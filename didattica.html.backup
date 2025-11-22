@@ -727,6 +727,494 @@
         </div>
     </section>
     
+    <style>
+        .section-title {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+        
+        .section-title h1 {
+            font-size: 42px;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin-bottom: 15px;
+        }
+        
+        .section-title p {
+            font-size: 18px;
+            color: #666;
+        }
+        
+        .course-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+            margin-bottom: 30px;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            border: 3px solid transparent;
+        }
+        
+        .course-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+        }
+        
+        .course-card.border-blue {
+            border-color: #38C4FF;
+        }
+        
+        .course-card.border-yellow {
+            border-color: #FFD400;
+        }
+        
+        .course-card.border-pink {
+            border-color: #E91E63;
+        }
+        
+        .course-card.border-navy {
+            border-color: #1565C0;
+        }
+        
+        .course-card.border-orange {
+            border-color: #F45F00;
+        }
+        
+        .course-card.border-coral {
+            border-color: #E14C4D;
+        }
+        
+        .card-header-logo {
+            padding: 25px;
+            text-align: center;
+            min-height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        .card-header-logo img {
+            max-width: 85%;
+            height: auto;
+            max-height: 70px;
+            object-fit: contain;
+        }
+        
+        .card-body-content {
+            padding: 30px 25px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .course-main-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin-bottom: 12px;
+            line-height: 1.4;
+            min-height: 50px;
+        }
+        
+        .course-subtitle-text {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+            font-style: italic;
+            min-height: 40px;
+        }
+        
+        .course-info-section {
+            background: #fafafa;
+            border-left: 4px solid;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+            flex-grow: 1;
+        }
+        
+        .course-info-section.info-blue {
+            border-left-color: #38C4FF;
+        }
+        
+        .course-info-section.info-yellow {
+            border-left-color: #FFD400;
+        }
+        
+        .course-info-section.info-pink {
+            border-left-color: #E91E63;
+        }
+        
+        .course-info-section.info-navy {
+            border-left-color: #1565C0;
+        }
+        
+        .course-info-section.info-orange {
+            border-left-color: #F45F00;
+        }
+        
+        .course-info-section.info-coral {
+            border-left-color: #E14C4D;
+        }
+        
+        .info-date {
+            font-weight: 700;
+            font-size: 14px;
+            color: #1a1a1a;
+            margin-bottom: 15px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #e9ecef;
+            display: flex;
+            align-items: center;
+        }
+        
+        .info-date:before {
+            content: "📅";
+            margin-right: 8px;
+            font-size: 16px;
+        }
+        
+        .info-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #444;
+            line-height: 1.7;
+            padding-left: 5px;
+        }
+        
+        .info-item:before {
+            content: "▸";
+            font-weight: bold;
+            font-size: 16px;
+            margin-right: 10px;
+            line-height: 1.4;
+            flex-shrink: 0;
+        }
+        
+        .course-card.border-blue .info-item:before {
+            color: #38C4FF;
+        }
+        
+        .course-card.border-yellow .info-item:before {
+            color: #FFD400;
+        }
+        
+        .course-card.border-pink .info-item:before {
+            color: #E91E63;
+        }
+        
+        .course-card.border-navy .info-item:before {
+            color: #1565C0;
+        }
+        
+        .course-card.border-orange .info-item:before {
+            color: #F45F00;
+        }
+        
+        .course-card.border-coral .info-item:before {
+            color: #E14C4D;
+        }
+        
+        .subsection-title {
+            font-weight: 700;
+            font-size: 14px;
+            color: #1a1a1a;
+            margin: 20px 0 10px 0;
+            padding-top: 15px;
+            border-top: 2px solid #e9ecef;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .subsection-title:first-of-type {
+            border-top: none;
+            padding-top: 0;
+            margin-top: 0;
+        }
+        
+        .cta-button {
+            display: block;
+            width: 100%;
+            padding: 16px 20px;
+            color: white;
+            text-align: center;
+            text-decoration: none;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+            color: white;
+            text-decoration: none;
+        }
+        
+        .cta-button.btn-blue {
+            background: #38C4FF;
+        }
+        
+        .cta-button.btn-blue:hover {
+            background: #2AAFEA;
+        }
+        
+        .cta-button.btn-yellow {
+            background: #FFD400;
+            color: #1a1a1a;
+        }
+        
+        .cta-button.btn-yellow:hover {
+            background: #F0C400;
+            color: #1a1a1a;
+        }
+        
+        .cta-button.btn-pink {
+            background: #E91E63;
+        }
+        
+        .cta-button.btn-pink:hover {
+            background: #D81B60;
+        }
+        
+        .cta-button.btn-navy {
+            background: #1565C0;
+        }
+        
+        .cta-button.btn-navy:hover {
+            background: #0D47A1;
+        }
+        
+        .cta-button.btn-orange {
+            background: #F45F00;
+        }
+        
+        .cta-button.btn-orange:hover {
+            background: #E55100;
+        }
+        
+        .cta-button.btn-coral {
+            background: #E14C4D;
+        }
+        
+        .cta-button.btn-coral:hover {
+            background: #D43F40;
+        }
+        
+        /* Centra le card singole */
+        .centered-cards {
+            display: flex;
+            justify-content: center;
+        }
+        
+        /* Garantisce che tutte le card abbiano la stessa altezza */
+        .row-equal-height {
+            display: flex;
+            flex-wrap: wrap;
+        }
+        
+        /* Centra le card quando c'è solo una card visibile */
+        .row-equal-height.centered-cards {
+            justify-content: center;
+        }
+        
+        .row-equal-height > [class*='col-'] {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        @media (max-width: 991px) {
+            .course-main-title {
+                font-size: 17px;
+                min-height: auto;
+            }
+            
+            .course-subtitle-text {
+                font-size: 13px;
+                min-height: auto;
+            }
+            
+            .info-item {
+                font-size: 13px;
+            }
+        }
+        
+        @media (max-width: 767px) {
+            .section-title h1 {
+                font-size: 32px;
+            }
+            
+            .card-body-content {
+                padding: 25px 20px;
+            }
+            
+            .course-main-title {
+                min-height: auto;
+            }
+            
+            .course-subtitle-text {
+                min-height: auto;
+            }
+        }
+    </style>
+    
+    <!--==========================
+      Courses Section
+    ============================-->
+    <section class="courses-container">
+        <div class="container">
+            <div class="section-title">
+                <h1>I Nostri Corsi</h1>
+                <p>Scegli il percorso più adatto alle tue esigenze</p>
+            </div>
+            
+            <div class="row row-equal-height">
+                <!-- LEONARDO STARTER CLASS -->
+                <div class="col-lg-4 col-md-6 mb-4" data-category="medicina">
+                    <div class="course-card border-blue">
+                        <div class="card-header-logo" style="background: #9AD8F1;">
+                            <img src="./assets/images/NEW_LOGO_2026/LS Starter.png" alt="Leonardo Starter Class">
+                        </div>
+                        <div class="card-body-content">
+                            <h3 class="course-main-title">Corso base per l'ammissione a MEDICINA, ODONTOIATRIA, VETERINARIA</h3>
+                            <p class="course-subtitle-text">In lingua italiana e in lingua inglese (IMAT) e PROF. SANITARIE in lingua italiana</p>
+                            
+                            <div class="course-info-section info-blue">
+                                <div class="info-date">gennaio-maggio 2026 | sabato/domenica</div>
+                                <div class="info-item">20 lezioni (42 ore DF)</div>
+                                <div class="info-item">18 simulazioni tematiche (14 ore ES) + 1 simulazione completa (3 ore ES)</div>
+                            </div>
+                            
+                            <a href="contattaci.html" class="cta-button btn-blue">Contattaci</a>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- LEONARDO ACADEMY - LECTURES AND TRAINING -->
+                <div class="col-lg-4 col-md-6 mb-4" data-category="medicina">
+                    <div class="course-card border-yellow">
+                        <div class="card-header-logo" style="background: #FFE066;">
+                            <img src="./assets/images/NEW_LOGO_2026/ACADEMY.png" alt="Leonardo Academy">
+                        </div>
+                        <div class="card-body-content">
+                            <h3 class="course-main-title">Corso avanzato per l'ammissione a MEDICINA, ODONTOIATRIA, VETERINARIA</h3>
+                            <p class="course-subtitle-text">In lingua italiana</p>
+                            
+                            <div class="course-info-section info-yellow">
+                                <div class="subsection-title">A. Lectures: luglio-agosto 2026 | 3-4 giorni/settimana</div>
+                                <div class="info-item">24 lezioni (67 ore DF)</div>
+                                <div class="info-item">22 simulazioni tematiche (11 ore ES)</div>
+                                
+                                <div class="subsection-title">B. Training: settembre-novembre 2026 | sabato/domenica</div>
+                                <div class="info-item">22 simulazioni complete d'esame (66 ore ES)</div>
+                                <div class="info-item">Correzione commentata (66 ore DF)</div>
+                            </div>
+                            
+                            <a href="contattaci.html" class="cta-button btn-yellow">Contattaci</a>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- LEONARDO ACADEMY - INTENSIVE TRAINING -->
+                <div class="col-lg-4 col-md-6 mb-4" data-category="medicina">
+                    <div class="course-card border-pink">
+                        <div class="card-header-logo" style="background: #F48FB1;">
+                            <img src="./assets/images/NEW_LOGO_2026/ACADEMY.png" alt="Leonardo Academy Intensive">
+                        </div>
+                        <div class="card-body-content">
+                            <h3 class="course-main-title">Corso intensivo per l'ammissione a MEDICINA, ODONTOIATRIA, VETERINARIA</h3>
+                            <p class="course-subtitle-text">In lingua italiana</p>
+                            
+                            <div class="course-info-section info-pink">
+                                <div class="info-date">novembre-dicembre 2026 | lunedì-domenica</div>
+                                <div class="info-item">14 simulazioni complete d'esame (42 ore ES)</div>
+                                <div class="info-item">Correzione commentata (42 ore DF)</div>
+                            </div>
+                            
+                            <a href="contattaci.html" class="cta-button btn-pink">Contattaci</a>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- SNT CLASS -->
+                <div class="col-lg-4 col-md-6 mb-4" data-category="snt">
+                    <div class="course-card border-orange">
+                        <div class="card-header-logo" style="background: #FFA366;">
+                            <img src="./assets/images/NEW_LOGO_2026/SNT.png" alt="SNT Class">
+                        </div>
+                        <div class="card-body-content">
+                            <h3 class="course-main-title">Corso avanzato per l'ammissione a PROFESSIONI SANITARIE</h3>
+                            <p class="course-subtitle-text">In lingua italiana</p>
+                            
+                            <div class="course-info-section info-orange">
+                                <div class="info-date">luglio-agosto 2026 | 5 giorni/settimana</div>
+                                <div class="info-item">24 lezioni (67 ore DF)</div>
+                                <div class="info-item">24 simulazioni complete del test di ammissione (36 ore ES)</div>
+                            </div>
+                            
+                            <a href="contattaci.html" class="cta-button btn-orange">Contattaci</a>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- IMAT INTENSIVE TRAINING -->
+                <div class="col-lg-4 col-md-6 mb-4" data-category="imat">
+                    <div class="course-card border-navy">
+                        <div class="card-header-logo" style="background: #64B5F6;">
+                            <img src="./assets/images/NEW_LOGO_2026/IMAT.png" alt="IMAT">
+                        </div>
+                        <div class="card-body-content">
+                            <h3 class="course-main-title">Corso avanzato per l'ammissione a MEDICINA, ODONTOIATRIA e VETERINARIA</h3>
+                            <p class="course-subtitle-text">In lingua inglese (IMAT) e PROF. SANITARIE in lingua inglese</p>
+                            
+                            <div class="course-info-section info-navy">
+                                <div class="info-date">luglio-agosto-settembre 2026 | 2 giorni/settimana</div>
+                                <div class="info-item">15 lezioni (30 ore DF)</div>
+                                <div class="info-item">15 simulazioni complete del test di ammissione (23 ore ES)</div>
+                            </div>
+                            
+                            <a href="contattaci.html" class="cta-button btn-navy">Contattaci</a>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- ARCHED CLASS -->
+                <div class="col-lg-4 col-md-6 mb-4" data-category="arched">
+                    <div class="course-card border-coral">
+                        <div class="card-header-logo" style="background: #EF9A9A;">
+                            <img src="./assets/images/NEW_LOGO_2026/ARCHED.png" alt="Arched Class">
+                        </div>
+                        <div class="card-body-content">
+                            <h3 class="course-main-title">Corso per l'ammissione ad ARCHITETTURA/INGEGNERIA EDILE-ARCHITETTURA</h3>
+                            <p class="course-subtitle-text"></p>
+                            
+                            <div class="course-info-section info-coral">
+                                <div class="info-date">marzo-luglio 2026 | 1 giorno/settimana</div>
+                                <div class="info-item">18 lezioni con storia e storia dell'arte (54 ore DF)</div>
+                                <div class="info-item">18 simulazioni tematiche (TOLC@CASA – 6 ore ES)</div>
+                                <div class="info-item">18 simulazioni complete del test di ammissione (TOLC@UNI – 30 ore ES)</div>
+                            </div>
+                            
+                            <a href="contattaci.html" class="cta-button btn-coral">Contattaci</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
     <!-- Footer Start -->
     <div class="container-fluid bg-dark text-light footer wow fadeIn" data-wow-delay="0.1s">
         <div class="container py-5">
