@@ -15,7 +15,7 @@ export default function TestCard({ test, expandable = false }: TestCardProps) {
   if (expandable) {
     return (
       <div 
-        className={`bg-white/80 backdrop-blur-sm border border-gray-200 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:bg-white hover:border-red-300 cursor-pointer group flex flex-col ${!isExpanded ? 'h-full' : ''}`}
+        className="bg-white/80 backdrop-blur-sm border border-gray-200 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:bg-white hover:border-red-300 cursor-pointer group flex flex-col min-h-[320px]"
       >
         <div className="flex items-center justify-center bg-gradient-to-br from-red-50 to-white rounded-2xl w-20 h-20 mx-auto mb-4 group-hover:scale-110 transition-transform shadow-lg">
           <Image src={test.image} alt={test.title} width={90} height={40} className="object-contain" />
@@ -23,7 +23,7 @@ export default function TestCard({ test, expandable = false }: TestCardProps) {
         <h5 className="text-lg font-semibold text-gray-900 mb-3 text-center">
           {test.title}
         </h5>
-        <p className="text-gray-600 mb-4 text-center text-sm flex-grow">{test.description}</p>
+        <p className="text-gray-600 mb-4 text-center text-sm">{test.description}</p>
         
         {isExpanded && test.details && (
           <div className="mt-4 pt-4 border-t border-gray-200">
@@ -31,7 +31,7 @@ export default function TestCard({ test, expandable = false }: TestCardProps) {
           </div>
         )}
         
-        <div className="pt-4">
+        <div className="pt-4 mt-auto">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="flex items-center justify-center w-full text-red-600 hover:text-red-700 font-medium text-sm"

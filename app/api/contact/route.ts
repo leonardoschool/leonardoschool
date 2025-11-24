@@ -1,10 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 
+// Simple in-memory rate limiting (resets on server restart)
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 ora
+const MAX_REQUESTS_PER_WINDOW = 5; // max 5 email all'ora per IP
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const record = rateLimitMap.get(ip);
+
+  if (!record || now > record.resetTime) {
+    // Prima richiesta o finestra scaduta
+    rateLimitMap.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
+    return true;
+  }
+
+  if (record.count >= MAX_REQUESTS_PER_WINDOW) {
+    return false; // Limite raggiunto
+  }
+
+  record.count++;
+  return true;
+}
+
+function sanitizeInput(input: string): string {
+  // Rimuovi HTML tags e caratteri pericolosi
+  return input
+    .replace(/<[^>]*>/g, '') // Rimuovi HTML
+    .replace(/[<>"']/g, '') // Rimuovi caratteri pericolosi
+    .trim();
+}
+
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting basato su IP
+    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+    if (!checkRateLimit(ip)) {
+      return NextResponse.json(
+        { error: 'Troppe richieste. Riprova tra un\'ora.' },
+        { status: 429 }
+      );
+    }
+
     const data = await request.json();
-    const { name, phone, email, subject, message } = data;
+    let { name, phone, email, subject, message } = data;
 
     // Validate required fields
     if (!name || !phone || !email || !subject || !message) {
@@ -14,11 +54,57 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Sanitize inputs
+    name = sanitizeInput(name);
+    phone = sanitizeInput(phone);
+    email = sanitizeInput(email);
+    subject = sanitizeInput(subject);
+    message = sanitizeInput(message);
+
+    // Validate lengths
+    if (name.length < 8 || name.length > 100) {
+      return NextResponse.json(
+        { error: 'Nome non valido (8-100 caratteri)' },
+        { status: 400 }
+      );
+    }
+
+    if (subject.length < 6 || subject.length > 200) {
+      return NextResponse.json(
+        { error: 'Oggetto non valido (6-200 caratteri)' },
+        { status: 400 }
+      );
+    }
+
+    if (message.length < 20 || message.length > 2000) {
+      return NextResponse.json(
+        { error: 'Messaggio non valido (20-2000 caratteri)' },
+        { status: 400 }
+      );
+    }
+
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(email) || email.length > 100) {
       return NextResponse.json(
         { error: 'Formato email non valido' },
+        { status: 400 }
+      );
+    }
+
+    // Validate phone format
+    const phoneDigits = phone.replace(/[\s\-\+]/g, '');
+    if (phoneDigits.length < 10 || phoneDigits.length > 15 || !/^[0-9+\s\-]+$/.test(phone)) {
+      return NextResponse.json(
+        { error: 'Numero di telefono non valido' },
+        { status: 400 }
+      );
+    }
+
+    // Validate name contains only letters
+    if (!/^[a-zA-ZàèéìòùÀÈÉÌÒÙ\s']+$/.test(name)) {
+      return NextResponse.json(
+        { error: 'Il nome può contenere solo lettere' },
         { status: 400 }
       );
     }

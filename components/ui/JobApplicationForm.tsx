@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, FormEvent, useRef } from 'react';
+import { useState, FormEvent, useRef, useEffect } from 'react';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
+import { cn } from '@/lib/utils';
 
 interface FormData {
   name: string;
@@ -35,37 +36,82 @@ export default function JobApplicationForm() {
     cv: null,
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  const materie = [
+    'Biologia',
+    'Chimica e Propedeutica Biochimica',
+    'Disegno e Rappresentazione',
+    'Fisica e Matematica',
+    'Ragionamento Logico',
+    'Storia e Cultura Generale'
+  ];
+
+  // Chiudi dropdown quando clicchi fuori
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
 
+    // Nome: min 8, max 100 caratteri, solo lettere e spazi
     if (formData.name.length < 8) {
       newErrors.name = 'Inserisci il tuo Nome e Cognome';
+    } else if (formData.name.length > 100) {
+      newErrors.name = 'Nome troppo lungo (max 100 caratteri)';
+    } else if (!/^[a-zA-ZàèéìòùÀÈÉÌÒÙ\s']+$/.test(formData.name)) {
+      newErrors.name = 'Il nome può contenere solo lettere';
     }
 
-    if (formData.phone.length < 10) {
-      newErrors.phone = 'Inserisci un numero valido';
+    // Telefono: esattamente 10 cifre italiane o formato internazionale
+    const phoneDigits = formData.phone.replace(/[\s\-\+]/g, '');
+    if (phoneDigits.length < 10 || phoneDigits.length > 15) {
+      newErrors.phone = 'Inserisci un numero valido (10-15 cifre)';
+    } else if (!/^[0-9+\s\-]+$/.test(formData.phone)) {
+      newErrors.phone = 'Il telefono può contenere solo numeri';
     }
 
+    // Email: validazione robusta
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
       newErrors.email = "Inserisci un'Email valida";
+    } else if (formData.email.length > 100) {
+      newErrors.email = 'Email troppo lunga (max 100 caratteri)';
     }
 
+    // Oggetto: min 6, max 200 caratteri
     if (formData.subject.length < 6) {
       newErrors.subject = 'Inserisci almeno 6 caratteri';
+    } else if (formData.subject.length > 200) {
+      newErrors.subject = 'Oggetto troppo lungo (max 200 caratteri)';
     }
 
+    // Materia: obbligatoria
     if (!formData.materia) {
       newErrors.materia = 'Seleziona una materia';
     }
 
-    if (!formData.message.trim()) {
+    // Messaggio: min 20, max 2000 caratteri
+    const trimmedMessage = formData.message.trim();
+    if (!trimmedMessage) {
       newErrors.message = 'Scrivici qualcosa!';
+    } else if (trimmedMessage.length < 20) {
+      newErrors.message = 'Il messaggio è troppo breve (min 20 caratteri)';
+    } else if (trimmedMessage.length > 2000) {
+      newErrors.message = 'Messaggio troppo lungo (max 2000 caratteri)';
     }
 
     setErrors(newErrors);
@@ -175,6 +221,7 @@ export default function JobApplicationForm() {
             onChange={handleChange}
             error={errors.name}
             required
+            maxLength={100}
             className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
           />
         </div>
@@ -189,6 +236,7 @@ export default function JobApplicationForm() {
             onChange={handleChange}
             error={errors.phone}
             required
+            maxLength={20}
             className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
           />
         </div>
@@ -203,6 +251,7 @@ export default function JobApplicationForm() {
             onChange={handleChange}
             error={errors.email}
             required
+            maxLength={100}
             className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
           />
         </div>
@@ -217,27 +266,77 @@ export default function JobApplicationForm() {
             onChange={handleChange}
             error={errors.subject}
             required
+            maxLength={200}
             className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
           />
+          <p className="mt-1 text-xs text-gray-500 text-right">{formData.subject.length}/200</p>
         </div>
 
         <div>
-          <select
-            name="materia"
-            id="materia"
-            value={formData.materia}
-            onChange={handleChange}
-            className="w-full px-4 py-3 rounded-lg bg-white border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-colors"
-            required
-          >
-            <option value="">Seleziona la materia</option>
-            <option value="Biologia">Biologia</option>
-            <option value="Chimica e Propedeutica Biochimica">Chimica e Propedeutica Biochimica</option>
-            <option value="Disegno e Rappresentazione">Disegno e Rappresentazione</option>
-            <option value="Fisica e Matematica">Fisica e Matematica</option>
-            <option value="Ragionamento Logico">Ragionamento Logico</option>
-            <option value="Storia e Cultura Generale">Storia e Cultura Generale</option>
-          </select>
+          <div className="relative" ref={dropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              className={cn(
+                "w-full px-4 py-3 rounded-lg bg-white border text-left transition-all duration-300 flex items-center justify-between",
+                errors.materia ? "border-red-500" : "border-gray-300",
+                "hover:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+              )}
+            >
+              <span className={formData.materia ? "text-gray-900" : "text-gray-500"}>
+                {formData.materia || "Seleziona la materia"}
+              </span>
+              <svg
+                className={cn(
+                  'w-5 h-5 text-gray-400 transition-transform duration-300',
+                  isDropdownOpen && 'rotate-180'
+                )}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+
+            {/* Dropdown Menu */}
+            <ul
+              className={cn(
+                'absolute top-full left-0 right-0 mt-2 bg-white shadow-2xl rounded-2xl py-3 transition-all duration-300 border border-gray-200 z-10 max-h-64 overflow-y-auto overflow-x-hidden',
+                isDropdownOpen
+                  ? 'opacity-100 visible translate-y-0'
+                  : 'opacity-0 invisible -translate-y-2 pointer-events-none'
+              )}
+            >
+              {materie.map((materia) => (
+                <li key={materia}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, materia }));
+                      setIsDropdownOpen(false);
+                      if (errors.materia) {
+                        setErrors(prev => ({ ...prev, materia: undefined }));
+                      }
+                    }}
+                    className={cn(
+                      "w-full text-left px-5 py-3 text-sm transition-all duration-200 font-normal rounded-xl",
+                      formData.materia === materia
+                        ? "bg-gradient-to-r from-red-50 to-red-100 text-red-600 font-bold"
+                        : "text-gray-800 hover:text-base hover:font-bold hover:bg-gradient-to-r hover:from-red-50 hover:to-red-100 hover:text-red-600"
+                    )}
+                  >
+                    {materia}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
           {errors.materia && (
             <p className="mt-1 text-sm text-red-600">{errors.materia}</p>
           )}
@@ -251,9 +350,14 @@ export default function JobApplicationForm() {
             placeholder="Messaggio"
             value={formData.message}
             onChange={handleChange}
+            maxLength={2000}
             className="w-full px-4 py-3 rounded-lg bg-white border border-gray-300 text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-colors resize-none"
             required
           />
+          <div className="flex justify-between items-center mt-1">
+            <p className="text-xs text-gray-500">Minimo 20 caratteri</p>
+            <p className="text-xs text-gray-500">{formData.message.length}/2000</p>
+          </div>
           {errors.message && (
             <p className="mt-1 text-sm text-red-600">{errors.message}</p>
           )}

@@ -45,25 +45,46 @@ export default function ContactForm({ defaultSubject = '', subjectReadonly = fal
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
 
+    // Nome: min 8, max 100 caratteri, solo lettere e spazi
     if (formData.name.length < 8) {
       newErrors.name = 'Inserisci il tuo Nome e Cognome';
+    } else if (formData.name.length > 100) {
+      newErrors.name = 'Nome troppo lungo (max 100 caratteri)';
+    } else if (!/^[a-zA-ZàèéìòùÀÈÉÌÒÙ\s']+$/.test(formData.name)) {
+      newErrors.name = 'Il nome può contenere solo lettere';
     }
 
-    if (formData.phone.length < 10) {
-      newErrors.phone = 'Inserisci un numero valido';
+    // Telefono: esattamente 10 cifre italiane o formato internazionale
+    const phoneDigits = formData.phone.replace(/[\s\-\+]/g, '');
+    if (phoneDigits.length < 10 || phoneDigits.length > 15) {
+      newErrors.phone = 'Inserisci un numero valido (10-15 cifre)';
+    } else if (!/^[0-9+\s\-]+$/.test(formData.phone)) {
+      newErrors.phone = 'Il telefono può contenere solo numeri';
     }
 
+    // Email: validazione robusta
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
       newErrors.email = "Inserisci un'Email valida";
+    } else if (formData.email.length > 100) {
+      newErrors.email = 'Email troppo lunga (max 100 caratteri)';
     }
 
+    // Oggetto: min 6, max 200 caratteri
     if (formData.subject.length < 6) {
       newErrors.subject = 'Inserisci almeno 6 caratteri';
+    } else if (formData.subject.length > 200) {
+      newErrors.subject = 'Oggetto troppo lungo (max 200 caratteri)';
     }
 
-    if (!formData.message.trim()) {
+    // Messaggio: min 20, max 2000 caratteri
+    const trimmedMessage = formData.message.trim();
+    if (!trimmedMessage) {
       newErrors.message = 'Scrivici qualcosa!';
+    } else if (trimmedMessage.length < 20) {
+      newErrors.message = 'Il messaggio è troppo breve (min 20 caratteri)';
+    } else if (trimmedMessage.length > 2000) {
+      newErrors.message = 'Messaggio troppo lungo (max 2000 caratteri)';
     }
 
     setErrors(newErrors);
@@ -171,6 +192,7 @@ export default function ContactForm({ defaultSubject = '', subjectReadonly = fal
             onChange={handleChange}
             error={errors.name}
             required
+            maxLength={100}
             className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
           />
         </div>
@@ -185,6 +207,7 @@ export default function ContactForm({ defaultSubject = '', subjectReadonly = fal
             onChange={handleChange}
             error={errors.phone}
             required
+            maxLength={20}
             className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
           />
         </div>
@@ -199,6 +222,7 @@ export default function ContactForm({ defaultSubject = '', subjectReadonly = fal
             onChange={handleChange}
             error={errors.email}
             required
+            maxLength={100}
             className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
           />
         </div>
@@ -214,8 +238,10 @@ export default function ContactForm({ defaultSubject = '', subjectReadonly = fal
             error={errors.subject}
             required
             disabled={subjectReadonly}
+            maxLength={200}
             className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
           />
+          <p className="mt-1 text-xs text-gray-500 text-right">{formData.subject.length}/200</p>
         </div>
 
         <div>
@@ -226,9 +252,14 @@ export default function ContactForm({ defaultSubject = '', subjectReadonly = fal
             placeholder="Messaggio"
             value={formData.message}
             onChange={handleChange}
+            maxLength={2000}
             className="w-full px-4 py-3 rounded-lg bg-white border border-gray-300 text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-colors resize-none"
             required
           />
+          <div className="flex justify-between items-center mt-1">
+            <p className="text-xs text-gray-500">Minimo 20 caratteri</p>
+            <p className="text-xs text-gray-500">{formData.message.length}/2000</p>
+          </div>
           {errors.message && (
             <p className="mt-1 text-sm text-red-600">{errors.message}</p>
           )}
