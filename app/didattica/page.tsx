@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Button from '@/components/ui/Button';
 import Image from 'next/image';
+import { Suspense } from 'react';
 
 const coursesData = {
   medicina: [
@@ -221,7 +222,7 @@ const coursesData = {
   ],
 };
 
-export default function DidatticaPage() {
+function DidatticaContent() {
   const searchParams = useSearchParams();
   const corso = searchParams.get('corso') || 'medicina';
 
@@ -432,5 +433,17 @@ export default function DidatticaPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+export default function DidatticaPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-600"></div>
+      </div>
+    }>
+      <DidatticaContent />
+    </Suspense>
   );
 }
