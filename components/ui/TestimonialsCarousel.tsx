@@ -31,7 +31,7 @@ export default function TestimonialsCarousel({ testimonials }: TestimonialsCarou
   }, [emblaApi]);
 
   return (
-    <section className="py-16 bg-gray-50">
+    <section className="py-16 bg-gradient-to-b from-white via-gray-50 to-white relative overflow-hidden">
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900">

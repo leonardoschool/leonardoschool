@@ -9,6 +9,7 @@ interface FormData {
   phone: string;
   email: string;
   subject: string;
+  materia: string;
   message: string;
   cv?: File | null;
 }
@@ -18,6 +19,7 @@ interface FormErrors {
   phone?: string;
   email?: string;
   subject?: string;
+  materia?: string;
   message?: string;
   cv?: string;
 }
@@ -28,6 +30,7 @@ export default function JobApplicationForm() {
     phone: '',
     email: '',
     subject: '',
+    materia: '',
     message: '',
     cv: null,
   });
@@ -55,6 +58,10 @@ export default function JobApplicationForm() {
 
     if (formData.subject.length < 6) {
       newErrors.subject = 'Inserisci almeno 6 caratteri';
+    }
+
+    if (!formData.materia) {
+      newErrors.materia = 'Seleziona una materia';
     }
 
     if (!formData.message.trim()) {
@@ -91,6 +98,7 @@ export default function JobApplicationForm() {
           phone: '',
           email: '',
           subject: '',
+          materia: '',
           message: '',
           cv: null,
         });
@@ -107,7 +115,7 @@ export default function JobApplicationForm() {
   };
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -143,15 +151,15 @@ export default function JobApplicationForm() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto bg-gradient-to-br from-gray-900/40 to-black/60 backdrop-blur-xl rounded-2xl border border-white/10 p-8">
+    <div className="max-w-2xl mx-auto">
       {submitStatus === 'success' && (
-        <div className="mb-6 p-4 bg-green-500/20 border border-green-500/50 rounded-lg text-green-400">
+        <div className="mb-6 p-4 bg-green-100 border border-green-300 rounded-lg text-green-700">
           Il tuo messaggio è stato inviato. Grazie!
         </div>
       )}
 
       {submitStatus === 'error' && (
-        <div className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400">
+        <div className="mb-6 p-4 bg-red-100 border border-red-300 rounded-lg text-red-700">
           Si è verificato un errore. Riprova più tardi.
         </div>
       )}
@@ -167,7 +175,7 @@ export default function JobApplicationForm() {
             onChange={handleChange}
             error={errors.name}
             required
-            className="bg-white/10 border-white/20 text-white placeholder:text-gray-400"
+            className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
           />
         </div>
 
@@ -181,7 +189,7 @@ export default function JobApplicationForm() {
             onChange={handleChange}
             error={errors.phone}
             required
-            className="bg-white/10 border-white/20 text-white placeholder:text-gray-400"
+            className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
           />
         </div>
 
@@ -195,7 +203,7 @@ export default function JobApplicationForm() {
             onChange={handleChange}
             error={errors.email}
             required
-            className="bg-white/10 border-white/20 text-white placeholder:text-gray-400"
+            className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
           />
         </div>
 
@@ -209,8 +217,30 @@ export default function JobApplicationForm() {
             onChange={handleChange}
             error={errors.subject}
             required
-            className="bg-white/10 border-white/20 text-white placeholder:text-gray-400"
+            className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
           />
+        </div>
+
+        <div>
+          <select
+            name="materia"
+            id="materia"
+            value={formData.materia}
+            onChange={handleChange}
+            className="w-full px-4 py-3 rounded-lg bg-white border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-colors"
+            required
+          >
+            <option value="">Seleziona la materia</option>
+            <option value="Biologia">Biologia</option>
+            <option value="Chimica e Propedeutica Biochimica">Chimica e Propedeutica Biochimica</option>
+            <option value="Disegno e Rappresentazione">Disegno e Rappresentazione</option>
+            <option value="Fisica e Matematica">Fisica e Matematica</option>
+            <option value="Ragionamento Logico">Ragionamento Logico</option>
+            <option value="Storia e Cultura Generale">Storia e Cultura Generale</option>
+          </select>
+          {errors.materia && (
+            <p className="mt-1 text-sm text-red-600">{errors.materia}</p>
+          )}
         </div>
 
         <div>
@@ -221,11 +251,11 @@ export default function JobApplicationForm() {
             placeholder="Messaggio"
             value={formData.message}
             onChange={handleChange}
-            className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-colors resize-none"
+            className="w-full px-4 py-3 rounded-lg bg-white border border-gray-300 text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-colors resize-none"
             required
           />
           {errors.message && (
-            <p className="mt-1 text-sm text-red-400">{errors.message}</p>
+            <p className="mt-1 text-sm text-red-600">{errors.message}</p>
           )}
         </div>
 
@@ -242,7 +272,7 @@ export default function JobApplicationForm() {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-gray-300 hover:bg-white/20 transition-colors flex items-center justify-center gap-3"
+            className="w-full px-4 py-3 rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-3"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
@@ -250,10 +280,10 @@ export default function JobApplicationForm() {
             {formData.cv ? formData.cv.name : 'Allega il tuo CV (PDF, DOC)'}
           </button>
           {errors.cv && (
-            <p className="mt-1 text-sm text-red-400">{errors.cv}</p>
+            <p className="mt-1 text-sm text-red-600">{errors.cv}</p>
           )}
           {formData.cv && (
-            <p className="mt-1 text-sm text-green-400">✓ {formData.cv.name}</p>
+            <p className="mt-1 text-sm text-green-600">✓ {formData.cv.name}</p>
           )}
         </div>
 

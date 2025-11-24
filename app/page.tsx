@@ -10,31 +10,35 @@ import { TestCard as TestCardType, Testimonial } from '@/types';
 const tests: TestCardType[] = [
   {
     id: 'medicina',
-    title: 'Test Medicina e Odontoiatria',
-    description: 'Medicina e Odontoiatria in italiano',
+    title: 'Semestre Aperto',
+    description: 'Medicina, Odontoiatria e Veterinaria',
     image: '/images/med.png',
     link: 'https://accessoprogrammato.mur.gov.it/2024/',
-  },
-  {
-    id: 'veterinaria',
-    title: 'Test Veterinaria',
-    description: 'Medicina Veterinaria in italiano',
-    image: '/images/vet.png',
-    link: 'https://accessoprogrammato.mur.gov.it/2024/',
+    details: 'Test di accesso per i corsi di Medicina e Chirurgia, Odontoiatria e Protesi Dentaria, e Medicina Veterinaria in lingua italiana.',
   },
   {
     id: 'imat',
     title: 'IMAT',
-    description: 'Medicina e Odontoiatria in inglese',
+    description: 'Medicina, Odontoiatria e Veterinaria in Inglese',
     image: '/images/imat.png',
     link: 'https://accessoprogrammato.mur.gov.it/2024/',
+    details: 'International Medical Admissions Test per i corsi di Medicina, Odontoiatria e Veterinaria in lingua inglese.',
   },
   {
     id: 'sanitarie',
-    title: 'Test Professioni Sanitarie',
-    description: 'Professioni Sanitarie in italiano o inglese',
+    title: 'Professioni Sanitarie',
+    description: 'Professioni Sanitarie',
     image: '/images/snt.png',
     link: 'https://www.mur.gov.it/it/atti-e-normativa/decreto-ministeriale-n-1116-del-31-07-2024',
+    details: 'Test di accesso per i corsi delle Professioni Sanitarie (Infermieristica, Fisioterapia, ecc.).',
+  },
+  {
+    id: 'architettura',
+    title: 'Test ARCHED',
+    description: 'Architettura/Ingegneria edile-Architettura',
+    image: '/images/arched.png',
+    link: 'https://www.cisiaonline.it/area-tematica-architettura/test-arched-architettura-ingegneria-edile/struttura-della-prova-test-arched/',
+    details: 'Test per i corsi di Architettura e Ingegneria Edile-Architettura.',
   },
 ];
 
@@ -122,8 +126,7 @@ export default function Home() {
 
             {/* Description */}
             <p className="text-lg md:text-xl text-gray-200 max-w-3xl mx-auto leading-relaxed">
-              Preparazione d&apos;eccellenza per i test di Medicina, Odontoiatria, Veterinaria, 
-              IMAT e Professioni Sanitarie. Metodi innovativi e tutor qualificati per realizzare il tuo sogno.
+              Preparazione d&apos;eccellenza per l’ammissione ai corsi di laurea ad accesso programmato
             </p>
 
             {/* CTA Buttons */}
@@ -135,7 +138,7 @@ export default function Home() {
               </Link>
               <Link href="/simulazione">
                 <Button variant="outline" size="lg" className="min-w-[200px]">
-                  Prova una Simulazione
+                  Esercitati con noi
                 </Button>
               </Link>
             </div>
@@ -164,7 +167,7 @@ export default function Home() {
       </section>
 
       {/* Tests Section */}
-      <section id="about" className="py-24 bg-gradient-to-b from-white via-gray-50 to-white relative">
+      <section id="about" className="py-20 bg-gradient-to-b from-white via-gray-50 to-white relative">
         {/* Decorative Elements */}
         <div className="absolute top-20 left-10 w-64 h-64 bg-red-100 rounded-full blur-3xl opacity-30" />
         <div className="absolute bottom-20 right-10 w-80 h-80 bg-red-50 rounded-full blur-3xl opacity-40" />
@@ -185,9 +188,9 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-16 items-start">
             {tests.map((test) => (
-              <TestCard key={test.id} test={test} />
+              <TestCard key={test.id} test={test} expandable={true} />
             ))}
           </div>
 
@@ -201,78 +204,99 @@ export default function Home() {
         </div>
       </section>
 
-      {/* CTA Section - Modern Split Design */}
-      <section className="bg-white">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 max-w-7xl mx-auto rounded-3xl overflow-hidden shadow-2xl">
-            {/* Left Side - Dark Card */}
-            <div className="bg-gradient-to-br from-gray-900 via-black to-gray-900 p-12 lg:p-16 flex flex-col justify-center relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-red-600/10 rounded-full blur-3xl" />
-              <div className="absolute bottom-0 left-0 w-48 h-48 bg-red-600/10 rounded-full blur-3xl" />
-              
-              <div className="relative z-10">
-                <div className="inline-block mb-6">
-                  <div className="w-14 h-14 bg-gradient-to-br from-red-500 to-red-600 rounded-2xl flex items-center justify-center">
-                    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                  </div>
-                </div>
-                
-                <h2 className="text-3xl lg:text-4xl font-bold text-white mb-6 leading-tight">
-                  Costruiamo insieme<br />il tuo successo
-                </h2>
-                
-                <p className="text-gray-300 text-lg leading-relaxed mb-8">
-                  Analizziamo il tuo punto di partenza, ci prefissiamo obiettivi periodici 
-                  e ti indirizziamo verso il percorso didattico più adatto alle tue esigenze.
-                </p>
-                
-                <div className="space-y-4 mb-10">
-                  <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-full bg-red-600/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </div>
-                    <p className="text-gray-300">Lezioni in presenza e online</p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-full bg-red-600/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </div>
-                    <p className="text-gray-300">Supporto didattico personalizzato</p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-full bg-red-600/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </div>
-                    <p className="text-gray-300">Monitoraggio costante dei progressi</p>
-                  </div>
-                </div>
-                
-                <Link href="/contattaci">
-                  <Button variant="secondary" size="lg" className="w-full sm:w-auto">
-                    Prenota un colloquio gratuito
-                  </Button>
-                </Link>
+      {/* Why Choose Us Section - Modern Cards with Icons */}
+      <section className="bg-gradient-to-b from-white via-gray-50 to-white relative overflow-hidden">
+        {/* Decorative elements */}
+        <div className="absolute top-20 right-0 w-96 h-96 bg-red-100 rounded-full blur-3xl opacity-20" />
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-red-50 rounded-full blur-3xl opacity-30" />
+        
+        <div className="container mx-auto px-4 relative z-10">
+          {/* Header */}
+          <div className="text-center mb-16">
+            <div className="inline-block mb-4">
+              <span className="text-sm font-semibold text-red-600 bg-red-50 px-4 py-2 rounded-full uppercase tracking-wider">
+                LA NOSTRA FORMULA MAGICA PER IL SUCCESSO
+              </span>
+            </div>
+            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+              Il Metodo Leonardo
+            </h2>
+            <div className="w-24 h-1.5 bg-gradient-to-r from-red-500 to-red-600 mx-auto rounded-full mb-6" />
+            <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+              Percorsi formativi affidati a giovani tutor, veicoli in piccole classi e fedeli nei contenuti ai bandi ministeriali
+            </p>
+          </div>
+
+          {/* 4 Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+            {/* Card 1 - Classi Non Numerose */}
+            <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100 hover:border-red-200 group">
+              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
               </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">
+                Classi Non Numerose
+              </h3>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                Che uniscono l'esclusività della lezione privata all'efficacia del gruppo studio
+              </p>
             </div>
 
-            {/* Right Side - Image */}
-            <div className="relative h-[400px] lg:h-auto min-h-[500px]">
-              <Image
-                src="/images/conference.jpg"
-                alt="Studenti Leonardo School"
-                fill
-                className="object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+            {/* Card 2 - Studenti per gli Studenti */}
+            <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100 hover:border-red-200 group">
+              <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">
+                Studenti per gli Studenti
+              </h3>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                Con percorsi didattici affidati a tutor che hanno affrontato i test di ammissione
+              </p>
             </div>
+
+            {/* Card 3 - Approccio Teorico-Pratico */}
+            <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100 hover:border-red-200 group">
+              <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">
+                Approccio Teorico-Pratico
+              </h3>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                Che abbina alle lezioni frontali esercitazioni con simulazioni tematiche e generali
+              </p>
+            </div>
+
+            {/* Card 4 - Offerta Formativa Flessibile */}
+            <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100 hover:border-red-200 group">
+              <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">
+                Offerta Formativa Flessibile
+              </h3>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                Per un percorso base, intermedio o avanzato in linea con le esigenze di apprendimento
+              </p>
+            </div>
+          </div>
+
+          {/* CTA Button */}
+          <div className="text-center mt-12">
+            <Link href="/contattaci">
+              <Button variant="primary" size="lg" className="shadow-xl hover:shadow-2xl">
+                Prenota un colloquio gratuito
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
@@ -296,11 +320,11 @@ export default function Home() {
               rel="noopener noreferrer"
               className="inline-block group"
             >
-              <div className="bg-black border-2 border-gray-200 rounded-2xl p-12 hover:border-red-500 hover:shadow-xl transition-all duration-300">
+              <div className="bg-black border-2 border-gray-200 rounded-2xl p-6 md:p-12 hover:border-red-500 hover:shadow-xl transition-all duration-300">
                 <img
                   src="/images/partner.png"
                   alt="Partner - Centro Fonolinguistico"
-                  className="max-w-full h-auto mx-auto group-hover:scale-105 transition-transform duration-300"
+                  className="w-full h-auto mx-auto group-hover:scale-105 transition-transform duration-300"
                   style={{ maxWidth: '450px' }}
                 />
               </div>

@@ -9,18 +9,11 @@ export const metadata: Metadata = {
 
 const testTypes = [
   {
-    id: 'medicina',
-    title: 'Medicina e Odontoiatria',
+    id: 'medicina-veterinaria',
+    title: 'Medicina, Odontoiatria e Veterinaria',
     duration: '100 minuti',
     questions: '60 domande',
-    color: 'bg-gray-700',
-  },
-  {
-    id: 'veterinaria',
-    title: 'Veterinaria',
-    duration: '100 minuti',
-    questions: '60 domande',
-    color: 'bg-green-500',
+    color: 'bg-blue-500',
   },
   {
     id: 'professioni-sanitarie',
@@ -68,10 +61,11 @@ export default function SimulazionePage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {testTypes.map((test) => (
-              <div
+              <Link
                 key={test.id}
+                href={`/simulazione/${test.id}`}
                 className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow"
               >
                 <div className={`${test.color} h-2`} />
@@ -111,7 +105,7 @@ export default function SimulazionePage() {
                     </p>
                   </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
@@ -190,23 +184,6 @@ export default function SimulazionePage() {
               </p>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-16 bg-gray-50">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">
-            Pronto a Iniziare?
-          </h2>
-          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Prenota subito la tua simulazione e scopri il tuo potenziale
-          </p>
-          <Link href="/contattaci">
-            <Button variant="primary" size="lg">
-              Prenota Ora
-            </Button>
-          </Link>
         </div>
       </section>
     </div>

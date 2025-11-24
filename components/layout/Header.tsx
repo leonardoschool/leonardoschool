@@ -23,9 +23,7 @@ export default function Header() {
   return (
     <header className={cn(
       "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
-      isScrolled 
-        ? "bg-gradient-to-b from-red-900/95 to-transparent backdrop-blur-xl" 
-        : "bg-gradient-to-b from-red-900/80 to-transparent backdrop-blur-lg"
+      " bg-[#a8012b]"
     )}>
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between py-4">
@@ -33,16 +31,13 @@ export default function Header() {
           <Link href="/" className="flex items-center gap-3 text-sm font-bold group">
             <div className="transition-all duration-300 group-hover:scale-110">
               <Image
-                src="/images/logo.png"
+                src="/images/NEW_LOGO_2026/Logo_sito.png"
                 alt="Leonardo School Logo"
-                width={46}
-                height={43}
+                width={230}
+                height={230}
                 className="object-contain drop-shadow-lg"
               />
             </div>
-            <span className="hidden sm:inline text-white font-bold tracking-wide text-shadow-lg">
-              LEONARDO SCHOOL
-            </span>
           </Link>
 
           {/* Desktop Navigation */}
@@ -57,7 +52,7 @@ export default function Header() {
                 >
                   {item.submenu ? (
                     <>
-                      <button className="px-4 py-2 text-sm font-semibold text-white hover:text-red-400 transition-all duration-300 flex items-center gap-1">
+                      <button className="px-4 py-2 text-sm uppercase font-medium text-white hover:text-base hover:font-bold hover: transition-all duration-300 flex items-center gap-1">
                         {item.label}
                         <svg
                           className={cn(
@@ -79,7 +74,7 @@ export default function Header() {
                       {/* Submenu */}
                       <ul
                         className={cn(
-                          'absolute top-full left-0 min-w-[250px] bg-white shadow-2xl rounded-2xl py-3 mt-2 transition-all duration-300 border border-gray-200',
+                          'absolute top-full left-0 min-w-[280px] bg-white shadow-2xl rounded-2xl py-3 mt-2 transition-all duration-300 border border-gray-200',
                           openSubmenu === item.label
                             ? 'opacity-100 visible translate-y-0'
                             : 'opacity-0 invisible -translate-y-2'
@@ -89,7 +84,7 @@ export default function Header() {
                           <li key={subitem.label}>
                             <Link
                               href={subitem.href}
-                              className="block px-5 py-3 text-sm text-gray-800 hover:bg-gradient-to-r hover:from-red-50 hover:to-red-100 hover:text-red-600 transition-all duration-200 font-medium rounded-xl mx-2"
+                              className="block px-5 py-3 text-xs whitespace-nowrap text-gray-800 hover:text-sm hover:font-bold hover:bg-gradient-to-r hover:from-red-50 hover:to-red-100 hover:text-red-600 transition-all duration-200 font-normal rounded-xl mx-2"
                             >
                               {subitem.label}
                             </Link>
@@ -100,7 +95,7 @@ export default function Header() {
                   ) : (
                     <Link
                       href={item.href}
-                      className="px-4 py-2 text-sm font-semibold text-white hover:text-red-400 transition-all duration-300"
+                      className="px-4 py-2 text-sm uppercase font-medium text-white hover:text-base hover:font-bold hover:text-white transition-all duration-300"
                     >
                       {item.label}
                     </Link>
@@ -140,24 +135,25 @@ export default function Header() {
             </svg>
           </button>
         </div>
+      </div>
 
-        {/* Mobile Menu */}
-        <div className={cn(
-          'lg:hidden overflow-hidden transition-all duration-300',
-          isMobileMenuOpen ? 'max-h-screen opacity-100' : 'max-h-0 opacity-0'
-        )}>
-          <nav className="pb-4 bg-gradient-to-br from-red-950/50 via-gray-900/60 to-black/70 backdrop-blur-2xl rounded-b-2xl shadow-2xl border-t border-white/10">
-            <ul className="space-y-1 p-3">
+      {/* Mobile Menu */}
+      <div className={cn(
+        'lg:hidden fixed left-0 right-0 bottom-0 transition-all duration-300 bg-[#a8012b] -mt-1',
+        isMobileMenuOpen ? 'top-[70px] opacity-100 visible' : 'top-full opacity-0 invisible pointer-events-none'
+      )}>
+        <nav className="h-full overflow-y-auto pb-20" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <ul className="p-4 space-y-2">
               {NAVIGATION.map((item) => (
                 <li key={item.label}>
                   {item.submenu ? (
-                    <>
+                    <div className="rounded-2xl overflow-hidden bg-black/10">
                       <button
                         className={cn(
-                          "w-full text-left px-4 py-3 text-sm font-semibold rounded-xl flex items-center justify-between transition-all duration-200 backdrop-blur-md border",
+                          "w-full text-left px-6 py-4 text-base uppercase font-semibold flex items-center justify-between transition-all duration-200",
                           openSubmenu === item.label
-                            ? 'bg-white/15 text-white border-white/20'
-                            : 'text-gray-200 hover:bg-white/10 hover:text-white border-transparent'
+                            ? 'text-white'
+                            : 'text-white'
                         )}
                         onClick={() =>
                           setOpenSubmenu(openSubmenu === item.label ? null : item.label)
@@ -185,12 +181,12 @@ export default function Header() {
                         'overflow-hidden transition-all duration-300',
                         openSubmenu === item.label ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
                       )}>
-                        <ul className="pl-4 space-y-1 py-2">
+                        <ul className="border-t border-white/20">
                           {item.submenu.map((subitem) => (
                             <li key={subitem.label}>
                               <Link
                                 href={subitem.href}
-                                className="block px-4 py-2 text-sm text-gray-300 hover:bg-white/15 hover:text-white rounded-xl transition-all backdrop-blur-md border border-transparent hover:border-white/10"
+                                className="block px-8 py-3 text-sm text-white hover:bg-black/10 hover:pl-10 transition-all border-l-4 border-transparent hover:border-white"
                                 onClick={() => setIsMobileMenuOpen(false)}
                               >
                                 {subitem.label}
@@ -199,11 +195,11 @@ export default function Header() {
                           ))}
                         </ul>
                       </div>
-                    </>
+                    </div>
                   ) : (
                     <Link
                       href={item.href}
-                      className="block px-4 py-3 text-sm font-semibold text-gray-200 hover:bg-white/15 hover:text-white rounded-xl transition-all backdrop-blur-md border border-transparent hover:border-white/10"
+                      className="block px-6 py-4 text-base uppercase font-semibold text-white bg-black/10 rounded-2xl hover:bg-black/20 transition-all"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       {item.label}
@@ -214,7 +210,6 @@ export default function Header() {
             </ul>
           </nav>
         </div>
-      </div>
     </header>
   );
 }

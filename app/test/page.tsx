@@ -3,38 +3,34 @@ import { TestCard as TestCardType } from '@/types';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Test Universitari',
-  description: 'Informazioni su tutti i test di accesso universitari: Medicina, Veterinaria, Professioni Sanitarie, Architettura e altro',
+  title: 'Prove di Accesso',
+  description: 'Informazioni su tutte le prove di accesso universitari: Medicina, Odontoiatria, Veterinaria, Professioni Sanitarie, Architettura e altro',
 };
 
 const allTests: TestCardType[] = [
   {
     id: 'medicina',
-    title: 'Test Medicina e Odontoiatria',
-    description: 'Medicina e Odontoiatria in italiano',
+    title: 'Semestre Aperto',
+    description: 'Medicina, Odontoiatria e Veterinaria',
     image: '/images/med.png',
     link: 'https://accessoprogrammato.mur.gov.it/2024/',
-  },
-  {
-    id: 'veterinaria',
-    title: 'Test Veterinaria',
-    description: 'Medicina Veterinaria in italiano',
-    image: '/images/vet.png',
-    link: 'https://accessoprogrammato.mur.gov.it/2024/',
+    details: 'Test di accesso per i corsi di Medicina e Chirurgia, Odontoiatria e Protesi Dentaria, e Medicina Veterinaria in lingua italiana.',
   },
   {
     id: 'imat',
     title: 'IMAT',
-    description: 'Medicina e Odontoiatria in inglese',
+    description: 'Medicina, Odontoiatria e Veterinaria in Inglese',
     image: '/images/imat.png',
     link: 'https://accessoprogrammato.mur.gov.it/2024/',
+    details: 'International Medical Admissions Test per i corsi di Medicina, Odontoiatria e Veterinaria in lingua inglese.',
   },
   {
     id: 'sanitarie',
-    title: 'Test Professioni Sanitarie',
-    description: 'Professioni Sanitarie in italiano o inglese',
+    title: 'Professioni Sanitarie',
+    description: 'Professioni Sanitarie',
     image: '/images/snt.png',
     link: 'https://www.mur.gov.it/it/atti-e-normativa/decreto-ministeriale-n-1116-del-31-07-2024',
+    details: 'Test di accesso per i corsi delle Professioni Sanitarie (Infermieristica, Fisioterapia, ecc.).',
   },
   {
     id: 'architettura',
@@ -42,6 +38,7 @@ const allTests: TestCardType[] = [
     description: 'Architettura/Ingegneria edile-Architettura',
     image: '/images/arched.png',
     link: 'https://www.cisiaonline.it/area-tematica-architettura/test-arched-architettura-ingegneria-edile/struttura-della-prova-test-arched/',
+    details: 'Test per i corsi di Architettura e Ingegneria Edile-Architettura.',
   },
 ];
 
@@ -56,18 +53,13 @@ export default function TestPage() {
         </div>
         
         <div className="container mx-auto px-4 text-center relative z-10">
-          <div className="inline-block mb-6">
-            <span className="text-sm font-bold text-red-400 bg-red-900/30 px-4 py-2 rounded-full uppercase tracking-wider border border-red-500/30">
-              Informazioni Complete
-            </span>
-          </div>
           <h1 className="text-4xl md:text-6xl font-black mb-6">
-            Test Universitari
+            Prove di Accesso
           </h1>
           <div className="w-24 h-1.5 bg-gradient-to-r from-red-500 to-red-600 mx-auto rounded-full mb-8" />
           <p className="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto leading-relaxed">
-            Scopri tutti i test di accesso universitari e ottieni informazioni dettagliate
-            su date, modalità e requisiti per il tuo percorso di studi
+            Scopri tutti i test di accesso per il tuo percorso di studi e ottieni informazioni dettagliate
+            su date, modalità e contenuti.
           </p>
         </div>
       </section>
@@ -85,13 +77,13 @@ export default function TestPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto mb-20">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto mb-20 items-start">
             {allTests.map((test) => (
-              <TestCard key={test.id} test={test} />
+              <TestCard key={test.id} test={test} expandable={true} />
             ))}
           </div>
 
-          {/* Universit\u00e0 Private Section */}
+          {/* Università Private Section */}
           <div className="mt-20">
             <div className="text-center mb-16">
               <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4">

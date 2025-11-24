@@ -12,6 +12,7 @@ export interface TestCard {
   description: string;
   image: string;
   link: string;
+  details?: string;
 }
 
 export interface Testimonial {

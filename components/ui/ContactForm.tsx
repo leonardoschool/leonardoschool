@@ -22,12 +22,17 @@ interface FormErrors {
   cv?: string;
 }
 
-export default function ContactForm() {
+interface ContactFormProps {
+  defaultSubject?: string;
+  subjectReadonly?: boolean;
+}
+
+export default function ContactForm({ defaultSubject = '', subjectReadonly = false }: ContactFormProps) {
   const [formData, setFormData] = useState<FormData>({
     name: '',
     phone: '',
     email: '',
-    subject: '',
+    subject: defaultSubject,
     message: '',
     cv: null,
   });
@@ -142,15 +147,15 @@ export default function ContactForm() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto bg-gradient-to-br from-gray-900/40 to-black/60 backdrop-blur-xl rounded-2xl border border-white/10 p-8">
+    <div className="max-w-2xl mx-auto">
       {submitStatus === 'success' && (
-        <div className="mb-6 p-4 bg-green-500/20 border border-green-500/50 rounded-lg text-green-400">
+        <div className="mb-6 p-4 bg-green-100 border border-green-500 rounded-lg text-green-700">
           Il tuo messaggio è stato inviato. Grazie!
         </div>
       )}
 
       {submitStatus === 'error' && (
-        <div className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400">
+        <div className="mb-6 p-4 bg-red-100 border border-red-500 rounded-lg text-red-700">
           Si è verificato un errore. Riprova più tardi.
         </div>
       )}
@@ -166,7 +171,7 @@ export default function ContactForm() {
             onChange={handleChange}
             error={errors.name}
             required
-            className="bg-white/10 border-white/20 text-white placeholder:text-gray-400"
+            className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
           />
         </div>
 
@@ -180,7 +185,7 @@ export default function ContactForm() {
             onChange={handleChange}
             error={errors.phone}
             required
-            className="bg-white/10 border-white/20 text-white placeholder:text-gray-400"
+            className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
           />
         </div>
 
@@ -194,7 +199,7 @@ export default function ContactForm() {
             onChange={handleChange}
             error={errors.email}
             required
-            className="bg-white/10 border-white/20 text-white placeholder:text-gray-400"
+            className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
           />
         </div>
 
@@ -208,7 +213,8 @@ export default function ContactForm() {
             onChange={handleChange}
             error={errors.subject}
             required
-            className="bg-white/10 border-white/20 text-white placeholder:text-gray-400"
+            disabled={subjectReadonly}
+            className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
           />
         </div>
 
@@ -220,11 +226,11 @@ export default function ContactForm() {
             placeholder="Messaggio"
             value={formData.message}
             onChange={handleChange}
-            className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-colors resize-none"
+            className="w-full px-4 py-3 rounded-lg bg-white border border-gray-300 text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-colors resize-none"
             required
           />
           {errors.message && (
-            <p className="mt-1 text-sm text-red-400">{errors.message}</p>
+            <p className="mt-1 text-sm text-red-600">{errors.message}</p>
           )}
         </div>
 

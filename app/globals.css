@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  --primary-red: #cc0033;
+  --primary-red: #a8012b;
   --primary-black: #000000;
   --light-gray: #f8f9fa;
 }
@@ -34,7 +34,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #990026;
+  background: #8a0125;
 }
 
 /* Smooth scroll */

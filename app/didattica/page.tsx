@@ -12,8 +12,8 @@ const coursesData = {
       id: 'starter',
       logo: '/images/NEW_LOGO_2026/LS Starter.png',
       badge: 'BASE',
-      badgeColor: 'bg-green-500',
-      headerColor: 'bg-gradient-to-br from-green-400 to-green-600',
+      badgeColor: 'bg-[#68BCE8]',
+      headerColor: 'bg-[#68BCE8]',
       category: 'MEDICINA • ODONTOIATRIA • VETERINARIA',
       title: 'Leonardo Starter Class',
       language: 'Italiano / Inglese (IMAT) / Prof. Sanitarie',
@@ -35,14 +35,14 @@ const coursesData = {
           subtext: '18 tematiche + 1 completa',
         },
       ],
-      ctaColor: 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700',
+      ctaColor: 'bg-[#68BCE8] hover:bg-[#5AACDB]',
     },
     {
       id: 'academy',
       logo: '/images/NEW_LOGO_2026/ACADEMY.png',
       badge: 'AVANZATO',
-      badgeColor: 'bg-blue-600',
-      headerColor: 'bg-gradient-to-br from-blue-400 to-blue-600',
+      badgeColor: 'bg-[#D54F8A]',
+      headerColor: 'bg-[#D54F8A]',
       category: 'MEDICINA • ODONTOIATRIA • VETERINARIA',
       title: 'Leonardo Academy',
       language: 'Italiano',
@@ -60,14 +60,14 @@ const coursesData = {
           subtext: '22 simulazioni complete + correzioni',
         },
       ],
-      ctaColor: 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800',
+      ctaColor: 'bg-[#D54F8A] hover:bg-[#C4407A]',
     },
     {
       id: 'intensive',
       logo: '/images/NEW_LOGO_2026/ACADEMY.png',
       badge: 'INTENSIVO',
-      badgeColor: 'bg-pink-500',
-      headerColor: 'bg-gradient-to-br from-pink-400 to-pink-600',
+      badgeColor: 'bg-[#B5B240]',
+      headerColor: 'bg-[#B5B240]',
       category: 'MEDICINA • ODONTOIATRIA • VETERINARIA',
       title: 'Leonardo Academy Intensive',
       language: 'Italiano',
@@ -85,7 +85,7 @@ const coursesData = {
           subtext: 'Correzioni commentate (42 ore)',
         },
       ],
-      ctaColor: 'bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700',
+      ctaColor: 'bg-[#B5B240] hover:bg-[#A5A238]',
     },
   ],
   imat: [
@@ -123,11 +123,40 @@ const coursesData = {
   ],
   snt: [
     {
+      id: 'starter-snt',
+      logo: '/images/NEW_LOGO_2026/LS Starter.png',
+      badge: 'BASE',
+      badgeColor: 'bg-[#68BCE8]',
+      headerColor: 'bg-[#68BCE8]',
+      category: 'PROFESSIONI SANITARIE',
+      title: 'Leonardo Starter Class',
+      language: 'Italiano / Prof. Sanitarie',
+      details: [
+        {
+          icon: '📅',
+          label: 'PERIODO',
+          text: 'Gennaio - Maggio 2026',
+          subtext: 'Sabato / Domenica',
+        },
+        {
+          icon: '📚',
+          label: 'DIDATTICA',
+          text: '20 lezioni (42 ore)',
+        },
+        {
+          icon: '✓',
+          label: 'SIMULAZIONI',
+          subtext: '18 tematiche + 1 completa',
+        },
+      ],
+      ctaColor: 'bg-[#68BCE8] hover:bg-[#5AACDB]',
+    },
+    {
       id: 'snt-class',
       logo: '/images/NEW_LOGO_2026/SNT.png',
       badge: 'AVANZATO',
       badgeColor: 'bg-orange-500',
-      headerColor: 'bg-gradient-to-br from-orange-400 to-orange-600',
+      headerColor: 'bg-orange-500',
       category: 'PROFESSIONI SANITARIE',
       title: 'SNT Class',
       language: 'Italiano',
@@ -158,9 +187,9 @@ const coursesData = {
     {
       id: 'arched-class',
       logo: '/images/NEW_LOGO_2026/arched.png',
-      badge: 'AVANZATO',
+      badge: '',
       badgeColor: 'bg-purple-500',
-      headerColor: 'bg-gradient-to-br from-purple-400 to-purple-600',
+      headerColor: 'bg-purple-500',
       category: 'ARCHITETTURA',
       title: 'ArchED Class',
       language: 'Italiano',
@@ -184,17 +213,48 @@ const coursesData = {
           subtext: 'Correzioni dettagliate',
         },
       ],
-      ctaColor: 'bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700',
+      ctaColor: 'bg-purple-500 hover:bg-purple-600',
     },
   ],
   altro: [
+    {
+      id: 'tolc-class',
+      logo: '/images/NEW_LOGO_2026/TOLC.png',
+      badge: '',
+      badgeColor: 'bg-teal-500',
+      headerColor: 'bg-teal-500',
+      category: 'TOLC',
+      title: 'Percorsi TOLC',
+      language: 'Italiano',
+      details: [
+        {
+          icon: '📊',
+          label: 'TEST',
+          text: 'TOLC-MED, TOLC-I, TOLC-SU',
+          subtext: 'Preparazione specifica',
+        },
+        {
+          icon: '📚',
+          label: 'PROGRAMMA',
+          text: 'Materie mirate per ogni TOLC',
+          subtext: 'Logica, Matematica, Scienze',
+        },
+        {
+          icon: '✅',
+          label: 'MODALITÀ',
+          text: 'Lezioni ed esercitazioni',
+          subtext: 'Simulazioni complete',
+        },
+      ],
+      ctaColor: 'bg-teal-500 hover:bg-teal-600',
+    },
     {
       id: 'altro-class',
       logo: '/images/logo.png',
       badge: '',
       badgeColor: 'bg-gray-600',
-      headerColor: 'bg-gradient-to-br from-gray-700 to-gray-900',
-      category: 'ALTRI CORSI',
+      headerColor: 'bg-gray-600',
+      category: 'PERCORSI PERSONALIZZATI',
       title: 'Corso Personalizzato',
       language: 'Italiano',
       details: [
@@ -217,7 +277,7 @@ const coursesData = {
           subtext: 'Online o in presenza',
         },
       ],
-      ctaColor: 'bg-gradient-to-r from-gray-700 to-gray-900 hover:from-gray-800 hover:to-black',
+      ctaColor: 'bg-gray-600 hover:bg-gray-700',
     },
   ],
 };
@@ -227,6 +287,7 @@ function DidatticaContent() {
   const corso = searchParams.get('corso') || 'medicina';
 
   const selectedCourses = coursesData[corso as keyof typeof coursesData] || coursesData.medicina;
+  const showImat = corso === 'medicina'; // Mostra IMAT solo quando si visualizza medicina
 
   return (
     <div className="min-h-screen pb-16 bg-gray-50">
@@ -237,7 +298,7 @@ function DidatticaContent() {
           <div className="absolute top-0 left-0 w-96 h-96 bg-red-600 rounded-full blur-3xl animate-pulse" />
           <div className="absolute bottom-0 right-0 w-96 h-96 bg-gray-600 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
         </div>
-        
+
         <div className="container mx-auto px-4 text-center relative z-10">
           <h1 className="text-4xl md:text-6xl font-black mb-6">
             {corso === 'medicina' && 'Medicina, Odontoiatria e Veterinaria'}
@@ -246,59 +307,45 @@ function DidatticaContent() {
             {corso === 'arched' && 'Architettura'}
             {corso === 'altro' && 'Corsi Personalizzati'}
           </h1>
-          <p className="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto">
-            Corsi preparatori per l&apos;ammissione alle facoltà mediche
+          <p className="text-xl text-gray-300">
+            Preparazione per l’ammissione a Medicina e Chirurgia, Odontoiatria e Protesi Dentaria e Medicina Veterinaria
           </p>
-          
+
           {/* Course tabs integrated in hero */}
           <div className="flex flex-wrap justify-center gap-4 mt-12">
             <Link
               href="/didattica?corso=medicina"
-              className={`px-8 py-4 rounded-2xl font-bold transition-all transform hover:scale-105 ${
-                corso === 'medicina'
-                  ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-xl shadow-red-500/50'
-                  : 'bg-white/10 backdrop-blur-md text-white border border-white/20 hover:bg-white/20'
-              }`}
+              className={`px-8 py-4 rounded-2xl font-bold transition-all transform hover:scale-105 ${corso === 'medicina'
+                ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-xl shadow-red-500/50'
+                : 'bg-white/10 backdrop-blur-md text-white border border-white/20 hover:bg-white/20'
+                }`}
             >
               Medicina
             </Link>
             <Link
-              href="/didattica?corso=imat"
-              className={`px-8 py-4 rounded-2xl font-bold transition-all transform hover:scale-105 ${
-                corso === 'imat'
-                  ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-xl shadow-red-500/50'
-                  : 'bg-white/10 backdrop-blur-md text-white border border-white/20 hover:bg-white/20'
-              }`}
-            >
-              IMAT
-            </Link>
-            <Link
               href="/didattica?corso=snt"
-              className={`px-8 py-4 rounded-2xl font-bold transition-all transform hover:scale-105 ${
-                corso === 'snt'
-                  ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-xl shadow-red-500/50'
-                  : 'bg-white/10 backdrop-blur-md text-white border border-white/20 hover:bg-white/20'
-              }`}
+              className={`px-8 py-4 rounded-2xl font-bold transition-all transform hover:scale-105 ${corso === 'snt'
+                ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-xl shadow-red-500/50'
+                : 'bg-white/10 backdrop-blur-md text-white border border-white/20 hover:bg-white/20'
+                }`}
             >
               Professioni Sanitarie
             </Link>
             <Link
               href="/didattica?corso=arched"
-              className={`px-8 py-4 rounded-2xl font-bold transition-all transform hover:scale-105 ${
-                corso === 'arched'
-                  ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-xl shadow-red-500/50'
-                  : 'bg-white/10 backdrop-blur-md text-white border border-white/20 hover:bg-white/20'
-              }`}
+              className={`px-8 py-4 rounded-2xl font-bold transition-all transform hover:scale-105 ${corso === 'arched'
+                ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-xl shadow-red-500/50'
+                : 'bg-white/10 backdrop-blur-md text-white border border-white/20 hover:bg-white/20'
+                }`}
             >
               Architettura
             </Link>
             <Link
               href="/didattica?corso=altro"
-              className={`px-8 py-4 rounded-2xl font-bold transition-all transform hover:scale-105 ${
-                corso === 'altro'
-                  ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-xl shadow-red-500/50'
-                  : 'bg-white/10 backdrop-blur-md text-white border border-white/20 hover:bg-white/20'
-              }`}
+              className={`px-8 py-4 rounded-2xl font-bold transition-all transform hover:scale-105 ${corso === 'altro'
+                ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-xl shadow-red-500/50'
+                : 'bg-white/10 backdrop-blur-md text-white border border-white/20 hover:bg-white/20'
+                }`}
             >
               Altro
             </Link>
@@ -309,6 +356,9 @@ function DidatticaContent() {
       {/* Courses Grid */}
       <section className="py-24 bg-gradient-to-b from-white via-gray-50 to-white relative overflow-hidden">
         <div className="container mx-auto px-4 relative z-10">
+          <h2 className="text-4xl text-black text-center mb-10 font-bold">
+            {corso === 'altro' ? 'Percorsi TOLC e Personalizzati' : 'Semestre Aperto'}
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12 max-w-7xl mx-auto">
             {selectedCourses.map((course) => (
               <div
@@ -317,33 +367,34 @@ function DidatticaContent() {
               >
                 {/* Main Card */}
                 <div className="relative bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 overflow-hidden border-2 border-gray-100 flex flex-col h-full">
-                  
-                  {/* Top colored section with integrated logo */}
-                  <div className={`${course.headerColor} relative px-8 py-12 overflow-hidden flex-shrink-0`}>
-                    {/* Decorative elements */}
-                    <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/20 rounded-full" />
-                    <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-black/10 rounded-full" />
-                    
-                    <div className="relative z-10">
-                      {/* Badge */}
-                      <div className="absolute top-0 right-0">
-                        <span className={`${course.badgeColor} text-white px-4 py-2 rounded-full text-xs font-black shadow-lg uppercase tracking-widest`}>
-                          {course.badge}
-                        </span>
-                      </div>
-                      
-                      {/* Logo directly integrated - no background box */}
-                      <div className="flex justify-center mt-4">
-                        <Image
-                          src={course.logo}
-                          alt={course.title}
-                          width={240}
-                          height={90}
-                          className="object-contain drop-shadow-2xl transform group-hover:scale-110 transition-transform duration-500"
-                        />
-                      </div>
+
+                  {/* Top white section with logo */}
+                  <div className="relative px-8 py-12 bg-white overflow-hidden flex-shrink-0">
+                    {/* Subtle decorative elements */}
+                    <div className="absolute -top-10 -right-10 w-40 h-40 bg-gray-50 rounded-full" />
+                    <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-gray-50 rounded-full" />
+
+                    {/* Badge colorato */}
+                    <div className="absolute top-4 right-4 z-20">
+                      <span className={`${course.badgeColor} text-white px-4 py-2 rounded-full text-xs font-black shadow-lg uppercase tracking-widest`}>
+                        {course.badge}
+                      </span>
+                    </div>
+
+                    {/* Logo */}
+                    <div className="relative z-10 flex justify-center">
+                      <Image
+                        src={course.logo}
+                        alt={course.title}
+                        width={240}
+                        height={90}
+                        className="object-contain transform group-hover:scale-110 transition-transform duration-500"
+                      />
                     </div>
                   </div>
+
+                  {/* Colored accent line */}
+                  <div className={`h-1 ${course.headerColor}`} />
 
                   {/* Card content */}
                   <div className="p-8 flex flex-col flex-grow">
@@ -351,12 +402,12 @@ function DidatticaContent() {
                     <div className="text-xs text-gray-400 font-black mb-3 tracking-widest uppercase">
                       {course.category}
                     </div>
-                    
+
                     {/* Title */}
                     <h3 className="text-2xl font-black text-gray-900 mb-3 leading-tight">
                       {course.title}
                     </h3>
-                    
+
                     {/* Language badge */}
                     <div className="inline-block mb-8">
                       <span className={`text-sm font-bold ${course.headerColor} text-white px-4 py-1.5 rounded-full shadow-md`}>
@@ -416,14 +467,136 @@ function DidatticaContent() {
         </div>
       </section>
 
+      {/* IMAT Section - Separata */}
+      {showImat && (
+        <section className="py-24 bg-gradient-to-b from-gray-50 via-white to-gray-50 relative overflow-hidden">
+          <div className="container mx-auto px-4 relative z-10">
+            <div className="text-center mb-16">
+              <span className="inline-block px-6 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-bold uppercase tracking-wider mb-4">
+                International Medical Admissions Test
+              </span>
+              <h2 className="text-4xl text-black font-bold mb-4">
+                Corso IMAT
+              </h2>
+              <p className="text-gray-600 max-w-2xl mx-auto">
+                Preparazione specifica per il test di ammissione a Medicina in inglese
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12 max-w-7xl mx-auto">
+              {coursesData.imat.map((course) => (
+                <div
+                  key={course.id}
+                  className="group relative"
+                >
+                  {/* Main Card */}
+                  <div className="relative bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 overflow-hidden border-2 border-gray-100 flex flex-col h-full">
+
+                    {/* Top white section with logo */}
+                    <div className="relative px-8 py-12 bg-white overflow-hidden flex-shrink-0">
+                      {/* Subtle decorative elements */}
+                      <div className="absolute -top-10 -right-10 w-40 h-40 bg-gray-50 rounded-full" />
+                      <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-gray-50 rounded-full" />
+
+                      {/* Badge colorato */}
+                      <div className="absolute top-4 right-4 z-20">
+                        <span className={`${course.badgeColor} text-white px-4 py-2 rounded-full text-xs font-black shadow-lg uppercase tracking-widest`}>
+                          {course.badge}
+                        </span>
+                      </div>
+
+                      {/* Logo */}
+                      <div className="relative z-10 flex justify-center">
+                        <Image
+                          src={course.logo}
+                          alt={course.title}
+                          width={240}
+                          height={90}
+                          className="object-contain transform group-hover:scale-110 transition-transform duration-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Card content */}
+                    <div className="p-8 flex flex-col flex-grow">
+                      {/* Category */}
+                      <div className="text-xs text-gray-400 font-black mb-3 tracking-widest uppercase">
+                        {course.category}
+                      </div>
+
+                      {/* Title */}
+                      <h3 className="text-2xl font-black text-gray-900 mb-3 leading-tight">
+                        {course.title}
+                      </h3>
+
+                      {/* Language badge */}
+                      <div className="inline-block mb-8">
+                        <span className={`text-sm font-bold ${course.headerColor} text-white px-4 py-1.5 rounded-full shadow-md`}>
+                          {course.language}
+                        </span>
+                      </div>
+
+                      {/* Details - flex-grow pushes button to bottom */}
+                      <div className="space-y-5 mb-8 flex-grow">
+                        {course.details.map((detail, index) => (
+                          <div key={index} className="flex gap-4 items-start">
+                            <div className={`${course.badgeColor} text-white min-w-[52px] h-[52px] rounded-2xl flex items-center justify-center font-black shrink-0 shadow-lg text-xl transform group-hover:rotate-6 transition-transform`}>
+                              {detail.icon}
+                            </div>
+                            <div className="flex-1 pt-1">
+                              <div className="text-xs text-gray-400 font-black mb-1.5 uppercase tracking-wider">
+                                {detail.label}
+                              </div>
+                              <div className="text-base font-bold text-gray-900 leading-snug mb-1">
+                                {detail.text}
+                              </div>
+                              {detail.subtext && (
+                                <div className="text-sm text-gray-600">
+                                  {detail.subtext}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* CTA Button - always at same position */}
+                      <Link href="/contattaci">
+                        <button
+                          className={`w-full ${course.ctaColor} text-white font-black py-5 px-6 rounded-2xl transition-all duration-300 transform hover:scale-105 shadow-2xl uppercase tracking-wider text-sm relative overflow-hidden group/btn`}
+                        >
+                          <span className="relative z-10 flex items-center justify-center gap-2">
+                            Contattaci Ora
+                            <svg className="w-5 h-5 transform group-hover/btn:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                            </svg>
+                          </span>
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent transform -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700" />
+                        </button>
+                      </Link>
+                    </div>
+
+                    {/* Bottom accent line */}
+                    <div className={`h-2 ${course.headerColor}`} />
+                  </div>
+
+                  {/* Floating glow effect on hover */}
+                  <div className={`absolute inset-0 ${course.headerColor} opacity-0 group-hover:opacity-20 blur-2xl rounded-3xl transition-opacity duration-500 -z-10`} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* CTA Section */}
       <section className="py-16 bg-white">
         <div className="container mx-auto px-4 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">
-            Non Sei Sicuro del Corso Adatto a Te?
+            Hai bisogno di aiuto?
           </h2>
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Prenota un colloquio gratuito e costruiremo insieme il percorso perfetto per te
+            Prenota un colloquio gratuito e costruiremo insieme un percorso su misura per te
           </p>
           <Link href="/contattaci">
             <Button variant="primary" size="lg">

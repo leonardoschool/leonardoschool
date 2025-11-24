@@ -28,9 +28,11 @@ export const SITE_KEYWORDS = [
 ];
 
 export const SOCIAL_LINKS = {
-  facebook: '#',
-  instagram: '#',
-  twitter: '#',
+  facebook: 'https://www.facebook.com/Leonardo-School-115110770367756',
+  instagram: 'https://www.instagram.com/leonardo.school/',
+  youtube: 'https://www.youtube.com/@leonardoformazione',
+  linkedin: 'https://www.linkedin.com/company/leonardoschool',
+  tiktok: 'https://www.tiktok.com/@leonardo.school',
 };
 
 export const NAVIGATION = [
@@ -39,14 +41,13 @@ export const NAVIGATION = [
     href: '/didattica',
     submenu: [
       { label: 'Medicina, Odontoiatria e Veterinaria', href: '/didattica?corso=medicina' },
-      { label: 'IMAT', href: '/didattica?corso=imat' },
       { label: 'Professioni Sanitarie', href: '/didattica?corso=snt' },
       { label: 'Architettura', href: '/didattica?corso=arched' },
       { label: 'Altro', href: '/didattica?corso=altro' },
     ],
   },
   { label: 'Simulazione', href: '/simulazione' },
-  { label: 'Test', href: '/test' },
+  { label: 'Prove', href: '/test' },
   { label: 'Contattaci', href: '/contattaci' },
   {
     label: 'Altro',
