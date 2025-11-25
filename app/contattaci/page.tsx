@@ -1,13 +1,14 @@
+'use client';
+
 import ContactForm from '@/components/ui/ContactForm';
-import { Metadata } from 'next';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 
-export const metadata: Metadata = {
-  title: 'Contattaci',
-  description: 'Hai dubbi? Contattaci per informazioni sui nostri corsi di preparazione ai test universitari',
-};
+function ContattaciContent() {
+  const searchParams = useSearchParams();
+  const oggetto = searchParams.get('oggetto') || '';
 
-export default function ContattaciPage() {
   return (
     <div className="min-h-screen pt-24 pb-16 bg-gray-50">
       <div className="container mx-auto px-4">
@@ -145,23 +146,26 @@ export default function ContattaciPage() {
                 </div>
               </div>
             </div>
-
-            {/* Company Info Card */}
-            <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-lg">
-              <h3 className="text-gray-900 font-semibold mb-3">Leonardo Formazione S.r.l.s</h3>
-              <div className="text-sm text-gray-600 space-y-1">
-                <p>P.IVA: 05944090876</p>
-                <p>Sede Legale: Corso Sicilia 20 - Trecastagni</p>
-              </div>
-            </div>
           </div>
 
           {/* Contact Form */}
           <div>
-            <ContactForm />
+            <ContactForm defaultSubject={oggetto} />
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ContattaciPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-600"></div>
+      </div>
+    }>
+      <ContattaciContent />
+    </Suspense>
   );
 }

@@ -2,8 +2,14 @@ import JobApplicationForm from '@/components/ui/JobApplicationForm';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Lavora Con Noi',
-  description: 'Unisciti al team di Leonardo School come tutor. Opportunità per studenti e neolaureati appassionati di insegnamento',
+  title: 'Lavora Con Noi - Tutor Medicina Catania | Leonardo School',
+  description: 'Diventa tutor Leonardo School Catania: opportunità per studenti universitari e neolaureati. Insegna preparazione test medicina e professioni sanitarie.',
+  keywords: ['lavora con noi catania', 'tutor medicina catania', 'lavoro studenti catania', 'tutor universitari', 'insegnante medicina catania', 'opportunità studenti medicina'],
+  openGraph: {
+    title: 'Lavora Con Noi - Leonardo School Catania',
+    description: 'Unisciti al team di tutor Leonardo School',
+    url: 'https://leonardoschool.it/lavora-con-noi',
+  },
 };
 
 export default function LavoraConNoiPage() {

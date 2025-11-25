@@ -93,9 +93,9 @@ const coursesData = {
       id: 'imat-standard',
       logo: '/images/NEW_LOGO_2026/IMAT.png',
       badge: 'STANDARD',
-      badgeColor: 'bg-blue-700',
-      headerColor: 'bg-gradient-to-br from-blue-500 to-blue-700',
-      category: 'MEDICINA E ODONTOIATRIA IN INGLESE',
+      badgeColor: 'bg-[#19419B]',
+      headerColor: 'bg-gradient-to-br from-[#19419B] to-[#19419B]',
+      category: 'MEDICINA E ODONTOIATRIA E VETERINARIA IN INGLESE',
       title: 'IMAT CLASS',
       language: 'English',
       details: [
@@ -118,7 +118,7 @@ const coursesData = {
           subtext: 'Official IMAT past papers',
         },
       ],
-      ctaColor: 'bg-gradient-to-r from-blue-700 to-blue-800 hover:from-blue-800 hover:to-blue-900',
+      ctaColor: 'bg-gradient-to-r from-[#19419B] to-[#19419B] hover:from-[#19419B] hover:to-[#19419B]',
     },
   ],
   snt: [
@@ -313,11 +313,11 @@ function DidatticaContent() {
       case 'imat':
         return 'IMAT - International Medical Admissions Test';
       case 'snt':
-        return 'CORSI DI LAUREA DELLE PROFESSIONI SANITARIE';
+        return 'PROFESSIONI SANITARIE';
       case 'arched':
-        return 'Architettura • Ingegneria Edile-Architettura';
+        return 'ARCHITETTURA';
       case 'altro':
-        return 'Test CISIA e Altri';
+        return 'Test CISIA e Altri Corsi';
       default:
         return 'Corsi Disponibili';
     }
@@ -331,11 +331,11 @@ function DidatticaContent() {
       case 'imat':
         return 'Corso intensivo per il test di ammissione in lingua inglese a Medicina e Odontoiatria';
       case 'snt':
-        return 'Percorsi dedicati per l\'accesso ai corsi di laurea delle Professioni Sanitarie';
+        return 'Preparazione completa per l\'ammissione ai Corsi di Laurea delle Professioni Sanitarie';
       case 'arched':
-        return 'Preparazione mirata per i test di ammissione ad Architettura e Ingegneria Edile-Architettura';
+        return 'Preparazione completa per l\'ammissione ai Corsi di Laurea direttamente finalizzati alla professione di Architetto';
       case 'altro':
-        return 'Test CISIA TOLC e percorsi di didattica personalizzata per ogni esigenza';
+        return 'Test CISIA e percorsi didattici personalizzati per ogni tua esigenza';
       default:
         return 'Scegli il percorso più adatto alle tue esigenze';
     }
@@ -482,7 +482,7 @@ function DidatticaContent() {
                     </div>
 
                     {/* CTA Button - always at same position */}
-                    <Link href="/contattaci">
+                    <Link href={`/contattaci?oggetto=${encodeURIComponent(course.title)}`}>
                       <button
                         className={`w-full ${course.ctaColor} text-white font-black py-5 px-6 rounded-2xl transition-all duration-300 transform hover:scale-105 shadow-2xl uppercase tracking-wider text-sm relative overflow-hidden group/btn`}
                       >
@@ -511,18 +511,15 @@ function DidatticaContent() {
 
       {/* IMAT Section - Separata */}
       {showImat && (
-        <section className="py-24 bg-gradient-to-b from-gray-50 via-white to-gray-50 relative overflow-hidden">
+        <section className="bg-gradient-to-b from-gray-50 via-white to-gray-50 relative overflow-hidden">
           <div className="container mx-auto px-4 relative z-10">
-            <div className="text-center mb-16">
+            <div className="text-center mb-8">
               <h2 className="text-4xl text-black font-bold mb-4">
                 IMAT
               </h2>
               <span className="inline-block px-6 py-2 bg-[#a8012b] text-white rounded-full text-sm font-bold uppercase tracking-wider mb-4">
                 International Medical Admissions Test
               </span>
-              <p className="text-gray-600 max-w-2xl mx-auto">
-                Preparazione specifica per il test di ammissione a Medicina in inglese
-              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12 max-w-7xl mx-auto">
@@ -603,7 +600,7 @@ function DidatticaContent() {
                       </div>
 
                       {/* CTA Button - always at same position */}
-                      <Link href="/contattaci">
+                      <Link href={`/contattaci?oggetto=${encodeURIComponent(course.title)}`}>
                         <button
                           className={`w-full ${course.ctaColor} text-white font-black py-5 px-6 rounded-2xl transition-all duration-300 transform hover:scale-105 shadow-2xl uppercase tracking-wider text-sm relative overflow-hidden group/btn`}
                         >

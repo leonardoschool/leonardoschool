@@ -2,29 +2,29 @@
 
 export const SITE_NAME = 'Leonardo School';
 export const SITE_DESCRIPTION = 
-  'Leonardo School si occupa di preparare i ragazzi al superamento dei test ministeriali per le facoltà di medicina, professioni sanitarie e veterinaria';
+  'Leonardo School Catania: preparazione test medicina, odontoiatria, veterinaria, professioni sanitarie, architettura e TOLC. Corsi, simulazioni e tutor qualificati per l\'ammissione all\'università.';
 
 export const SITE_KEYWORDS = [
-  'leonardo school',
-  'medicina',
-  'università',
-  'test',
-  'test accesso',
-  'professioni sanitarie',
-  'preparazione',
-  'medico',
-  'studenti',
-  'veterinaria',
-  'catania',
-  'scuola',
-  'scuola superiore',
-  'liceo',
-  'sanitario',
-  'infermiere',
-  'tecnico',
-  'laboratorio',
-  'biotecnologie',
-  'camice',
+  'leonardo school catania',
+  'preparazione test medicina catania',
+  'test medicina catania',
+  'corsi medicina catania',
+  'test odontoiatria catania',
+  'test veterinaria catania',
+  'professioni sanitarie catania',
+  'preparazione professioni sanitarie',
+  'simulazione test medicina',
+  'TOLC medicina',
+  'TOLC test',
+  'corsi test ammissione catania',
+  'scuola preparazione medicina sicilia',
+  'test ingresso medicina',
+  'test architettura catania',
+  'preparazione università catania',
+  'corso test universitari',
+  'tutor medicina catania',
+  'preparazione TOLC catania',
+  'CEnT test medicina',
 ];
 
 export const SOCIAL_LINKS = {

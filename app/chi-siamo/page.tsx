@@ -4,8 +4,14 @@ import Button from '@/components/ui/Button';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Chi Siamo',
-  description: 'Scopri chi siamo e il nostro metodo di insegnamento innovativo con tutor studenti e neolaureati',
+  title: 'Chi Siamo - Leonardo School Catania',
+  description: 'Leonardo School Catania: scuola di preparazione test medicina, odontoiatria e professioni sanitarie. Metodo innovativo con tutor studenti e neolaureati.',
+  keywords: ['chi siamo leonardo school', 'scuola preparazione catania', 'metodo insegnamento medicina', 'tutor medicina catania'],
+  openGraph: {
+    title: 'Chi Siamo - Leonardo School Catania',
+    description: 'Scopri chi siamo e il nostro metodo di insegnamento innovativo',
+    url: 'https://leonardoschool.it/chi-siamo',
+  },
 };
 
 export default function ChiSiamoPage() {

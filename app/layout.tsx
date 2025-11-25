@@ -15,12 +15,25 @@ const raleway = Raleway({
 
 export const metadata: Metadata = {
   title: {
-    default: SITE_NAME,
+    default: `${SITE_NAME} | Preparazione Test Medicina Catania`,
     template: `%s | ${SITE_NAME}`,
   },
   description: SITE_DESCRIPTION,
   keywords: SITE_KEYWORDS,
   authors: [{ name: SITE_NAME }],
+  creator: SITE_NAME,
+  publisher: SITE_NAME,
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
   icons: {
     icon: [
       { url: '/images/logo.png' },
@@ -35,8 +48,26 @@ export const metadata: Metadata = {
     locale: "it_IT",
     url: "https://leonardoschool.it",
     siteName: SITE_NAME,
-    title: SITE_NAME,
+    title: `${SITE_NAME} - Preparazione Test Medicina e Professioni Sanitarie Catania`,
     description: SITE_DESCRIPTION,
+    images: [{
+      url: 'https://leonardoschool.it/images/logo.png',
+      width: 1200,
+      height: 630,
+      alt: 'Leonardo School Catania Logo',
+    }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: `${SITE_NAME} - Preparazione Test Medicina Catania`,
+    description: SITE_DESCRIPTION,
+    images: ['https://leonardoschool.it/images/logo.png'],
+  },
+  verification: {
+    google: 'aa1074040bc69c9c',
+  },
+  alternates: {
+    canonical: 'https://leonardoschool.it',
   },
 };
 

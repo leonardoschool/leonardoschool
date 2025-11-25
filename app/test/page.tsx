@@ -3,8 +3,14 @@ import { TestCard as TestCardType } from '@/types';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Prove di Accesso',
-  description: 'Informazioni su tutte le prove di accesso universitari: Medicina, Odontoiatria, Veterinaria, Professioni Sanitarie, Architettura e altro',
+  title: 'Prove Accesso Universitario - Test Medicina e Professioni Sanitarie Catania',
+  description: 'Informazioni complete su prove accesso 2025-2026: test medicina, odontoiatria, veterinaria, professioni sanitarie, architettura. Date, documenti e graduatorie.',
+  keywords: ['prove accesso università', 'test medicina 2026', 'test odontoiatria date', 'test veterinaria catania', 'professioni sanitarie prove', 'test architettura', 'date test medicina', 'graduatoria medicina'],
+  openGraph: {
+    title: 'Prove Accesso Universitario - Leonardo School',
+    description: 'Tutte le informazioni sui test di accesso universitari 2025-2026',
+    url: 'https://leonardoschool.it/test',
+  },
 };
 
 const allTests: TestCardType[] = [
