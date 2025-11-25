@@ -2,7 +2,6 @@
 
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import Button from '@/components/ui/Button';
 import Image from 'next/image';
 import { Suspense } from 'react';
 
@@ -19,20 +18,19 @@ const coursesData = {
       language: 'Italiano / Inglese (IMAT) / Prof. Sanitarie',
       details: [
         {
-          icon: '📅',
+          icon: '🗓',
           label: 'PERIODO',
-          text: 'Gennaio - Maggio 2026',
-          subtext: 'Sabato / Domenica',
+          text: 'dicembre-maggio 2026',
         },
         {
-          icon: '📚',
-          label: 'DIDATTICA',
-          text: '20 lezioni (42 ore)',
+          icon: '🧑‍🏫',
+          label: 'DIDATTICA FRONTALE',
+          text: '42 ore',
         },
         {
-          icon: '✓',
-          label: 'SIMULAZIONI',
-          subtext: '18 tematiche + 1 completa',
+          icon: '✍',
+          label: 'ESERCITAZIONE',
+          text: '21 ore',
         },
       ],
       ctaColor: 'bg-[#42BFED] hover:bg-[#5AACDB]',
@@ -48,16 +46,34 @@ const coursesData = {
       language: 'Italiano',
       details: [
         {
-          icon: 'A',
-          label: 'LECTURES',
-          text: 'Luglio - Agosto 2026',
-          subtext: '24 lezioni • 22 simulazioni',
+          icon: '🗓',
+          label: '1° PERIODO',
+          text: 'luglio-agosto 2026',
         },
         {
-          icon: 'B',
-          label: 'TRAINING',
-          text: 'Settembre - Novembre 2026',
-          subtext: '22 simulazioni complete + correzioni',
+          icon: '🧑‍🏫',
+          label: 'DIDATTICA FRONTALE',
+          text: '72 ore',
+        },
+        {
+          icon: '✍',
+          label: 'ESERCITAZIONE',
+          text: '11 ore',
+        },
+        {
+          icon: '🗓',
+          label: '2° PERIODO',
+          text: 'settembre-novembre 2026',
+        },
+        {
+          icon: '🧑‍🏫',
+          label: 'DIDATTICA FRONTALE',
+          text: '66 ore',
+        },
+        {
+          icon: '✍',
+          label: 'ESERCITAZIONE',
+          text: '66 ore',
         },
       ],
       ctaColor: 'bg-[#E7418B] hover:bg-[#C4407A]',
@@ -73,16 +89,19 @@ const coursesData = {
       language: 'Italiano',
       details: [
         {
-          icon: '📅',
-          label: 'PERIODO',
-          text: 'Novembre - Dicembre 2026',
-          subtext: 'Lunedì - Domenica',
+          icon: '🗓',
+          label: '1° PERIODO',
+          text: 'novembre-dicembre 2026',
         },
         {
-          icon: '⚡',
-          label: 'PROGRAMMA',
-          text: '14 simulazioni complete',
-          subtext: 'Correzioni commentate (42 ore)',
+          icon: '🧑‍🏫',
+          label: 'DIDATTICA FRONTALE',
+          text: '42 ore',
+        },
+        {
+          icon: '✍',
+          label: 'ESERCITAZIONE',
+          text: '42 ore',
         },
       ],
       ctaColor: 'bg-[#B6B21D] hover:bg-[#A5A238]',
@@ -100,22 +119,19 @@ const coursesData = {
       language: 'English',
       details: [
         {
-          icon: '📅',
+          icon: '🗓',
           label: 'PERIOD',
-          text: 'June - September 2026',
-          subtext: 'Intensive preparation',
+          text: 'June-September 2026',
         },
         {
-          icon: '📚',
-          label: 'PROGRAM',
-          text: 'Complete IMAT syllabus',
-          subtext: 'Medical terminology in English',
+          icon: '🧑‍🏫',
+          label: 'LECTURES',
+          text: '30 ore',
         },
         {
-          icon: '✓',
-          label: 'TESTS',
-          text: 'Weekly mock exams',
-          subtext: 'Official IMAT past papers',
+          icon: '✍',
+          label: 'TRAINING',
+          text: '25 ore',
         },
       ],
       ctaColor: 'bg-gradient-to-r from-[#19419B] to-[#19419B] hover:from-[#19419B] hover:to-[#19419B]',
@@ -123,30 +139,30 @@ const coursesData = {
   ],
   snt: [
     {
-      id: 'starter-snt',
+      id: 'starter',
       logo: '/images/NEW_LOGO_2026/STARTER.png',
       badge: 'BASE',
       badgeColor: 'bg-[#42BFED]',
       headerColor: 'bg-[#42BFED]',
-      category: 'PROFESSIONI SANITARIE',
+      category: 'MEDICINA • ODONTOIATRIA • VETERINARIA',
       title: 'STARTER CLASS',
-      language: 'Italiano / Prof. Sanitarie',
+      language: 'Italiano / Inglese (IMAT) / Prof. Sanitarie',
       details: [
         {
-          icon: '📅',
+          icon: '🗓',
           label: 'PERIODO',
-          text: 'Gennaio - Maggio 2026',
+          text: 'Dicembre - Maggio 2026',
           subtext: 'Sabato / Domenica',
         },
         {
-          icon: '📚',
-          label: 'DIDATTICA',
+          icon: '🧑‍🏫',
+          label: 'DIDATTICA FRONTALE',
           text: '20 lezioni (42 ore)',
         },
         {
-          icon: '✓',
-          label: 'SIMULAZIONI',
-          subtext: '18 tematiche + 1 completa',
+          icon: '✍',
+          label: 'ESERCITAZIONE',
+          subtext: '21 ore',
         },
       ],
       ctaColor: 'bg-[#42BFED] hover:bg-[#5AACDB]',
@@ -162,22 +178,19 @@ const coursesData = {
       language: 'Italiano',
       details: [
         {
-          icon: '📅',
+          icon: '🗓',
           label: 'PERIODO',
-          text: 'Luglio - Settembre 2026',
-          subtext: 'Preparazione mirata',
+          text: 'luglio-settembre 2026',
         },
         {
-          icon: '📚',
-          label: 'DIDATTICA',
-          text: 'Focus materie principali',
-          subtext: 'Biologia, Chimica, Fisica',
+          icon: '🧑‍🏫',
+          label: 'DIDATTICA FRONTALE',
+          text: '70 ore',
         },
         {
-          icon: '✓',
-          label: 'SIMULAZIONI',
-          text: 'Test settimanali',
-          subtext: 'Ripasso intensivo',
+          icon: '✍',
+          label: 'ESERCITAZIONE',
+          text: '40 ore',
         },
       ],
       ctaColor: 'bg-orange-500 hover:bg-orange-600',
@@ -195,22 +208,19 @@ const coursesData = {
       language: 'Italiano',
       details: [
         {
-          icon: '📅',
+          icon: '🗓',
           label: 'PERIODO',
-          text: 'Luglio - Settembre 2026',
-          subtext: 'Preparazione completa',
+          text: 'luglio-settembre 2026',
         },
         {
-          icon: '📚',
-          label: 'DIDATTICA',
-          text: 'Materie specifiche',
-          subtext: 'Matematica, Fisica, Disegno',
+          icon: '🧑‍🏫',
+          label: 'DIDATTICA FRONTALE',
+          text: '55 ore',
         },
         {
-          icon: '✓',
-          label: 'SIMULAZIONI',
-          text: 'Test completi settimanali',
-          subtext: 'Correzioni dettagliate',
+          icon: '✍',
+          label: 'ESERCITAZIONE',
+          text: '40 ore',
         },
       ],
       ctaColor: 'bg-[#EB635B] hover:bg-[#D94F49]',
@@ -346,7 +356,7 @@ function DidatticaContent() {
 
       {/* Hero Section */}
       <section className="relative py-24 bg-black text-white overflow-hidden">
-        
+
         <div className="container mx-auto px-4 text-center relative z-10">
           <h1 className="text-4xl md:text-6xl font-black mb-6">
             {corso !== 'medicina' ? getHeroTitle() : 'MEDICINA, ODONTOIATRIA, VETERINARIA'}
@@ -399,8 +409,11 @@ function DidatticaContent() {
       </section>
 
       {/* Courses Grid */}
-      <section className="py-24 bg-gradient-to-b from-white via-gray-50 to-white relative overflow-hidden">
+      <section className="py-12 bg-gradient-to-b from-white via-gray-50 to-white relative overflow-hidden">
         <div className="container mx-auto px-4 relative z-10">
+          <p className="text-lg text-gray-600 mt-6 mb-6 max-w-2xl mx-auto text-center">
+            Scegli il corso di preparazione più adatto alle tue esigenze
+          </p>
           <h2 className="text-4xl text-black text-center mb-10 font-bold">
             {getSectionTitle()}
           </h2>
@@ -458,28 +471,30 @@ function DidatticaContent() {
                       {course.title}
                     </h3>
 
-                    {/* Details - flex-grow pushes button to bottom */}
-                    <div className="space-y-5 mb-8 flex-grow">
-                      {course.details.map((detail, index) => (
-                        <div key={index} className="flex gap-4 items-start">
-                          <div className={`${course.badgeColor} text-white min-w-[52px] h-[52px] rounded-2xl flex items-center justify-center font-black shrink-0 shadow-lg text-xl transform group-hover:rotate-6 transition-transform`}>
-                            {detail.icon}
-                          </div>
-                          <div className="flex-1 pt-1">
-                            <div className="text-xs text-gray-400 font-black mb-1.5 uppercase tracking-wider">
+                    {/* Details - compact grid for uniform height */}
+                    <div className="mb-8 flex-grow">
+                      <div className="grid grid-cols-3 gap-3">
+                        {course.details.map((detail, index) => (
+                          <div key={index} className="text-center">
+                            <div className={`${course.badgeColor} text-white w-12 h-12 rounded-xl flex items-center justify-center font-black mx-auto mb-2 shadow-lg text-lg transform group-hover:scale-110 transition-transform`}>
+                              {detail.icon}
+                            </div>
+                            <div className="text-[10px] text-gray-400 font-black mb-1 uppercase tracking-tight leading-tight">
                               {detail.label}
                             </div>
-                            <div className="text-base font-bold text-gray-900 leading-snug mb-1">
-                              {detail.text}
-                            </div>
-                            {detail.subtext && (
-                              <div className="text-sm text-gray-600">
-                                {detail.subtext}
+                            {detail.text && (
+                              <div className="text-xs font-bold text-gray-900 leading-tight">
+                                {detail.text}
+                              </div>
+                            )}
+                            {(detail as any).subtext && (
+                              <div className="text-[10px] text-gray-600 mt-0.5 leading-tight">
+                                {(detail as any).subtext}
                               </div>
                             )}
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
 
                     {/* CTA Button - always at same position */}
@@ -576,28 +591,30 @@ function DidatticaContent() {
                         </span>
                       </div>
 
-                      {/* Details - flex-grow pushes button to bottom */}
-                      <div className="space-y-5 mb-8 flex-grow">
-                        {course.details.map((detail, index) => (
-                          <div key={index} className="flex gap-4 items-start">
-                            <div className={`${course.badgeColor} text-white min-w-[52px] h-[52px] rounded-2xl flex items-center justify-center font-black shrink-0 shadow-lg text-xl transform group-hover:rotate-6 transition-transform`}>
-                              {detail.icon}
-                            </div>
-                            <div className="flex-1 pt-1">
-                              <div className="text-xs text-gray-400 font-black mb-1.5 uppercase tracking-wider">
+                      {/* Details - compact grid for uniform height */}
+                      <div className="mb-8 flex-grow">
+                        <div className="grid grid-cols-3 gap-3">
+                          {course.details.map((detail, index) => (
+                            <div key={index} className="text-center">
+                              <div className={`${course.badgeColor} text-white w-12 h-12 rounded-xl flex items-center justify-center font-black mx-auto mb-2 shadow-lg text-lg transform group-hover:scale-110 transition-transform`}>
+                                {detail.icon}
+                              </div>
+                              <div className="text-[10px] text-gray-400 font-black mb-1 uppercase tracking-tight leading-tight">
                                 {detail.label}
                               </div>
-                              <div className="text-base font-bold text-gray-900 leading-snug mb-1">
-                                {detail.text}
-                              </div>
-                              {detail.subtext && (
-                                <div className="text-sm text-gray-600">
-                                  {detail.subtext}
+                              {detail.text && (
+                                <div className="text-xs font-bold text-gray-900 leading-tight">
+                                  {detail.text}
+                                </div>
+                              )}
+                              {(detail as any).subtext && (
+                                <div className="text-[10px] text-gray-600 mt-0.5 leading-tight">
+                                  {(detail as any).subtext}
                                 </div>
                               )}
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
 
                       {/* CTA Button - always at same position */}

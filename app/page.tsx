@@ -252,16 +252,13 @@ export default function Home() {
           <div className="text-center mb-10">
             <div className="inline-block mb-4">
               <span className="text-sm font-semibold text-red-600 bg-red-50 px-4 py-2 rounded-full uppercase tracking-wider">
-                I nostri corsi
+                PROVE DI AMMISSIONE
               </span>
             </div>
             <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
               Quale test vuoi sostenere?
             </h1>
             <div className="w-24 h-1.5 bg-gradient-to-r from-red-500 to-red-600 mx-auto rounded-full" />
-            <p className="text-lg text-gray-600 mt-6 max-w-2xl mx-auto">
-              Scegli il corso di preparazione più adatto alle tue esigenze
-            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8 mb-16 items-start">
@@ -273,7 +270,7 @@ export default function Home() {
           <div className="text-center">
             <Link href="/test">
               <Button variant="primary" size="lg" className="shadow-xl shadow-red-600/20 hover:shadow-2xl hover:shadow-red-600/30">
-                Scopri tutti i corsi
+                Scopri di più
               </Button>
             </Link>
           </div>
@@ -316,7 +313,7 @@ export default function Home() {
                 Classi Non Numerose
               </h3>
               <p className="text-gray-600 text-sm leading-relaxed">
-                Che uniscono l'esclusività della lezione privata all'efficacia del gruppo studio
+                Aule raccolte che uniscono l’esclusività della lezione privata alla dinamicità e alla motivazione del lavoro di gruppo
               </p>
             </div>
 
@@ -331,7 +328,7 @@ export default function Home() {
                 Studenti per gli Studenti
               </h3>
               <p className="text-gray-600 text-sm leading-relaxed">
-                Con percorsi didattici affidati a tutor che hanno affrontato i test di ammissione
+                Tutor giovani, competenti e con esperienza diretta nei test di ammissione, per un supporto autentico ed efficace
               </p>
             </div>
 
@@ -346,7 +343,7 @@ export default function Home() {
                 Approccio Teorico-Pratico
               </h3>
               <p className="text-gray-600 text-sm leading-relaxed">
-                Che abbina alle lezioni frontali esercitazioni con simulazioni tematiche e generali
+                Lezioni frontali chiare e strutturate integrate da esercitazioni tematiche e generali per trasformare la teoria in risultati
               </p>
             </div>
 
@@ -361,7 +358,7 @@ export default function Home() {
                 Offerta Formativa Flessibile
               </h3>
               <p className="text-gray-600 text-sm leading-relaxed">
-                Per un percorso base, intermedio o avanzato in linea con le esigenze di apprendimento
+                Un percorso didattico base, intermedio, avanzato o talmente personalizzato pensato per adattarsi ai tuoi obiettivi e alle tue esigenze di apprendimento
               </p>
             </div>
           </div>
