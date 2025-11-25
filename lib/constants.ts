@@ -62,8 +62,8 @@ export const NAVIGATION = [
 ];
 
 export const STATS = [
-  { icon: 'users', value: 150, suffix: '+', label: 'Studenti Soddisfatti' },
-  { icon: 'graduation-cap', value: 89, suffix: '%', label: 'Ammessi nella Prima Scelta' },
-  { icon: 'book', value: 4000, suffix: '+', label: 'Ore di Corso Svolte ad Oggi' },
+  { icon: 'users', value: 366, suffix: '+', label: 'Studenti Soddisfatti' },
+  { icon: 'graduation-cap', value: 92, suffix: '%', label: 'Ammessi nella Prima Scelta', prefix: '>' },
+  { icon: 'book', value: 4732, suffix: '+', label: 'Ore di Corso Svolte ad Oggi' },
   { icon: 'user', value: 20, suffix: '+', label: 'Giovani Tutor' },
 ];

@@ -46,7 +46,7 @@ export default function ProvePage() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
             {/* Hero Section */}
-            <section className="relative bg-gradient-to-r from-red-600 to-red-700 text-white py-20 overflow-hidden">
+            <section className="relative bg-gradient-to-r from-red-600 to-red-700 text-white pt-32 pb-24 overflow-hidden">
                 <div className="absolute inset-0 bg-black/10"></div>
                 <div className="container mx-auto px-4 relative z-10">
                     <div className="max-w-4xl mx-auto text-center">
@@ -109,7 +109,7 @@ export default function ProvePage() {
                                     </div>
                                     <div className="ml-4">
                                         <h3 className="text-lg font-semibold text-yellow-800 mb-1">
-                                            Contenuto Non Ancora Disponibile
+                                            Contenuto non ancora disponibile
                                         </h3>
                                         <p className="text-sm text-yellow-700">
                                             Le prove del 2° Appello saranno disponibili a breve. Nel frattempo, puoi consultare il materiale del 1° Appello.

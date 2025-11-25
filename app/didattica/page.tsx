@@ -28,7 +28,7 @@ const coursesData = {
           text: '42 ore',
         },
         {
-          icon: '✍',
+          icon: '📊',
           label: 'ESERCITAZIONE',
           text: '21 ore',
         },
@@ -56,7 +56,7 @@ const coursesData = {
           text: '72 ore',
         },
         {
-          icon: '✍',
+          icon: '📊',
           label: 'ESERCITAZIONE',
           text: '11 ore',
         },
@@ -71,7 +71,7 @@ const coursesData = {
           text: '66 ore',
         },
         {
-          icon: '✍',
+          icon: '📊',
           label: 'ESERCITAZIONE',
           text: '66 ore',
         },
@@ -90,7 +90,7 @@ const coursesData = {
       details: [
         {
           icon: '🗓',
-          label: '1° PERIODO',
+          label: 'PERIODO',
           text: 'novembre-dicembre 2026',
         },
         {
@@ -99,7 +99,7 @@ const coursesData = {
           text: '42 ore',
         },
         {
-          icon: '✍',
+          icon: '📊',
           label: 'ESERCITAZIONE',
           text: '42 ore',
         },
@@ -109,9 +109,37 @@ const coursesData = {
   ],
   imat: [
     {
-      id: 'imat-standard',
+      id: 'imat-starter',
+      logo: '/images/NEW_LOGO_2026/STARTER.png',
+      badge: 'BASE',
+      badgeColor: 'bg-[#42BFED]',
+      headerColor: 'bg-[#42BFED]',
+      category: 'MEDICINA • ODONTOIATRIA • VETERINARIA',
+      title: 'STARTER CLASS',
+      language: 'Italiano / Inglese (IMAT) / Prof. Sanitarie',
+      details: [
+        {
+          icon: '🗓',
+          label: 'PERIODO',
+          text: 'dicembre-maggio 2026',
+        },
+        {
+          icon: '🧑‍🏫',
+          label: 'DIDATTICA FRONTALE',
+          text: '42 ore',
+        },
+        {
+          icon: '✍',
+          label: 'ESERCITAZIONE',
+          text: '21 ore',
+        },
+      ],
+      ctaColor: 'bg-[#42BFED] hover:bg-[#5AACDB]',
+    },
+    {
+      id: 'imat-advanced',
       logo: '/images/NEW_LOGO_2026/IMAT.png',
-      badge: 'STANDARD',
+      badge: 'AVANZATO',
       badgeColor: 'bg-[#19419B]',
       headerColor: 'bg-gradient-to-br from-[#19419B] to-[#19419B]',
       category: 'MEDICINA E ODONTOIATRIA E VETERINARIA IN INGLESE',
@@ -160,7 +188,7 @@ const coursesData = {
           text: '20 lezioni (42 ore)',
         },
         {
-          icon: '✍',
+          icon: '📊',
           label: 'ESERCITAZIONE',
           subtext: '21 ore',
         },
@@ -188,7 +216,7 @@ const coursesData = {
           text: '70 ore',
         },
         {
-          icon: '✍',
+          icon: '📊',
           label: 'ESERCITAZIONE',
           text: '40 ore',
         },
@@ -218,7 +246,7 @@ const coursesData = {
           text: '55 ore',
         },
         {
-          icon: '✍',
+          icon: '📊',
           label: 'ESERCITAZIONE',
           text: '40 ore',
         },
@@ -422,65 +450,81 @@ function DidatticaContent() {
               {getHeroTitle()}
             </span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12 max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
             {selectedCourses.map((course) => (
               <div
                 key={course.id}
                 className="group relative"
               >
-                {/* Main Card */}
-                <div className="relative bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 overflow-hidden border-2 border-gray-100 flex flex-col h-full">
+                {/* Main Card with premium design */}
+                <div className="relative bg-gradient-to-br from-white via-white to-gray-50/50 rounded-3xl shadow-2xl hover:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.3)] transition-all duration-700 transform hover:-translate-y-4 hover:scale-[1.02] overflow-hidden border border-gray-200/50 flex flex-col h-full backdrop-blur-sm">
 
-                  {/* Top white section with logo */}
-                  <div className="relative px-8 py-12 bg-white overflow-hidden flex-shrink-0 h-64 flex items-center">
-                    {/* Subtle decorative elements */}
-                    <div className="absolute -top-10 -right-10 w-40 h-40 bg-gray-50 rounded-full" />
-                    <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-gray-50 rounded-full" />
+                  {/* Top section with logo - glassmorphism effect - REDUCED HEIGHT */}
+                  <div className="relative px-6 py-8 bg-gradient-to-br from-white/95 via-gray-50/80 to-white/95 overflow-hidden flex-shrink-0 h-48 flex items-center backdrop-blur-xl">
+                    {/* Premium decorative gradient orbs */}
+                    <div className={`absolute -top-12 -right-12 w-48 h-48 ${course.badgeColor} opacity-5 rounded-full blur-3xl group-hover:opacity-10 transition-opacity duration-700`} />
+                    <div className={`absolute -bottom-10 -left-10 w-40 h-40 ${course.badgeColor} opacity-5 rounded-full blur-2xl group-hover:opacity-10 transition-opacity duration-700`} />
+                    
+                    {/* Animated gradient mesh background */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-transparent via-gray-50/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
 
-                    {/* Badge colorato */}
-                    <div className="absolute top-4 right-4 z-20">
-                      <span className={`${course.badgeColor} text-white px-4 py-2 rounded-full text-xs font-black shadow-lg uppercase tracking-widest`}>
+                    {/* Premium badge with gradient */}
+                    <div className="absolute top-6 right-6 z-20">
+                      <span className={`${course.badgeColor} text-white px-5 py-2.5 rounded-full text-xs font-black shadow-xl uppercase tracking-widest backdrop-blur-sm border border-white/20 transform group-hover:scale-110 transition-transform duration-300`}>
                         {course.badge}
                       </span>
                     </div>
 
-                    {/* Logo */}
+                    {/* Logo with enhanced animation */}
                     <div className="relative z-10 flex justify-center w-full">
-                      <Image
-                        src={course.logo}
-                        alt={course.title}
-                        width={240}
-                        height={90}
-                        className="object-contain transform group-hover:scale-110 transition-transform duration-500"
-                      />
+                      <div className="relative">
+                        {/* Glow effect behind logo */}
+                        <div className={`absolute inset-0 ${course.badgeColor} opacity-0 group-hover:opacity-20 blur-2xl transition-opacity duration-700`} />
+                        <Image
+                          src={course.logo}
+                          alt={course.title}
+                          width={200}
+                          height={75}
+                          className="object-contain transform group-hover:scale-110 transition-transform duration-700 relative z-10 drop-shadow-lg"
+                        />
+                      </div>
                     </div>
                   </div>
 
-                  {/* Colored accent line */}
-                  <div className={`h-1 ${course.headerColor}`} />
+                  {/* Premium gradient accent line */}
+                  <div className={`h-1.5 bg-gradient-to-r ${course.headerColor} shadow-lg`} />
 
-                  {/* Card content */}
-                  <div className="p-8 flex flex-col flex-grow">
-                    {/* Category */}
-                    <div className="text-xs text-gray-400 font-black mb-3 tracking-widest uppercase">
+                  {/* Card content with premium spacing - REDUCED PADDING */}
+                  <div className="p-6 flex flex-col flex-grow bg-gradient-to-b from-transparent to-gray-50/30">
+                    {/* Category with gradient */}
+                    <div className="text-[10px] text-gray-400 font-black mb-2 tracking-[0.2em] uppercase">
                       {course.category}
                     </div>
 
-                    {/* Title */}
-                    <h3 className="text-2xl font-black text-gray-900 mb-3 leading-tight">
+                    {/* Title with premium styling */}
+                    <h3 className="text-xl font-black text-gray-900 mb-4 leading-tight bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text">
                       {course.title}
                     </h3>
 
-                    {/* Details - conditional layout based on number of items */}
-                    <div className="mb-8 flex-grow">
-                      <div className={course.details.length > 3 ? "grid grid-cols-3 gap-3" : "flex flex-col gap-4 max-w-xs mx-auto"}>
+                    {/* Details - enhanced design */}
+                    <div className="mb-6 flex-grow">
+                      <div className={course.details.length > 3 ? "grid grid-cols-3 gap-2 mt-6" : "flex flex-col gap-2.5 max-w-sm mx-auto"}>
                         {course.details.map((detail, index) => (
-                          <div key={index} className={course.details.length > 3 ? "text-center" : "flex items-center gap-4 bg-gray-50 rounded-xl p-4"}>
-                            <div className={`${course.badgeColor} text-white ${course.details.length > 3 ? 'w-12 h-12' : 'w-14 h-14 flex-shrink-0'} rounded-xl flex items-center justify-center font-black ${course.details.length > 3 ? 'mx-auto mb-2' : ''} shadow-lg text-lg transform group-hover:scale-110 transition-transform`}>
-                              {detail.icon}
+                          <div 
+                            key={index} 
+                            className={course.details.length > 3 
+                              ? "text-center group/item" 
+                              : "relative flex items-center gap-3 bg-gradient-to-br from-white to-gray-50/80 rounded-xl p-3 shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100/50 backdrop-blur-sm group/item hover:-translate-y-1"
+                            }
+                          >
+                            {/* Icon with premium effects */}
+                            <div className={`${course.badgeColor} text-white ${course.details.length > 3 ? 'w-12 h-12' : 'w-14 h-14 flex-shrink-0'} rounded-xl flex items-center justify-center font-black ${course.details.length > 3 ? 'mx-auto mb-1.5' : ''} shadow-xl text-lg transform group-hover/item:scale-110 group-hover/item:rotate-3 transition-all duration-300 relative overflow-hidden`}>
+                              {/* Shine effect */}
+                              <div className="absolute inset-0 bg-gradient-to-br from-white/30 to-transparent opacity-0 group-hover/item:opacity-100 transition-opacity duration-300" />
+                              <span className="relative z-10">{detail.icon}</span>
                             </div>
                             <div className={course.details.length > 3 ? '' : 'flex-1 text-left'}>
-                              <div className={`${course.details.length > 3 ? 'text-[10px]' : 'text-xs'} text-gray-400 font-black mb-1 uppercase tracking-tight leading-tight`}>
+                              <div className={`${course.details.length > 3 ? 'text-[10px]' : 'text-xs'} text-gray-400 font-black mb-1 uppercase tracking-wider leading-tight`}>
                                 {detail.label}
                               </div>
                               {detail.text && (
@@ -499,28 +543,30 @@ function DidatticaContent() {
                       </div>
                     </div>
 
-                    {/* CTA Button - always at same position */}
+                    {/* Premium CTA Button with advanced effects */}
                     <Link href={`/contattaci?oggetto=${encodeURIComponent(course.title)}`}>
                       <button
-                        className={`w-full ${course.ctaColor} text-white font-black py-5 px-6 rounded-2xl transition-all duration-300 transform hover:scale-105 shadow-2xl uppercase tracking-wider text-sm relative overflow-hidden group/btn`}
+                        className={`w-full ${course.ctaColor} text-white font-black py-4 px-6 rounded-2xl transition-all duration-500 transform hover:scale-105 hover:shadow-2xl shadow-xl uppercase tracking-wider text-sm relative overflow-hidden group/btn border border-white/20`}
                       >
-                        <span className="relative z-10 flex items-center justify-center gap-2">
-                          Contattaci Ora
-                          <svg className="w-5 h-5 transform group-hover/btn:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <span className="relative z-10 flex items-center justify-center gap-3">
+                          <span>Contattaci Ora</span>
+                          <svg className="w-5 h-5 transform group-hover/btn:translate-x-2 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                           </svg>
                         </span>
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent transform -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700" />
+                        {/* Multiple shine effects */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent transform -translate-x-full group-hover/btn:translate-x-full transition-transform duration-1000" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover/btn:opacity-100 transition-opacity duration-300" />
                       </button>
                     </Link>
                   </div>
 
-                  {/* Bottom accent line */}
-                  <div className={`h-2 ${course.headerColor}`} />
+                  {/* Premium bottom accent with gradient */}
+                  <div className={`h-2 bg-gradient-to-r ${course.headerColor} shadow-inner`} />
                 </div>
 
-                {/* Floating glow effect on hover */}
-                <div className={`absolute inset-0 ${course.headerColor} opacity-0 group-hover:opacity-20 blur-2xl rounded-3xl transition-opacity duration-500 -z-10`} />
+                {/* Premium floating glow effect on hover */}
+                <div className={`absolute inset-0 ${course.headerColor} opacity-0 group-hover:opacity-20 blur-3xl rounded-3xl transition-opacity duration-700 -z-10 scale-95 group-hover:scale-105`} />
               </div>
             ))}
           </div>
@@ -540,69 +586,81 @@ function DidatticaContent() {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12 max-w-7xl mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
               {coursesData.imat.map((course) => (
                 <div
                   key={course.id}
                   className="group relative"
                 >
-                  {/* Main Card */}
-                  <div className="relative bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 overflow-hidden border-2 border-gray-100 flex flex-col h-full">
+                  {/* Main Card with premium design */}
+                  <div className="relative bg-gradient-to-br from-white via-white to-gray-50/50 rounded-3xl shadow-2xl hover:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.3)] transition-all duration-700 transform hover:-translate-y-4 hover:scale-[1.02] overflow-hidden border border-gray-200/50 flex flex-col h-full backdrop-blur-sm">
 
-                    {/* Top white section with logo */}
-                    <div className="relative px-8 py-12 bg-white overflow-hidden flex-shrink-0 h-64 flex items-center">
-                      {/* Subtle decorative elements */}
-                      <div className="absolute -top-10 -right-10 w-40 h-40 bg-gray-50 rounded-full" />
-                      <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-gray-50 rounded-full" />
+                    {/* Top section with logo - glassmorphism effect - REDUCED HEIGHT */}
+                    <div className="relative px-6 py-8 bg-gradient-to-br from-white/95 via-gray-50/80 to-white/95 overflow-hidden flex-shrink-0 h-48 flex items-center backdrop-blur-xl">
+                      {/* Premium decorative gradient orbs */}
+                      <div className={`absolute -top-12 -right-12 w-48 h-48 ${course.badgeColor} opacity-5 rounded-full blur-3xl group-hover:opacity-10 transition-opacity duration-700`} />
+                      <div className={`absolute -bottom-10 -left-10 w-40 h-40 ${course.badgeColor} opacity-5 rounded-full blur-2xl group-hover:opacity-10 transition-opacity duration-700`} />
+                      
+                      {/* Animated gradient mesh background */}
+                      <div className="absolute inset-0 bg-gradient-to-br from-transparent via-gray-50/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
 
-                      {/* Badge colorato */}
-                      <div className="absolute top-4 right-4 z-20">
-                        <span className={`${course.badgeColor} text-white px-4 py-2 rounded-full text-xs font-black shadow-lg uppercase tracking-widest`}>
+                      {/* Premium badge with gradient */}
+                      <div className="absolute top-6 right-6 z-20">
+                        <span className={`${course.badgeColor} text-white px-5 py-2.5 rounded-full text-xs font-black shadow-xl uppercase tracking-widest backdrop-blur-sm border border-white/20 transform group-hover:scale-110 transition-transform duration-300`}>
                           {course.badge}
                         </span>
                       </div>
 
-                      {/* Logo */}
+                      {/* Logo with enhanced animation */}
                       <div className="relative z-10 flex justify-center w-full">
-                        <Image
-                          src={course.logo}
-                          alt={course.title}
-                          width={240}
-                          height={90}
-                          className="object-contain transform group-hover:scale-110 transition-transform duration-500"
-                        />
+                        <div className="relative">
+                          {/* Glow effect behind logo */}
+                          <div className={`absolute inset-0 ${course.badgeColor} opacity-0 group-hover:opacity-20 blur-2xl transition-opacity duration-700`} />
+                          <Image
+                            src={course.logo}
+                            alt={course.title}
+                            width={200}
+                            height={75}
+                            className="object-contain transform group-hover:scale-110 transition-transform duration-700 relative z-10 drop-shadow-lg"
+                          />
+                        </div>
                       </div>
                     </div>
 
-                    {/* Card content */}
-                    <div className="p-8 flex flex-col flex-grow">
-                      {/* Category */}
-                      <div className="text-xs text-gray-400 font-black mb-3 tracking-widest uppercase">
+                    {/* Premium gradient accent line */}
+                    <div className={`h-1.5 bg-gradient-to-r ${course.headerColor} shadow-lg`} />
+
+                    {/* Card content with premium spacing - REDUCED PADDING */}
+                    <div className="p-6 flex flex-col flex-grow bg-gradient-to-b from-transparent to-gray-50/30">
+                      {/* Category with gradient */}
+                      <div className="text-[10px] text-gray-400 font-black mb-2 tracking-[0.2em] uppercase">
                         {course.category}
                       </div>
 
-                      {/* Title */}
-                      <h3 className="text-2xl font-black text-gray-900 mb-3 leading-tight">
+                      {/* Title with premium styling */}
+                      <h3 className="text-xl font-black text-gray-900 mb-3 leading-tight bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text">
                         {course.title}
                       </h3>
-
-                      {/* Language badge */}
-                      <div className="inline-block mb-8">
-                        <span className={`text-sm font-bold ${course.headerColor} text-white px-4 py-1.5 rounded-full shadow-md`}>
-                          {course.language}
-                        </span>
-                      </div>
-
-                      {/* Details - conditional layout based on number of items */}
-                      <div className="mb-8 flex-grow">
-                        <div className={course.details.length > 3 ? "grid grid-cols-3 gap-3" : "flex flex-col gap-4 max-w-xs mx-auto"}>
+                      
+                      {/* Details - enhanced design */}
+                      <div className="mb-6 flex-grow">
+                        <div className={course.details.length > 3 ? "grid grid-cols-3 gap-2 mt-6" : "flex flex-col gap-2.5 max-w-sm mx-auto"}>
                           {course.details.map((detail, index) => (
-                            <div key={index} className={course.details.length > 3 ? "text-center" : "flex items-center gap-4 bg-gray-50 rounded-xl p-4"}>
-                              <div className={`${course.badgeColor} text-white ${course.details.length > 3 ? 'w-12 h-12' : 'w-14 h-14 flex-shrink-0'} rounded-xl flex items-center justify-center font-black ${course.details.length > 3 ? 'mx-auto mb-2' : ''} shadow-lg text-lg transform group-hover:scale-110 transition-transform`}>
-                                {detail.icon}
+                            <div 
+                              key={index} 
+                              className={course.details.length > 3 
+                                ? "text-center group/item" 
+                                : "relative flex items-center gap-3 bg-gradient-to-br from-white to-gray-50/80 rounded-xl p-3 shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100/50 backdrop-blur-sm group/item hover:-translate-y-1"
+                              }
+                            >
+                              {/* Icon with premium effects */}
+                              <div className={`${course.badgeColor} text-white ${course.details.length > 3 ? 'w-12 h-12' : 'w-14 h-14 flex-shrink-0'} rounded-xl flex items-center justify-center font-black ${course.details.length > 3 ? 'mx-auto mb-1.5' : ''} shadow-xl text-lg transform group-hover/item:scale-110 group-hover/item:rotate-3 transition-all duration-300 relative overflow-hidden`}>
+                                {/* Shine effect */}
+                                <div className="absolute inset-0 bg-gradient-to-br from-white/30 to-transparent opacity-0 group-hover/item:opacity-100 transition-opacity duration-300" />
+                                <span className="relative z-10">{detail.icon}</span>
                               </div>
                               <div className={course.details.length > 3 ? '' : 'flex-1 text-left'}>
-                                <div className={`${course.details.length > 3 ? 'text-[10px]' : 'text-xs'} text-gray-400 font-black mb-1 uppercase tracking-tight leading-tight`}>
+                                <div className={`${course.details.length > 3 ? 'text-[10px]' : 'text-xs'} text-gray-400 font-black mb-1 uppercase tracking-wider leading-tight`}>
                                   {detail.label}
                                 </div>
                                 {detail.text && (
@@ -621,28 +679,30 @@ function DidatticaContent() {
                         </div>
                       </div>
 
-                      {/* CTA Button - always at same position */}
+                      {/* Premium CTA Button with advanced effects */}
                       <Link href={`/contattaci?oggetto=${encodeURIComponent(course.title)}`}>
                         <button
-                          className={`w-full ${course.ctaColor} text-white font-black py-5 px-6 rounded-2xl transition-all duration-300 transform hover:scale-105 shadow-2xl uppercase tracking-wider text-sm relative overflow-hidden group/btn`}
+                          className={`w-full ${course.ctaColor} text-white font-black py-4 px-6 rounded-2xl transition-all duration-500 transform hover:scale-105 hover:shadow-2xl shadow-xl uppercase tracking-wider text-sm relative overflow-hidden group/btn border border-white/20`}
                         >
-                          <span className="relative z-10 flex items-center justify-center gap-2">
-                            Contattaci Ora
-                            <svg className="w-5 h-5 transform group-hover/btn:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <span className="relative z-10 flex items-center justify-center gap-3">
+                            <span>Contattaci Ora</span>
+                            <svg className="w-5 h-5 transform group-hover/btn:translate-x-2 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                             </svg>
                           </span>
-                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent transform -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700" />
+                          {/* Multiple shine effects */}
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent transform -translate-x-full group-hover/btn:translate-x-full transition-transform duration-1000" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover/btn:opacity-100 transition-opacity duration-300" />
                         </button>
                       </Link>
                     </div>
 
-                    {/* Bottom accent line */}
-                    <div className={`h-2 ${course.headerColor}`} />
+                    {/* Premium bottom accent with gradient */}
+                    <div className={`h-2 bg-gradient-to-r ${course.headerColor} shadow-inner`} />
                   </div>
 
-                  {/* Floating glow effect on hover */}
-                  <div className={`absolute inset-0 ${course.headerColor} opacity-0 group-hover:opacity-20 blur-2xl rounded-3xl transition-opacity duration-500 -z-10`} />
+                  {/* Premium floating glow effect on hover */}
+                  <div className={`absolute inset-0 ${course.headerColor} opacity-0 group-hover:opacity-20 blur-3xl rounded-3xl transition-opacity duration-700 -z-10 scale-95 group-hover:scale-105`} />
                 </div>
               ))}
             </div>

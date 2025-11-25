@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import { STATS } from '@/lib/constants';
 import Button from '@/components/ui/Button';
 import { Metadata } from 'next';
 
@@ -83,22 +84,14 @@ export default function ChiSiamoPage() {
 
         {/* Stats Section */}
         <div className="grid md:grid-cols-4 gap-6 max-w-6xl mx-auto mb-20">
-          <div className="bg-white rounded-2xl p-6 border border-gray-200 text-center shadow-lg">
-            <div className="text-4xl font-bold text-red-600 mb-2">150+</div>
-            <div className="text-gray-700">Studenti</div>
-          </div>
-          <div className="bg-white rounded-2xl p-6 border border-gray-200 text-center shadow-lg">
-            <div className="text-4xl font-bold text-red-600 mb-2">89%</div>
-            <div className="text-gray-700">Tasso di Successo</div>
-          </div>
-          <div className="bg-white rounded-2xl p-6 border border-gray-200 text-center shadow-lg">
-            <div className="text-4xl font-bold text-red-600 mb-2">20+</div>
-            <div className="text-gray-700">Tutor Qualificati</div>
-          </div>
-          <div className="bg-white rounded-2xl p-6 border border-gray-200 text-center shadow-lg">
-            <div className="text-4xl font-bold text-red-600 mb-2">4000+</div>
-            <div className="text-gray-700">Ore di Lezione</div>
-          </div>
+          {STATS.map((stat, index) => (
+            <div key={index} className="bg-white rounded-2xl p-6 border border-gray-200 text-center shadow-lg">
+              <div className="text-4xl font-bold text-red-600 mb-2">
+                {stat.prefix || ''}{stat.value}{stat.suffix}
+              </div>
+              <div className="text-gray-700">{stat.label}</div>
+            </div>
+          ))}
         </div>
 
         {/* Features Section */}

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import ScienceCanvasLight from '@/components/ui/ScienceCanvasLight';
 import { TestCard as TestCardType, Testimonial } from '@/types';
+import { STATS } from '@/lib/constants';
 
 const tests: TestCardType[] = [
   {
@@ -209,24 +210,39 @@ export default function Home() {
 
             {/* Quick Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 pt-16">
-              <div className="text-center">
-                <div className="text-4xl md:text-5xl font-bold text-red-500 mb-2">+150</div>
-                <div className="text-sm text-gray-300">Studenti Soddisfatti</div>
-              </div>
-              <div className="text-center">
-                <div className="text-4xl md:text-5xl font-bold text-red-500 mb-2">89%</div>
-                <div className="text-sm text-gray-300">Ammessi alla Prima Scelta</div>
-              </div>
-              <div className="text-center">
-                <div className="text-4xl md:text-5xl font-bold text-red-500 mb-2">+4000</div>
-                <div className="text-sm text-gray-300">Ore di Corso Svolte</div>
-              </div>
-              <div className="text-center">
-                <div className="text-4xl md:text-5xl font-bold text-red-500 mb-2">+20</div>
-                <div className="text-sm text-gray-300">Giovani Tutor</div>
-              </div>
+              {STATS.map((stat, index) => (
+                <div key={index} className="text-center">
+                  <div className="text-4xl md:text-5xl font-bold text-red-500 mb-2">
+                    {stat.prefix || ''}{stat.value}{stat.suffix}
+                  </div>
+                  <div className="text-sm text-gray-300">{stat.label}</div>
+                </div>
+              ))}
             </div>
           </div>
+        </div>
+
+        {/* Scroll Down Arrow */}
+        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 animate-bounce z-40">
+          <a
+            href="#about"
+            className="block text-white opacity-70 hover:opacity-100 transition-opacity"
+            aria-label="Scorri verso il basso"
+          >
+            <svg
+              className="w-8 h-8"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7M19 3l-7 7-7-7"
+              />
+            </svg>
+          </a>
         </div>
       </section>
 
@@ -298,7 +314,7 @@ export default function Home() {
                 </svg>
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-3">
-                Classi Non Numerose
+                Classi non numerose
               </h3>
               <p className="text-gray-600 text-sm leading-relaxed">
                 Aule raccolte che uniscono l’esclusività della lezione privata alla dinamicità e alla motivazione del lavoro di gruppo
@@ -328,7 +344,7 @@ export default function Home() {
                 </svg>
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-3">
-                Approccio Teorico-Pratico
+                Approccio teorico-pratico
               </h3>
               <p className="text-gray-600 text-sm leading-relaxed">
                 Lezioni frontali chiare e strutturate integrate da esercitazioni tematiche e generali per trasformare la teoria in risultati
@@ -343,10 +359,10 @@ export default function Home() {
                 </svg>
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-3">
-                Offerta Formativa Flessibile
+                Offerta formativa flessibile
               </h3>
               <p className="text-gray-600 text-sm leading-relaxed">
-                Un percorso didattico base, intermedio, avanzato o talmente personalizzato pensato per adattarsi ai tuoi obiettivi e alle tue esigenze di apprendimento
+                Un percorso didattico base, intermedio, avanzato o totalmente personalizzato pensato per adattarsi ai tuoi obiettivi e alle tue esigenze di apprendimento
               </p>
             </div>
           </div>
@@ -366,14 +382,14 @@ export default function Home() {
       <TestimonialsCarousel testimonials={testimonials} />
 
       {/* Partner Section - Minimalist */}
-      <section className="bg-gradient-to-b from-gray-50 to-white">
+      <section className="bg-gradient-to-b from-gray-50 to-white py-16">
         <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto text-center">
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+          <div className="max-w-3xl mx-auto text-center">
+            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-8">
               I nostri Partner
             </h2>
 
-            <div className="w-20 h-1 bg-gradient-to-r from-red-500 to-red-600 mx-auto rounded-full mb-5" />
+            <div className="w-20 h-1 bg-gradient-to-r from-red-500 to-red-600 mx-auto rounded-full mb-12" />
 
             <a
               href="https://www.fonolinguistico.it/"
@@ -381,12 +397,12 @@ export default function Home() {
               rel="noopener noreferrer"
               className="inline-block group"
             >
-              <div className="bg-black border-2 border-gray-200 rounded-2xl p-6 md:p-12 hover:border-red-500 hover:shadow-xl transition-all duration-300">
+              <div className="bg-black border-2 border-gray-200 rounded-2xl p-4 md:p-8 hover:border-red-500 hover:shadow-xl transition-all duration-300">
                 <img
                   src="/images/partner.png"
                   alt="Partner - Centro Fonolinguistico"
                   className="w-full h-auto mx-auto group-hover:scale-105 transition-transform duration-300"
-                  style={{ maxWidth: '450px' }}
+                  style={{ maxWidth: '350px' }}
                 />
               </div>
             </a>

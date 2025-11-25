@@ -7,9 +7,10 @@ interface CounterProps {
   end: number;
   duration?: number;
   suffix?: string;
+  prefix?: string;
 }
 
-function Counter({ end, duration = 2000, suffix = '' }: CounterProps) {
+function Counter({ end, duration = 2000, suffix = '', prefix = '' }: CounterProps) {
   const [count, setCount] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
@@ -65,7 +66,7 @@ function Counter({ end, duration = 2000, suffix = '' }: CounterProps) {
 
   return (
     <span ref={ref}>
-      {suffix === '%' ? `${count}${suffix}` : `${suffix}${count}`}
+      {prefix}{count}{suffix}
     </span>
   );
 }
@@ -130,7 +131,7 @@ export default function StatsSection() {
                 )}
               </div>
               <h3 className="text-3xl font-bold text-gray-800 mb-2">
-                <Counter end={stat.value} suffix={stat.suffix} />
+                <Counter end={stat.value} suffix={stat.suffix} prefix={stat.prefix} />
               </h3>
               <p className="text-sm text-gray-600">{stat.label}</p>
             </div>

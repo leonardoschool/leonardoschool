@@ -243,7 +243,7 @@ export default function SimulazionePage() {
               {testTypes.slice(1).map((test) => (
                 <Link
                   key={test.id}
-                  href={`/contattaci?oggetto=${encodeURIComponent(test.title)}`}
+                  href={`/contattaci?oggetto=${encodeURIComponent(`Richiesta Simulazione: ${test.title}`)}`}
                   className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow"
                 >
                   <div className={`${test.color} h-2`} />
@@ -307,7 +307,7 @@ export default function SimulazionePage() {
             {tolcTests.map((test) => (
               <Link
                 key={test.id}
-                href={`/contattaci?oggetto=${encodeURIComponent(test.title)}`}
+                href={`/contattaci?oggetto=${encodeURIComponent(`Richiesta Simulazione: ${test.title}`)}`}
                 className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow"
               >
                 <div style={{ backgroundColor: test.color }} className="h-2" />

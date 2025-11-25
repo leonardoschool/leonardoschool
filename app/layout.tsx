@@ -78,7 +78,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="it">
-      <body className={`${raleway.variable} font-sans antialiased`}>
+      <body className={`${raleway.variable} font-sans antialiased`} suppressHydrationWarning>
         <Preloader />
         <Header />
         <main className="min-h-screen">{children}</main>
