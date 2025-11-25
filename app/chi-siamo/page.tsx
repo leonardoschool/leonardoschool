@@ -35,7 +35,7 @@ export default function ChiSiamoPage() {
             <div className="absolute -inset-1 bg-gradient-to-r from-red-600 to-red-800 rounded-2xl blur opacity-25 group-hover:opacity-40 transition duration-500"></div>
             <div className="relative h-[400px] lg:h-[600px] rounded-2xl overflow-hidden">
               <Image
-                src="/images/545.jpg"
+                src="/images/NEW_LOGO_2026/chi_siamo.png"
                 alt="Team Leonardo School"
                 fill
                 className="object-cover transition duration-500 group-hover:scale-105"
@@ -46,33 +46,33 @@ export default function ChiSiamoPage() {
 
           {/* Content Section */}
           <div className="space-y-8">
-            <div className="bg-white rounded-2xl p-8 lg:p-10 border border-gray-200 shadow-lg">
+            <div className="bg-white rounded-2xl p-8 lg:p-10 border border-gray-200 shadow-lg hover:shadow-2xl transition-shadow duration-300">
               <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">
-                Il Nostro Metodo
+                Il metodo Leonardo School
               </h2>
               
-              <div className="space-y-4 text-gray-700 leading-relaxed text-lg">
+              <div className="space-y-6 text-gray-700 leading-relaxed text-lg">
                 <p>
-                  I nostri <span className="text-red-600 font-semibold">tutor</span>, tutti studenti o neolaureati, seguono da anni le nostre
-                  classi con <span className="text-gray-900 font-semibold">metodi di insegnamento rapidi e innovativi</span>, creando un
-                  coinvolgimento tale da abbattere ogni barriera d'insegnamento.
+                  I nostri <span className="text-red-600 font-semibold">tutor</span>, studenti e neolaureati selezionati, seguono da anni le nostre classi con un <span className="text-gray-900 font-semibold">metodo rapido, moderno e coinvolgente</span>, capace di rendere l'apprendimento <span className="text-red-600 font-semibold">immediato e naturale</span>.
                 </p>
                 
                 <p>
-                  Sono sempre <span className="text-red-600 font-semibold">disponibili</span>, anche al di fuori delle lezioni, per chiarimenti
-                  o spiegazioni aggiuntive!
+                  Sono sempre <span className="text-red-600 font-semibold">disponibili</span> anche fuori dall'orario delle lezioni per dubbi, chiarimenti e supporto aggiuntivo.
                 </p>
                 
-                <div className="bg-red-50 border-l-4 border-red-600 p-4 rounded-r-lg mt-6">
-                  <p className="font-semibold text-gray-900 text-xl">
-                    Cosa aspetti? Vieni a conoscere il nostro metodo!
+                <div className="bg-gradient-to-r from-red-50 to-red-100 border-l-4 border-red-600 p-6 rounded-r-xl mt-8 shadow-md">
+                  <p className="font-bold text-gray-900 text-xl mb-1">
+                    Cosa aspetti?
+                  </p>
+                  <p className="text-red-700 font-semibold text-lg">
+                    Vieni a conoscere il nostro metodo!
                   </p>
                 </div>
               </div>
 
               <div className="mt-8">
                 <Link href="/contattaci">
-                  <Button variant="primary" size="lg" className="w-full sm:w-auto text-lg px-8">
+                  <Button variant="primary" size="lg" className="w-full sm:w-auto text-lg px-8 shadow-lg hover:shadow-xl transition-shadow">
                     Contattaci Ora
                   </Button>
                 </Link>

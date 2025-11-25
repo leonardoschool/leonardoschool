@@ -3,6 +3,7 @@ import TestimonialsCarousel from '@/components/ui/TestimonialsCarousel';
 import Button from '@/components/ui/Button';
 import Link from 'next/link';
 import Image from 'next/image';
+import ScienceCanvasLight from '@/components/ui/ScienceCanvasLight';
 import { TestCard as TestCardType, Testimonial } from '@/types';
 
 const tests: TestCardType[] = [
@@ -164,26 +165,13 @@ const testimonials: Testimonial[] = [
 export default function Home() {
   return (
     <>
-      {/* Hero Section with Animated Background Images */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        {/* Animated Background Images */}
-        <div className="absolute inset-0">
-          {/* Base gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/100 z-10" />
+      {/* Hero Section with Interactive Science Animation */}
+      <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-black">
+        {/* Interactive Science Canvas Background */}
+        <ScienceCanvasLight />
 
-          {/* Animated images that fade in and out */}
-          <div className="absolute inset-0">
-            <div className="absolute inset-0 animate-fadeInOut" style={{ animationDelay: '0s' }}>
-              <Image src="/images/conference.jpg" alt="" fill className="object-cover" priority />
-            </div>
-            <div className="absolute inset-0 animate-fadeInOut" style={{ animationDelay: '5s' }}>
-              <Image src="/images/student.jpg" alt="" fill className="object-cover" />
-            </div>
-            <div className="absolute inset-0 animate-fadeInOut" style={{ animationDelay: '10s' }}>
-              <Image src="/images/student2.jpg" alt="" fill className="object-cover" />
-            </div>
-          </div>
-        </div>
+        {/* Gradient overlay for better text readability */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/80 z-10" />
 
         <div className="container mx-auto px-4 pt-32 pb-20 relative z-30">
           <div className="max-w-5xl mx-auto text-center space-y-8">

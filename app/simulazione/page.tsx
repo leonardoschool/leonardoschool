@@ -157,7 +157,7 @@ export default function SimulazionePage() {
   return (
     <div className="min-h-screen pb-16">
       {/* Hero Section */}
-      <section className="relative py-24 bg-black text-white overflow-hidden">
+      <section className="relative pt-32 pb-24 bg-black text-white overflow-hidden">
         
         <div className="container mx-auto px-4 text-center relative z-10">
           <h1 className="text-4xl md:text-6xl font-black mb-6">

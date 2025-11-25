@@ -355,7 +355,7 @@ function DidatticaContent() {
     <div className="min-h-screen pb-16 bg-gray-50">
 
       {/* Hero Section */}
-      <section className="relative py-24 bg-black text-white overflow-hidden">
+      <section className="relative pt-32 pb-24 bg-black text-white overflow-hidden">
 
         <div className="container mx-auto px-4 text-center relative z-10">
           <h1 className="text-4xl md:text-6xl font-black mb-6">
@@ -471,27 +471,29 @@ function DidatticaContent() {
                       {course.title}
                     </h3>
 
-                    {/* Details - compact grid for uniform height */}
+                    {/* Details - conditional layout based on number of items */}
                     <div className="mb-8 flex-grow">
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className={course.details.length > 3 ? "grid grid-cols-3 gap-3" : "flex flex-col gap-4 max-w-xs mx-auto"}>
                         {course.details.map((detail, index) => (
-                          <div key={index} className="text-center">
-                            <div className={`${course.badgeColor} text-white w-12 h-12 rounded-xl flex items-center justify-center font-black mx-auto mb-2 shadow-lg text-lg transform group-hover:scale-110 transition-transform`}>
+                          <div key={index} className={course.details.length > 3 ? "text-center" : "flex items-center gap-4 bg-gray-50 rounded-xl p-4"}>
+                            <div className={`${course.badgeColor} text-white ${course.details.length > 3 ? 'w-12 h-12' : 'w-14 h-14 flex-shrink-0'} rounded-xl flex items-center justify-center font-black ${course.details.length > 3 ? 'mx-auto mb-2' : ''} shadow-lg text-lg transform group-hover:scale-110 transition-transform`}>
                               {detail.icon}
                             </div>
-                            <div className="text-[10px] text-gray-400 font-black mb-1 uppercase tracking-tight leading-tight">
-                              {detail.label}
+                            <div className={course.details.length > 3 ? '' : 'flex-1 text-left'}>
+                              <div className={`${course.details.length > 3 ? 'text-[10px]' : 'text-xs'} text-gray-400 font-black mb-1 uppercase tracking-tight leading-tight`}>
+                                {detail.label}
+                              </div>
+                              {detail.text && (
+                                <div className={`${course.details.length > 3 ? 'text-xs' : 'text-sm'} font-bold text-gray-900 leading-tight`}>
+                                  {detail.text}
+                                </div>
+                              )}
+                              {(detail as any).subtext && (
+                                <div className="text-[10px] text-gray-600 mt-0.5 leading-tight">
+                                  {(detail as any).subtext}
+                                </div>
+                              )}
                             </div>
-                            {detail.text && (
-                              <div className="text-xs font-bold text-gray-900 leading-tight">
-                                {detail.text}
-                              </div>
-                            )}
-                            {(detail as any).subtext && (
-                              <div className="text-[10px] text-gray-600 mt-0.5 leading-tight">
-                                {(detail as any).subtext}
-                              </div>
-                            )}
                           </div>
                         ))}
                       </div>
@@ -591,27 +593,29 @@ function DidatticaContent() {
                         </span>
                       </div>
 
-                      {/* Details - compact grid for uniform height */}
+                      {/* Details - conditional layout based on number of items */}
                       <div className="mb-8 flex-grow">
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className={course.details.length > 3 ? "grid grid-cols-3 gap-3" : "flex flex-col gap-4 max-w-xs mx-auto"}>
                           {course.details.map((detail, index) => (
-                            <div key={index} className="text-center">
-                              <div className={`${course.badgeColor} text-white w-12 h-12 rounded-xl flex items-center justify-center font-black mx-auto mb-2 shadow-lg text-lg transform group-hover:scale-110 transition-transform`}>
+                            <div key={index} className={course.details.length > 3 ? "text-center" : "flex items-center gap-4 bg-gray-50 rounded-xl p-4"}>
+                              <div className={`${course.badgeColor} text-white ${course.details.length > 3 ? 'w-12 h-12' : 'w-14 h-14 flex-shrink-0'} rounded-xl flex items-center justify-center font-black ${course.details.length > 3 ? 'mx-auto mb-2' : ''} shadow-lg text-lg transform group-hover:scale-110 transition-transform`}>
                                 {detail.icon}
                               </div>
-                              <div className="text-[10px] text-gray-400 font-black mb-1 uppercase tracking-tight leading-tight">
-                                {detail.label}
+                              <div className={course.details.length > 3 ? '' : 'flex-1 text-left'}>
+                                <div className={`${course.details.length > 3 ? 'text-[10px]' : 'text-xs'} text-gray-400 font-black mb-1 uppercase tracking-tight leading-tight`}>
+                                  {detail.label}
+                                </div>
+                                {detail.text && (
+                                  <div className={`${course.details.length > 3 ? 'text-xs' : 'text-sm'} font-bold text-gray-900 leading-tight`}>
+                                    {detail.text}
+                                  </div>
+                                )}
+                                {(detail as any).subtext && (
+                                  <div className="text-[10px] text-gray-600 mt-0.5 leading-tight">
+                                    {(detail as any).subtext}
+                                  </div>
+                                )}
                               </div>
-                              {detail.text && (
-                                <div className="text-xs font-bold text-gray-900 leading-tight">
-                                  {detail.text}
-                                </div>
-                              )}
-                              {(detail as any).subtext && (
-                                <div className="text-[10px] text-gray-600 mt-0.5 leading-tight">
-                                  {(detail as any).subtext}
-                                </div>
-                              )}
                             </div>
                           ))}
                         </div>
