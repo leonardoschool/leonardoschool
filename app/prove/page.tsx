@@ -1,100 +1,224 @@
+'use client';
+
 import { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
+import { useState } from 'react';
 
-export const metadata: Metadata = {
-  title: 'Prove - Leonardo School Catania',
-  description: 'Pagina delle prove disponibili per la preparazione ai test di ammissione universitari.',
-  keywords: ['prove test medicina', 'prove universitarie', 'esercitazioni test', 'prove catania'],
-  openGraph: {
-    title: 'Prove - Leonardo School Catania',
-    description: 'Pagina delle prove disponibili',
-    url: 'https://leonardoschool.it/prove',
-  },
-};
+// Subject categories with their colors and PDFs
+const subjects = [
+    {
+        id: 'chimica',
+        name: 'Chimica',
+        color: '#E7418B',
+        icon: '🧪',
+    },
+    {
+        id: 'fisica',
+        name: 'Fisica',
+        color: '#42BFED',
+        icon: '⚛️',
+    },
+    {
+        id: 'biologia',
+        name: 'Biologia',
+        color: '#B6B21D',
+        icon: '🧬',
+    },
+];
+
+const appeals = [
+    {
+        id: '1',
+        title: '1° Appello',
+        description: 'Prima sessione d\'esame',
+    },
+    {
+        id: '2',
+        title: '2° Appello',
+        description: 'Seconda sessione d\'esame',
+    },
+];
 
 export default function ProvePage() {
-  return (
-    <div className="min-h-screen pt-24 pb-16 bg-gray-50">
-      <div className="container mx-auto px-4">
-        {/* Hero Section */}
-        <div className="text-center mb-16">
-          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
-            Prove
-          </h1>
-          <p className="text-xl text-gray-700 max-w-3xl mx-auto">
-            Esercitati con le nostre prove per preparare al meglio i test di ammissione universitari
-          </p>
-        </div>
+    const [selectedAppeal, setSelectedAppeal] = useState<string>('1');
 
-        {/* Content Section */}
-        <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-8 md:p-12">
-          <div className="text-center">
-            <div className="mb-8">
-              <svg
-                className="w-24 h-24 mx-auto text-red-600 mb-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                Contenuto in Arrivo
-              </h2>
-              <p className="text-lg text-gray-600 mb-8">
-                Stiamo preparando materiali esclusivi di esercitazione per te.
-              </p>
-            </div>
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
+            {/* Hero Section */}
+            <section className="relative bg-gradient-to-r from-red-600 to-red-700 text-white py-20 overflow-hidden">
+                <div className="absolute inset-0 bg-black/10"></div>
+                <div className="container mx-auto px-4 relative z-10">
+                    <div className="max-w-4xl mx-auto text-center">
+                        <h1 className="text-5xl md:text-6xl font-bold mb-6">
+                            PROVE UFFICIALI
+                        </h1>
+                        <p className="text-xl text-red-100 mb-8">
+                            Consulta le prove ufficiali per preparati al meglio all'ammissione universitaria
+                        </p>
+                        <div className="inline-flex items-center gap-2 bg-yellow-400/90 text-gray-900 px-6 py-3 rounded-lg font-semibold">
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                            </svg>
+                            Pagina in continuo aggiornamento
+                        </div>
+                    </div>
+                </div>
+            </section>
 
-            <div className="space-y-4">
-              <p className="text-gray-700">
-                Nel frattempo, puoi esplorare le nostre altre sezioni:
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link
-                  href="/simulazione"
-                  className="inline-flex items-center justify-center px-6 py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Simulazioni
-                </Link>
-                <Link
-                  href="/test"
-                  className="inline-flex items-center justify-center px-6 py-3 bg-gray-900 text-white font-semibold rounded-lg hover:bg-gray-800 transition-colors"
-                >
-                  Test di Accesso
-                </Link>
-                <Link
-                  href="/didattica"
-                  className="inline-flex items-center justify-center px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Corsi
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
+            {/* Main Content */}
+            <section className="py-10">
+                <div className="container mx-auto px-4">
+                    {/* Appeal Tabs */}
+                    <div className="mb-10">
+                        <Image
+                            src="/images/NEW_LOGO_2026/LogoSemestreAperto.png"
+                            alt="Semestre Aperto"
+                            width={200}
+                            height={80}
+                            className="mx-auto"
+                        />
+                    </div>
+                    <div className="max-w-4xl mx-auto mb-12">
+                        <div className="flex justify-center gap-4">
+                            {appeals.map((appeal) => (
+                                <button
+                                    key={appeal.id}
+                                    onClick={() => setSelectedAppeal(appeal.id)}
+                                    className={`px-8 py-4 rounded-2xl font-bold transition-all transform hover:scale-105 ${selectedAppeal === appeal.id
+                                            ? 'bg-gradient-to-r from-[#4565B0] to-[#4565B0] text-white shadow-xl shadow-gray-600/50'
+                                            : 'bg-white/80 text-gray-900 border-2 border-gray-200 hover:border-red-400'
+                                        }`}
+                                >
+                                    <div className="text-xl mb-1">{appeal.title}</div>
+                                    <div className="text-sm opacity-80">{appeal.description}</div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
 
-        {/* CTA Section */}
-        <div className="mt-16 text-center">
-          <h3 className="text-2xl font-bold text-gray-900 mb-4">
-            Hai domande?
-          </h3>
-          <p className="text-gray-600 mb-6">
-            Contattaci per maggiori informazioni sui nostri corsi e servizi
-          </p>
-          <Link
-            href="/contattaci"
-            className="inline-flex items-center justify-center px-8 py-4 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors shadow-lg hover:shadow-xl"
-          >
-            Contattaci
-          </Link>
+                    {/* Alert for 2° Appello */}
+                    {selectedAppeal === '2' && (
+                        <div className="max-w-4xl mx-auto mb-8">
+                            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-6 rounded-lg shadow-md">
+                                <div className="flex items-start">
+                                    <div className="flex-shrink-0">
+                                        <svg className="h-6 w-6 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                    </div>
+                                    <div className="ml-4">
+                                        <h3 className="text-lg font-semibold text-yellow-800 mb-1">
+                                            Contenuto Non Ancora Disponibile
+                                        </h3>
+                                        <p className="text-sm text-yellow-700">
+                                            Le prove del 2° Appello saranno disponibili a breve. Nel frattempo, puoi consultare il materiale del 1° Appello.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Subject Cards */}
+                    <div className="max-w-6xl mx-auto">
+                        <h2 className="text-3xl font-bold text-gray-900 mb-8 text-center">
+                            Prove d'esame disponibili
+                        </h2>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            {subjects.map((subject) => {
+                                const pdfFileName = `${subject.name} ${selectedAppeal}° – Soluzioni.pdf`;
+                                const pdfPath = `/pdf/${pdfFileName}`;
+
+                                return (
+                                    <div
+                                        key={subject.id}
+                                        className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-2xl transition-all transform hover:scale-105"
+                                    >
+                                        {/* Card Header */}
+                                        <div
+                                            className="h-32 flex items-center justify-center text-white"
+                                            style={{ backgroundColor: subject.color }}
+                                        >
+                                            <div className="text-6xl">{subject.icon}</div>
+                                        </div>
+
+                                        {/* Card Content */}
+                                        <div className="p-6">
+                                            <h3 className="text-2xl font-bold text-gray-900 mb-4 text-center">
+                                                {subject.name}
+                                            </h3>
+
+                                            {/* PDF Link */}
+                                            {selectedAppeal === '2' ? (
+                                                <div className="flex items-center justify-between p-4 bg-gray-100 rounded-xl border-2 border-gray-300 opacity-60 cursor-not-allowed">
+                                                    <div className="flex items-center gap-3">
+                                                        <div
+                                                            className="text-white p-2 rounded-lg"
+                                                            style={{ backgroundColor: subject.color }}
+                                                        >
+                                                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                                                <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                                                            </svg>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-semibold text-gray-600">
+                                                                {selectedAppeal}° Appello
+                                                            </p>
+                                                            <p className="text-xs text-gray-500">Non ancora disponibile</p>
+                                                        </div>
+                                                    </div>
+                                                    <svg
+                                                        className="w-5 h-5 text-gray-400"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </div>
+                                            ) : (
+                                                <a
+                                                    href={pdfPath}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-xl transition-all group border-2 border-gray-200 hover:border-gray-300"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div
+                                                            className="text-white p-2 rounded-lg group-hover:scale-110 transition-transform"
+                                                            style={{ backgroundColor: subject.color }}
+                                                        >
+                                                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                                                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                                                            </svg>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-semibold text-gray-900">
+                                                                {selectedAppeal}° Appello
+                                                            </p>
+                                                            <p className="text-xs text-gray-500">Con soluzioni</p>
+                                                        </div>
+                                                    </div>
+                                                    <svg
+                                                        className="w-5 h-5 text-gray-400 group-hover:translate-x-1 transition-all"
+                                                        style={{ color: subject.color }}
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                    </svg>
+                                                </a>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            </section>
         </div>
-      </div>
-    </div>
-  );
+    );
 }

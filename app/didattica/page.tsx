@@ -12,8 +12,8 @@ const coursesData = {
       id: 'starter',
       logo: '/images/NEW_LOGO_2026/STARTER.png',
       badge: 'BASE',
-      badgeColor: 'bg-[#68BCE8]',
-      headerColor: 'bg-[#68BCE8]',
+      badgeColor: 'bg-[#42BFED]',
+      headerColor: 'bg-[#42BFED]',
       category: 'MEDICINA • ODONTOIATRIA • VETERINARIA',
       title: 'STARTER CLASS',
       language: 'Italiano / Inglese (IMAT) / Prof. Sanitarie',
@@ -35,14 +35,14 @@ const coursesData = {
           subtext: '18 tematiche + 1 completa',
         },
       ],
-      ctaColor: 'bg-[#68BCE8] hover:bg-[#5AACDB]',
+      ctaColor: 'bg-[#42BFED] hover:bg-[#5AACDB]',
     },
     {
       id: 'academy',
       logo: '/images/NEW_LOGO_2026/ACADEMY.png',
       badge: 'AVANZATO',
-      badgeColor: 'bg-[#D54F8A]',
-      headerColor: 'bg-[#D54F8A]',
+      badgeColor: 'bg-[#E7418B]',
+      headerColor: 'bg-[#E7418B]',
       category: 'MEDICINA • ODONTOIATRIA • VETERINARIA',
       title: 'ACADEMY',
       language: 'Italiano',
@@ -60,14 +60,14 @@ const coursesData = {
           subtext: '22 simulazioni complete + correzioni',
         },
       ],
-      ctaColor: 'bg-[#D54F8A] hover:bg-[#C4407A]',
+      ctaColor: 'bg-[#E7418B] hover:bg-[#C4407A]',
     },
     {
       id: 'intensive',
       logo: '/images/NEW_LOGO_2026/ACADEMY.png',
       badge: 'INTENSIVO',
-      badgeColor: 'bg-[#B5B240]',
-      headerColor: 'bg-[#B5B240]',
+      badgeColor: 'bg-[#B6B21D]',
+      headerColor: 'bg-[#B6B21D]',
       category: 'MEDICINA • ODONTOIATRIA • VETERINARIA',
       title: 'ACADEMY INTENSIVE TRAINING',
       language: 'Italiano',
@@ -85,7 +85,7 @@ const coursesData = {
           subtext: 'Correzioni commentate (42 ore)',
         },
       ],
-      ctaColor: 'bg-[#B5B240] hover:bg-[#A5A238]',
+      ctaColor: 'bg-[#B6B21D] hover:bg-[#A5A238]',
     },
   ],
   imat: [
@@ -126,8 +126,8 @@ const coursesData = {
       id: 'starter-snt',
       logo: '/images/NEW_LOGO_2026/STARTER.png',
       badge: 'BASE',
-      badgeColor: 'bg-[#68BCE8]',
-      headerColor: 'bg-[#68BCE8]',
+      badgeColor: 'bg-[#42BFED]',
+      headerColor: 'bg-[#42BFED]',
       category: 'PROFESSIONI SANITARIE',
       title: 'STARTER CLASS',
       language: 'Italiano / Prof. Sanitarie',
@@ -149,7 +149,7 @@ const coursesData = {
           subtext: '18 tematiche + 1 completa',
         },
       ],
-      ctaColor: 'bg-[#68BCE8] hover:bg-[#5AACDB]',
+      ctaColor: 'bg-[#42BFED] hover:bg-[#5AACDB]',
     },
     {
       id: 'snt-class',
@@ -346,12 +346,13 @@ function DidatticaContent() {
 
       {/* Hero Section */}
       <section className="relative py-24 bg-black text-white overflow-hidden">
-
+        
         <div className="container mx-auto px-4 text-center relative z-10">
           <h1 className="text-4xl md:text-6xl font-black mb-6">
-            { corso !== 'medicina' ? getHeroTitle() : 'MEDICINA, ODONTOIATRIA, VETERINARIA' }
+            {corso !== 'medicina' ? getHeroTitle() : 'MEDICINA, ODONTOIATRIA, VETERINARIA'}
           </h1>
-          <p className="text-xl text-gray-300">
+          <div className="w-24 h-1.5 bg-gradient-to-r from-red-500 to-red-600 mx-auto rounded-full mb-8" />
+          <p className="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto leading-relaxed">
             {getHeroDescription()}
           </p>
 
@@ -629,19 +630,23 @@ function DidatticaContent() {
       )}
 
       {/* CTA Section */}
-      <section className="py-16 bg-white">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">
-            Hai bisogno di aiuto?
-          </h2>
-          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Prenota un colloquio gratuito e costruiremo insieme un percorso su misura per te
-          </p>
-          <Link href="/contattaci">
-            <Button variant="primary" size="lg">
-              Prenota un Colloquio
-            </Button>
-          </Link>
+      <section className="py-40">
+        <div className="container mx-auto px-4">
+          <div className="max-w-3xl mx-auto bg-gradient-to-r from-red-600 to-red-700 rounded-2xl shadow-2xl p-12 text-center text-white">
+            <h3 className="text-3xl font-bold mb-4">Hai bisogno di aiuto?</h3>
+            <p className="text-xl text-red-100 mb-8">
+              Contattaci per maggiori informazioni sui nostri corsi o per costruire insieme un percorso su misura per te.
+            </p>
+            <Link
+              href="/contattaci"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-red-600 font-bold rounded-xl hover:bg-gray-100 transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              Contattaci
+            </Link>
+          </div>
         </div>
       </section>
     </div>

@@ -105,12 +105,7 @@ export default function Footer() {
             <ul className="space-y-1.5">
               <li>
                 <Link href="/didattica?corso=medicina" className="text-sm text-gray-400 hover:text-white transition-colors">
-                  Medicina e Odontoiatria
-                </Link>
-              </li>
-              <li>
-                <Link href="/didattica?corso=imat" className="text-sm text-gray-400 hover:text-white transition-colors">
-                  IMAT
+                  Medicina
                 </Link>
               </li>
               <li>
@@ -119,8 +114,13 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/didattica?corso=veterinaria" className="text-sm text-gray-400 hover:text-white transition-colors">
-                  Veterinaria
+                <Link href="/didattica?corso=arched" className="text-sm text-gray-400 hover:text-white transition-colors">
+                  Architettura
+                </Link>
+              </li>
+              <li>
+                <Link href="/didattica?corso=altro" className="text-sm text-gray-400 hover:text-white transition-colors">
+                  Altro
                 </Link>
               </li>
             </ul>
@@ -157,17 +157,22 @@ export default function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="border-t border-gray-800 mt-6 pt-4 flex flex-col sm:flex-row justify-between items-center gap-3 text-xs">
-          <p className="text-gray-400">
-            © {currentYear} {SITE_NAME}. Tutti i diritti riservati.
-          </p>
-          <div className="flex gap-4">
-            <Link href="/privacy-policy.pdf" className="text-gray-400 hover:text-white transition-colors">
-              Privacy Policy
-            </Link>
-            <Link href="/privacy-policy.pdf" className="text-gray-400 hover:text-white transition-colors">
-              Termini e Condizioni
-            </Link>
+        <div className="border-t border-gray-800 mt-6 pt-4 space-y-3">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-3 text-xs">
+            <p className="text-gray-400">
+              © {currentYear} {SITE_NAME}. Tutti i diritti riservati.
+            </p>
+            <div className="flex gap-4">
+              <Link href="/privacy-policy.pdf" className="text-gray-400 hover:text-white transition-colors">
+                Privacy Policy
+              </Link>
+              <Link href="/privacy-policy.pdf" className="text-gray-400 hover:text-white transition-colors">
+                Termini e Condizioni
+              </Link>
+            </div>
+          </div>
+          <div className="text-center text-xs text-gray-500">
+            <p>Leonardo Formazione s.r.l.s | P.Iva: 05944090876 | Sede Legale: Corso Sicilia 20 - Trecastagni</p>
           </div>
         </div>
       </div>

@@ -155,17 +155,19 @@ const tolcTests = [
 
 export default function SimulazionePage() {
   return (
-    <div className="min-h-screen pt-24 pb-16">
+    <div className="min-h-screen pb-16">
       {/* Hero Section */}
-      <section className="bg-linear-to-br from-red-600 to-red-800 text-white py-20">
-        <div className="container mx-auto px-4 text-center">
-          <h1 className="text-4xl md:text-6xl font-bold mb-6">
+      <section className="relative py-24 bg-black text-white overflow-hidden">
+        
+        <div className="container mx-auto px-4 text-center relative z-10">
+          <h1 className="text-4xl md:text-6xl font-black mb-6">
             TESTA LA TUA PREPARAZIONE
           </h1>
-          <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto">
-            con una simulazione gratuita
+          <div className="w-24 h-1.5 bg-gradient-to-r from-red-500 to-red-600 mx-auto rounded-full mb-8" />
+          <p className="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto leading-relaxed mb-4">
+            Esercitati con una simulazione gratuita
           </p>
-          <p className="text-lg mb-8">
+          <p className="text-lg text-gray-300">
             Medicina-Odontoiatria-Veterinaria • IMAT • Professioni Sanitarie • Architettura • TOLC • CEnT
           </p>
         </div>
