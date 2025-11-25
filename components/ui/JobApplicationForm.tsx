@@ -129,12 +129,21 @@ export default function JobApplicationForm() {
     setSubmitStatus('idle');
 
     try {
-      const response = await fetch('/api/contact', {
+      // Create FormData for file upload
+      const formDataToSend = new FormData();
+      formDataToSend.append('name', formData.name);
+      formDataToSend.append('phone', formData.phone);
+      formDataToSend.append('email', formData.email);
+      formDataToSend.append('subject', formData.subject);
+      formDataToSend.append('materia', formData.materia);
+      formDataToSend.append('message', formData.message);
+      if (formData.cv) {
+        formDataToSend.append('cv', formData.cv);
+      }
+
+      const response = await fetch('/api/lavora-con-noi', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
+        body: formDataToSend,
       });
 
       if (response.ok) {
@@ -149,6 +158,10 @@ export default function JobApplicationForm() {
           cv: null,
         });
         setErrors({});
+        // Reset file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
       } else {
         setSubmitStatus('error');
       }
