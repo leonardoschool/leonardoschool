@@ -186,7 +186,7 @@ const coursesData = {
   arched: [
     {
       id: 'arched-class',
-      logo: '/images/NEW_LOGO_2026/arched.png',
+      logo: '/images/NEW_LOGO_2026/ARCHED.png',
       badge: '',
       badgeColor: 'bg-[#EB635B]',
       headerColor: 'bg-[#EB635B]',
