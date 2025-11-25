@@ -28,7 +28,7 @@ const allTests: TestCardType[] = [
     id: 'sanitarie',
     title: 'Professioni Sanitarie',
     description: 'Professioni Sanitarie',
-    image: '/images/snt.png',
+    image: '/images/NEW_LOGO_2026/icon_snt.png',
     link: 'https://www.mur.gov.it/it/atti-e-normativa/decreto-ministeriale-n-1116-del-31-07-2024',
     details: 'Test di accesso per i corsi delle Professioni Sanitarie (Infermieristica, Fisioterapia, ecc.).',
   },
