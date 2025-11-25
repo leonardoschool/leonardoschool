@@ -10,9 +10,19 @@ export interface TestCard {
   id: string;
   title: string;
   description: string;
-  image: string;
+  image?: string;
+  images?: string[]; // Array of multiple images for cards that need multiple icons
   link: string;
   details?: string;
+  dates?: {
+    label: string;
+    date: string;
+    url?: string;
+  }[];
+  documents?: {
+    title: string;
+    url: string;
+  }[];
 }
 
 export interface Testimonial {

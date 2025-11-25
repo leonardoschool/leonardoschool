@@ -11,34 +11,112 @@ const allTests: TestCardType[] = [
   {
     id: 'medicina',
     title: 'Semestre Aperto',
-    description: 'Medicina, Odontoiatria e Veterinaria',
+    description: 'Medicina, Odontoiatria e Veterinaria in lingua Italiana',
     image: '/images/med.png',
     link: 'https://accessoprogrammato.mur.gov.it/2024/',
-    details: 'Test di accesso per i corsi di Medicina e Chirurgia, Odontoiatria e Protesi Dentaria, e Medicina Veterinaria in lingua italiana.',
+    dates: [
+      { label: '1° appello', date: '20 novembre 2025 (iscrizioni 30 ottobre - 15 novembre 2025)' },
+      { label: '2° appello', date: '10 dicembre 2025 (iscrizioni 21 novembre - 6 dicembre 2025)' },
+      { label: 'Pubblicazione risultati 1° appello', date: 'entro il 3 dicembre 2025' },
+      { label: 'Pubblicazione risultati 2° appello', date: 'entro il 23 dicembre 2025' },
+      { label: 'Pubblicazione graduatorie nazionali', date: '12 gennaio 2026' },
+      { label: '1a immatricolazione', date: '13-16 gennaio 2026' },
+      { label: '1° scorrimento e scelta sedi vacanti', date: '21-23 gennaio 2026 (ore 17:00)' },
+      { label: '2° scorrimento e 2a immatricolazione', date: '26-29 gennaio 2026' },
+      { label: 'Chiusura graduatorie', date: '3 febbraio 2026' },
+    ],
+    documents: [
+      { title: 'Decreto attuativo', url: 'https://www.mur.gov.it/sites/default/files/2025-06/Decreto%20MInisteriale%20n.%20418%20del%2030-05-2025.pdf' },
+      { title: 'Procedure di iscrizione', url: 'https://www.mur.gov.it/sites/default/files/2025-06/Decreto%20MInisteriale%20n.%20418%20Allegato%201.pdf' },
+      { title: 'Graduatoria nazionale', url: 'https://www.mur.gov.it/sites/default/files/2025-07/Decreto%20Ministeriale%20n.%20454%20del%2016-07-2025.pdf' },
+      { title: 'Syllabus Chimica e Propedeutica Biochimica', url: 'https://www.mur.gov.it/sites/default/files/2025-06/Decreto%20MInisteriale%20n.%20418%20Syllabus%20Chimica%20e%20Propedeutica%20Biochimica.pdf' },
+      { title: 'Syllabus Fisica', url: 'https://www.mur.gov.it/sites/default/files/2025-06/Decreto%20Ministeriale%20n.%20418%20Syllabus_fisica%20errata%20corrige%2024.06.2025.pdf' },
+      { title: 'Syllabus Biologia', url: 'https://www.mur.gov.it/sites/default/files/2025-06/Decreto%20MInisteriale%20n.%20418%20Syllabus_BIOLOGIA.pdf' },
+      { title: 'Linee guida', url: 'https://www.mur.gov.it/sites/default/files/2025-10/LineeGuida_semestre_aperto_brochure.pdf' },
+      { title: 'Posti disponibili MEDICINA - UE', url: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20ministeriale%20n.%20600%20del%2007-08-2025%20-%20MEDICINA%20-%20UE%20-%20ITA.pdf' },
+      { title: 'Posti disponibili ODONTOIATRIA - UE', url: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20ministeriale%20n.%20600%20del%2007-08-2025%20-%20ODONTOIATRIA%20-%20UE%20-%20ITA.pdf' },
+      { title: 'Posti disponibili VETERINARIA - UE', url: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20ministeriale%20n.%20600%20del%2007-08-2025%20-%20VETERINARIA%20-%20UE%20-%20ITA.pdf' },
+    ],
   },
   {
     id: 'imat',
     title: 'IMAT',
-    description: 'Medicina, Odontoiatria e Veterinaria in Inglese',
+    description: 'Medicina, Odontoiatria e Veterinaria in lingua Inglese',
     image: '/images/imat.png',
     link: 'https://accessoprogrammato.mur.gov.it/2024/',
-    details: 'International Medical Admissions Test per i corsi di Medicina, Odontoiatria e Veterinaria in lingua inglese.',
+    dates: [
+      { label: 'Test', date: '17 settembre 2025' },
+      { label: 'Apertura iscrizioni', date: '26 agosto 2025' },
+      { label: 'Chiusura iscrizioni', date: '9 settembre 2025' },
+      { label: 'Pubblicazione risultati anonimi', date: '25 settembre 2025' },
+      { label: 'Pubblicazione graduatoria', date: '13 ottobre 2025' },
+    ],
+    documents: [
+      { title: 'Decreto ministeriale IMAT', url: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20ministeriale%20n.%20599%20del%2007-08-2025.pdf' },
+      { title: 'Allegato A - Modalità e contenuti', url: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20ministeriale%20n.%20599%20del%2007-08-2025%20-%20Allegato%20A.pdf' },
+      { title: 'Posti disponibili UE e non UE', url: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20ministeriale%20n.%20599%20del%2007-08-2025%20-%20Tabella%20B%20posti%20UE%20e%20non%20UE%20italia%20e%20posti%20extra%20UE%20rev.pdf' },
+    ],
   },
   {
     id: 'sanitarie',
     title: 'Professioni Sanitarie',
-    description: 'Professioni Sanitarie',
-    image: '/images/NEW_LOGO_2026/icon_snt.png',
+    description: 'Professioni Sanitarie in lingua Italiana e in lingua Inglese',
+    image: '/images/NEW_LOGO_2026/snticon.png',
     link: 'https://www.mur.gov.it/it/atti-e-normativa/decreto-ministeriale-n-1116-del-31-07-2024',
-    details: 'Test di accesso per i corsi delle Professioni Sanitarie (Infermieristica, Fisioterapia, ecc.).',
+    dates: [
+      { label: 'Test IT', date: '8 settembre 2025' },
+      { label: 'Test ENG', date: '10 settembre 2025' },
+      { label: 'Test LM', date: '25 settembre 2025' },
+    ],
+    documents: [
+      { title: 'Decreto ministeriale L/SNT', url: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20ministeriale%20n.%20586%20del%2006-08-2025.pdf' },
+      { title: 'Decreto ministeriale LM/SNT', url: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20Ministeriale%20n.%20605%20dell%208-8-2025.pdf' },
+      { title: 'Syllabi L/SNT', url: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20ministeriale%20n.%20586%20del%2006-08-2025%20-%20Allegato%20A.pdf' },
+      { title: 'Syllabi LM/SNT', url: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20Ministeriale%20n.%20605%20Allegato%201.pdf' },
+      { title: 'Posti disponibili L/SNT UE', url: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20Ministeriale%20n.%20614%20Tabella%20A%20candidati%20UE%20e%20non%20UE%20Italia.pdf' },
+    ],
   },
   {
     id: 'architettura',
     title: 'Test ARCHED',
-    description: 'Architettura/Ingegneria edile-Architettura',
+    description: 'Architettura / Ingegneria edile-Architettura',
     image: '/images/arched.png',
     link: 'https://www.cisiaonline.it/area-tematica-architettura/test-arched-architettura-ingegneria-edile/struttura-della-prova-test-arched/',
-    details: 'Test per i corsi di Architettura e Ingegneria Edile-Architettura.',
+    dates: [
+      { label: 'Calendario CISIA', date: 'Consulta le date disponibili sul sito CISIA', url: 'https://www.cisiaonline.it/altri-test/test-arched/date' },
+    ],
+    documents: [
+      { title: 'Decreto ministeriale', url: 'https://www.mur.gov.it/sites/default/files/2025-05/Decreto%20Ministeriale%20n.%20395%20del%2012-05-2025.pdf' },
+      { title: 'Syllabi', url: 'https://www.mur.gov.it/sites/default/files/2025-05/Decreto%20Ministeriale%20n.%20395%20Allegato%20A.pdf' },
+      { title: 'Posti disponibili UE', url: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20Ministeriale%20n.%20554%20del%204-8-2025.pdf%20-%20Tabella%20A%20posti%20UE%20e%20non%20UE%20residenti.pdf' },
+    ],
+  },
+  {
+    id: 'tolc-cent',
+    title: 'TOLC & CEnT',
+    description: 'Test On-Line CISIA / CISIA English Test',
+    image: '/images/NEW_LOGO_2026/tolc_icon.png',
+    link: 'https://www.cisiaonline.it/',
+    dates: [
+      { label: 'Calendario CISIA', date: 'Consulta le date disponibili sul sito CISIA', url: 'https://testcisia.it/calendario.php' },
+    ],
+    documents: [
+      { title: 'Regolamento TOLC', url: 'https://www.cisiaonline.it/tolc/tutto-sul-TOLC/regolamento-tolc' },
+      { title: 'Regolamento CEnT', url: 'https://www.cisiaonline.it/cent/tutto-sul-CEnT/regolamento-CEnT' },
+      { title: 'Syllabus TOLC-AV (Scienze agrarie e veterinarie)', url: 'https://www.cisiaonline.it/tolc/tolc-av/struttura-della-prova-e-sillabo' },
+      { title: 'Syllabus TOLC-B (Scienze biologiche e Biotecnologie)', url: 'https://www.cisiaonline.it/tolc/tolc-b/struttura-della-prova-e-sillabo' },
+      { title: 'Syllabus TOLC-E (Economia, Statistica e Scienze sociali)', url: 'https://www.cisiaonline.it/tolc/tolc-e/struttura-della-prova-e-sillabo' },
+      { title: 'Syllabus TOLC-F (Scienze farmaceutiche)', url: 'https://www.cisiaonline.it/tolc/tolc-f/struttura-della-prova-e-sillabo' },
+      { title: 'Syllabus TOLC-I (Ingegneria)', url: 'https://www.cisiaonline.it/tolc/tolc-i/struttura-della-prova-e-sillabo' },
+      { title: 'Syllabus TOLC-LP (Orientamento professionalizzante)', url: 'https://www.cisiaonline.it/tolc/tolc-lp/struttura-della-prova-e-sillabo' },
+      { title: 'Syllabus TOLC-PSI (Scienze psicologiche)', url: 'https://www.cisiaonline.it/tolc/tolc-psi/struttura-della-prova-e-sillabo' },
+      { title: 'Syllabus TOLC-S (Scienze chimiche, fisiche, matematiche, geologiche e naturali)', url: 'https://www.cisiaonline.it/tolc/tolc-s/struttura-della-prova-e-sillabo' },
+      { title: 'Syllabus TOLC-SPS (Scienze politiche e sociali)', url: 'https://www.cisiaonline.it/tolc/tolc-sps/struttura-della-prova-e-sillabo' },
+      { title: 'Syllabus TOLC-SU (Scienze umanistiche)', url: 'http://tolc-su/' },
+      { title: 'English TOLC-E', url: 'https://www.cisiaonline.it/tolc/english-tolc-e/structure-and-syllabus' },
+      { title: 'English TOLC-F', url: 'https://www.cisiaonline.it/tolc/english-tolc-f/structure-and-syllabus' },
+      { title: 'English TOLC-I', url: 'https://www.cisiaonline.it/tolc/english-tolc-i/structure-and-syllabus' },
+    ],
   },
 ];
 
@@ -70,14 +148,14 @@ export default function TestPage() {
         <div className="container mx-auto px-4 relative z-10">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4">
-              Test Ministeriali
+              UNIVERSITÀ PUBBLICHE 
             </h2>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Informazioni ufficiali sui test di accesso regolati dal MUR
+              Informazioni ufficiali sui test di accesso regolati a livello nazionale o locale
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto mb-20 items-start">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8 max-w-7xl mx-auto mb-20 items-start">
             {allTests.map((test) => (
               <TestCard key={test.id} test={test} expandable={true} />
             ))}
@@ -87,29 +165,54 @@ export default function TestPage() {
           <div className="mt-20">
             <div className="text-center mb-16">
               <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4">
-                Test Universitari Specifici
+                UNIVERSITÀ PRIVATE
               </h2>
+              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+              Informazioni ufficiali sulle prove di accesso non direttamente regolate dal MUR 
+            </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
-              {/* UniSR */}
+              {/* Hunimed */}
               <div className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100">
                 <div className="flex justify-center mb-6">
                   <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
-                    <img src="/images/uniSR.jpeg" alt="UniSR" className="w-14 h-14 object-contain rounded-full" />
+                    <img src="/images/hunimed.png" alt="Hunimed" className="w-14 h-14 object-contain" />
                   </div>
                 </div>
-                <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test UniSR</h3>
-                <p className="text-sm text-gray-600 mb-6 text-center">Università Vita-Salute San Raffaele</p>
+                <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test Hunimed</h3>
+                <p className="text-sm text-gray-600 mb-6 text-center">Humanitas University</p>
                 <div className="space-y-2">
-                  <a href="https://www.unisr.it" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicina e Odontoiatria
+                  <a href="https://www.hunimed.eu/wp-content/uploads/2025/11/2026_MEDEU_Bando_ITA-1.pdf" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Medicine and Surgery
                   </a>
-                  <a href="https://www.unisr.it" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Professioni sanitarie
+                  <a href="https://www.hunimed.eu/wp-content/uploads/2025/06/2025_Professioni-Sanitarie.pdf" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Professioni Sanitarie
                   </a>
-                  <a href="https://www.unisr.it" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicina in inglese
+                </div>
+              </div>
+
+              {/* UCBM */}
+              <div className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100">
+                <div className="flex justify-center mb-6">
+                  <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
+                    <img src="/images/ucbm.png" alt="UCBM" className="w-14 h-14 object-contain" />
+                  </div>
+                </div>
+                <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test UBCM</h3>
+                <p className="text-sm text-gray-600 mb-6 text-center">Università Campus Bio-Medico di Roma</p>
+                <div className="space-y-2">
+                  <a href="https://www.unicampus.it/ammissioni-trasferim/medicina-e-chirurgia-a-a-2026-2027/" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Medicina e Chirurgia
+                  </a>
+                  <a href="https://www.unicampus.it/ammissioni-trasferim/odontoiatria-e-protesi-dentaria-a-a-2026-2027/" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Odontoiatria e Protesi Dentaria
+                  </a>
+                  <a href="https://www.unicampus.it/ammissioni-trasferim/medicine-and-surgery-a-a-2026-2027-cittadini-italiani-europei-ed-equiparati/" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Medicine and Surgery
+                  </a>
+                  <a href="https://www.unicampus.it/ammissioni-trasferim/medicine-and-surgery-medtech-a-a-2026-2027-cittadini-italiani-europei-ed-equiparati/" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Medicine and Surgery "MedTech"
                   </a>
                 </div>
               </div>
@@ -124,17 +227,17 @@ export default function TestPage() {
                 <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test UniCamillus</h3>
                 <p className="text-sm text-gray-600 mb-6 text-center">Saint Camillus International University</p>
                 <div className="space-y-2">
-                  <a href="https://www.unicamillus.org" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicina in inglese (Roma)
+                  <a href="https://unicamillus.org/wp-content/uploads/bandi_ammissione/2025-2026/dr_545_bando_medicina_italiano_eu_2025-2026_ottobre_2025.pdf?x46727" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Medicina e Chirurgia
                   </a>
-                  <a href="https://www.unicamillus.org" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicina in inglese (Venezia)
+                  <a href="https://unicamillus.org/wp-content/uploads/bandi_ammissione/2025-2026/dr_546_bando_odontoiatria_eu_2025-2026_roma_ottobre_2025.pdf?x46727" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Odontoiatria e Protesi Dentaria
                   </a>
-                  <a href="https://www.unicamillus.org" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Odontoiatria (Roma)
+                  <a href="https://unicamillus.org/wp-content/uploads/bandi_ammissione/2025-2026/dr_544_bando_medicina_inglese_eu_2025-2026_roma_ottobre_2025.pdf?x46727" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Medicine and Surgery
                   </a>
-                  <a href="https://www.unicamillus.org" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Professioni sanitarie
+                  <a href="https://unicamillus.org/wp-content/uploads/bandi_ammissione/2025-2026/dr-559_bando_oste_biom_ue_ottobre_2025-2026.pdf?x46727" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Professioni Sanitarie
                   </a>
                 </div>
               </div>
@@ -149,58 +252,11 @@ export default function TestPage() {
                 <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test UniCatt</h3>
                 <p className="text-sm text-gray-600 mb-6 text-center">Università Cattolica del Sacro Cuore</p>
                 <div className="space-y-2">
-                  <a href="https://www.unicatt.it" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicina e Odontoiatria
+                  <a href="https://www.unicatt.it/corsi/triennale/medicina-e-chirurgia-roma/ammissioni-e-iscrizioni.html" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Medicina e Chirurgia – Odontoiatria e Protesi Dentaria
                   </a>
-                  <a href="https://www.unicatt.it" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicina in inglese
-                  </a>
-                </div>
-              </div>
-
-              {/* UCBM */}
-              <div className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100">
-                <div className="flex justify-center mb-6">
-                  <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
-                    <img src="/images/ucbm.png" alt="UCBM" className="w-14 h-14 object-contain" />
-                  </div>
-                </div>
-                <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test UCBM</h3>
-                <p className="text-sm text-gray-600 mb-6 text-center">Università Campus Bio-Medico di Roma</p>
-                <div className="space-y-2">
-                  <a href="https://www.unicampus.it" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicina
-                  </a>
-                  <a href="https://www.unicampus.it" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Odontoiatria
-                  </a>
-                  <a href="https://www.unicampus.it" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicina in inglese
-                  </a>
-                  <a href="https://www.unicampus.it" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicina in inglese "MedTech"
-                  </a>
-                </div>
-              </div>
-
-              {/* Hunimed */}
-              <div className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100">
-                <div className="flex justify-center mb-6">
-                  <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
-                    <img src="/images/hunimed.png" alt="Hunimed" className="w-14 h-14 object-contain" />
-                  </div>
-                </div>
-                <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test Hunimed</h3>
-                <p className="text-sm text-gray-600 mb-6 text-center">Humanitas University</p>
-                <div className="space-y-2">
-                  <a href="https://www.hunimed.eu" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicina in inglese
-                  </a>
-                  <a href="https://www.hunimed.eu" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicina in inglese "MedTech"
-                  </a>
-                  <a href="https://www.hunimed.eu" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Professioni sanitarie in inglese
+                  <a href="https://www.unicatt.it/en/programmes/undergraduate-and-integrated-degree-programmes/medicine-and-surgery-it-rome/admissions-and-enrolment.html" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Medicine and Surgery – Dentistry and Dental Prosthodontics
                   </a>
                 </div>
               </div>
@@ -215,8 +271,36 @@ export default function TestPage() {
                 <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test UniLink</h3>
                 <p className="text-sm text-gray-600 mb-6 text-center">Link Campus University</p>
                 <div className="space-y-2">
-                  <a href="https://www.unilink.it" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicina
+                  <a href="https://www.unilink.it/fileadmin/user_upload/offerta_formativa/18-12_BandoMED-ODONTO_25-26_tutte_le_sedi.pdf" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Medicina e Chirurgia – Odontoiatria e Protesi Dentaria
+                  </a>
+                  <a href="https://www2.unilink.it/test-ammissione.asp" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Professioni Sanitarie
+                  </a>
+                </div>
+              </div>
+
+              {/* UniSR */}
+              <div className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100">
+                <div className="flex justify-center mb-6">
+                  <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
+                    <img src="/images/uniSR.jpeg" alt="UniSR" className="w-14 h-14 object-contain rounded-full" />
+                  </div>
+                </div>
+                <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test UniSR</h3>
+                <p className="text-sm text-gray-600 mb-6 text-center">Università Vita-Salute San Raffaele</p>
+                <div className="space-y-2">
+                  <a href="https://www.unisr.it/servizi/ammissioni/medicina-chirurgia" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Medicina e Chirurgia
+                  </a>
+                  <a href="https://www.unisr.it/servizi/ammissioni/odontoiatria" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Odontoiatria e Protesi Dentaria
+                  </a>
+                  <a href="https://www.unisr.it/servizi/ammissioni/international-medical-doctor-program" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Medicine and Surgery
+                  </a>
+                  <a href="https://www.unisr.it/servizi/ammissioni/professioni-sanitarie" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
+                    <span className="text-red-600 mr-2">›</span> Professioni Sanitarie
                   </a>
                 </div>
               </div>

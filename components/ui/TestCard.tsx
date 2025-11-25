@@ -17,17 +17,84 @@ export default function TestCard({ test, expandable = false }: TestCardProps) {
       <div 
         className="bg-white/80 backdrop-blur-sm border border-gray-200 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:bg-white hover:border-red-300 cursor-pointer group flex flex-col min-h-[320px]"
       >
-        <div className="flex items-center justify-center bg-gradient-to-br from-red-50 to-white rounded-2xl w-20 h-20 mx-auto mb-4 group-hover:scale-110 transition-transform shadow-lg">
-          <Image src={test.image} alt={test.title} width={90} height={40} className="object-contain" />
-        </div>
+        {test.images && test.images.length > 0 ? (
+          <div className="flex items-center justify-center gap-3 mb-4">
+            {test.images.map((img, index) => (
+              <div key={index} className="flex items-center justify-center bg-gradient-to-br from-red-50 to-white rounded-xl w-16 h-16 group-hover:scale-110 transition-transform shadow-lg">
+                <Image src={img} alt={`${test.title} ${index + 1}`} width={50} height={50} className="object-contain" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex items-center justify-center bg-gradient-to-br from-red-50 to-white rounded-2xl w-20 h-20 mx-auto mb-4 group-hover:scale-110 transition-transform shadow-lg">
+            <Image src={test.image!} alt={test.title} width={90} height={40} className="object-contain" />
+          </div>
+        )}
         <h5 className="text-lg font-semibold text-gray-900 mb-3 text-center">
           {test.title}
         </h5>
-        <p className="text-gray-600 mb-4 text-center text-sm">{test.description}</p>
+        <p className="text-gray-600 mb-4 text-center text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: test.description.replace(' / ', '<br/>') }}></p>
         
-        {isExpanded && test.details && (
+        {isExpanded && (test.details || test.dates || test.documents) && (
           <div className="mt-4 pt-4 border-t border-gray-200">
-            <p className="text-gray-700 text-sm mb-4">{test.details}</p>
+            {test.details && (
+              <p className="text-gray-700 text-sm mb-4">{test.details}</p>
+            )}
+            {test.dates && test.dates.length > 0 && (
+              <div className="mb-4">
+                <h6 className="text-sm font-semibold text-gray-900 mb-3">Date utili:</h6>
+                <div className="space-y-2">
+                  {test.dates.map((dateInfo, index) => (
+                    dateInfo.url ? (
+                      <a
+                        key={index}
+                        href={dateInfo.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-start text-sm group/date"
+                      >
+                        <svg className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0 text-red-600 group-hover/date:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+                        </svg>
+                        <div className="leading-tight">
+                          <span className="font-medium text-gray-900 group-hover/date:text-red-600 transition-colors">{dateInfo.label}:</span>
+                          <span className="text-gray-700 group-hover/date:text-red-600 transition-colors ml-1">{dateInfo.date}</span>
+                        </div>
+                      </a>
+                    ) : (
+                      <div key={index} className="flex items-start text-sm">
+                        <svg className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+                        </svg>
+                        <div className="leading-tight">
+                          <span className="font-medium text-gray-900">{dateInfo.label}:</span>
+                          <span className="text-gray-700 ml-1">{dateInfo.date}</span>
+                        </div>
+                      </div>
+                    )
+                  ))}
+                </div>
+              </div>
+            )}
+            {test.documents && test.documents.length > 0 && (
+              <div className="space-y-2">
+                <h6 className="text-sm font-semibold text-gray-900 mb-3">Documenti utili:</h6>
+                {test.documents.map((doc, index) => (
+                  <a
+                    key={index}
+                    href={doc.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-start text-sm text-gray-700 hover:text-red-600 transition-colors group"
+                  >
+                    <svg className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                    </svg>
+                    <span className="leading-tight">{doc.title}</span>
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
         )}
         
@@ -56,9 +123,19 @@ export default function TestCard({ test, expandable = false }: TestCardProps) {
 
   return (
     <div className="bg-white/80 backdrop-blur-sm border border-gray-200 rounded-2xl h-full p-6 transition-all duration-300 hover:shadow-2xl hover:bg-white hover:border-red-300 hover:-translate-y-1 cursor-pointer group">
-      <div className="flex items-center justify-center bg-gradient-to-br from-red-50 to-white rounded-2xl w-20 h-20 mx-auto mb-4 group-hover:scale-110 transition-transform shadow-lg">
-        <Image src={test.image} alt={test.title} width={90} height={40} className="object-contain" />
-      </div>
+      {test.images && test.images.length > 0 ? (
+        <div className="flex items-center justify-center gap-3 mb-4">
+          {test.images.map((img, index) => (
+            <div key={index} className="flex items-center justify-center bg-gradient-to-br from-red-50 to-white rounded-xl w-16 h-16 group-hover:scale-110 transition-transform shadow-lg">
+              <Image src={img} alt={`${test.title} ${index + 1}`} width={50} height={50} className="object-contain" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex items-center justify-center bg-gradient-to-br from-red-50 to-white rounded-2xl w-20 h-20 mx-auto mb-4 group-hover:scale-110 transition-transform shadow-lg">
+          <Image src={test.image!} alt={test.title} width={90} height={40} className="object-contain" />
+        </div>
+      )}
       <h5 className="text-lg font-semibold text-gray-900 mb-3 text-center">
         {test.title}
       </h5>

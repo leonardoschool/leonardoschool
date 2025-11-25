@@ -10,12 +10,12 @@ const coursesData = {
   medicina: [
     {
       id: 'starter',
-      logo: '/images/NEW_LOGO_2026/LS Starter.png',
+      logo: '/images/NEW_LOGO_2026/STARTER.png',
       badge: 'BASE',
       badgeColor: 'bg-[#68BCE8]',
       headerColor: 'bg-[#68BCE8]',
       category: 'MEDICINA • ODONTOIATRIA • VETERINARIA',
-      title: 'Leonardo Starter Class',
+      title: 'STARTER CLASS',
       language: 'Italiano / Inglese (IMAT) / Prof. Sanitarie',
       details: [
         {
@@ -44,7 +44,7 @@ const coursesData = {
       badgeColor: 'bg-[#D54F8A]',
       headerColor: 'bg-[#D54F8A]',
       category: 'MEDICINA • ODONTOIATRIA • VETERINARIA',
-      title: 'Leonardo Academy',
+      title: 'ACADEMY',
       language: 'Italiano',
       details: [
         {
@@ -69,7 +69,7 @@ const coursesData = {
       badgeColor: 'bg-[#B5B240]',
       headerColor: 'bg-[#B5B240]',
       category: 'MEDICINA • ODONTOIATRIA • VETERINARIA',
-      title: 'Leonardo Academy Intensive',
+      title: 'ACADEMY INTENSIVE TRAINING',
       language: 'Italiano',
       details: [
         {
@@ -96,7 +96,7 @@ const coursesData = {
       badgeColor: 'bg-blue-700',
       headerColor: 'bg-gradient-to-br from-blue-500 to-blue-700',
       category: 'MEDICINA E ODONTOIATRIA IN INGLESE',
-      title: 'IMAT Class',
+      title: 'IMAT CLASS',
       language: 'English',
       details: [
         {
@@ -124,12 +124,12 @@ const coursesData = {
   snt: [
     {
       id: 'starter-snt',
-      logo: '/images/NEW_LOGO_2026/LS Starter.png',
+      logo: '/images/NEW_LOGO_2026/STARTER.png',
       badge: 'BASE',
       badgeColor: 'bg-[#68BCE8]',
       headerColor: 'bg-[#68BCE8]',
       category: 'PROFESSIONI SANITARIE',
-      title: 'Leonardo Starter Class',
+      title: 'STARTER CLASS',
       language: 'Italiano / Prof. Sanitarie',
       details: [
         {
@@ -158,7 +158,7 @@ const coursesData = {
       badgeColor: 'bg-orange-500',
       headerColor: 'bg-orange-500',
       category: 'PROFESSIONI SANITARIE',
-      title: 'SNT Class',
+      title: 'SNT CLASS',
       language: 'Italiano',
       details: [
         {
@@ -188,10 +188,10 @@ const coursesData = {
       id: 'arched-class',
       logo: '/images/NEW_LOGO_2026/arched.png',
       badge: '',
-      badgeColor: 'bg-purple-500',
-      headerColor: 'bg-purple-500',
+      badgeColor: 'bg-[#EB635B]',
+      headerColor: 'bg-[#EB635B]',
       category: 'ARCHITETTURA',
-      title: 'ArchED Class',
+      title: 'ARCHED CLASS',
       language: 'Italiano',
       details: [
         {
@@ -213,7 +213,7 @@ const coursesData = {
           subtext: 'Correzioni dettagliate',
         },
       ],
-      ctaColor: 'bg-purple-500 hover:bg-purple-600',
+      ctaColor: 'bg-[#EB635B] hover:bg-[#D94F49]',
     },
   ],
   altro: [
@@ -221,10 +221,10 @@ const coursesData = {
       id: 'tolc-class',
       logo: '/images/NEW_LOGO_2026/TOLC.png',
       badge: '',
-      badgeColor: 'bg-teal-500',
-      headerColor: 'bg-teal-500',
+      badgeColor: 'bg-[#1C4865]',
+      headerColor: 'bg-[#1C4865]',
       category: 'TOLC',
-      title: 'Percorsi TOLC',
+      title: 'TOLC CLASS',
       language: 'Italiano',
       details: [
         {
@@ -246,16 +246,16 @@ const coursesData = {
           subtext: 'Simulazioni complete',
         },
       ],
-      ctaColor: 'bg-teal-500 hover:bg-teal-600',
+      ctaColor: 'bg-[#1C4865] hover:bg-[#15354A]',
     },
     {
       id: 'altro-class',
-      logo: '/images/logo.png',
+      logo: '/images/NEW_LOGO_2026/PT.png',
       badge: '',
       badgeColor: 'bg-gray-600',
       headerColor: 'bg-gray-600',
       category: 'PERCORSI PERSONALIZZATI',
-      title: 'Corso Personalizzato',
+      title: 'Personal Training',
       language: 'Italiano',
       details: [
         {
@@ -289,26 +289,70 @@ function DidatticaContent() {
   const selectedCourses = coursesData[corso as keyof typeof coursesData] || coursesData.medicina;
   const showImat = corso === 'medicina'; // Mostra IMAT solo quando si visualizza medicina
 
+  // Funzione per ottenere il titolo della sezione
+  const getSectionTitle = () => {
+    switch (corso) {
+      case 'medicina':
+        return 'Semestre Aperto';
+      case 'snt':
+        return 'Professioni Sanitarie';
+      case 'arched':
+        return 'ARCHED';
+      case 'altro':
+        return 'TOLC, CEnT e Didattica Personalizzata';
+      default:
+        return 'Corsi Disponibili';
+    }
+  };
+
+  // Funzione per ottenere il titolo dell'hero
+  const getHeroTitle = () => {
+    switch (corso) {
+      case 'medicina':
+        return 'MEDICINA • ODONTOIATRIA • VETERINARIA';
+      case 'imat':
+        return 'IMAT - International Medical Admissions Test';
+      case 'snt':
+        return 'CORSI DI LAUREA DELLE PROFESSIONI SANITARIE';
+      case 'arched':
+        return 'Architettura • Ingegneria Edile-Architettura';
+      case 'altro':
+        return 'Test CISIA e Altri';
+      default:
+        return 'Corsi Disponibili';
+    }
+  };
+
+  // Funzione per ottenere la descrizione dell'hero
+  const getHeroDescription = () => {
+    switch (corso) {
+      case 'medicina':
+        return 'Preparazione completa per l\'ammissione a Medicina e Chirurgia, Odontoiatria e Protesi Dentaria e Medicina Veterinaria';
+      case 'imat':
+        return 'Corso intensivo per il test di ammissione in lingua inglese a Medicina e Odontoiatria';
+      case 'snt':
+        return 'Percorsi dedicati per l\'accesso ai corsi di laurea delle Professioni Sanitarie';
+      case 'arched':
+        return 'Preparazione mirata per i test di ammissione ad Architettura e Ingegneria Edile-Architettura';
+      case 'altro':
+        return 'Test CISIA TOLC e percorsi di didattica personalizzata per ogni esigenza';
+      default:
+        return 'Scegli il percorso più adatto alle tue esigenze';
+    }
+  };
+
   return (
     <div className="min-h-screen pb-16 bg-gray-50">
 
       {/* Hero Section */}
-      <section className="relative py-20 bg-black text-white overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 left-0 w-96 h-96 bg-red-600 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute bottom-0 right-0 w-96 h-96 bg-gray-600 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-        </div>
+      <section className="relative py-24 bg-black text-white overflow-hidden">
 
         <div className="container mx-auto px-4 text-center relative z-10">
           <h1 className="text-4xl md:text-6xl font-black mb-6">
-            {corso === 'medicina' && 'Medicina, Odontoiatria e Veterinaria'}
-            {corso === 'imat' && 'IMAT - International Medical Admissions Test'}
-            {corso === 'snt' && 'Professioni Sanitarie'}
-            {corso === 'arched' && 'Architettura'}
-            {corso === 'altro' && 'Corsi Personalizzati'}
+            { corso !== 'medicina' ? getHeroTitle() : 'MEDICINA, ODONTOIATRIA, VETERINARIA' }
           </h1>
           <p className="text-xl text-gray-300">
-            Preparazione per l’ammissione a Medicina e Chirurgia, Odontoiatria e Protesi Dentaria e Medicina Veterinaria
+            {getHeroDescription()}
           </p>
 
           {/* Course tabs integrated in hero */}
@@ -357,8 +401,13 @@ function DidatticaContent() {
       <section className="py-24 bg-gradient-to-b from-white via-gray-50 to-white relative overflow-hidden">
         <div className="container mx-auto px-4 relative z-10">
           <h2 className="text-4xl text-black text-center mb-10 font-bold">
-            {corso === 'altro' ? 'Percorsi TOLC e Personalizzati' : 'Semestre Aperto'}
+            {getSectionTitle()}
           </h2>
+          <div className="text-center mb-8">
+            <span className="inline-block px-6 py-2 bg-[#a8012b] text-white rounded-full text-sm font-bold uppercase tracking-wider">
+              {getHeroTitle()}
+            </span>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12 max-w-7xl mx-auto">
             {selectedCourses.map((course) => (
               <div
@@ -369,7 +418,7 @@ function DidatticaContent() {
                 <div className="relative bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 overflow-hidden border-2 border-gray-100 flex flex-col h-full">
 
                   {/* Top white section with logo */}
-                  <div className="relative px-8 py-12 bg-white overflow-hidden flex-shrink-0">
+                  <div className="relative px-8 py-12 bg-white overflow-hidden flex-shrink-0 h-64 flex items-center">
                     {/* Subtle decorative elements */}
                     <div className="absolute -top-10 -right-10 w-40 h-40 bg-gray-50 rounded-full" />
                     <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-gray-50 rounded-full" />
@@ -382,7 +431,7 @@ function DidatticaContent() {
                     </div>
 
                     {/* Logo */}
-                    <div className="relative z-10 flex justify-center">
+                    <div className="relative z-10 flex justify-center w-full">
                       <Image
                         src={course.logo}
                         alt={course.title}
@@ -407,13 +456,6 @@ function DidatticaContent() {
                     <h3 className="text-2xl font-black text-gray-900 mb-3 leading-tight">
                       {course.title}
                     </h3>
-
-                    {/* Language badge */}
-                    <div className="inline-block mb-8">
-                      <span className={`text-sm font-bold ${course.headerColor} text-white px-4 py-1.5 rounded-full shadow-md`}>
-                        {course.language}
-                      </span>
-                    </div>
 
                     {/* Details - flex-grow pushes button to bottom */}
                     <div className="space-y-5 mb-8 flex-grow">
@@ -472,17 +514,17 @@ function DidatticaContent() {
         <section className="py-24 bg-gradient-to-b from-gray-50 via-white to-gray-50 relative overflow-hidden">
           <div className="container mx-auto px-4 relative z-10">
             <div className="text-center mb-16">
-              <span className="inline-block px-6 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-bold uppercase tracking-wider mb-4">
+              <h2 className="text-4xl text-black font-bold mb-4">
+                IMAT
+              </h2>
+              <span className="inline-block px-6 py-2 bg-[#a8012b] text-white rounded-full text-sm font-bold uppercase tracking-wider mb-4">
                 International Medical Admissions Test
               </span>
-              <h2 className="text-4xl text-black font-bold mb-4">
-                Corso IMAT
-              </h2>
               <p className="text-gray-600 max-w-2xl mx-auto">
                 Preparazione specifica per il test di ammissione a Medicina in inglese
               </p>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12 max-w-7xl mx-auto">
               {coursesData.imat.map((course) => (
                 <div
@@ -493,7 +535,7 @@ function DidatticaContent() {
                   <div className="relative bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 overflow-hidden border-2 border-gray-100 flex flex-col h-full">
 
                     {/* Top white section with logo */}
-                    <div className="relative px-8 py-12 bg-white overflow-hidden flex-shrink-0">
+                    <div className="relative px-8 py-12 bg-white overflow-hidden flex-shrink-0 h-64 flex items-center">
                       {/* Subtle decorative elements */}
                       <div className="absolute -top-10 -right-10 w-40 h-40 bg-gray-50 rounded-full" />
                       <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-gray-50 rounded-full" />
@@ -506,7 +548,7 @@ function DidatticaContent() {
                       </div>
 
                       {/* Logo */}
-                      <div className="relative z-10 flex justify-center">
+                      <div className="relative z-10 flex justify-center w-full">
                         <Image
                           src={course.logo}
                           alt={course.title}
