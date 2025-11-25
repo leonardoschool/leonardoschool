@@ -22,33 +22,43 @@ const testTypes = [
         subject: 'Chimica e Propedeutica Biochimica',
         duration: '45 minuti',
         questions: '31 domande',
+        color: '#D54F8A',
       },
       {
         subject: 'Fisica',
         duration: '45 minuti',
         questions: '31 domande',
+        color: '#68BCE8',
       },
       {
         subject: 'Biologia',
         duration: '45 minuti',
         questions: '31 domande',
+        color: '#B5B240',
       },
     ],
-    color: 'bg-blue-500',
+    color: 'bg-[#EEB550]',
+  },
+  {
+    id: 'imat',
+    title: 'IMAT',
+    duration: '100 minuti',
+    questions: '60 domande',
+    color: 'bg-[#19419B]',
   },
   {
     id: 'professioni-sanitarie',
     title: 'Professioni Sanitarie',
     duration: '100 minuti',
     questions: '60 domande',
-    color: 'bg-purple-500',
+    color: 'bg-orange-500',
   },
   {
     id: 'architettura',
     title: 'Architettura',
     duration: '100 minuti',
     questions: '50 domande',
-    color: 'bg-orange-500',
+    color: 'bg-[#EB635B]',
   },
 ];
 
@@ -136,7 +146,7 @@ const tolcTests = [
   {
     id: 'cent-s',
     title: 'CEnT-S',
-    subtitle: 'Test per medicina e chirurgia in inglese',
+    subtitle: 'Ingegneria, Farmacia, Economia e altri corsi in ambito scientifico tenuti prevalentemente in lingua inglese',
     color: '#1E4C86',
     questions: '55 domande',
     duration: '110 minuti',
@@ -181,18 +191,18 @@ export default function SimulazionePage() {
             >
               <div className={`${testTypes[0].color} h-2`} />
               <div className="p-6">
-                <h3 className="text-xl font-bold text-gray-900 mb-4">
+                <h3 className="text-xl font-bold text-gray-900 mb-6">
                   {testTypes[0].title}
                 </h3>
                 
-                <div className="space-y-4">
+                <div className="space-y-6">
                   {testTypes[0].tests?.map((subTest, index) => (
-                    <div key={index} className="border-l-4 border-gray-200 pl-4">
-                      <p className="font-semibold text-gray-800 mb-2">{subTest.subject}</p>
-                      <div className="space-y-1 text-sm text-gray-600">
-                        <p className="flex items-center">
+                    <div key={index} className={`bg-gray-50 rounded-lg p-4 border-l-4`} style={{ borderLeftColor: subTest.color }}>
+                      <p className="font-bold text-gray-900 mb-3 text-base">{subTest.subject}</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex items-center text-sm text-gray-700">
                           <svg
-                            className="w-4 h-4 mr-2"
+                            className="w-5 h-5 mr-2 text-gray-600"
                             fill="currentColor"
                             viewBox="0 0 20 20"
                           >
@@ -203,11 +213,11 @@ export default function SimulazionePage() {
                               clipRule="evenodd"
                             />
                           </svg>
-                          {subTest.questions}
-                        </p>
-                        <p className="flex items-center">
+                          <span className="font-medium">{subTest.questions}</span>
+                        </div>
+                        <div className="flex items-center text-sm text-gray-700">
                           <svg
-                            className="w-4 h-4 mr-2"
+                            className="w-5 h-5 mr-2 text-gray-600"
                             fill="currentColor"
                             viewBox="0 0 20 20"
                           >
@@ -217,8 +227,8 @@ export default function SimulazionePage() {
                               clipRule="evenodd"
                             />
                           </svg>
-                          {subTest.duration}
-                        </p>
+                          <span className="font-medium">{subTest.duration}</span>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -226,24 +236,24 @@ export default function SimulazionePage() {
               </div>
             </Link>
 
-            {/* Colonna destra con Professioni Sanitarie e Architettura */}
+            {/* Colonna destra con IMAT, Professioni Sanitarie e Architettura */}
             <div className="flex flex-col gap-6">
               {testTypes.slice(1).map((test) => (
                 <Link
                   key={test.id}
-                  href={`/simulazione/${test.id}`}
-                  className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow flex-1"
+                  href={`/contattaci?oggetto=${encodeURIComponent(test.title)}`}
+                  className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow"
                 >
                   <div className={`${test.color} h-2`} />
-                  <div className="p-6">
-                    <h3 className="text-xl font-bold text-gray-900 mb-4">
+                  <div className="p-4">
+                    <h3 className="text-lg font-bold text-gray-900 mb-3">
                       {test.title}
                     </h3>
                     
-                    <div className="space-y-2 text-gray-600">
+                    <div className="space-y-1.5 text-gray-600 text-sm">
                       <p className="flex items-center">
                         <svg
-                          className="w-5 h-5 mr-2"
+                          className="w-4 h-4 mr-2"
                           fill="currentColor"
                           viewBox="0 0 20 20"
                         >
@@ -258,7 +268,7 @@ export default function SimulazionePage() {
                       </p>
                       <p className="flex items-center">
                         <svg
-                          className="w-5 h-5 mr-2"
+                          className="w-4 h-4 mr-2"
                           fill="currentColor"
                           viewBox="0 0 20 20"
                         >
@@ -284,19 +294,10 @@ export default function SimulazionePage() {
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Test TOLC
+              TOLC & CEnT
             </h2>
             <p className="text-lg text-gray-600 max-w-3xl mx-auto mb-4">
-              Preparati per i Test On Line CISIA (TOLC) utilizzati da molte università italiane per l&apos;accesso ai corsi di laurea.
-            </p>
-            <p className="text-base text-gray-500 max-w-2xl mx-auto">
-              Per accedere ai materiali di studio e alle simulazioni TOLC{' '}
-              <a 
-                href="/contattaci?oggetto=Informazioni%20TOLC"
-                className="text-indigo-600 hover:text-indigo-700 font-semibold underline"
-              >
-                contattaci qui
-              </a>
+              Esercitati per i Test On-Line CISIA (TOLC) e il CEnT-S  (CISIA English Test-Sciences) utilizzati da molte università italiane per l'accesso ai corsi di laurea.
             </p>
           </div>
 

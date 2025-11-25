@@ -47,7 +47,8 @@ export const NAVIGATION = [
     ],
   },
   { label: 'Simulazione', href: '/simulazione' },
-  { label: 'Prove', href: '/test' },
+  { label: 'Test', href: '/test' },
+  { label: 'Prove', href: '/prove' },
   { label: 'Contattaci', href: '/contattaci' },
   {
     label: 'Altro',
