@@ -6,6 +6,7 @@ import Footer from "@/components/layout/Footer";
 import Preloader from "@/components/ui/Preloader";
 import CookieBanner from "@/components/ui/CookieBanner";
 import { SITE_NAME, SITE_DESCRIPTION, SITE_KEYWORDS } from "@/lib/constants";
+import { Analytics } from '@vercel/analytics/next';
 
 const inter = Inter({
   variable: "--font-inter",
@@ -84,6 +85,7 @@ export default function RootLayout({
         <main className="min-h-screen">{children}</main>
         <Footer />
         <CookieBanner />
+        <Analytics />
       </body>
     </html>
   );
