@@ -1,0 +1,9 @@
+# Robots.txt per Leonardo School
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://leonardoschool.it/sitemap.xml
+
+# Disallow admin e API routes
+Disallow: /api/
