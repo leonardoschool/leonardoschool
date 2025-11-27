@@ -148,11 +148,11 @@ export default function TestPage() {
       <section className="py-20 relative overflow-hidden">
 
         <div className="container mx-auto px-4 relative z-10">
-          <div className="text-center mb-16">
+          <div className="text-center mb-4">
             <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4">
               UNIVERSITÀ PUBBLICHE 
             </h2>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+            <p className="text-lg text-gray-600 max-w-2xxl mx-auto">
               Informazioni ufficiali sui test di ammissione regolamentati a livello nazionale o locale
             </p>
           </div>
@@ -165,11 +165,11 @@ export default function TestPage() {
 
           {/* Università Private Section */}
           <div className="mt-20">
-            <div className="text-center mb-16">
+            <div className="text-center mb-4">
               <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4">
                 UNIVERSITÀ PRIVATE
               </h2>
-              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+              <p className="text-lg text-gray-600 max-w-2xxl mx-auto">
               Informazioni ufficiali sui test di ammisisone non direttamente regolamentati dal MUR
             </p>
             </div>

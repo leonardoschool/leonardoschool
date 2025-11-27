@@ -27,6 +27,7 @@ module.exports = {
       fontFamily: {
         inter: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        bahnschrift: ['Bahnschrift', 'system-ui', '-apple-system', 'sans-serif'],
       },
     },
   },

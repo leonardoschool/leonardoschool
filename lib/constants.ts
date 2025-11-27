@@ -56,7 +56,6 @@ export const NAVIGATION = [
     submenu: [
       { label: 'Chi siamo', href: '/chi-siamo' },
       { label: 'Lavora con noi', href: '/lavora-con-noi' },
-      { label: 'Termini e condizioni', href: '/privacy-policy.pdf' },
     ],
   },
 ];

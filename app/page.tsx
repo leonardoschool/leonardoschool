@@ -2,7 +2,6 @@ import TestCard from '@/components/ui/TestCard';
 import TestimonialsCarousel from '@/components/ui/TestimonialsCarousel';
 import Button from '@/components/ui/Button';
 import Link from 'next/link';
-import Image from 'next/image';
 import ScienceCanvasLight from '@/components/ui/ScienceCanvasLight';
 import AnimatedStats from '@/components/ui/AnimatedStats';
 import { TestCard as TestCardType, Testimonial } from '@/types';
@@ -179,7 +178,7 @@ export default function Home() {
           <div className="max-w-5xl mx-auto text-center space-y-8">
             {/* Main Heading */}
             <div className="space-y-4">
-              <h1 className="text-5xl md:text-7xl font-bold text-white leading-tight">
+              <h1 className="text-6xl font-bold text-white leading-tight font-bahnschrift" style={{ fontSize: 'clamp(3.75rem, 8vw, 6.5rem)' }}>
                 LEONARDO SCHOOL
               </h1>
               <div className="h-1.5 w-32 bg-gradient-to-r from-red-500 to-red-600 mx-auto rounded-full" />
@@ -191,7 +190,7 @@ export default function Home() {
             </h2>
 
             {/* Description */}
-            <p className="text-lg md:text-xl text-gray-200 max-w-3xl mx-auto leading-relaxed">
+            <p className="text-lg md:text-xl text-gray-200 max-w-3xxl mx-auto leading-relaxed">
               Preparazione d&apos;eccellenza per l’ammissione ai corsi di laurea ad accesso programmato
             </p>
 

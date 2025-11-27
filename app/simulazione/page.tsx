@@ -176,7 +176,7 @@ export default function SimulazionePage() {
       {/* Test Types Section */}
       <section className="py-16 bg-gray-50">
         <div className="container mx-auto px-4">
-          <div className="text-center mb-12">
+          <div className="text-center mb-4">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
               Scegli la tua simulazione
             </h2>
@@ -294,7 +294,7 @@ export default function SimulazionePage() {
       {/* TOLC Tests Section */}
       <section className=" bg-gray-50">
         <div className="container mx-auto px-4">
-          <div className="text-center mb-12">
+          <div className="text-center mb-4">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
               TOLC & CEnT
             </h2>
@@ -345,7 +345,7 @@ export default function SimulazionePage() {
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Perché Fare una Simulazione?
+              Perché fare una simulazione?
             </h2>
           </div>
 
@@ -361,7 +361,7 @@ export default function SimulazionePage() {
                 </svg>
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">
-                Valuta la Tua Preparazione
+                Valuta la tua preparazione
               </h3>
               <p className="text-gray-600">
                 Scopri il tuo livello attuale e identifica le aree da migliorare
@@ -406,7 +406,7 @@ export default function SimulazionePage() {
                 </svg>
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">
-                Correzione Dettagliata
+                Correzione dettagliata
               </h3>
               <p className="text-gray-600">
                 Ricevi feedback completo con spiegazioni per ogni risposta

@@ -81,7 +81,7 @@ const coursesData = {
     {
       id: 'intensive',
       logo: '/images/NEW_LOGO_2026/ACADEMY.png',
-      badge: 'INTENSIVO',
+      badge: 'INTENSIVO | ONLINE + IN PRESENZA',
       badgeColor: 'bg-[#B6B21D]',
       headerColor: 'bg-[#B6B21D]',
       category: 'MEDICINA • ODONTOIATRIA • VETERINARIA',
@@ -258,28 +258,28 @@ const coursesData = {
     {
       id: 'tolc-class',
       logo: '/images/NEW_LOGO_2026/TOLC.png',
-      badge: '',
+      badge: 'ONLINE/IN PRESENZA',
       badgeColor: 'bg-[#1C4865]',
       headerColor: 'bg-[#1C4865]',
-      category: 'TOLC',
-      title: 'TOLC CLASS',
+      category: 'TEST CISIA',
+      title: 'TOLC/CEnT CLASS',
       language: 'Italiano',
       details: [
         {
-          icon: '📊',
+          icon: '🖥️',
           label: 'TEST',
-          text: 'TOLC-MED, TOLC-I, TOLC-SU',
+          text: 'TOLC o CEnT',
           subtext: 'Preparazione specifica',
         },
         {
-          icon: '📚',
-          label: 'PROGRAMMA',
-          text: 'Materie mirate per ogni TOLC',
-          subtext: 'Logica, Matematica, Scienze',
+          icon: '🧑‍🏫',
+          label: 'DIDATTICA FRONTALE',
+          text: 'Ragionamento logico, Matematica, Scienze, Storia, Inglese',
+          subtext: '',
         },
         {
-          icon: '✅',
-          label: 'MODALITÀ',
+          icon: '📊',
+          label: 'ESERCITAZIONE',
           text: 'Lezioni ed esercitazioni',
           subtext: 'Simulazioni complete',
         },
@@ -289,11 +289,11 @@ const coursesData = {
     {
       id: 'altro-class',
       logo: '/images/NEW_LOGO_2026/PT.png',
-      badge: '',
+      badge: 'ONLINE/IN PRESENZA',
       badgeColor: 'bg-gray-600',
       headerColor: 'bg-gray-600',
-      category: 'PERCORSI PERSONALIZZATI',
-      title: 'Personal Training',
+      category: 'DIDATTICA PERSONALIZZATA',
+      title: 'PERSONAL TRAINING',
       language: 'Italiano',
       details: [
         {
@@ -304,8 +304,8 @@ const coursesData = {
         },
         {
           icon: '📚',
-          label: 'MATERIE',
-          text: 'Scegli il tuo percorso',
+          label: 'DIDATTICA',
+          text: 'Scegli le materie',
           subtext: 'Flessibilità totale',
         },
         {
@@ -442,7 +442,7 @@ function DidatticaContent() {
           <p className="text-lg text-gray-600 mt-6 mb-6 max-w-2xl mx-auto text-center">
             Scegli il corso di preparazione più adatto alle tue esigenze
           </p>
-          <h2 className="text-4xl text-black text-center mb-10 font-bold">
+          <h2 className="text-4xl text-black text-center mb-4 font-bold">
             {getSectionTitle()}
           </h2>
           <div className="text-center mb-8">
@@ -508,39 +508,73 @@ function DidatticaContent() {
 
                     {/* Details - enhanced design */}
                     <div className="mb-6 flex-grow">
-                      <div className={course.details.length > 3 ? "grid grid-cols-3 gap-2 mt-6" : "flex flex-col gap-2.5 max-w-sm mx-auto"}>
-                        {course.details.map((detail, index) => (
-                          <div 
-                            key={index} 
-                            className={course.details.length > 3 
-                              ? "text-center group/item" 
-                              : "relative flex items-center gap-3 bg-gradient-to-br from-white to-gray-50/80 rounded-xl p-3 shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100/50 backdrop-blur-sm group/item hover:-translate-y-1"
-                            }
-                          >
-                            {/* Icon with premium effects */}
-                            <div className={`${course.badgeColor} text-white ${course.details.length > 3 ? 'w-12 h-12' : 'w-14 h-14 flex-shrink-0'} rounded-xl flex items-center justify-center font-black ${course.details.length > 3 ? 'mx-auto mb-1.5' : ''} shadow-xl text-lg transform group-hover/item:scale-110 group-hover/item:rotate-3 transition-all duration-300 relative overflow-hidden`}>
-                              {/* Shine effect */}
-                              <div className="absolute inset-0 bg-gradient-to-br from-white/30 to-transparent opacity-0 group-hover/item:opacity-100 transition-opacity duration-300" />
-                              <span className="relative z-10">{detail.icon}</span>
+                      {course.details.length > 3 ? (
+                        <div className="flex flex-col gap-4">
+                          {[0, 3].map((startIndex) => (
+                            <div 
+                              key={startIndex} 
+                              className="grid grid-cols-3 gap-2 bg-gradient-to-br from-white to-gray-50/80 rounded-xl p-3 shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100/50 backdrop-blur-sm group/row hover:-translate-y-1"
+                            >
+                              {course.details.slice(startIndex, startIndex + 3).map((detail, index) => (
+                                <div key={startIndex + index} className="text-center group/item flex flex-col items-center justify-center gap-1 h-full">
+                                  {/* Icon with premium effects */}
+                                  <div className={`${course.badgeColor} text-white w-10 h-10 rounded-lg flex items-center justify-center font-black mx-auto mb-1 shadow-lg text-base transform group-hover/item:scale-110 transition-all duration-300 relative overflow-hidden flex-shrink-0`}>
+                                    {/* Shine effect */}
+                                    <div className="absolute inset-0 bg-gradient-to-br from-white/30 to-transparent opacity-0 group-hover/item:opacity-100 transition-opacity duration-300" />
+                                    <span className="relative z-10">{detail.icon}</span>
+                                  </div>
+                                  <div className="w-full flex flex-col items-center justify-center flex-grow">
+                                    <div className="text-[9px] text-gray-400 font-black mb-0.5 uppercase tracking-wider leading-tight min-h-[22px] flex items-center justify-center w-full">
+                                      {detail.label}
+                                    </div>
+                                    {detail.text && (
+                                      <div className="text-[11px] font-bold text-gray-900 leading-tight min-h-[30px] flex items-center justify-center w-full">
+                                        {detail.text}
+                                      </div>
+                                    )}
+                                    {(detail as any).subtext && (
+                                      <div className="text-[9px] text-gray-600 mt-0.5 leading-tight">
+                                        {(detail as any).subtext}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                            <div className={course.details.length > 3 ? '' : 'flex-1 text-left'}>
-                              <div className={`${course.details.length > 3 ? 'text-[10px]' : 'text-xs'} text-gray-400 font-black mb-1 uppercase tracking-wider leading-tight`}>
-                                {detail.label}
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2.5 max-w-sm mx-auto">
+                          {course.details.map((detail, index) => (
+                            <div 
+                              key={index} 
+                              className="relative flex items-center gap-3 bg-gradient-to-br from-white to-gray-50/80 rounded-xl p-3 shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100/50 backdrop-blur-sm group/item hover:-translate-y-1"
+                            >
+                              {/* Icon with premium effects */}
+                              <div className={`${course.badgeColor} text-white w-14 h-14 flex-shrink-0 rounded-xl flex items-center justify-center font-black shadow-xl text-lg transform group-hover/item:scale-110 group-hover/item:rotate-3 transition-all duration-300 relative overflow-hidden`}>
+                                {/* Shine effect */}
+                                <div className="absolute inset-0 bg-gradient-to-br from-white/30 to-transparent opacity-0 group-hover/item:opacity-100 transition-opacity duration-300" />
+                                <span className="relative z-10">{detail.icon}</span>
                               </div>
-                              {detail.text && (
-                                <div className={`${course.details.length > 3 ? 'text-xs' : 'text-sm'} font-bold text-gray-900 leading-tight`}>
-                                  {detail.text}
+                              <div className="flex-1 text-left">
+                                <div className="text-xs text-gray-400 font-black mb-1 uppercase tracking-wider leading-tight">
+                                  {detail.label}
                                 </div>
-                              )}
-                              {(detail as any).subtext && (
-                                <div className="text-[10px] text-gray-600 mt-0.5 leading-tight">
-                                  {(detail as any).subtext}
-                                </div>
-                              )}
+                                {detail.text && (
+                                  <div className="text-sm font-bold text-gray-900 leading-tight">
+                                    {detail.text}
+                                  </div>
+                                )}
+                                {(detail as any).subtext && (
+                                  <div className="text-[10px] text-gray-600 mt-0.5 leading-tight">
+                                    {(detail as any).subtext}
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* Premium CTA Button with advanced effects */}
@@ -577,7 +611,7 @@ function DidatticaContent() {
       {showImat && (
         <section className="bg-gradient-to-b from-gray-50 via-white to-gray-50 relative overflow-hidden">
           <div className="container mx-auto px-4 relative z-10">
-            <div className="text-center mb-8">
+            <div className="text-center mb-4">
               <h2 className="text-4xl text-black font-bold mb-4">
                 IMAT
               </h2>
@@ -644,12 +678,12 @@ function DidatticaContent() {
                       
                       {/* Details - enhanced design */}
                       <div className="mb-6 flex-grow">
-                        <div className={course.details.length > 3 ? "grid grid-cols-3 gap-2 mt-6" : "flex flex-col gap-2.5 max-w-sm mx-auto"}>
+                        <div className={course.details.length > 3 ? "grid grid-cols-3 gap-x-2 gap-y-6 mt-6" : "flex flex-col gap-2.5 max-w-sm mx-auto"}>
                           {course.details.map((detail, index) => (
                             <div 
                               key={index} 
                               className={course.details.length > 3 
-                                ? "text-center group/item" 
+                                ? "relative flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-white to-gray-50/80 rounded-xl p-2 shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100/50 backdrop-blur-sm group/item hover:-translate-y-1 text-center" 
                                 : "relative flex items-center gap-3 bg-gradient-to-br from-white to-gray-50/80 rounded-xl p-3 shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100/50 backdrop-blur-sm group/item hover:-translate-y-1"
                               }
                             >

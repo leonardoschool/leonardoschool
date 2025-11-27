@@ -163,10 +163,7 @@ export default function Footer() {
               © {currentYear} {SITE_NAME}. Tutti i diritti riservati.
             </p>
             <div className="flex gap-4">
-              <Link href="/privacy-policy.pdf" className="text-gray-400 hover:text-white transition-colors">
-                Privacy Policy
-              </Link>
-              <Link href="/privacy-policy.pdf" className="text-gray-400 hover:text-white transition-colors">
+              <Link href="/termini-condizioni" className="text-gray-400 hover:text-white transition-colors">
                 Termini e Condizioni
               </Link>
             </div>

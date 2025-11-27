@@ -27,12 +27,12 @@ const subjects = [
 const appeals = [
     {
         id: '1',
-        title: '1° Appello',
+        title: '1° appello',
         description: 'Prima sessione d\'esame',
     },
     {
         id: '2',
-        title: '2° Appello',
+        title: '2° appello',
         description: 'Seconda sessione d\'esame',
     },
 ];
@@ -43,7 +43,7 @@ export default function ProvePage() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
             {/* Hero Section */}
-            <section className="relative bg-gradient-to-r from-red-600 to-red-700 text-white pt-32 pb-24 overflow-hidden">
+            <section className="relative bg-gradient-to-r from-red-600 to-red-700 text-white pt-32 pb-16 overflow-hidden">
                 <div className="absolute inset-0 bg-black/10"></div>
                 <div className="container mx-auto px-4 relative z-10">
                     <div className="max-w-4xl mx-auto text-center">
@@ -64,7 +64,7 @@ export default function ProvePage() {
             </section>
 
             {/* Main Content */}
-            <section className="py-10">
+            <section className="py-20">
                 <div className="container mx-auto px-4">
                     {/* Appeal Tabs */}
                     <div className="mb-10">
@@ -94,7 +94,7 @@ export default function ProvePage() {
                         </div>
                     </div>
 
-                    {/* Alert for 2° Appello */}
+                    {/* Alert for 2° appello */}
                     {selectedAppeal === '2' && (
                         <div className="max-w-4xl mx-auto mb-8">
                             <div className="bg-yellow-50 border-l-4 border-yellow-400 p-6 rounded-lg shadow-md">
@@ -109,7 +109,7 @@ export default function ProvePage() {
                                             Contenuto non ancora disponibile
                                         </h3>
                                         <p className="text-sm text-yellow-700">
-                                            Le prove del 2° Appello saranno disponibili a breve. Nel frattempo, puoi consultare il materiale del 1° Appello.
+                                            Le prove del 2° appello saranno disponibili a breve. Nel frattempo, puoi consultare il materiale del 1° appello.
                                         </p>
                                     </div>
                                 </div>
@@ -119,7 +119,7 @@ export default function ProvePage() {
 
                     {/* Subject Cards */}
                     <div className="max-w-6xl mx-auto">
-                        <h2 className="text-3xl font-bold text-gray-900 mb-8 text-center">
+                        <h2 className="text-3xl font-bold text-gray-900 mb-4 text-center">
                             Prove d'esame disponibili
                         </h2>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -160,7 +160,7 @@ export default function ProvePage() {
                                                         </div>
                                                         <div>
                                                             <p className="text-sm font-semibold text-gray-600">
-                                                                {selectedAppeal}° Appello
+                                                                {selectedAppeal}° appello
                                                             </p>
                                                             <p className="text-xs text-gray-500">Non ancora disponibile</p>
                                                         </div>
@@ -192,7 +192,7 @@ export default function ProvePage() {
                                                         </div>
                                                         <div>
                                                             <p className="text-sm font-semibold text-gray-900">
-                                                                {selectedAppeal}° Appello {selectedAppeal === '1' ? '(20 novembre 2025)' : ''}
+                                                                {selectedAppeal}° appello {selectedAppeal === '1' ? '(20 novembre 2025)' : ''}
                                                             </p>
                                                             <p className="text-xs text-gray-500">Soluzioni</p>
                                                         </div>
