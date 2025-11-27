@@ -32,14 +32,13 @@ export default function ChiSiamoPage() {
         {/* Main Content */}
         <div className="grid lg:grid-cols-2 gap-12 items-center max-w-7xl mx-auto mb-20">
           {/* Image Section */}
-          <div className="relative group">
-            <div className="absolute -inset-1 bg-gradient-to-r from-red-600 to-red-800 rounded-2xl blur opacity-25 group-hover:opacity-40 transition duration-500"></div>
-            <div className="relative h-[400px] lg:h-[600px] rounded-2xl overflow-hidden">
+          <div className="relative">
+            <div className="relative h-[400px] lg:h-[600px] rounded-2xl overflow-hidden shadow-2xl">
               <Image
                 src="/images/NEW_LOGO_2026/chi_siamo.png"
                 alt="Team Leonardo School"
                 fill
-                className="object-cover transition duration-500 group-hover:scale-105"
+                className="object-cover animate-fade-in"
                 priority
               />
             </div>

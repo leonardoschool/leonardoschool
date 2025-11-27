@@ -75,6 +75,17 @@ html {
   50% { box-shadow: 0 0 20px 0 rgba(168, 1, 43, 0.7); }
 }
 
+@keyframes fade-in {
+  0% { 
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% { 
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .animate-gradient-x {
   animation: gradient-x 3s ease infinite;
 }
@@ -85,6 +96,10 @@ html {
 
 .animate-pulse-glow {
   animation: pulse-glow 2s infinite;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.8s ease-out forwards;
 }
 
 .text-gradient {

@@ -195,9 +195,9 @@ export default function ProvePage() {
                                                         </div>
                                                         <div>
                                                             <p className="text-sm font-semibold text-gray-900">
-                                                                {selectedAppeal}° Appello
+                                                                {selectedAppeal}° Appello {selectedAppeal === '1' ? '(20 novembre 2025)' : ''}
                                                             </p>
-                                                            <p className="text-xs text-gray-500">Con soluzioni</p>
+                                                            <p className="text-xs text-gray-500">Soluzioni</p>
                                                         </div>
                                                     </div>
                                                     <svg
