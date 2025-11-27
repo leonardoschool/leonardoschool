@@ -22,9 +22,9 @@ export default function ChiSiamoPage() {
         {/* Hero Section */}
         <div className="text-center mb-16">
           <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
-            Chi Siamo
+            Chi siamo
           </h1>
-          <p className="text-xl text-gray-700 max-w-3xl mx-auto">
+          <p className="text-xl text-gray-700 max-w-3xxl mx-auto">
             Scopri il nostro metodo innovativo e il team che ti accompagnerà verso il successo
           </p>
         </div>
@@ -102,7 +102,7 @@ export default function ChiSiamoPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
               </svg>
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">Metodo Innovativo</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-3">Metodo innovativo</h3>
             <p className="text-gray-700">
               Tecniche di insegnamento moderne e coinvolgenti che rendono l'apprendimento efficace e piacevole.
             </p>
@@ -115,7 +115,7 @@ export default function ChiSiamoPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">Tutor Esperti</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-3">Tutor esperti</h3>
             <p className="text-gray-700">
               Studenti universitari e neolaureati che conoscono perfettamente le sfide dei test d'ingresso.
             </p>
@@ -128,7 +128,7 @@ export default function ChiSiamoPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">Supporto Continuo</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-3">Supporto continuo</h3>
             <p className="text-gray-700">
               Assistenza anche fuori dall'orario di lezione per garantire il tuo successo in ogni momento.
             </p>
