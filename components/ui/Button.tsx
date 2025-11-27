@@ -13,11 +13,11 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variants = {
       primary:
-        'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-md hover:shadow-lg',
+        'bg-gradient-to-r from-red-600 to-red-700 text-white hover:from-red-500 hover:to-red-600 active:from-red-700 active:to-red-800 shadow-lg hover:shadow-red-500/30 hover:shadow-xl hover:-translate-y-0.5',
       secondary:
-        'bg-white text-red-600 border-2 border-red-600 hover:bg-red-50 active:bg-red-100',
+        'bg-white text-red-600 border-2 border-red-600 hover:bg-red-50 active:bg-red-100 hover:shadow-lg hover:-translate-y-0.5',
       outline:
-        'bg-transparent text-white border-2 border-white hover:bg-white hover:text-red-600',
+        'bg-transparent text-white border-2 border-white/80 hover:border-white hover:bg-white hover:text-red-600 hover:shadow-lg hover:shadow-white/20 hover:-translate-y-0.5',
       ghost: 'bg-transparent hover:bg-gray-100 text-gray-700',
     };
 

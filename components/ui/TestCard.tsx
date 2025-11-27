@@ -15,7 +15,7 @@ export default function TestCard({ test, expandable = false }: TestCardProps) {
   if (expandable) {
     return (
       <div 
-        className="bg-white/80 backdrop-blur-sm border border-gray-200 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:bg-white hover:border-red-300 cursor-pointer group flex flex-col min-h-[320px]"
+        className="bg-white/80 backdrop-blur-sm border border-gray-200 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-red-500/10 hover:bg-white hover:border-red-300 cursor-pointer group flex flex-col min-h-[320px] hover:-translate-y-2"
       >
         {test.images && test.images.length > 0 ? (
           <div className="flex items-center justify-center gap-3 mb-4">
@@ -122,7 +122,7 @@ export default function TestCard({ test, expandable = false }: TestCardProps) {
   }
 
   return (
-    <div className="bg-white/80 backdrop-blur-sm border border-gray-200 rounded-2xl h-full p-6 transition-all duration-300 hover:shadow-2xl hover:bg-white hover:border-red-300 hover:-translate-y-1 cursor-pointer group">
+    <div className="bg-white/80 backdrop-blur-sm border border-gray-200 rounded-2xl h-full p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-red-500/10 hover:bg-white hover:border-red-300 hover:-translate-y-2 cursor-pointer group">
       {test.images && test.images.length > 0 ? (
         <div className="flex items-center justify-center gap-3 mb-4">
           {test.images.map((img, index) => (
