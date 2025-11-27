@@ -28,7 +28,7 @@ Focus principale su:
 4. Test: 0.8 (alta - informazioni utili)
 5. Contatti: 0.7
 6. Chi Siamo: 0.6
-7. Lavora Con Noi: 0.5
+7. Lavora con noi: 0.5
 
 ## 📋 Passi Successivi (DA FARE MANUALMENTE)
 

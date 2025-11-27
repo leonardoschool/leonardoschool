@@ -3,11 +3,11 @@ import Link from 'next/link';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Simulazione Test Medicina e TOLC - Leonardo School Catania',
+  title: 'Simulazioni | Leonardo School',
   description: 'Simulazioni gratuite test medicina, professioni sanitarie, architettura e TOLC. Preparati con le nostre simulazioni complete e valuta la tua preparazione.',
   keywords: ['simulazione test medicina', 'simulazione TOLC', 'test medicina online', 'simulazione professioni sanitarie', 'TOLC-MED', 'TOLC medicina simulazione', 'test architettura simulazione', 'CEnT simulazione'],
   openGraph: {
-    title: 'Simulazione Test Medicina e TOLC - Leonardo School',
+    title: 'Simulazioni | Leonardo School',
     description: 'Testa la tua preparazione con simulazioni gratuite',
     url: 'https://leonardoschool.it/simulazione',
   },

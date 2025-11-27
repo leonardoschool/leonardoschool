@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
 
     // Email content
     const mailOptions = {
-      from: `"Leonardo School - Lavora Con Noi" <${process.env.EMAIL_FROM}>`,
+      from: `"Leonardo School - Lavora con noi" <${process.env.EMAIL_FROM}>`,
       to: process.env.EMAIL_TO,
       replyTo: email,
       subject: `Candidatura: ${subject}`,
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
           <body>
             <div class="container">
               <div class="header">
-                <h2 style="margin: 0;">💼 Nuova candidatura - Lavora Con Noi</h2>
+                <h2 style="margin: 0;">💼 Nuova candidatura - Lavora con noi</h2>
               </div>
               <div class="content">
                 <div class="field">
@@ -204,7 +204,7 @@ export async function POST(request: NextRequest) {
         </html>
       `,
       text: `
-Nuova candidatura - Lavora Con Noi
+Nuova candidatura - Lavora con noi
 
 Nome e Cognome: ${name}
 Telefono: ${phone}

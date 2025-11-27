@@ -2,11 +2,11 @@ import JobApplicationForm from '@/components/ui/JobApplicationForm';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Lavora Con Noi - Tutor Medicina Catania | Leonardo School',
+  title: 'Lavora con noi - Tutor Medicina Catania | Leonardo School',
   description: 'Diventa tutor Leonardo School Catania: opportunità per studenti universitari e neolaureati. Insegna preparazione test medicina e professioni sanitarie.',
-  keywords: ['lavora con noi catania', 'tutor medicina catania', 'lavoro studenti catania', 'tutor universitari', 'insegnante medicina catania', 'opportunità studenti medicina'],
+  keywords: ['Lavora con noi catania', 'tutor medicina catania', 'lavoro studenti catania', 'tutor universitari', 'insegnante medicina catania', 'opportunità studenti medicina'],
   openGraph: {
-    title: 'Lavora Con Noi - Leonardo School Catania',
+    title: 'Lavora con noi - Leonardo School Catania',
     description: 'Unisciti al team di tutor Leonardo School',
     url: 'https://leonardoschool.it/lavora-con-noi',
   },
@@ -19,7 +19,7 @@ export default function LavoraConNoiPage() {
         {/* Hero Section */}
         <div className="max-w-4xl mx-auto text-center mb-16">
           <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
-            Lavora Con Noi
+            Lavora con noi
           </h1>
           <p className="text-xl text-gray-700 leading-relaxed">
             Sei uno studente universitario o un neolaureato appassionato di insegnamento?<br />
@@ -31,7 +31,7 @@ export default function LavoraConNoiPage() {
         <div className="max-w-6xl mx-auto mb-16">
           <div className="text-center mb-12">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Perché Lavorare Con Noi?
+              Perché lavorare con noi?
             </h2>
             <p className="text-gray-700 text-lg">
               Entra a far parte di un team dinamico e innovativo
@@ -46,7 +46,7 @@ export default function LavoraConNoiPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Orari Flessibili</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Orari flessibili</h3>
               <p className="text-gray-700">
                 Concilia il lavoro con i tuoi studi grazie a orari flessibili e personalizzabili.
               </p>
@@ -59,7 +59,7 @@ export default function LavoraConNoiPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Crescita Professionale</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Crescita professionale</h3>
               <p className="text-gray-700">
                 Sviluppa competenze didattiche e comunicative in un ambiente stimolante.
               </p>
@@ -72,7 +72,7 @@ export default function LavoraConNoiPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Team Giovane</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Team giovane</h3>
               <p className="text-gray-700">
                 Lavora insieme ad altri studenti e neolaureati in un team affiatato.
               </p>
@@ -135,7 +135,7 @@ export default function LavoraConNoiPage() {
                     <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
                   </svg>
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900">Cosa Offriamo</h3>
+                <h3 className="text-2xl font-bold text-gray-900">Cosa offriamo</h3>
               </div>
               <ul className="space-y-4">
                 <li className="flex items-start">
@@ -178,7 +178,7 @@ export default function LavoraConNoiPage() {
           <div>
             <div className="text-center mb-8">
               <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-                Candidati Ora
+                Candidati ora
               </h2>
               <p className="text-lg text-gray-700">
                 Compila il form qui sotto e allegaci il tuo CV.<br />
