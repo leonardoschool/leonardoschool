@@ -6,7 +6,7 @@ export const SITE_DESCRIPTION =
 
 export const SITE_KEYWORDS = [
   'leonardo school catania',
-  'preparazione test medicina catania',
+  'preparazione ammissione universitaria',
   'test medicina catania',
   'corsi medicina catania',
   'test odontoiatria catania',
@@ -62,8 +62,8 @@ export const NAVIGATION = [
 ];
 
 export const STATS = [
-  { icon: 'users', value: 366, suffix: '+', label: 'Studenti Soddisfatti' },
-  { icon: 'graduation-cap', value: 92, suffix: '%', label: 'Ammessi nella Prima Scelta', prefix: '>' },
-  { icon: 'book', value: 4732, suffix: '+', label: 'Ore di Corso Svolte ad Oggi' },
-  { icon: 'user', value: 20, suffix: '+', label: 'Giovani Tutor' },
+  { icon: 'users', value: 366, suffix: '+', label: 'Studenti soddisfatti' },
+  { icon: 'graduation-cap', value: 92, suffix: '%', label: 'Ammessi in 1ᵃ scelta', prefix: '>' },
+  { icon: 'book', value: 4732, suffix: '+', label: 'Ore di corso svolte' },
+  { icon: 'user', value: 20, suffix: '+', label: 'Giovani tutor' },
 ];

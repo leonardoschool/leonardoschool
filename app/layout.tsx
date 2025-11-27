@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Raleway } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
@@ -7,15 +7,15 @@ import Preloader from "@/components/ui/Preloader";
 import CookieBanner from "@/components/ui/CookieBanner";
 import { SITE_NAME, SITE_DESCRIPTION, SITE_KEYWORDS } from "@/lib/constants";
 
-const raleway = Raleway({
-  variable: "--font-raleway",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
-  weight: ["100", "200", "300", "400", "500", "600", "700", "800", "900"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: {
-    default: `${SITE_NAME} | Preparazione Test Medicina Catania`,
+    default: `${SITE_NAME} | Preparazione Ammissione Universitaria`,
     template: `%s | ${SITE_NAME}`,
   },
   description: SITE_DESCRIPTION,
@@ -59,7 +59,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: `${SITE_NAME} - Preparazione Test Medicina Catania`,
+    title: `${SITE_NAME} - Preparazione Ammissione Universitaria`,
     description: SITE_DESCRIPTION,
     images: ['https://leonardoschool.it/images/logo.png'],
   },
@@ -78,7 +78,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="it">
-      <body className={`${raleway.variable} font-sans antialiased`} suppressHydrationWarning>
+      <body className={`${inter.variable} font-sans antialiased`} suppressHydrationWarning>
         <Preloader />
         <Header />
         <main className="min-h-screen">{children}</main>

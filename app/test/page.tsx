@@ -153,7 +153,7 @@ export default function TestPage() {
               UNIVERSITÀ PUBBLICHE 
             </h2>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Informazioni ufficiali sui test di accesso regolati a livello nazionale o locale
+              Informazioni ufficiali sui test di ammissione regolamentati a livello nazionale o locale
             </p>
           </div>
 
@@ -170,7 +170,7 @@ export default function TestPage() {
                 UNIVERSITÀ PRIVATE
               </h2>
               <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Informazioni ufficiali sulle prove di accesso non direttamente regolate dal MUR 
+              Informazioni ufficiali sui test di ammisisone non direttamente regolamentati dal MUR
             </p>
             </div>
 

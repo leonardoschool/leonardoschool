@@ -25,7 +25,8 @@ module.exports = {
         },
       },
       fontFamily: {
-        raleway: ['Raleway', 'system-ui', '-apple-system', 'sans-serif'],
+        inter: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
     },
   },

@@ -51,16 +51,16 @@ export default function ChiSiamoPage() {
               <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">
                 Il metodo Leonardo School
               </h2>
-              
+
               <div className="space-y-6 text-gray-700 leading-relaxed text-lg">
                 <p>
                   I nostri <span className="text-red-600 font-semibold">tutor</span>, studenti e neolaureati selezionati, seguono da anni le nostre classi con un <span className="text-gray-900 font-semibold">metodo rapido, moderno e coinvolgente</span>, capace di rendere l'apprendimento <span className="text-red-600 font-semibold">immediato e naturale</span>.
                 </p>
-                
+
                 <p>
                   Sono sempre <span className="text-red-600 font-semibold">disponibili</span> anche fuori dall'orario delle lezioni per dubbi, chiarimenti e supporto aggiuntivo.
                 </p>
-                
+
                 <div className="bg-gradient-to-r from-red-50 to-red-100 border-l-4 border-red-600 p-6 rounded-r-xl mt-8 shadow-md">
                   <p className="font-bold text-gray-900 text-xl mb-1">
                     Cosa aspetti?
@@ -133,6 +133,25 @@ export default function ChiSiamoPage() {
             <p className="text-gray-700">
               Assistenza anche fuori dall'orario di lezione per garantire il tuo successo in ogni momento.
             </p>
+          </div>
+        </div>
+
+        {/* Partner Section */}
+        <div className="mt-20 max-w-xs mx-auto">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">
+              I nostri Partner
+            </h2>
+            <div className="w-16 h-1 bg-gradient-to-r from-red-500 to-red-600 mx-auto rounded-full" />
+          </div>
+
+          <div className="bg-black border border-gray-300 rounded-xl pt-6 pr-6 pl-6 hover:border-red-500 hover:shadow-lg transition-all duration-300">
+            <img
+              src="/images/partner.png"
+              alt="Partner - Centro Fonolinguistico"
+              className="w-full h-auto mx-auto group-hover:scale-105 transition-transform duration-300"
+              style={{ maxWidth: '320px' }}
+            />
           </div>
         </div>
       </div>

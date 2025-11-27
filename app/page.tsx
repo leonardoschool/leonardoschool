@@ -4,6 +4,7 @@ import Button from '@/components/ui/Button';
 import Link from 'next/link';
 import Image from 'next/image';
 import ScienceCanvasLight from '@/components/ui/ScienceCanvasLight';
+import AnimatedStats from '@/components/ui/AnimatedStats';
 import { TestCard as TestCardType, Testimonial } from '@/types';
 import { STATS } from '@/lib/constants';
 
@@ -209,16 +210,7 @@ export default function Home() {
             </div>
 
             {/* Quick Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 pt-16">
-              {STATS.map((stat, index) => (
-                <div key={index} className="text-center">
-                  <div className="text-4xl md:text-5xl font-bold text-red-500 mb-2">
-                    {stat.prefix || ''}{stat.value}{stat.suffix}
-                  </div>
-                  <div className="text-sm text-gray-300">{stat.label}</div>
-                </div>
-              ))}
-            </div>
+            <AnimatedStats stats={STATS} />
           </div>
         </div>
 
@@ -300,7 +292,7 @@ export default function Home() {
             </h2>
             <div className="w-24 h-1.5 bg-gradient-to-r from-red-500 to-red-600 mx-auto rounded-full mb-6" />
             <p className="text-lg text-gray-600 max-w-3xl mx-auto">
-              Percorsi formativi affidati a giovani tutor, veicoli in piccole classi e fedeli nei contenuti ai bandi ministeriali
+              Tutor giovani e competenti, piccoli gruppi classe e programmi didattici perfettamente in linea con i syllabi dei concorsi di ammissione.
             </p>
           </div>
 
@@ -380,35 +372,6 @@ export default function Home() {
 
       {/* Testimonials Section */}
       <TestimonialsCarousel testimonials={testimonials} />
-
-      {/* Partner Section - Minimalist */}
-      <section className="bg-gradient-to-b from-gray-50 to-white py-16">
-        <div className="container mx-auto px-4">
-          <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-8">
-              I nostri Partner
-            </h2>
-
-            <div className="w-20 h-1 bg-gradient-to-r from-red-500 to-red-600 mx-auto rounded-full mb-12" />
-
-            <a
-              href="https://www.fonolinguistico.it/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block group"
-            >
-              <div className="bg-black border-2 border-gray-200 rounded-2xl p-4 md:p-8 hover:border-red-500 hover:shadow-xl transition-all duration-300">
-                <img
-                  src="/images/partner.png"
-                  alt="Partner - Centro Fonolinguistico"
-                  className="w-full h-auto mx-auto group-hover:scale-105 transition-transform duration-300"
-                  style={{ maxWidth: '350px' }}
-                />
-              </div>
-            </a>
-          </div>
-        </div>
-      </section>
 
       {/* WhatsApp Floating Button */}
       <a
