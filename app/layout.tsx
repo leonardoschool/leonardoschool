@@ -49,7 +49,7 @@ export const metadata: Metadata = {
     locale: "it_IT",
     url: "https://leonardoschool.it",
     siteName: SITE_NAME,
-    title: `${SITE_NAME} - Preparazione Test Medicina e Professioni Sanitarie Catania`,
+    title: `${SITE_NAME} - Preparazione Test Ammissione Universitaria`,
     description: SITE_DESCRIPTION,
     images: [{
       url: 'https://leonardoschool.it/images/logo.png',

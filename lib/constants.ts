@@ -1,8 +1,8 @@
 // Constants for Leonardo School
 
 export const SITE_NAME = 'Leonardo School';
-export const SITE_DESCRIPTION = 
-  'Leonardo School: Preparazione Test Ammissione Universitaria';
+export const SITE_DESCRIPTION = 'Leonardo School: preparazione test Medicina, Odontoiatria, Veterinaria, Professioni sanitarie, Architettura e TOLC. Corsi, simulazioni e tutor qualificati per l\'ammissione all\'università.';
+
 
 export const SITE_KEYWORDS = [
   'leonardo school catania',
