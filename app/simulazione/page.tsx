@@ -7,9 +7,9 @@ export const metadata: Metadata = {
   description: 'Simulazioni gratuite test medicina, professioni sanitarie, architettura e TOLC. Preparati con le nostre simulazioni complete e valuta la tua preparazione.',
   keywords: ['simulazione test medicina', 'simulazione TOLC', 'test medicina online', 'simulazione professioni sanitarie', 'TOLC-MED', 'TOLC medicina simulazione', 'test architettura simulazione', 'CEnT simulazione'],
   openGraph: {
-    title: 'Simulazioni | Leonardo School',
+    title: 'Simulazioni | Leonardo School',
     description: 'Testa la tua preparazione con simulazioni gratuite',
-    url: 'https://leonardoschool.it/simulazione',
+    url: 'https://www.leonardoschool.it/simulazione',
   },
 };
 

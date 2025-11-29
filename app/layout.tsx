@@ -47,7 +47,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "it_IT",
-    url: "https://leonardoschool.it",
+    url: "https://www.leonardoschool.it",
     siteName: SITE_NAME,
     title: `${SITE_NAME} - Preparazione Test Ammissione Universitaria`,
     description: SITE_DESCRIPTION,
@@ -68,7 +68,7 @@ export const metadata: Metadata = {
     google: 'aa1074040bc69c9c',
   },
   alternates: {
-    canonical: 'https://leonardoschool.it',
+    canonical: 'https://www.leonardoschool.it',
   },
 };
 

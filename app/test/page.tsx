@@ -7,9 +7,9 @@ export const metadata: Metadata = {
   description: 'Informazioni complete su prove accesso 2025-2026: test medicina, odontoiatria, veterinaria, professioni sanitarie, architettura. Date, documenti e graduatorie.',
   keywords: ['prove accesso università', 'test medicina 2026', 'test odontoiatria date', 'test veterinaria catania', 'professioni sanitarie prove', 'test architettura', 'date test medicina', 'graduatoria medicina'],
   openGraph: {
-    title: 'Test di ammissione | Leonardo School',
+    title: 'Test di ammissione | Leonardo School',
     description: 'Tutte le informazioni sui test di accesso universitari 2025-2026',
-    url: 'https://leonardoschool.it/test',
+    url: 'https://www.leonardoschool.it/test',
   },
 };
 

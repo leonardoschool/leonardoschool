@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Chi Siamo - Leonardo School Catania',
     description: 'Scopri chi siamo e il nostro metodo di insegnamento innovativo',
-    url: 'https://leonardoschool.it/chi-siamo',
+    url: 'https://www.leonardoschool.it/chi-siamo',
   },
 };
 

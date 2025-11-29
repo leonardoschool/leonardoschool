@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Lavora con noi - Leonardo School Catania',
     description: 'Unisciti al team di tutor Leonardo School',
-    url: 'https://leonardoschool.it/lavora-con-noi',
+    url: 'https://www.leonardoschool.it/lavora-con-noi',
   },
 };
 
