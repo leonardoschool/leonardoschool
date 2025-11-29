@@ -157,7 +157,7 @@ const coursesData = {
           text: '30 ore',
         },
         {
-          icon: '✍',
+          icon: '📊',
           label: 'TRAINING',
           text: '25 ore',
         },
@@ -172,7 +172,7 @@ const coursesData = {
       badge: 'BASE',
       badgeColor: 'bg-[#42BFED]',
       headerColor: 'bg-[#42BFED]',
-      category: 'MEDICINA • ODONTOIATRIA • VETERINARIA',
+      category: 'PROFESSIONI SANITARIE',
       title: 'STARTER CLASS',
       language: 'Italiano / Inglese (IMAT) / Prof. Sanitarie',
       details: [
@@ -185,12 +185,12 @@ const coursesData = {
         {
           icon: '🧑‍🏫',
           label: 'DIDATTICA FRONTALE',
-          text: '20 lezioni (42 ore)',
+          text: '42 ore',
         },
         {
           icon: '📊',
           label: 'ESERCITAZIONE',
-          subtext: '21 ore',
+          text: '21 ore',
         },
       ],
       ctaColor: 'bg-[#42BFED] hover:bg-[#5AACDB]',
