@@ -2,7 +2,7 @@
 
 export const SITE_NAME = 'Leonardo School';
 export const SITE_DESCRIPTION = 
-  'Leonardo School Catania: preparazione test medicina, odontoiatria, veterinaria, professioni sanitarie, architettura e TOLC. Corsi, simulazioni e tutor qualificati per l\'ammissione all\'università.';
+  'Leonardo School: Preparazione Test Ammissione Universitaria';
 
 export const SITE_KEYWORDS = [
   'leonardo school catania',
