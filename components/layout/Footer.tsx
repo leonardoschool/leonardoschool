@@ -147,12 +147,6 @@ export default function Footer() {
               </li>
             </ul>
             
-            <a
-              href="https://leonardo-school.web.app/#/login"
-              className="inline-block bg-red-600 hover:bg-red-700 text-white text-sm font-semibold px-6 py-2 rounded-lg transition-colors"
-            >
-              Login
-            </a>
           </div>
         </div>
 
