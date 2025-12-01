@@ -161,6 +161,22 @@ const testimonials: Testimonial[] = [
     image: '/images/5.jpeg',
     text: 'Mesi di duro lavoro direzionato dai tutor super competenti e costantemente disponibili possono determinare il resto della tua vita! Tornando indietro mi affiderei altre cento volte: è stata la mossa più intelligente che abbia mai fatto. Grazie!',
   },
+  {
+    id: '6',
+    name: 'Giuliana L.',
+    course: 'Medicina e Chirurgia',
+    university: 'Catania',
+    image: '/images/NEW_LOGO_2026/NEW_TESTIMONIALS/GiulianaL.jpg',
+    text: 'Leonardo School è stata molto più di una semplice scuola di preparazione: è diventata una vera piccola famiglia. Lezioni chiare, spiegazioni precise, esercitazioni mirate e la costante disponibilità dei tutor: ecco il mix perfetto. Fino all’ultimo giorno, mi sono sentita motivata e supportata. Mi hanno insegnato a credere in me stessa e, grazie a questo, ho realizzato il mio sogno!',
+  },
+  {
+    id: '7',
+    name: 'Aurora Carmen U.',
+    course: 'Medicina e Chirurgia',
+    university: 'Catania',
+    image: '/images/NEW_LOGO_2026/NEW_TESTIMONIALS/AuroraCarmen.jpg',
+    text: 'È stata la scelta migliore che potessi fare. Non è solo un percorso di preparazione eccezionale e funzionale al test, ma anche un’occasione di crescita personale, tra persone magnifiche e tutor straordinari. Consiglio questo percorso a tutti: per me Leonardo School è stata casa e rassicurazione.',
+  },
 ];
 
 export default function Home() {
