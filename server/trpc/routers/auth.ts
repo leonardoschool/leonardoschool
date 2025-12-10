@@ -14,7 +14,7 @@ export const authRouter = router({
         firebaseUid: z.string(),
         email: z.string().email(),
         name: z.string(),
-        role: z.enum(['STUDENT', 'ADMIN']).default('STUDENT'),
+        role: z.enum(['STUDENT', 'ADMIN', 'COLLABORATOR']).default('STUDENT'),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -23,7 +23,7 @@ export const authRouter = router({
       // Check if user already exists
       let user = await ctx.prisma.user.findUnique({
         where: { firebaseUid },
-        include: { student: true, admin: true },
+        include: { student: true, admin: true, collaborator: true },
       });
 
       if (user) {
@@ -44,10 +44,14 @@ export const authRouter = router({
           ...(role === 'ADMIN' && {
             admin: { create: {} },
           }),
+          ...(role === 'COLLABORATOR' && {
+            collaborator: { create: {} },
+          }),
         },
         include: {
           student: true,
           admin: true,
+          collaborator: true,
         },
       });
 

@@ -167,6 +167,17 @@ export const colors = {
   },
 
   /**
+   * Colori icone adattativi
+   * Garantisce visibilità in entrambi i temi
+   */
+  icon: {
+    primary: 'text-gray-700 dark:text-slate-300',
+    secondary: 'text-gray-500 dark:text-slate-400',
+    muted: 'text-gray-400 dark:text-slate-500',
+    interactive: 'text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white',
+  },
+
+  /**
    * Bordi adattativi
    * Light: grigi chiari, Dark: slate medio
    */
@@ -247,6 +258,8 @@ export const colors = {
       shadow: 'hover:shadow-2xl dark:hover:shadow-slate-900/70',
       textRed: 'hover:text-red-600 dark:hover:text-red-400',
       bg: 'hover:bg-gray-50 dark:hover:bg-slate-700',
+      bgSubtle: 'hover:bg-gray-100 dark:hover:bg-gray-700',
+      bgMuted: 'hover:bg-gray-200 dark:hover:bg-gray-600',
     },
     
     // Gradiente per card interattive prove

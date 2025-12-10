@@ -46,6 +46,38 @@ const isAdmin = t.middleware(({ ctx, next }) => {
   });
 });
 
+// Collaborator middleware
+const isCollaborator = t.middleware(({ ctx, next }) => {
+  if (!ctx.user || ctx.user.role !== 'COLLABORATOR') {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Collaborator access required',
+    });
+  }
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user,
+    },
+  });
+});
+
+// Staff middleware (Admin OR Collaborator)
+const isStaff = t.middleware(({ ctx, next }) => {
+  if (!ctx.user || (ctx.user.role !== 'ADMIN' && ctx.user.role !== 'COLLABORATOR')) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Staff access required',
+    });
+  }
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user,
+    },
+  });
+});
+
 // Student middleware
 const isStudent = t.middleware(({ ctx, next }) => {
   if (!ctx.user || ctx.user.role !== 'STUDENT') {
@@ -64,4 +96,6 @@ const isStudent = t.middleware(({ ctx, next }) => {
 
 export const protectedProcedure = t.procedure.use(isAuthed);
 export const adminProcedure = t.procedure.use(isAdmin);
+export const collaboratorProcedure = t.procedure.use(isCollaborator);
+export const staffProcedure = t.procedure.use(isStaff); // Admin OR Collaborator
 export const studentProcedure = t.procedure.use(isStudent);

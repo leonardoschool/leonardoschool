@@ -19,7 +19,6 @@ export default function AuthLayout({
           <h1 className={`text-3xl font-bold ${colors.primary.text}`}>
             Leonardo School
           </h1>
-          <p className={`mt-1 text-sm ${colors.text.secondary}`}>Preparazione Test Universitari</p>
         </div>
         
         {children}

@@ -42,7 +42,16 @@ export default function CompleteProfilePage() {
     postalCode: '',
   });
 
-  const updateProfileMutation = trpc.students.completeProfile.useMutation();
+  // Get user to determine role
+  const { data: user } = trpc.auth.me.useQuery(undefined, {
+    retry: false,
+  });
+  
+  // Type assertion needed because Prisma types might not be updated yet
+  const isCollaborator = (user?.role as string) === 'COLLABORATOR';
+
+  const updateStudentProfileMutation = trpc.students.completeProfile.useMutation();
+  const updateCollaboratorProfileMutation = trpc.collaborators.completeProfile.useMutation();
 
   // Check if user is authenticated
   useEffect(() => {
@@ -161,7 +170,7 @@ export default function CompleteProfilePage() {
     setLoading(true);
 
     try {
-      await updateProfileMutation.mutateAsync({
+      const mutationData = {
         fiscalCode: validation.data.fiscalCode,
         dateOfBirth: validation.data.dateOfBirth,
         phone: validation.data.phone,
@@ -169,12 +178,23 @@ export default function CompleteProfilePage() {
         city: validation.data.city,
         province: validation.data.province,
         postalCode: validation.data.postalCode,
-      });
+      };
 
-      // Redirect alla dashboard
-      router.push('/studente');
+      // Update cookies by calling the auth endpoint with current token
+      const currentUser = firebaseAuth.getCurrentUser();
+      if (currentUser) {
+        const token = await currentUser.getIdToken();
+        await fetch('/api/auth/me', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        });
+      }
+
+      // Redirect to appropriate dashboard
+      const dashboardUrl = isCollaborator ? '/collaboratore' : '/studente';
+      router.push(dashboardUrl);
     } catch (err: any) {
-      console.error('Profile completion error:', err);
       setError(err.message || 'Errore durante il salvataggio. Riprova');
     } finally {
       setLoading(false);

@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
       include: {
         student: true,
         admin: true,
+        collaborator: true,
       },
     });
 

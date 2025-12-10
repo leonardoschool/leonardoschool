@@ -23,6 +23,7 @@ import {
   Calendar,
   Download,
   X,
+  Trash2,
 } from 'lucide-react';
 
 type StudentStatus = 'all' | 'active' | 'inactive' | 'pending_profile' | 'pending_contract' | 'pending_activation';
@@ -36,6 +37,90 @@ const statusOptions: { value: StudentStatus; label: string; color: string }[] = 
   { value: 'inactive', label: 'Disattivati', color: colors.status.error.text },
 ];
 
+// Modal di conferma custom
+function ConfirmModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  confirmLabel = 'Conferma',
+  cancelLabel = 'Annulla',
+  variant = 'danger',
+  isLoading = false,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  variant?: 'danger' | 'warning' | 'info';
+  isLoading?: boolean;
+}) {
+  if (!isOpen) return null;
+
+  const variantColors = {
+    danger: {
+      icon: 'bg-red-100 dark:bg-red-900/30',
+      iconColor: 'text-red-600 dark:text-red-400',
+      button: 'bg-red-600 hover:bg-red-700 text-white',
+    },
+    warning: {
+      icon: 'bg-amber-100 dark:bg-amber-900/30',
+      iconColor: 'text-amber-600 dark:text-amber-400',
+      button: 'bg-amber-600 hover:bg-amber-700 text-white',
+    },
+    info: {
+      icon: 'bg-purple-100 dark:bg-purple-900/30',
+      iconColor: 'text-purple-600 dark:text-purple-400',
+      button: 'bg-purple-600 hover:bg-purple-700 text-white',
+    },
+  };
+
+  const colorScheme = variantColors[variant];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className={`${colors.background.card} rounded-2xl max-w-md w-full p-6 shadow-2xl`}>
+        <div className="flex items-start gap-4">
+          <div className={`w-12 h-12 rounded-xl ${colorScheme.icon} flex items-center justify-center flex-shrink-0`}>
+            <AlertTriangle className={`w-6 h-6 ${colorScheme.iconColor}`} />
+          </div>
+          <div className="flex-1">
+            <h3 className={`text-lg font-bold ${colors.text.primary}`}>{title}</h3>
+            <p className={`mt-2 ${colors.text.secondary}`}>{message}</p>
+          </div>
+        </div>
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={onClose}
+            disabled={isLoading}
+            className={`flex-1 px-4 py-3 rounded-xl ${colors.background.secondary} font-medium hover:opacity-80 transition-opacity disabled:opacity-50`}
+          >
+            {cancelLabel}
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isLoading}
+            className={`flex-1 px-4 py-3 rounded-xl ${colorScheme.button} font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+          >
+            {isLoading ? (
+              <span className="flex items-center justify-center gap-2">
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                Attendere...
+              </span>
+            ) : (
+              confirmLabel
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function StudentsManagementPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StudentStatus>('all');
@@ -44,6 +129,19 @@ export default function StudentsManagementPage() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [viewContractId, setViewContractId] = useState<string | null>(null);
+
+  // Modal di conferma
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    type: 'delete';
+    userId: string;
+    userName: string;
+  }>({
+    isOpen: false,
+    type: 'delete',
+    userId: '',
+    userName: '',
+  });
 
   const utils = trpc.useUtils();
 
@@ -54,6 +152,9 @@ export default function StudentsManagementPage() {
     page,
     limit: 10,
   });
+
+  // Fetch students stats
+  const { data: stats } = trpc.contracts.getStudentsStats.useQuery();
 
   // Fetch contract templates
   const { data: templates } = trpc.contracts.getTemplates.useQuery();
@@ -85,6 +186,41 @@ export default function StudentsManagementPage() {
       utils.contracts.getAllStudents.invalidate();
     },
   });
+
+  const deleteUserMutation = trpc.users.deleteUser.useMutation({
+    onSuccess: () => {
+      utils.contracts.getAllStudents.invalidate();
+      utils.contracts.getStudentsStats.invalidate();
+      closeConfirmModal();
+    },
+  });
+
+  const closeConfirmModal = () => {
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+  };
+
+  const openDeleteModal = (userId: string, userName: string) => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'delete',
+      userId,
+      userName,
+    });
+  };
+
+  const handleConfirmAction = () => {
+    deleteUserMutation.mutate({ userId: confirmModal.userId });
+  };
+
+  const getModalConfig = () => {
+    return {
+      title: 'Elimina Account',
+      message: `Sei sicuro di voler eliminare definitivamente l'account di "${confirmModal.userName}"? Questa azione è irreversibile.`,
+      confirmLabel: 'Elimina',
+      variant: 'danger' as const,
+      isLoading: deleteUserMutation.isPending,
+    };
+  };
 
   const getStudentStatus = (student: any) => {
     if (student.user.isActive) {
@@ -268,7 +404,7 @@ export default function StudentsManagementPage() {
             </div>
             <div>
               <p className={`text-sm ${colors.text.secondary}`}>Totale</p>
-              <p className="text-xl font-bold">{studentsData?.pagination.total || 0}</p>
+              <p className="text-xl font-bold">{stats?.total || 0}</p>
             </div>
           </div>
         </div>
@@ -279,7 +415,7 @@ export default function StudentsManagementPage() {
             </div>
             <div>
               <p className={`text-sm ${colors.text.secondary}`}>Attivi</p>
-              <p className="text-xl font-bold text-green-600">-</p>
+              <p className="text-xl font-bold text-green-600">{stats?.active || 0}</p>
             </div>
           </div>
         </div>
@@ -290,7 +426,7 @@ export default function StudentsManagementPage() {
             </div>
             <div>
               <p className={`text-sm ${colors.text.secondary}`}>In attesa</p>
-              <p className="text-xl font-bold text-amber-600">-</p>
+              <p className="text-xl font-bold text-amber-600">{stats?.pendingContract || 0}</p>
             </div>
           </div>
         </div>
@@ -301,7 +437,7 @@ export default function StudentsManagementPage() {
             </div>
             <div>
               <p className={`text-sm ${colors.text.secondary}`}>Da firmare</p>
-              <p className="text-xl font-bold text-blue-600">-</p>
+              <p className="text-xl font-bold text-blue-600">{stats?.pendingSignature || 0}</p>
             </div>
           </div>
         </div>
@@ -312,7 +448,7 @@ export default function StudentsManagementPage() {
             </div>
             <div>
               <p className={`text-sm ${colors.text.secondary}`}>Da attivare</p>
-              <p className="text-xl font-bold text-red-600">-</p>
+              <p className="text-xl font-bold text-red-600">{stats?.pendingActivation || 0}</p>
             </div>
           </div>
         </div>
@@ -439,12 +575,22 @@ export default function StudentsManagementPage() {
                               <button
                                 onClick={() => handleDeactivate(student.id)}
                                 disabled={deactivateStudentMutation.isPending}
-                                className={`p-2 rounded-lg ${colors.status.error.softBg} ${colors.status.error.text} hover:opacity-80 transition-opacity`}
+                                className={`p-2 rounded-lg ${colors.status.warning.softBg} ${colors.status.warning.text} hover:opacity-80 transition-opacity`}
                                 title="Disattiva account"
                               >
                                 <UserX className="w-4 h-4" />
                               </button>
                             )}
+
+                            {/* Delete Button */}
+                            <button
+                              onClick={() => openDeleteModal(student.user.id, student.user.name)}
+                              disabled={deleteUserMutation.isPending}
+                              className={`p-2 rounded-lg ${colors.status.error.softBg} ${colors.status.error.text} hover:opacity-80 transition-opacity`}
+                              title="Elimina account"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -673,6 +819,14 @@ export default function StudentsManagementPage() {
           </div>
         </div>
       )}
+
+      {/* Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={closeConfirmModal}
+        onConfirm={handleConfirmAction}
+        {...getModalConfig()}
+      />
     </div>
   );
 }

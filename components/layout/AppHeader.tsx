@@ -18,6 +18,7 @@ import {
   Monitor,
   Home,
   Users,
+  UserCog,
   FileText,
   BookOpen,
   BarChart3,
@@ -25,6 +26,9 @@ import {
   Check,
   X,
   AlertTriangle,
+  GraduationCap,
+  Briefcase,
+  Eye,
 } from 'lucide-react';
 
 type Theme = 'light' | 'dark' | 'system';
@@ -35,15 +39,23 @@ export default function AppHeader() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const [gestioneMenuOpen, setGestioneMenuOpen] = useState(false);
   const [currentTheme, setCurrentTheme] = useState<Theme>('system');
   const [loggingOut, setLoggingOut] = useState(false);
 
   const userMenuRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
   const themeMenuRef = useRef<HTMLDivElement>(null);
+  const gestioneMenuRef = useRef<HTMLDivElement>(null);
 
   // Get current user
   const { data: user } = trpc.auth.me.useQuery();
+  
+  // Get collaborator contract status (collaborator only)
+  const { data: collaboratorContract } = trpc.contracts.getMyCollaboratorContract.useQuery(
+    undefined,
+    { enabled: (user?.role as string) === 'COLLABORATOR', retry: false }
+  );
   
   // Get notifications (admin only)
   const { data: notifications, refetch: refetchNotifications } = trpc.contracts.getAdminNotifications.useQuery(
@@ -57,7 +69,21 @@ export default function AppHeader() {
   });
 
   const isAdmin = user?.role === 'ADMIN';
+  const isCollaborator = (user?.role as string) === 'COLLABORATOR';
+  const isStaff = isAdmin || isCollaborator;
   const unreadCount = notifications?.length || 0;
+  
+  // Collaborator can navigate only if:
+  // 1. Account is active AND has signed contract
+  // OR
+  // 2. Account is active AND has no contract at all (admin activated without contract)
+  // If there's a PENDING contract, navigation is blocked until signed
+  const hasPendingContract = collaboratorContract?.status === 'PENDING';
+  const hasSignedContract = collaboratorContract?.status === 'SIGNED';
+  const hasNoContract = !collaboratorContract;
+  const collaboratorCanNavigate = isCollaborator 
+    ? user?.isActive && (hasSignedContract || (hasNoContract && !hasPendingContract))
+    : true;
 
   // Theme handling
   useEffect(() => {
@@ -108,6 +134,9 @@ export default function AppHeader() {
       if (themeMenuRef.current && !themeMenuRef.current.contains(e.target as Node)) {
         setThemeMenuOpen(false);
       }
+      if (gestioneMenuRef.current && !gestioneMenuRef.current.contains(e.target as Node)) {
+        setGestioneMenuOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -134,14 +163,32 @@ export default function AppHeader() {
     { value: 'system' as Theme, label: 'Sistema', icon: Monitor },
   ];
 
+  // Menu Gestione (dropdown) - Admin only: Utenti e Contratti (Studenti e Collaboratori sono dentro Utenti)
+  const gestioneItems = [
+    { href: '/admin/utenti', label: 'Utenti', icon: UserCog },
+    { href: '/admin/contratti', label: 'Contratti', icon: FileText },
+  ];
+
   const adminNavItems = [
     { href: '/admin', label: 'Dashboard', icon: Home },
-    { href: '/admin/studenti', label: 'Studenti', icon: Users },
-    { href: '/admin/contratti', label: 'Contratti', icon: FileText },
     { href: '/admin/materiali', label: 'Materiali', icon: FolderOpen },
     { href: '/admin/domande', label: 'Domande', icon: BookOpen },
     { href: '/admin/statistiche', label: 'Statistiche', icon: BarChart3 },
   ];
+
+  // Collaborator: no contratti, studenti con vista limitata
+  const collaboratorNavItems = [
+    { href: '/collaboratore', label: 'Dashboard', icon: Home },
+    { href: '/collaboratore/studenti', label: 'Studenti', icon: Users },
+    { href: '/collaboratore/materiali', label: 'Materiali', icon: FolderOpen },
+    { href: '/collaboratore/domande', label: 'Domande', icon: BookOpen },
+    { href: '/collaboratore/statistiche', label: 'Statistiche', icon: BarChart3 },
+  ];
+
+  const navItems = isAdmin ? adminNavItems : isCollaborator ? collaboratorNavItems : [];
+
+  // Check if current path is in Gestione
+  const isGestioneActive = gestioneItems.some(item => pathname.startsWith(item.href));
 
   const formatNotificationTime = (date: Date | string) => {
     const now = new Date();
@@ -161,24 +208,75 @@ export default function AppHeader() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href={isAdmin ? '/admin' : '/studente'} className="flex items-center gap-3">
-            <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-[#8B1A1A] p-1">
+          <Link href={isAdmin ? '/admin' : isCollaborator ? '/collaboratore' : '/studente'} className="flex items-center gap-3">
+            <div className="relative w-14 h-14 rounded-lg p-1">
               <Image
-                src="/images/NEW_LOGO_2026/logo_sito_proof.png"
+                src="/images/logo.png"
                 alt="Leonardo School"
                 fill
                 className="object-contain"
               />
             </div>
-            <span className="font-bold text-lg hidden sm:block">Leonardo School</span>
           </Link>
 
-          {/* Admin Navigation (desktop) */}
-          {isAdmin && (
+          {/* Staff Navigation (desktop) - Admin & Collaborator */}
+          {isStaff && collaboratorCanNavigate && (
             <nav className="hidden lg:flex items-center gap-1">
-              {adminNavItems.map((item) => {
-                const isActive = pathname === item.href || 
-                  (item.href !== '/admin' && pathname.startsWith(item.href));
+              {/* Dashboard link */}
+              <Link
+                href={isAdmin ? '/admin' : '/collaboratore'}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                  pathname === '/admin' || pathname === '/collaboratore'
+                    ? `${colors.primary.softBg} ${colors.primary.text}`
+                    : `${colors.text.primary} ${colors.effects.hover.bgSubtle}`
+                }`}
+              >
+                <Home className="w-4 h-4" />
+                Dashboard
+              </Link>
+
+              {/* Gestione Dropdown (Admin only) */}
+              {isAdmin && (
+                <div ref={gestioneMenuRef} className="relative">
+                    <button
+                      onClick={() => setGestioneMenuOpen(!gestioneMenuOpen)}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                        isGestioneActive
+                          ? `${colors.primary.softBg} ${colors.primary.text}`
+                          : `${colors.text.primary} ${colors.effects.hover.bgSubtle}`
+                      }`}
+                    >
+                      <Briefcase className="w-4 h-4" />
+                      Gestione
+                      <ChevronDown className={`w-4 h-4 transition-transform ${gestioneMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>                  {gestioneMenuOpen && (
+                    <div className={`absolute left-0 top-full mt-1 w-48 ${colors.background.card} rounded-xl shadow-lg border ${colors.border.primary} py-1 z-50`}>
+                      {gestioneItems.map((item) => {
+                        const isItemActive = pathname.startsWith(item.href);
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={() => setGestioneMenuOpen(false)}
+                            className={`w-full px-4 py-2.5 flex items-center gap-3 text-sm transition-colors ${
+                              isItemActive
+                                ? `${colors.primary.softBg} ${colors.primary.text}`
+                                : `${colors.text.primary} ${colors.effects.hover.bgSubtle}`
+                            }`}
+                          >
+                            <item.icon className="w-4 h-4" />
+                            {item.label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Other nav items */}
+              {navItems.filter(item => item.href !== '/admin' && item.href !== '/collaboratore').map((item) => {
+                const isActive = pathname === item.href || pathname.startsWith(item.href);
                 return (
                   <Link
                     key={item.href}
@@ -186,7 +284,7 @@ export default function AppHeader() {
                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
                       isActive
                         ? `${colors.primary.softBg} ${colors.primary.text}`
-                        : `hover:${colors.background.secondary}`
+                        : `${colors.text.primary} ${colors.effects.hover.bgSubtle}`
                     }`}
                   >
                     <item.icon className="w-4 h-4" />
@@ -203,7 +301,7 @@ export default function AppHeader() {
             <div ref={themeMenuRef} className="relative">
               <button
                 onClick={() => setThemeMenuOpen(!themeMenuOpen)}
-                className={`p-2 rounded-lg ${colors.background.secondary} hover:${colors.background.tertiary} transition-colors`}
+                className={`p-2 rounded-lg ${colors.effects.hover.bgSubtle} ${colors.icon.interactive} transition-colors`}
                 title="Cambia tema"
               >
                 {currentTheme === 'dark' ? (
@@ -221,14 +319,14 @@ export default function AppHeader() {
                     <button
                       key={option.value}
                       onClick={() => handleThemeChange(option.value)}
-                      className={`w-full px-4 py-2 flex items-center gap-3 text-sm hover:${colors.background.secondary} transition-colors ${
-                        currentTheme === option.value ? colors.primary.text : ''
+                      className={`w-full px-4 py-2 flex items-center gap-3 text-sm ${colors.text.primary} ${colors.effects.hover.bgSubtle} transition-colors ${
+                        currentTheme === option.value ? colors.primary.text : colors.icon.primary
                       }`}
                     >
                       <option.icon className="w-4 h-4" />
                       {option.label}
                       {currentTheme === option.value && (
-                        <Check className="w-4 h-4 ml-auto" />
+                        <Check className={`w-4 h-4 ml-auto ${colors.primary.text}`} />
                       )}
                     </button>
                   ))}
@@ -241,7 +339,7 @@ export default function AppHeader() {
               <div ref={notificationsRef} className="relative">
                 <button
                   onClick={() => setNotificationsOpen(!notificationsOpen)}
-                  className={`p-2 rounded-lg ${colors.background.secondary} hover:${colors.background.tertiary} transition-colors relative`}
+                  className={`p-2 rounded-lg ${colors.effects.hover.bgSubtle} ${colors.icon.interactive} transition-colors relative`}
                 >
                   <Bell className="w-5 h-5" />
                   {unreadCount > 0 && (
@@ -269,7 +367,7 @@ export default function AppHeader() {
                         notifications.map((notification) => (
                           <div
                             key={notification.id}
-                            className={`px-4 py-3 border-b ${colors.border.primary} hover:${colors.background.secondary} transition-colors`}
+                            className={`px-4 py-3 border-b ${colors.border.primary} ${colors.effects.hover.bg} transition-colors cursor-pointer`}
                           >
                             <div className="flex items-start gap-3">
                               {notification.isUrgent && (
@@ -289,7 +387,7 @@ export default function AppHeader() {
                                   e.stopPropagation();
                                   handleMarkAsRead(notification.id);
                                 }}
-                                className={`p-1 rounded hover:${colors.background.tertiary} transition-colors`}
+                                className={`p-1 rounded ${colors.effects.hover.bgMuted} transition-colors`}
                                 title="Segna come letta"
                               >
                                 <X className="w-4 h-4" />
@@ -313,70 +411,70 @@ export default function AppHeader() {
             <div ref={userMenuRef} className="relative">
               <button
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg ${colors.background.secondary} hover:${colors.background.tertiary} transition-colors`}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg ${colors.effects.hover.bgSubtle} transition-colors`}
               >
                 <div className={`w-8 h-8 rounded-full ${colors.primary.bg} flex items-center justify-center text-white font-medium text-sm`}>
                   {user?.name?.charAt(0).toUpperCase() || 'U'}
                 </div>
-                <span className="hidden sm:block text-sm font-medium max-w-[120px] truncate">
+                <span className={`hidden sm:block text-sm font-medium max-w-[120px] truncate ${colors.text.primary}`}>
                   {user?.name?.split(' ')[0] || 'Utente'}
                 </span>
-                <ChevronDown className={`w-4 h-4 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 ${colors.icon.primary} transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {userMenuOpen && (
-                <div className={`absolute right-0 mt-2 w-56 ${colors.background.card} rounded-xl shadow-xl border ${colors.border.primary} py-2 z-50`}>
-                  {/* User info */}
-                  <div className={`px-4 py-3 border-b ${colors.border.primary}`}>
-                    <p className="font-medium truncate">{user?.name}</p>
-                    <p className={`text-sm ${colors.text.secondary} truncate`}>{user?.email}</p>
-                    <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                      isAdmin 
-                        ? `${colors.primary.softBg} ${colors.primary.text}` 
-                        : `${colors.status.info.softBg} ${colors.status.info.text}`
-                    }`}>
-                      {isAdmin ? 'Amministratore' : 'Studente'}
-                    </span>
+                <div className={`absolute right-0 mt-2 w-64 ${colors.background.card} rounded-xl shadow-xl border ${colors.border.primary} overflow-hidden z-50`}>
+                  {/* User info header */}
+                  <div className={`px-4 py-4 ${colors.primary.gradient}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-lg">
+                        {user?.name?.charAt(0).toUpperCase() || 'U'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-white truncate">{user?.name}</p>
+                        <p className="text-sm text-white/80 truncate">{user?.email}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <span className="inline-block px-2.5 py-1 rounded-full text-xs font-medium bg-white/20 text-white">
+                        {isAdmin ? '👑 Amministratore' : isCollaborator ? '🤝 Collaboratore' : '📚 Studente'}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Menu items */}
-                  <div className="py-1">
+                  <div className="py-2">
                     <Link
-                      href={isAdmin ? '/admin' : '/studente'}
+                      href={isAdmin ? '/admin/profilo' : isCollaborator ? '/collaboratore/profilo' : '/studente/profilo'}
                       onClick={() => setUserMenuOpen(false)}
-                      className={`flex items-center gap-3 px-4 py-2 text-sm hover:${colors.background.secondary} transition-colors`}
+                      className={`flex items-center gap-3 px-4 py-2.5 text-sm ${colors.text.primary} ${colors.effects.hover.bgSubtle} transition-colors`}
                     >
-                      <Home className="w-4 h-4" />
-                      Dashboard
+                      <Eye className={`w-4 h-4 ${colors.icon.secondary}`} />
+                      Visualizza profilo
                     </Link>
-                    <Link
-                      href={isAdmin ? '/admin/profilo' : '/studente/profilo'}
-                      onClick={() => setUserMenuOpen(false)}
-                      className={`flex items-center gap-3 px-4 py-2 text-sm hover:${colors.background.secondary} transition-colors`}
-                    >
-                      <User className="w-4 h-4" />
-                      Il mio profilo
-                    </Link>
-                    <Link
-                      href={isAdmin ? '/admin/impostazioni' : '/studente/impostazioni'}
-                      onClick={() => setUserMenuOpen(false)}
-                      className={`flex items-center gap-3 px-4 py-2 text-sm hover:${colors.background.secondary} transition-colors`}
-                    >
-                      <Settings className="w-4 h-4" />
-                      Impostazioni
-                    </Link>
+                    {/* Hide settings for collaborators without signed contract/active account */}
+                    {collaboratorCanNavigate && (
+                      <Link
+                        href={isAdmin ? '/admin/impostazioni' : isCollaborator ? '/collaboratore/impostazioni' : '/studente/impostazioni'}
+                        onClick={() => setUserMenuOpen(false)}
+                        className={`flex items-center gap-3 px-4 py-2.5 text-sm ${colors.text.primary} ${colors.effects.hover.bgSubtle} transition-colors`}
+                      >
+                        <Settings className={`w-4 h-4 ${colors.icon.secondary}`} />
+                        Impostazioni
+                      </Link>
+                    )}
                   </div>
 
                   {/* Logout */}
-                  <div className={`border-t ${colors.border.primary} pt-1 mt-1`}>
+                  <div className={`border-t ${colors.border.primary}`}>
                     <button
                       onClick={handleLogout}
                       disabled={loggingOut}
-                      className={`w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50`}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
                     >
                       {loggingOut ? (
                         <>
-                          <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                          <div className="w-4 h-4 border-2 border-red-600 dark:border-red-400 border-t-transparent rounded-full animate-spin" />
                           Disconnessione...
                         </>
                       ) : (
@@ -394,13 +492,13 @@ export default function AppHeader() {
         </div>
       </div>
 
-      {/* Mobile Navigation (Admin) */}
-      {isAdmin && (
+      {/* Mobile Navigation (Staff) */}
+      {isStaff && collaboratorCanNavigate && (
         <div className={`lg:hidden border-t ${colors.border.primary} overflow-x-auto`}>
           <nav className="flex items-center gap-1 px-4 py-2">
-            {adminNavItems.map((item) => {
+            {navItems.map((item) => {
               const isActive = pathname === item.href || 
-                (item.href !== '/admin' && pathname.startsWith(item.href));
+                (item.href !== '/admin' && item.href !== '/collaboratore' && pathname.startsWith(item.href));
               return (
                 <Link
                   key={item.href}
@@ -408,7 +506,7 @@ export default function AppHeader() {
                   className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
                     isActive
                       ? `${colors.primary.softBg} ${colors.primary.text}`
-                      : `hover:${colors.background.secondary}`
+                      : `${colors.text.secondary} ${colors.effects.hover.bgSubtle}`
                   }`}
                 >
                   <item.icon className="w-4 h-4" />

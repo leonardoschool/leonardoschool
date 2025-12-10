@@ -11,8 +11,9 @@ export function proxy(request: NextRequest) {
   
   // Define protected routes (inside (app) route group)
   const isAdminRoute = pathname.startsWith('/admin');
+  const isCollaboratorRoute = pathname.startsWith('/collaboratore');
   const isStudentRoute = pathname.startsWith('/studente');
-  const isProtectedRoute = isAdminRoute || isStudentRoute;
+  const isProtectedRoute = isAdminRoute || isCollaboratorRoute || isStudentRoute;
   const isContractSignRoute = pathname.startsWith('/contratto');
   
   // Protect private application routes
@@ -24,21 +25,37 @@ export function proxy(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
     
-    // Check if student has completed profile (skip for admins)
-    if (userRole === 'STUDENT' && !profileCompleted && !pathname.startsWith('/auth/complete-profile')) {
+    // Check if student/collaborator has completed profile (skip for admins)
+    if ((userRole === 'STUDENT' || userRole === 'COLLABORATOR') && !profileCompleted && !pathname.startsWith('/auth/complete-profile')) {
       // Profile incomplete, redirect to complete profile page
       return NextResponse.redirect(new URL('/auth/complete-profile', request.url));
     }
     
     // Check role-based access
     if (isAdminRoute && userRole !== 'ADMIN') {
-      // Not admin, redirect to student dashboard
+      // Not admin, redirect to appropriate dashboard
+      if (userRole === 'COLLABORATOR') {
+        return NextResponse.redirect(new URL('/collaboratore', request.url));
+      }
+      return NextResponse.redirect(new URL('/studente', request.url));
+    }
+    
+    if (isCollaboratorRoute && userRole !== 'COLLABORATOR') {
+      // Not collaborator, redirect to appropriate dashboard
+      if (userRole === 'ADMIN') {
+        return NextResponse.redirect(new URL('/admin', request.url));
+      }
       return NextResponse.redirect(new URL('/studente', request.url));
     }
     
     if (isStudentRoute && userRole !== 'STUDENT') {
-      // Not student, redirect to admin dashboard
-      return NextResponse.redirect(new URL('/admin', request.url));
+      // Not student, redirect to appropriate dashboard
+      if (userRole === 'ADMIN') {
+        return NextResponse.redirect(new URL('/admin', request.url));
+      }
+      if (userRole === 'COLLABORATOR') {
+        return NextResponse.redirect(new URL('/collaboratore', request.url));
+      }
     }
   }
   
@@ -53,14 +70,16 @@ export function proxy(request: NextRequest) {
   
   // If authenticated and trying to access auth pages (except complete-profile), redirect to dashboard
   if (authToken && pathname.startsWith('/auth') && !pathname.startsWith('/auth/complete-profile')) {
-    // If student with incomplete profile, allow access to complete-profile
-    if (userRole === 'STUDENT' && !profileCompleted) {
+    // If user with incomplete profile, allow access to complete-profile
+    if ((userRole === 'STUDENT' || userRole === 'COLLABORATOR') && !profileCompleted) {
       return NextResponse.redirect(new URL('/auth/complete-profile', request.url));
     }
     
     // Otherwise redirect to dashboard
     if (userRole === 'ADMIN') {
       return NextResponse.redirect(new URL('/admin', request.url));
+    } else if (userRole === 'COLLABORATOR') {
+      return NextResponse.redirect(new URL('/collaboratore', request.url));
     } else if (userRole === 'STUDENT') {
       return NextResponse.redirect(new URL('/studente', request.url));
     }
@@ -72,6 +91,7 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     '/admin/:path*',
+    '/collaboratore/:path*',
     '/studente/:path*',
     '/contratto/:path*',
     '/auth/:path*',

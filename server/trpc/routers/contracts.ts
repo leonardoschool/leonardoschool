@@ -1,5 +1,5 @@
 // Contracts Router - Handles contract templates, assignments, and signatures
-import { router, protectedProcedure, adminProcedure, studentProcedure } from '../init';
+import { router, protectedProcedure, adminProcedure, studentProcedure, collaboratorProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { emailService } from '../../services/emailService';
@@ -10,12 +10,21 @@ export const contractsRouter = router({
   /**
    * Get all contract templates
    */
-  getTemplates: adminProcedure.query(async ({ ctx }) => {
-    return ctx.prisma.contractTemplate.findMany({
-      where: { isActive: true },
-      orderBy: { name: 'asc' },
-    });
-  }),
+  getTemplates: adminProcedure
+    .input(
+      z.object({
+        targetRole: z.enum(['STUDENT', 'COLLABORATOR']).optional(),
+      }).optional()
+    )
+    .query(async ({ ctx, input }) => {
+      return ctx.prisma.contractTemplate.findMany({
+        where: { 
+          isActive: true,
+          ...(input?.targetRole ? { targetRole: input.targetRole } : {}),
+        },
+        orderBy: { name: 'asc' },
+      });
+    }),
 
   /**
    * Create a new contract template
@@ -28,6 +37,7 @@ export const contractsRouter = router({
         content: z.string().min(50, 'Contenuto contratto troppo corto'),
         price: z.number().optional(),
         duration: z.string().optional(),
+        targetRole: z.enum(['STUDENT', 'COLLABORATOR']).default('STUDENT'),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -38,6 +48,7 @@ export const contractsRouter = router({
           content: input.content,
           price: input.price,
           duration: input.duration,
+          targetRole: input.targetRole,
           createdBy: ctx.user.id,
         },
       });
@@ -55,6 +66,7 @@ export const contractsRouter = router({
         content: z.string().min(50).optional(),
         price: z.number().optional(),
         duration: z.string().optional(),
+        targetRole: z.enum(['STUDENT', 'COLLABORATOR']).optional(),
         isActive: z.boolean().optional(),
       })
     )
@@ -63,6 +75,38 @@ export const contractsRouter = router({
       return ctx.prisma.contractTemplate.update({
         where: { id },
         data,
+      });
+    }),
+
+  /**
+   * Delete a contract template (soft delete by setting isActive to false)
+   */
+  deleteTemplate: adminProcedure
+    .input(
+      z.object({
+        id: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Check if template has any active contracts
+      const contractsCount = await ctx.prisma.contract.count({
+        where: {
+          templateId: input.id,
+          status: { in: ['PENDING', 'SIGNED'] },
+        },
+      });
+
+      if (contractsCount > 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Impossibile eliminare: ${contractsCount} contratti attivi utilizzano questo template`,
+        });
+      }
+
+      // Soft delete by setting isActive to false
+      return ctx.prisma.contractTemplate.update({
+        where: { id: input.id },
+        data: { isActive: false },
       });
     }),
 
@@ -171,48 +215,190 @@ export const contractsRouter = router({
   }),
 
   /**
+   * Get contract preview with user data filled in
+   */
+  getContractPreview: adminProcedure
+    .input(z.object({
+      templateId: z.string(),
+      studentId: z.string().optional(),
+      collaboratorId: z.string().optional(),
+    }).refine(
+      (data) => data.studentId || data.collaboratorId,
+      { message: 'Devi specificare studentId o collaboratorId' }
+    ))
+    .query(async ({ ctx, input }) => {
+      const template = await ctx.prisma.contractTemplate.findUnique({
+        where: { id: input.templateId },
+      });
+
+      if (!template) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Template non trovato',
+        });
+      }
+
+      let targetUser: any = null;
+
+      if (input.studentId) {
+        const student = await ctx.prisma.student.findUnique({
+          where: { id: input.studentId },
+          include: { user: true },
+        });
+        if (!student) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Studente non trovato',
+          });
+        }
+        targetUser = student;
+      } else if (input.collaboratorId) {
+        const collaborator = await ctx.prisma.collaborator.findUnique({
+          where: { id: input.collaboratorId },
+          include: { user: true },
+        });
+        if (!collaborator) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Collaboratore non trovato',
+          });
+        }
+        targetUser = collaborator;
+      }
+
+      // Generate preview content
+      const previewContent = generateContractContent(template.content, targetUser, targetUser.user);
+
+      return {
+        template: {
+          id: template.id,
+          name: template.name,
+          description: template.description,
+          price: template.price,
+          duration: template.duration,
+          content: template.content, // Original template content
+        },
+        previewContent, // Content with user data filled in
+        user: {
+          name: targetUser.user.name,
+          email: targetUser.user.email,
+          fiscalCode: targetUser.fiscalCode,
+          phone: targetUser.phone,
+          address: targetUser.address,
+          city: targetUser.city,
+          province: targetUser.province,
+          postalCode: targetUser.postalCode,
+          dateOfBirth: targetUser.dateOfBirth,
+        },
+      };
+    }),
+
+  /**
    * Assign a contract to a student
    */
   assignContract: adminProcedure
     .input(
       z.object({
-        studentId: z.string(),
+        studentId: z.string().optional(),
+        collaboratorId: z.string().optional(),
         templateId: z.string(),
         expiresInDays: z.number().min(1).max(30).default(7),
         adminNotes: z.string().optional(),
-      })
+        customContent: z.string().optional(), // Admin can customize the contract content
+        customPrice: z.number().optional(), // Admin can override the price
+      }).refine(
+        (data) => data.studentId || data.collaboratorId,
+        { message: 'Devi specificare studentId o collaboratorId' }
+      )
     )
     .mutation(async ({ ctx, input }) => {
-      // Verify student exists and has completed profile
-      const student = await ctx.prisma.student.findUnique({
-        where: { id: input.studentId },
-        include: {
-          user: true,
-          contracts: {
-            where: { status: { in: ['PENDING', 'SIGNED'] } },
+      let targetUser: any = null;
+      let targetType: 'STUDENT' | 'COLLABORATOR' = 'STUDENT';
+      let targetId: string = '';
+
+      // Check if assigning to student or collaborator
+      if (input.studentId) {
+        const student = await ctx.prisma.student.findUnique({
+          where: { id: input.studentId },
+          include: {
+            user: true,
+            contracts: {
+              where: { status: { in: ['PENDING', 'SIGNED'] } },
+            },
           },
-        },
-      });
-
-      if (!student) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Studente non trovato',
         });
-      }
 
-      if (!student.user.profileCompleted) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Lo studente non ha ancora completato il profilo',
-        });
-      }
+        if (!student) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Studente non trovato',
+          });
+        }
 
-      if (student.contracts.length > 0) {
-        throw new TRPCError({
-          code: 'CONFLICT',
-          message: 'Lo studente ha già un contratto attivo o in attesa',
+        if (!student.user.profileCompleted) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Lo studente non ha ancora completato il profilo',
+          });
+        }
+
+        if (student.contracts.length > 0) {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'Lo studente ha già un contratto attivo o in attesa',
+          });
+        }
+
+        targetUser = student;
+        targetType = 'STUDENT';
+        targetId = input.studentId;
+      } else if (input.collaboratorId) {
+        const collaborator = await ctx.prisma.collaborator.findUnique({
+          where: { id: input.collaboratorId },
+          include: {
+            user: true,
+            contracts: {
+              where: { status: { in: ['PENDING', 'SIGNED'] } },
+            },
+          },
         });
+
+        if (!collaborator) {
+          // Try to find by userId to give more helpful error
+          const byUserId = await ctx.prisma.collaborator.findUnique({
+            where: { userId: input.collaboratorId },
+          });
+          
+          if (byUserId) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `ID errato: hai passato l'userId, usa collaboratorId: "${byUserId.id}"`,
+            });
+          }
+          
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: `Collaboratore con ID "${input.collaboratorId}" non trovato. Verifica che il record esista nella tabella collaborators.`,
+          });
+        }
+
+        if (!collaborator.user.profileCompleted) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Il collaboratore non ha ancora completato il profilo',
+          });
+        }
+
+        if (collaborator.contracts.length > 0) {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'Il collaboratore ha già un contratto attivo o in attesa',
+          });
+        }
+
+        targetUser = collaborator;
+        targetType = 'COLLABORATOR';
+        targetId = input.collaboratorId;
       }
 
       // Get template
@@ -227,8 +413,14 @@ export const contractsRouter = router({
         });
       }
 
-      // Generate content snapshot with student data
-      const contentSnapshot = generateContractContent(template.content, student, student.user);
+      // Generate content snapshot with user data
+      // Use custom content if provided, otherwise generate from template
+      const contentSnapshot = input.customContent 
+        ? input.customContent 
+        : generateContractContent(template.content, targetUser, targetUser.user);
+      
+      // Use custom price if provided, otherwise use template price
+      const finalPrice = input.customPrice ?? template.price;
 
       // Calculate expiration
       const expiresAt = new Date();
@@ -237,10 +429,10 @@ export const contractsRouter = router({
       // Token expiration (same as contract expiration)
       const signTokenExpiresAt = expiresAt;
 
-      // Create contract
+      // Create contract - assign to either student or collaborator
       const contract = await ctx.prisma.contract.create({
         data: {
-          studentId: input.studentId,
+          ...(targetType === 'STUDENT' ? { studentId: targetId } : { collaboratorId: targetId }),
           templateId: input.templateId,
           contentSnapshot,
           expiresAt,
@@ -252,6 +444,9 @@ export const contractsRouter = router({
           student: {
             include: { user: true },
           },
+          collaborator: {
+            include: { user: true },
+          },
           template: true,
         },
       });
@@ -261,17 +456,17 @@ export const contractsRouter = router({
         data: {
           type: 'CONTRACT_ASSIGNED',
           title: 'Contratto assegnato',
-          message: `Contratto "${template.name}" assegnato a ${student.user.name}`,
-          studentId: student.id,
+          message: `Contratto "${template.name}" assegnato a ${targetUser.user.name}`,
+          studentId: targetType === 'STUDENT' ? targetId : undefined,
           contractId: contract.id,
         },
       });
 
-      // Send email to student with sign link
+      // Send email with sign link
       const signLink = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}/contratto/${contract.signToken}`;
       await emailService.sendContractAssignedEmail({
-        studentName: student.user.name,
-        studentEmail: student.user.email,
+        studentName: targetUser.user.name,
+        studentEmail: targetUser.user.email,
         signLink,
         contractName: template.name,
         price: template.price || 0,
@@ -462,6 +657,61 @@ export const contractsRouter = router({
     }),
 
   /**
+   * Get students statistics for admin dashboard
+   */
+  getStudentsStats: adminProcedure.query(async ({ ctx }) => {
+    const [
+      total,
+      active,
+      pendingProfile,
+      pendingContract,
+      pendingSignature,
+      pendingActivation,
+    ] = await Promise.all([
+      // Total students
+      ctx.prisma.student.count(),
+      // Active students
+      ctx.prisma.student.count({
+        where: { user: { isActive: true } },
+      }),
+      // Pending profile (not completed)
+      ctx.prisma.student.count({
+        where: { user: { profileCompleted: false } },
+      }),
+      // Pending contract (profile complete, no contract)
+      ctx.prisma.student.count({
+        where: {
+          user: { profileCompleted: true, isActive: false },
+          contracts: { none: { status: { in: ['PENDING', 'SIGNED'] } } },
+        },
+      }),
+      // Pending signature (contract assigned but not signed)
+      ctx.prisma.student.count({
+        where: {
+          contracts: { some: { status: 'PENDING' } },
+        },
+      }),
+      // Pending activation (contract signed but not active)
+      ctx.prisma.student.count({
+        where: {
+          user: { isActive: false },
+          contracts: { some: { status: 'SIGNED' } },
+        },
+      }),
+    ]);
+
+    return {
+      total,
+      active,
+      pendingProfile,
+      pendingContract,
+      pendingSignature,
+      pendingActivation,
+      inactive: total - active,
+    };
+  }),
+
+  /**
    * Get all students for admin management
    */
   getAllStudents: adminProcedure
@@ -501,7 +751,7 @@ export const contractsRouter = router({
           where.contracts = { none: { status: { in: ['PENDING', 'SIGNED'] } } };
           break;
         case 'pending_activation':
-          where.user = { ...where.user, isActive: false };
+          where.user = { ...where.user, isActive: false, profileCompleted: true };
           where.contracts = { some: { status: 'SIGNED' } };
           break;
       }
@@ -549,6 +799,63 @@ export const contractsRouter = router({
       };
     }),
 
+  /**
+   * Revoke/Cancel a pending contract
+   */
+  revokeContract: adminProcedure
+    .input(z.object({
+      contractId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const contract = await ctx.prisma.contract.findUnique({
+        where: { id: input.contractId },
+        include: {
+          student: { include: { user: true } },
+          collaborator: { include: { user: true } },
+          template: true,
+        },
+      });
+
+      if (!contract) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Contratto non trovato',
+        });
+      }
+
+      if (contract.status === 'SIGNED') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Non è possibile revocare un contratto già firmato',
+        });
+      }
+
+      // Update contract status to CANCELLED
+      const updatedContract = await ctx.prisma.contract.update({
+        where: { id: input.contractId },
+        data: {
+          status: 'CANCELLED',
+          signTokenExpiresAt: new Date(), // Expire the token immediately
+        },
+      });
+
+      // Get user info for notification
+      const userName = contract.student?.user?.name || contract.collaborator?.user?.name || 'Utente';
+
+      // Create notification
+      await ctx.prisma.adminNotification.create({
+        data: {
+          type: 'CONTRACT_CANCELLED',
+          title: 'Contratto revocato',
+          message: `Contratto "${contract.template.name}" per ${userName} è stato revocato`,
+          studentId: contract.studentId || undefined,
+          contractId: contract.id,
+        },
+      });
+
+      return updatedContract;
+    }),
+
   // ==================== STUDENT ENDPOINTS ====================
 
   /**
@@ -585,6 +892,42 @@ export const contractsRouter = router({
     });
   }),
 
+  // ==================== COLLABORATOR ENDPOINTS ====================
+
+  /**
+   * Get current collaborator's contract (if any)
+   */
+  getMyCollaboratorContract: collaboratorProcedure.query(async ({ ctx }) => {
+    const collaborator = await ctx.prisma.collaborator.findUnique({
+      where: { userId: ctx.user.id },
+    });
+
+    if (!collaborator) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: 'Profilo collaboratore non trovato',
+      });
+    }
+
+    return ctx.prisma.contract.findFirst({
+      where: {
+        collaboratorId: collaborator.id,
+        status: { in: ['PENDING', 'SIGNED'] },
+      },
+      include: {
+        template: {
+          select: {
+            name: true,
+            description: true,
+            price: true,
+            duration: true,
+          },
+        },
+      },
+      orderBy: { assignedAt: 'desc' },
+    });
+  }),
+
   /**
    * Get contract by sign token (for email link)
    */
@@ -595,6 +938,13 @@ export const contractsRouter = router({
         where: { signToken: input.token },
         include: {
           student: {
+            include: {
+              user: {
+                select: { id: true, name: true, email: true },
+              },
+            },
+          },
+          collaborator: {
             include: {
               user: {
                 select: { id: true, name: true, email: true },
@@ -619,8 +969,9 @@ export const contractsRouter = router({
         });
       }
 
-      // Verify the logged-in user owns this contract
-      if (contract.student.user.id !== ctx.user.id) {
+      // Verify the logged-in user owns this contract (student or collaborator)
+      const contractUserId = contract.student?.user.id || contract.collaborator?.user.id;
+      if (contractUserId !== ctx.user.id) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Non sei autorizzato a vedere questo contratto',
@@ -746,9 +1097,9 @@ export const contractsRouter = router({
     }),
 
   /**
-   * Sign a contract
+   * Sign a contract (works for both students and collaborators)
    */
-  signContract: studentProcedure
+  signContract: protectedProcedure
     .input(
       z.object({
         contractId: z.string(),
@@ -756,22 +1107,15 @@ export const contractsRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const student = await ctx.prisma.student.findUnique({
-        where: { userId: ctx.user.id },
-      });
-
-      if (!student) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Profilo studente non trovato',
-        });
-      }
-
+      // Find the contract first
       const contract = await ctx.prisma.contract.findUnique({
         where: { id: input.contractId },
         include: {
           template: true,
           student: {
+            include: { user: true },
+          },
+          collaborator: {
             include: { user: true },
           },
         },
@@ -784,10 +1128,49 @@ export const contractsRouter = router({
         });
       }
 
-      if (contract.studentId !== student.id) {
+      // Determine if this is a student or collaborator contract
+      const isStudentContract = !!contract.studentId;
+      const isCollaboratorContract = !!contract.collaboratorId;
+
+      // Verify authorization
+      let signerName: string;
+      let signerEmail: string;
+      let signerId: string;
+
+      if (isStudentContract) {
+        const student = await ctx.prisma.student.findUnique({
+          where: { userId: ctx.user.id },
+        });
+
+        if (!student || contract.studentId !== student.id) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Non sei autorizzato a firmare questo contratto',
+          });
+        }
+
+        signerName = contract.student!.user.name;
+        signerEmail = contract.student!.user.email;
+        signerId = student.id;
+      } else if (isCollaboratorContract) {
+        const collaborator = await ctx.prisma.collaborator.findUnique({
+          where: { userId: ctx.user.id },
+        });
+
+        if (!collaborator || contract.collaboratorId !== collaborator.id) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Non sei autorizzato a firmare questo contratto',
+          });
+        }
+
+        signerName = contract.collaborator!.user.name;
+        signerEmail = contract.collaborator!.user.email;
+        signerId = collaborator.id;
+      } else {
         throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Non sei autorizzato a firmare questo contratto',
+          code: 'BAD_REQUEST',
+          message: 'Contratto non valido: nessun destinatario associato',
         });
       }
 
@@ -829,17 +1212,18 @@ export const contractsRouter = router({
         data: {
           type: 'CONTRACT_SIGNED',
           title: 'Contratto firmato',
-          message: `${contract.student.user.name} ha firmato il contratto "${contract.template.name}"`,
-          studentId: student.id,
+          message: `${signerName} ha firmato il contratto "${contract.template.name}"`,
+          studentId: isStudentContract ? signerId : null,
+          collaboratorId: isCollaboratorContract ? signerId : null,
           contractId: contract.id,
           isUrgent: true,
         },
       });
 
-      // Send confirmation email to student
+      // Send confirmation email to signer
       await emailService.sendContractSignedConfirmationEmail({
-        studentName: contract.student.user.name,
-        studentEmail: contract.student.user.email,
+        studentName: signerName,
+        studentEmail: signerEmail,
         contractName: contract.template.name,
         signedAt,
         price: contract.template.price || 0,
@@ -847,8 +1231,8 @@ export const contractsRouter = router({
 
       // Send notification email to admin
       await emailService.sendContractSignedAdminNotification({
-        studentName: contract.student.user.name,
-        studentEmail: contract.student.user.email,
+        studentName: signerName,
+        studentEmail: signerEmail,
         contractName: contract.template.name,
         signedAt,
       });

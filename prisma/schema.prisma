@@ -14,6 +14,7 @@ datasource db {
 
 enum UserRole {
   ADMIN
+  COLLABORATOR
   STUDENT
 }
 
@@ -64,6 +65,7 @@ enum ContractStatus {
 enum NotificationType {
   CONTRACT_ASSIGNED    // Contratto assegnato a studente
   CONTRACT_SIGNED      // Studente ha firmato
+  CONTRACT_CANCELLED   // Contratto revocato
   ACCOUNT_ACTIVATED    // Account attivato
   PROFILE_COMPLETED    // Studente ha completato profilo
   GENERAL              // Notifica generica
@@ -88,6 +90,7 @@ model User {
   // Relations
   student          Student?
   admin            Admin?
+  collaborator     Collaborator?
   
   @@index([firebaseUid])
   @@index([email])
@@ -140,6 +143,70 @@ model Admin {
   
   @@index([userId])
   @@map("admins")
+}
+
+// ==================== COLLABORATORS ====================
+
+model Collaborator {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  fiscalCode      String?  @unique
+  dateOfBirth     DateTime?
+  phone           String?
+  address         String?
+  city            String?
+  province        String?
+  postalCode      String?
+  
+  // Permissions
+  canManageQuestions  Boolean  @default(true)
+  canManageMaterials  Boolean  @default(true)
+  canViewStats        Boolean  @default(true)
+  canViewStudents     Boolean  @default(true)  // Vista limitata (no dati sensibili)
+  
+  // Employment info
+  hireDate        DateTime @default(now())
+  specialization  String?  // Area di competenza (es. "Biologia", "Matematica")
+  notes           String?  @db.Text
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  collaboratorContracts  CollaboratorContract[]
+  contracts       Contract[]  // Unified contract system
+  
+  @@index([userId])
+  @@map("collaborators")
+}
+
+// Contratti specifici per collaboratori
+model CollaboratorContract {
+  id              String   @id @default(cuid())
+  collaboratorId  String
+  
+  // Contract details
+  templateName    String?
+  pdfUrl          String?
+  signedPdfUrl    String?
+  
+  status          ContractStatus @default(PENDING)
+  
+  // Signature
+  signedAt        DateTime?
+  signatureIp     String?
+  
+  // Validity
+  expiresAt       DateTime?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  collaborator    Collaborator @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
+  
+  @@index([collaboratorId])
+  @@index([status])
+  @@map("collaborator_contracts")
 }
 
 // ==================== CLASSES ====================
@@ -390,6 +457,11 @@ model Event {
 
 // ==================== CONTRACTS ====================
 
+enum ContractTargetRole {
+  STUDENT
+  COLLABORATOR
+}
+
 model ContractTemplate {
   id          String    @id @default(cuid())
   name        String    // "Corso Annuale Medicina", "Corso Intensivo", etc.
@@ -397,6 +469,7 @@ model ContractTemplate {
   content     String    @db.Text  // HTML/Markdown del contratto con placeholder
   price       Float?    // Prezzo opzionale
   duration    String?   // "12 mesi", "6 mesi", etc.
+  targetRole  ContractTargetRole @default(STUDENT)  // Per chi è destinato questo template
   isActive    Boolean   @default(true)
   
   createdAt   DateTime  @default(now())
@@ -407,12 +480,14 @@ model ContractTemplate {
   materialAccess MaterialCourseAccess[]
   
   @@index([isActive])
+  @@index([targetRole])
   @@map("contract_templates")
 }
 
 model Contract {
   id                String          @id @default(cuid())
-  studentId         String
+  studentId         String?
+  collaboratorId    String?
   templateId        String
   
   // Contract status
@@ -440,10 +515,12 @@ model Contract {
   assignedBy        String?         // Admin userId who assigned
   
   // Relations
-  student           Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student           Student?        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  collaborator      Collaborator?   @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
   template          ContractTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
   
   @@index([studentId])
+  @@index([collaboratorId])
   @@index([templateId])
   @@index([status])
   @@index([signToken])
@@ -453,23 +530,24 @@ model Contract {
 // ==================== ADMIN NOTIFICATIONS ====================
 
 model AdminNotification {
-  id          String            @id @default(cuid())
-  type        NotificationType
-  title       String
-  message     String            @db.Text
+  id             String            @id @default(cuid())
+  type           NotificationType
+  title          String
+  message        String            @db.Text
   
   // Related entities
-  studentId   String?           // Related student (if applicable)
-  contractId  String?           // Related contract (if applicable)
+  studentId      String?           // Related student (if applicable)
+  collaboratorId String?           // Related collaborator (if applicable)
+  contractId     String?           // Related contract (if applicable)
   
   // Read status per admin (JSON: {adminId: readAt})
-  readBy      Json              @default("{}")
+  readBy         Json              @default("{}")
   
   // Priority
-  isUrgent    Boolean           @default(false)
+  isUrgent       Boolean           @default(false)
   
-  createdAt   DateTime          @default(now())
-  expiresAt   DateTime?
+  createdAt      DateTime          @default(now())
+  expiresAt      DateTime?
   
   @@index([type])
   @@index([createdAt])

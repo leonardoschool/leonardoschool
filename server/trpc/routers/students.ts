@@ -1,5 +1,5 @@
 // Students Router - Handles student profile and data
-import { router, protectedProcedure, adminProcedure } from '../init';
+import { router, protectedProcedure, adminProcedure, staffProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { emailService } from '../../services/emailService';
@@ -229,5 +229,54 @@ export const studentsRouter = router({
       },
       orderBy: { name: 'asc' },
     });
+  }),
+
+  /**
+   * Get students list for collaborators (limited view - no sensitive data)
+   */
+  getListForCollaborator: staffProcedure.query(async ({ ctx }) => {
+    const students = await ctx.prisma.user.findMany({
+      where: { 
+        role: 'STUDENT',
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isActive: true,
+        student: {
+          select: {
+            id: true,
+            enrollmentDate: true,
+            class: {
+              select: {
+                id: true,
+                name: true,
+              }
+            },
+            stats: {
+              select: {
+                totalTests: true,
+                avgScore: true,
+              }
+            },
+          }
+        }
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    // Flatten the response for easier use
+    return students.map(s => ({
+      id: s.id,
+      name: s.name,
+      email: s.email,
+      isActive: s.isActive,
+      studentId: s.student?.id,
+      enrollmentDate: s.student?.enrollmentDate,
+      className: s.student?.class?.name,
+      stats: s.student?.stats,
+    }));
   }),
 });

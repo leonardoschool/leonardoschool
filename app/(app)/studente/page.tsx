@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { firebaseAuth } from '@/lib/firebase/auth';
@@ -39,6 +39,13 @@ export default function StudentDashboard() {
 
   // Get current user
   const { data: user, isLoading: userLoading, error: userError } = trpc.auth.me.useQuery();
+
+  // Redirect to complete-profile if profile is not complete
+  useEffect(() => {
+    if (!userLoading && user && !user.profileCompleted) {
+      router.replace('/auth/complete-profile');
+    }
+  }, [user, userLoading, router]);
 
   // Get student's contract - only if user is a student with student data
   const { data: contract, isLoading: contractLoading } = trpc.contracts.getMyContract.useQuery(
@@ -221,13 +228,15 @@ export default function StudentDashboard() {
   // Only show loading for user query, contract can load in background
   const isLoading = userLoading;
 
-  // Handle loading state
-  if (isLoading) {
+  // Handle loading state OR redirecting to complete-profile
+  if (isLoading || (user && !user.profileCompleted)) {
     return (
       <div className={`min-h-screen ${colors.background.primary} flex items-center justify-center`}>
         <div className="text-center">
           <div className="w-12 h-12 border-2 border-red-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className={`mt-4 ${colors.text.secondary}`}>Caricamento dashboard...</p>
+          <p className={`mt-4 ${colors.text.secondary}`}>
+            {user && !user.profileCompleted ? 'Reindirizzamento...' : 'Caricamento dashboard...'}
+          </p>
         </div>
       </div>
     );
@@ -263,23 +272,6 @@ export default function StudentDashboard() {
             Benvenuto, <span className="font-medium">{user?.name}</span>!
           </p>
         </div>
-        <button
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className={`px-4 py-2 rounded-xl ${colors.background.secondary} hover:bg-gray-200 dark:hover:bg-gray-700 font-medium flex items-center gap-2 transition-colors disabled:opacity-50`}
-        >
-          {loggingOut ? (
-            <>
-              <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-              Disconnessione...
-            </>
-          ) : (
-            <>
-              <LogOut className="w-4 h-4" />
-              Logout
-            </>
-          )}
-        </button>
       </div>
 
       {/* Status Alert */}

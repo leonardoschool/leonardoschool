@@ -11,7 +11,7 @@ export async function createContext(opts: FetchCreateContextFnOptions) {
   const authHeader = req.headers.get('authorization');
   const token = authHeader?.replace('Bearer ', '');
 
-  let user: (User & { student?: any; admin?: any }) | null = null;
+  let user: (User & { student?: any; admin?: any; collaborator?: any }) | null = null;
 
   if (token) {
     try {
@@ -25,6 +25,7 @@ export async function createContext(opts: FetchCreateContextFnOptions) {
         include: {
           student: true,
           admin: true,
+          collaborator: true,
         },
       });
       

@@ -16,7 +16,8 @@ import {
   RotateCcw,
   ChevronDown,
   ChevronUp,
-  Clock
+  Clock,
+  Download
 } from 'lucide-react';
 
 export default function ContractSignPage() {
@@ -140,6 +141,135 @@ export default function ContractSignPage() {
     return canvas.toDataURL('image/png');
   };
 
+  // Funzione per scaricare il contratto come PDF
+  const handleDownloadPDF = async () => {
+    if (!contract) return;
+
+    // Crea una finestra di stampa con il contenuto del contratto
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setError('Abilita i popup per scaricare il contratto');
+      return;
+    }
+
+    const contractName = contract.template?.name || 'Contratto';
+    const contractPrice = contract.template?.price 
+      ? new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(contract.template.price)
+      : '-';
+    const contractDuration = contract.template?.duration || '-';
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${contractName}</title>
+        <style>
+          @media print {
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
+          body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
+            color: #1f2937;
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #9f1239;
+          }
+          .header h1 {
+            color: #9f1239;
+            margin: 0 0 10px 0;
+            font-size: 24px;
+          }
+          .header p {
+            color: #6b7280;
+            margin: 0;
+          }
+          .info-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+          }
+          .info-box {
+            background: #f9fafb;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+          }
+          .info-box label {
+            font-size: 12px;
+            color: #6b7280;
+            display: block;
+            margin-bottom: 5px;
+          }
+          .info-box span {
+            font-weight: 600;
+            font-size: 16px;
+          }
+          .content {
+            margin-bottom: 30px;
+          }
+          .content h2 {
+            font-size: 18px;
+            color: #374151;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            text-align: center;
+            font-size: 12px;
+            color: #9ca3af;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${contractName}</h1>
+          <p>${contract.template?.description || 'Contratto di collaborazione'}</p>
+        </div>
+        <div class="info-grid">
+          <div class="info-box">
+            <label>Importo</label>
+            <span>${contractPrice}</span>
+          </div>
+          <div class="info-box">
+            <label>Durata</label>
+            <span>${contractDuration}</span>
+          </div>
+          <div class="info-box">
+            <label>Data</label>
+            <span>${new Date().toLocaleDateString('it-IT')}</span>
+          </div>
+        </div>
+        <div class="content">
+          <h2>Termini e Condizioni</h2>
+          ${contract.contentSnapshot || ''}
+        </div>
+        <div class="footer">
+          <p>Documento generato da Leonardo School - ${new Date().toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+        </div>
+      </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    
+    // Aspetta che il contenuto sia caricato, poi stampa
+    printWindow.onload = () => {
+      printWindow.print();
+    };
+  };
+
   const handleSign = async () => {
     if (!contract || !acceptedTerms || !hasSignature) return;
 
@@ -252,16 +382,26 @@ export default function ContractSignPage() {
 
         {/* Contract Info Card */}
         <div className={`${colors.background.card} rounded-2xl shadow-lg p-6 mb-6`}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className={`w-12 h-12 rounded-xl ${colors.primary.softBg} flex items-center justify-center`}>
-              <FileText className={`w-6 h-6 ${colors.primary.text}`} />
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-12 h-12 rounded-xl ${colors.primary.softBg} flex items-center justify-center`}>
+                <FileText className={`w-6 h-6 ${colors.primary.text}`} />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold">{contract.template?.name}</h2>
+                <p className={`text-sm ${colors.text.secondary}`}>
+                  {contract.template?.description || 'Contratto di iscrizione'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-xl font-semibold">{contract.template?.name}</h2>
-              <p className={`text-sm ${colors.text.secondary}`}>
-                {contract.template?.description || 'Contratto di iscrizione'}
-              </p>
-            </div>
+            <button
+              onClick={handleDownloadPDF}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${colors.background.secondary} hover:${colors.background.tertiary} border ${colors.border.primary} transition-colors`}
+              title="Scarica contratto in PDF"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Scarica PDF</span>
+            </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

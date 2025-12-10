@@ -1,0 +1,1494 @@
+'use client';
+
+import { useState, useRef, useEffect } from 'react';
+import { trpc } from '@/lib/trpc/client';
+import { colors } from '@/lib/theme/colors';
+import {
+  Users,
+  Search,
+  CheckCircle,
+  XCircle,
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  UserCheck,
+  UserX,
+  Trash2,
+  Mail,
+  Calendar,
+  Shield,
+  UserCog,
+  GraduationCap,
+  AlertTriangle,
+  Send,
+  FileText,
+  Eye,
+  FileQuestion,
+  FilePen,
+  Hourglass,
+  Ban,
+  FileX,
+  X,
+  User,
+  FileEdit,
+} from 'lucide-react';
+
+type RoleFilter = 'ALL' | 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
+type StatusFilter = 'all' | 'active' | 'inactive' | 'pending_profile' | 'pending_contract' | 'pending_sign' | 'pending_activation';
+
+const statusOptions: { value: StatusFilter; label: string; shortLabel: string; icon: any; color: string; bg: string; activeColor: string }[] = [
+  { value: 'all', label: 'Tutti', shortLabel: 'Tutti', icon: Users, color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-100 dark:bg-gray-800', activeColor: 'bg-gray-600' },
+  { value: 'pending_profile', label: 'Attesa profilo', shortLabel: 'Profilo', icon: Clock, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-100 dark:bg-amber-900/30', activeColor: 'bg-amber-600' },
+  { value: 'pending_contract', label: 'Attesa contratto', shortLabel: 'Contratto', icon: FileQuestion, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-100 dark:bg-orange-900/30', activeColor: 'bg-orange-600' },
+  { value: 'pending_sign', label: 'Attesa firma', shortLabel: 'Firma', icon: FilePen, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30', activeColor: 'bg-blue-600' },
+  { value: 'pending_activation', label: 'Attesa attivazione', shortLabel: 'Attivaz.', icon: Hourglass, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-100 dark:bg-purple-900/30', activeColor: 'bg-purple-600' },
+  { value: 'active', label: 'Attivi', shortLabel: 'Attivi', icon: CheckCircle, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-100 dark:bg-green-900/30', activeColor: 'bg-green-600' },
+  { value: 'inactive', label: 'Disattivati', shortLabel: 'Disatt.', icon: Ban, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-100 dark:bg-red-900/30', activeColor: 'bg-red-600' },
+];
+
+// Role dropdown component
+function RoleDropdown({
+  currentRole,
+  onSelect,
+}: {
+  currentRole: 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
+  onSelect: (role: 'ADMIN' | 'COLLABORATOR' | 'STUDENT') => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const roles = [
+    { value: 'ADMIN' as const, label: 'Admin', icon: Shield, bg: 'bg-red-100 dark:bg-red-900/30', color: 'text-red-600 dark:text-red-400', ring: 'ring-red-400' },
+    { value: 'COLLABORATOR' as const, label: 'Collaboratore', icon: UserCog, bg: 'bg-purple-100 dark:bg-purple-900/30', color: 'text-purple-600 dark:text-purple-400', ring: 'ring-purple-400' },
+    { value: 'STUDENT' as const, label: 'Studente', icon: GraduationCap, bg: 'bg-blue-100 dark:bg-blue-900/30', color: 'text-blue-600 dark:text-blue-400', ring: 'ring-blue-400' },
+  ];
+
+  const current = roles.find(r => r.value === currentRole)!;
+  const CurrentIcon = current.icon;
+
+  return (
+    <div className="relative inline-block" ref={dropdownRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${current.bg} ${current.color} hover:ring-2 ${current.ring} hover:ring-offset-1`}
+      >
+        <CurrentIcon className="w-3.5 h-3.5" />
+        <span>{current.label}</span>
+        <ChevronDown className={`w-3 h-3 ml-0.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className={`absolute left-0 top-full mt-1.5 rounded-xl shadow-lg border ${colors.border.primary} ${colors.background.card} z-[100] min-w-[150px] overflow-hidden`}>
+          {roles.filter(r => r.value !== currentRole).map((role) => {
+            const RoleIcon = role.icon;
+            return (
+              <button
+                key={role.value}
+                onClick={() => {
+                  onSelect(role.value);
+                  setIsOpen(false);
+                }}
+                className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-gray-100 dark:hover:bg-gray-800`}
+              >
+                <div className={`w-7 h-7 rounded-lg ${role.bg} flex items-center justify-center`}>
+                  <RoleIcon className={`w-3.5 h-3.5 ${role.color}`} />
+                </div>
+                <span className={`font-medium ${role.color}`}>{role.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Modal di conferma custom
+function ConfirmModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  warning,
+  confirmLabel = 'Conferma',
+  variant = 'danger',
+  isLoading = false,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+  warning?: string;
+  confirmLabel?: string;
+  variant?: 'danger' | 'warning' | 'info';
+  isLoading?: boolean;
+}) {
+  if (!isOpen) return null;
+
+  const variantColors = {
+    danger: {
+      icon: 'bg-red-100 dark:bg-red-900/30',
+      iconColor: 'text-red-600 dark:text-red-400',
+      button: 'bg-red-600 hover:bg-red-700 text-white',
+    },
+    warning: {
+      icon: 'bg-amber-100 dark:bg-amber-900/30',
+      iconColor: 'text-amber-600 dark:text-amber-400',
+      button: 'bg-amber-600 hover:bg-amber-700 text-white',
+    },
+    info: {
+      icon: 'bg-blue-100 dark:bg-blue-900/30',
+      iconColor: 'text-blue-600 dark:text-blue-400',
+      button: `${colors.primary.gradient} text-white`,
+    },
+  };
+
+  const colorScheme = variantColors[variant];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className={`${colors.background.card} rounded-2xl max-w-md w-full p-6 shadow-2xl`}>
+        <div className="flex items-start gap-4">
+          <div className={`w-12 h-12 rounded-xl ${colorScheme.icon} flex items-center justify-center flex-shrink-0`}>
+            <AlertTriangle className={`w-6 h-6 ${colorScheme.iconColor}`} />
+          </div>
+          <div className="flex-1">
+            <h3 className={`text-lg font-bold ${colors.text.primary}`}>{title}</h3>
+            <p className={`mt-2 ${colors.text.secondary}`}>{message}</p>
+            {warning && (
+              <div className="mt-4 p-3 rounded-xl bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700">
+                <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">{warning}</p>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={onClose}
+            disabled={isLoading}
+            className={`flex-1 px-4 py-3 rounded-xl ${colors.background.secondary} font-medium hover:opacity-80 transition-opacity disabled:opacity-50`}
+          >
+            Annulla
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isLoading}
+            className={`flex-1 px-4 py-3 rounded-xl ${colorScheme.button} font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+          >
+            {isLoading ? (
+              <span className="flex items-center justify-center gap-2">
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                Attendere...
+              </span>
+            ) : (
+              confirmLabel
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Modal assegna contratto avanzato con step
+function AssignContractModal({
+  isOpen,
+  onClose,
+  onAssign,
+  templates,
+  isLoading,
+  targetId,
+  targetType,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onAssign: (data: { templateId: string; customContent?: string; customPrice?: number; adminNotes?: string; expiresInDays: number }) => void;
+  templates: any[];
+  isLoading: boolean;
+  targetId: string;
+  targetType: 'STUDENT' | 'COLLABORATOR';
+}) {
+  const [step, setStep] = useState<'select' | 'customize'>('select');
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [customContent, setCustomContent] = useState('');
+  const [customPrice, setCustomPrice] = useState<string>('');
+  const [adminNotes, setAdminNotes] = useState('');
+  const [expiresInDays, setExpiresInDays] = useState(7);
+  const [showPreview, setShowPreview] = useState(false);
+
+  // Fetch preview when template is selected
+  const { data: preview, isLoading: previewLoading } = trpc.contracts.getContractPreview.useQuery(
+    {
+      templateId: selectedTemplate!,
+      ...(targetType === 'STUDENT' ? { studentId: targetId } : { collaboratorId: targetId }),
+    },
+    { enabled: !!selectedTemplate && !!targetId && step === 'customize' }
+  );
+
+  // Reset state when modal opens/closes
+  useEffect(() => {
+    if (!isOpen) {
+      setStep('select');
+      setSelectedTemplate(null);
+      setCustomContent('');
+      setCustomPrice('');
+      setAdminNotes('');
+      setExpiresInDays(7);
+      setShowPreview(false);
+    }
+  }, [isOpen]);
+
+  // When preview loads, set the content
+  useEffect(() => {
+    if (preview) {
+      setCustomContent(preview.previewContent);
+      setCustomPrice(preview.template.price?.toString() || '');
+    }
+  }, [preview]);
+
+  const handleSelectTemplate = (templateId: string) => {
+    setSelectedTemplate(templateId);
+    setStep('customize');
+  };
+
+  const handleBack = () => {
+    setStep('select');
+    setSelectedTemplate(null);
+    setCustomContent('');
+    setCustomPrice('');
+  };
+
+  const handleAssign = () => {
+    if (!selectedTemplate) return;
+    onAssign({
+      templateId: selectedTemplate,
+      customContent: customContent || undefined,
+      customPrice: customPrice ? parseFloat(customPrice) : undefined,
+      adminNotes: adminNotes || undefined,
+      expiresInDays,
+    });
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className={`${colors.background.card} rounded-2xl w-full max-w-4xl my-8 shadow-2xl max-h-[90vh] flex flex-col`}>
+        {/* Header */}
+        <div className={`p-6 border-b ${colors.border.primary} flex-shrink-0`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className={`text-xl font-bold ${colors.text.primary}`}>
+                {step === 'select' ? 'Seleziona Template' : 'Personalizza Contratto'}
+              </h3>
+              <p className={`${colors.text.secondary} text-sm mt-1`}>
+                {step === 'select' 
+                  ? 'Scegli il template del contratto da assegnare'
+                  : `Template: ${preview?.template.name || 'Caricamento...'}`
+                }
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className={`p-2 rounded-lg hover:${colors.background.secondary}`}
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Step indicator */}
+          <div className="flex items-center gap-3 mt-4">
+            <div className={`flex items-center gap-2 ${step === 'select' ? colors.primary.text : colors.text.muted}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                step === 'select' ? colors.primary.gradient + ' text-white' : colors.background.secondary
+              }`}>1</div>
+              <span className="text-sm font-medium">Seleziona</span>
+            </div>
+            <div className={`flex-1 h-0.5 ${colors.background.secondary}`} />
+            <div className={`flex items-center gap-2 ${step === 'customize' ? colors.primary.text : colors.text.muted}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                step === 'customize' ? colors.primary.gradient + ' text-white' : colors.background.secondary
+              }`}>2</div>
+              <span className="text-sm font-medium">Personalizza</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto flex-1">
+          {step === 'select' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {templates?.map((template) => (
+                <button
+                  key={template.id}
+                  onClick={() => handleSelectTemplate(template.id)}
+                  className={`p-5 rounded-xl border-2 text-left transition-all hover:scale-[1.02] ${colors.border.primary} hover:border-red-400`}
+                >
+                  <p className="font-semibold text-lg">{template.name}</p>
+                  {template.description && (
+                    <p className={`text-sm ${colors.text.secondary} mt-2 line-clamp-2`}>{template.description}</p>
+                  )}
+                  <div className="flex items-center justify-between mt-4">
+                    {template.price ? (
+                      <p className={`font-bold ${colors.primary.text}`}>
+                        {new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(template.price)}
+                      </p>
+                    ) : (
+                      <span className={colors.text.muted}>Prezzo da definire</span>
+                    )}
+                    {template.duration && (
+                      <span className={`text-sm ${colors.text.muted}`}>{template.duration}</span>
+                    )}
+                  </div>
+                </button>
+              ))}
+
+              {!templates?.length && (
+                <div className="col-span-2 text-center py-12">
+                  <FileText className={`w-12 h-12 mx-auto ${colors.text.muted} mb-4`} />
+                  <p className={colors.text.muted}>Nessun template disponibile.</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {previewLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" />
+                </div>
+              ) : preview ? (
+                <>
+                  {/* User Info Summary */}
+                  <div className={`p-4 rounded-xl ${colors.background.secondary}`}>
+                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      Dati Utente
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <span className={colors.text.muted}>Nome:</span>
+                        <p className="font-medium">{preview.user.name}</p>
+                      </div>
+                      <div>
+                        <span className={colors.text.muted}>Email:</span>
+                        <p className="font-medium truncate">{preview.user.email}</p>
+                      </div>
+                      <div>
+                        <span className={colors.text.muted}>Cod. Fiscale:</span>
+                        <p className="font-medium">{preview.user.fiscalCode || '-'}</p>
+                      </div>
+                      <div>
+                        <span className={colors.text.muted}>Telefono:</span>
+                        <p className="font-medium">{preview.user.phone || '-'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Contract Content Editor */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="font-semibold flex items-center gap-2">
+                        <FileEdit className="w-4 h-4" />
+                        Contenuto Contratto
+                      </label>
+                      <button
+                        onClick={() => setShowPreview(!showPreview)}
+                        className={`text-sm px-3 py-1 rounded-lg ${colors.background.secondary}`}
+                      >
+                        {showPreview ? 'Modifica' : 'Anteprima'}
+                      </button>
+                    </div>
+                    {showPreview ? (
+                      <div 
+                        className={`p-4 rounded-xl border ${colors.border.primary} prose prose-sm max-w-none dark:prose-invert overflow-auto max-h-64`}
+                        dangerouslySetInnerHTML={{ __html: customContent }}
+                      />
+                    ) : (
+                      <textarea
+                        value={customContent}
+                        onChange={(e) => setCustomContent(e.target.value)}
+                        rows={10}
+                        className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.border.primary} border focus:ring-2 focus:ring-red-500 focus:border-transparent font-mono text-sm`}
+                        placeholder="Contenuto del contratto..."
+                      />
+                    )}
+                    <p className={`text-xs ${colors.text.muted} mt-1`}>
+                      I placeholder come {'{{NOME_COMPLETO}}'} sono già stati sostituiti con i dati dell'utente.
+                    </p>
+                  </div>
+
+                  {/* Price and Duration */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Prezzo (€)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={customPrice}
+                        onChange={(e) => setCustomPrice(e.target.value)}
+                        className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.border.primary} border focus:ring-2 focus:ring-red-500`}
+                        placeholder="Es: 1500.00"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Scadenza firma (giorni)
+                      </label>
+                      <select
+                        value={expiresInDays}
+                        onChange={(e) => setExpiresInDays(Number(e.target.value))}
+                        className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.border.primary} border focus:ring-2 focus:ring-red-500`}
+                      >
+                        <option value={3}>3 giorni</option>
+                        <option value={7}>7 giorni</option>
+                        <option value={14}>14 giorni</option>
+                        <option value={30}>30 giorni</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Durata (opzionale)
+                      </label>
+                      <input
+                        type="text"
+                        value={preview.template.duration || ''}
+                        disabled
+                        className={`w-full px-4 py-3 rounded-xl ${colors.background.secondary} ${colors.border.primary} border cursor-not-allowed`}
+                        placeholder="Es: 12 mesi"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Admin Notes */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Note Admin (non visibili all'utente)
+                    </label>
+                    <textarea
+                      value={adminNotes}
+                      onChange={(e) => setAdminNotes(e.target.value)}
+                      rows={2}
+                      className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.border.primary} border focus:ring-2 focus:ring-red-500`}
+                      placeholder="Note interne..."
+                    />
+                  </div>
+                </>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className={`p-6 border-t ${colors.border.primary} flex gap-3 flex-shrink-0`}>
+          {step === 'customize' && (
+            <button
+              onClick={handleBack}
+              className={`px-6 py-3 rounded-xl ${colors.background.secondary} font-medium`}
+            >
+              ← Indietro
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className={`flex-1 px-4 py-3 rounded-xl ${colors.background.secondary} font-medium`}
+          >
+            Annulla
+          </button>
+          {step === 'customize' && (
+            <button
+              onClick={handleAssign}
+              disabled={!selectedTemplate || isLoading || previewLoading}
+              className={`flex-1 px-4 py-3 rounded-xl ${colors.primary.gradient} text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2`}
+            >
+              {isLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                  Invio...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  Assegna e Invia
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function UsersManagementPage() {
+  const [search, setSearch] = useState('');
+  const [role, setRole] = useState<RoleFilter>('ALL');
+  const [status, setStatus] = useState<StatusFilter>('all');
+  const [page, setPage] = useState(1);
+
+  // Modal states
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    type: 'delete' | 'toggleActive' | 'changeRole' | 'revokeContract';
+    userId: string;
+    userName: string;
+    currentActive?: boolean;
+    newRole?: 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
+    contractId?: string;
+    hasSignedContract?: boolean;
+    userRole?: string;
+  }>({
+    isOpen: false,
+    type: 'delete',
+    userId: '',
+    userName: '',
+  });
+
+  const [contractModal, setContractModal] = useState<{
+    isOpen: boolean;
+    targetId: string;
+    targetType: 'STUDENT' | 'COLLABORATOR';
+  }>({
+    isOpen: false,
+    targetId: '',
+    targetType: 'STUDENT',
+  });
+
+  const [viewUserModal, setViewUserModal] = useState<{
+    isOpen: boolean;
+    user: any | null;
+  }>({
+    isOpen: false,
+    user: null,
+  });
+
+  const utils = trpc.useUtils();
+
+  // Get current user to hide self
+  const { data: currentUser } = trpc.auth.me.useQuery();
+
+  // Fetch users
+  const { data: usersData, isLoading } = trpc.users.getAll.useQuery({
+    search: search || undefined,
+    role,
+    status: status === 'all' ? 'ALL' 
+      : status === 'active' ? 'ACTIVE' 
+      : status === 'inactive' ? 'INACTIVE' 
+      : status === 'pending_profile' ? 'PENDING_PROFILE'
+      : status === 'pending_contract' ? 'PENDING_CONTRACT'
+      : status === 'pending_sign' ? 'PENDING_SIGN'
+      : status === 'pending_activation' ? 'PENDING_ACTIVATION'
+      : 'ALL',
+    page,
+    limit: 15,
+  });
+
+  // Fetch stats - filtered by selected role
+  const { data: stats } = trpc.users.getStats.useQuery({ role });
+
+  // Fetch contract templates
+  const { data: templates } = trpc.contracts.getTemplates.useQuery();
+
+  // Mutations
+  const toggleActiveMutation = trpc.users.toggleActive.useMutation({
+    onSuccess: () => {
+      utils.users.getAll.invalidate();
+      utils.users.getStats.invalidate();
+      closeConfirmModal();
+    },
+  });
+
+  const changeRoleMutation = trpc.users.changeRole.useMutation({
+    onSuccess: () => {
+      utils.users.getAll.invalidate();
+      utils.users.getStats.invalidate();
+      closeConfirmModal();
+    },
+  });
+
+  const deleteUserMutation = trpc.users.deleteUser.useMutation({
+    onSuccess: () => {
+      utils.users.getAll.invalidate();
+      utils.users.getStats.invalidate();
+      closeConfirmModal();
+    },
+  });
+
+  const assignContractMutation = trpc.contracts.assignContract.useMutation({
+    onSuccess: () => {
+      utils.users.getAll.invalidate();
+      setContractModal({ isOpen: false, targetId: '', targetType: 'STUDENT' });
+    },
+  });
+
+  const revokeContractMutation = trpc.contracts.revokeContract.useMutation({
+    onSuccess: () => {
+      utils.users.getAll.invalidate();
+      utils.users.getStats.invalidate();
+      closeConfirmModal();
+    },
+  });
+
+  const closeConfirmModal = () => {
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+  };
+
+  const openDeleteModal = (userId: string, userName: string) => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'delete',
+      userId,
+      userName,
+    });
+  };
+
+  const openToggleActiveModal = (userId: string, userName: string, currentActive: boolean, hasSignedContract: boolean = true, userRole: string = 'STUDENT') => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'toggleActive',
+      userId,
+      userName,
+      currentActive,
+      hasSignedContract,
+      userRole,
+    });
+  };
+
+  const openChangeRoleModal = (userId: string, userName: string, newRole: 'ADMIN' | 'COLLABORATOR' | 'STUDENT') => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'changeRole',
+      userId,
+      userName,
+      newRole,
+    });
+  };
+
+  const openRevokeContractModal = (contractId: string, userName: string) => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'revokeContract',
+      userId: '',
+      userName,
+      contractId,
+    });
+  };
+
+  const handleConfirm = () => {
+    switch (confirmModal.type) {
+      case 'delete':
+        deleteUserMutation.mutate({ userId: confirmModal.userId });
+        break;
+      case 'toggleActive':
+        toggleActiveMutation.mutate({ userId: confirmModal.userId });
+        break;
+      case 'changeRole':
+        if (confirmModal.newRole) {
+          changeRoleMutation.mutate({ userId: confirmModal.userId, newRole: confirmModal.newRole });
+        }
+        break;
+      case 'revokeContract':
+        if (confirmModal.contractId) {
+          revokeContractMutation.mutate({ contractId: confirmModal.contractId });
+        }
+        break;
+    }
+  };
+
+  const handleAssignContract = (data: { 
+    templateId: string; 
+    customContent?: string; 
+    customPrice?: number; 
+    adminNotes?: string; 
+    expiresInDays: number 
+  }) => {
+    if (contractModal.targetId) {
+      if (contractModal.targetType === 'COLLABORATOR') {
+        assignContractMutation.mutate({
+          collaboratorId: contractModal.targetId,
+          templateId: data.templateId,
+          expiresInDays: data.expiresInDays,
+          customContent: data.customContent,
+          customPrice: data.customPrice,
+          adminNotes: data.adminNotes,
+        });
+      } else {
+        assignContractMutation.mutate({
+          studentId: contractModal.targetId,
+          templateId: data.templateId,
+          expiresInDays: data.expiresInDays,
+          customContent: data.customContent,
+          customPrice: data.customPrice,
+          adminNotes: data.adminNotes,
+        });
+      }
+    }
+  };
+
+  const getModalConfig = () => {
+    switch (confirmModal.type) {
+      case 'delete':
+        return {
+          title: 'Elimina Account',
+          message: `Sei sicuro di voler eliminare definitivamente l'account di "${confirmModal.userName}"? Questa azione è irreversibile.`,
+          confirmLabel: 'Elimina',
+          variant: 'danger' as const,
+          isLoading: deleteUserMutation.isPending,
+        };
+      case 'toggleActive':
+        // Check if activating user without signed contract (non-admin)
+        const isActivatingWithoutContract = !confirmModal.currentActive && !confirmModal.hasSignedContract && confirmModal.userRole !== 'ADMIN';
+        return {
+          title: confirmModal.currentActive ? 'Disattiva Account' : 'Attiva Account',
+          message: confirmModal.currentActive
+            ? `Sei sicuro di voler disattivare l'account di "${confirmModal.userName}"?`
+            : `Sei sicuro di voler attivare l'account di "${confirmModal.userName}"?`,
+          warning: isActivatingWithoutContract 
+            ? `⚠️ Attenzione: ${confirmModal.userName} non ha ancora firmato il contratto. Attivando l'account, l'utente potrà accedere alla piattaforma senza aver firmato il contratto.`
+            : undefined,
+          confirmLabel: confirmModal.currentActive ? 'Disattiva' : (isActivatingWithoutContract ? 'Attiva comunque' : 'Attiva'),
+          variant: confirmModal.currentActive ? 'warning' as const : (isActivatingWithoutContract ? 'warning' as const : 'info' as const),
+          isLoading: toggleActiveMutation.isPending,
+        };
+      case 'changeRole':
+        const roleLabels = { ADMIN: 'Amministratore', COLLABORATOR: 'Collaboratore', STUDENT: 'Studente' };
+        return {
+          title: 'Cambia Ruolo',
+          message: `Sei sicuro di voler cambiare il ruolo di "${confirmModal.userName}" a ${roleLabels[confirmModal.newRole!]}?`,
+          confirmLabel: 'Cambia Ruolo',
+          variant: 'info' as const,
+          isLoading: changeRoleMutation.isPending,
+        };
+      case 'revokeContract':
+        return {
+          title: 'Revoca Contratto',
+          message: `Sei sicuro di voler revocare il contratto per "${confirmModal.userName}"? L'utente dovrà firmare un nuovo contratto.`,
+          confirmLabel: 'Revoca Contratto',
+          variant: 'warning' as const,
+          isLoading: revokeContractMutation.isPending,
+        };
+      default:
+        return { title: '', message: '', confirmLabel: '', variant: 'info' as const, isLoading: false };
+    }
+  };
+
+  const getRoleBadge = (userRole: string) => {
+    switch (userRole) {
+      case 'ADMIN':
+        return { label: 'Admin', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-100 dark:bg-red-900/30', icon: Shield };
+      case 'COLLABORATOR':
+        return { label: 'Collaboratore', color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-100 dark:bg-purple-900/30', icon: UserCog };
+      default:
+        return { label: 'Studente', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30', icon: GraduationCap };
+    }
+  };
+
+  const getStatusBadge = (user: any) => {
+    if (user.isActive) {
+      return { label: 'Attivo', color: colors.status.success.text, bg: colors.status.success.softBg };
+    }
+    if (!user.profileCompleted) {
+      return { label: 'Profilo incompleto', color: colors.status.warning.text, bg: colors.status.warning.softBg };
+    }
+    // Check contract status for students/collaborators
+    const hasContract = user.student?.contracts?.length > 0 || user.collaborator?.contracts?.length > 0;
+    const contract = user.student?.contracts?.[0] || user.collaborator?.contracts?.[0];
+    
+    if (!hasContract && user.role !== 'ADMIN') {
+      return { label: 'Attesa contratto', color: colors.status.info.text, bg: colors.status.info.softBg };
+    }
+    if (contract?.status === 'PENDING') {
+      return { label: 'Attesa firma', color: colors.status.info.text, bg: colors.status.info.softBg };
+    }
+    if (contract?.status === 'SIGNED') {
+      return { label: 'Attesa attivazione', color: colors.status.warning.text, bg: colors.status.warning.softBg };
+    }
+    return { label: 'Disattivato', color: colors.status.error.text, bg: colors.status.error.softBg };
+  };
+
+  const formatDate = (date: Date | string | null) => {
+    if (!date) return '-';
+    return new Intl.DateTimeFormat('it-IT', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }).format(new Date(date));
+  };
+
+  // Filter out current user
+  const filteredUsers = usersData?.users.filter((u: any) => u.id !== currentUser?.id) || [];
+
+  const modalConfig = getModalConfig();
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className={`text-2xl font-bold flex items-center gap-3 ${colors.text.primary}`}>
+          <Users className="w-8 h-8" />
+          Gestione Utenti
+        </h1>
+        <p className={`mt-1 ${colors.text.secondary}`}>
+          Visualizza tutti gli utenti, assegna ruoli, gestisci contratti e account
+        </p>
+      </div>
+
+      {/* Stats + Role Filters Combined */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {/* Tutti */}
+        <button
+          onClick={() => { setRole('ALL'); setPage(1); }}
+          className={`${colors.background.card} rounded-xl p-4 shadow-sm transition-all hover:shadow-md ${
+            role === 'ALL' ? 'ring-2 ring-gray-500 ring-offset-2 ring-offset-gray-900' : ''
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+              <Users className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            </div>
+            <div className="text-left">
+              <p className={`text-xs ${colors.text.muted}`}>Totale</p>
+              <p className="text-xl font-bold">{stats?.total || 0}</p>
+            </div>
+          </div>
+        </button>
+
+        {/* Admin */}
+        <button
+          onClick={() => { setRole('ADMIN'); setPage(1); }}
+          className={`${colors.background.card} rounded-xl p-4 shadow-sm transition-all hover:shadow-md ${
+            role === 'ADMIN' ? 'ring-2 ring-red-500 ring-offset-2 ring-offset-gray-900' : ''
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-red-600 dark:text-red-400" />
+            </div>
+            <div className="text-left">
+              <p className={`text-xs ${colors.text.muted}`}>Admin</p>
+              <p className="text-xl font-bold text-red-600">{stats?.admins || 0}</p>
+            </div>
+          </div>
+        </button>
+
+        {/* Collaboratori */}
+        <button
+          onClick={() => { setRole('COLLABORATOR'); setPage(1); }}
+          className={`${colors.background.card} rounded-xl p-4 shadow-sm transition-all hover:shadow-md ${
+            role === 'COLLABORATOR' ? 'ring-2 ring-purple-500 ring-offset-2 ring-offset-gray-900' : ''
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+              <UserCog className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            </div>
+            <div className="text-left">
+              <p className={`text-xs ${colors.text.muted}`}>Collaboratori</p>
+              <p className="text-xl font-bold text-purple-600">{stats?.collaborators || 0}</p>
+            </div>
+          </div>
+        </button>
+
+        {/* Studenti */}
+        <button
+          onClick={() => { setRole('STUDENT'); setPage(1); }}
+          className={`${colors.background.card} rounded-xl p-4 shadow-sm transition-all hover:shadow-md ${
+            role === 'STUDENT' ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-900' : ''
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+              <GraduationCap className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div className="text-left">
+              <p className={`text-xs ${colors.text.muted}`}>Studenti</p>
+              <p className="text-xl font-bold text-blue-600">{stats?.students || 0}</p>
+            </div>
+          </div>
+        </button>
+      </div>
+
+      {/* Search + Status Filters */}
+      <div className={`${colors.background.card} rounded-xl p-4 shadow-sm`}>
+        <div className="flex flex-col gap-4">
+          {/* Search */}
+          <div className="relative">
+            <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${colors.text.muted}`} />
+            <input
+              type="text"
+              placeholder="Cerca per nome o email..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className={`w-full pl-10 pr-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} focus:ring-2 focus:ring-red-500/20 focus:border-red-500`}
+            />
+          </div>
+
+          {/* Status Filter Row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+            {statusOptions.map((option) => {
+              const Icon = option.icon;
+              const getCount = () => {
+                switch (option.value) {
+                  case 'all': return stats?.total || 0;
+                  case 'pending_profile': return stats?.pendingProfile || 0;
+                  case 'pending_contract': return stats?.pendingContract || 0;
+                  case 'pending_sign': return stats?.pendingSign || 0;
+                  case 'pending_activation': return stats?.pendingActivation || 0;
+                  case 'active': return stats?.active || 0;
+                  case 'inactive': return stats?.inactive || 0;
+                  default: return 0;
+                }
+              };
+              const count = getCount();
+              const isSelected = status === option.value;
+              
+              return (
+                <button
+                  key={option.value}
+                  onClick={() => {
+                    setStatus(option.value);
+                    setPage(1);
+                  }}
+                  title={option.label}
+                  className={`flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    isSelected
+                      ? `${option.activeColor} text-white shadow-md ring-2 ring-offset-2 ring-offset-gray-900 ring-white/30`
+                      : `${option.bg} ${option.color} hover:opacity-80`
+                  }`}
+                >
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  <span className="hidden sm:inline">{option.shortLabel}</span>
+                  <span className={`min-w-[20px] h-5 px-1 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 ${
+                    isSelected ? 'bg-white/20' : 'bg-black/10 dark:bg-white/10'
+                  }`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Users Table */}
+      <div className={`${colors.background.card} rounded-xl shadow-sm`}>
+        {isLoading ? (
+          <div className="p-12 text-center">
+            <div className="w-8 h-8 border-2 border-red-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <p className={`mt-4 ${colors.text.secondary}`}>Caricamento utenti...</p>
+          </div>
+        ) : !filteredUsers.length ? (
+          <div className="p-12 text-center">
+            <Users className={`w-12 h-12 mx-auto ${colors.text.muted} mb-4`} />
+            <p className={colors.text.secondary}>Nessun utente trovato</p>
+          </div>
+        ) : (
+          <>
+            {/* Mobile Cards View */}
+            <div className="block lg:hidden divide-y divide-gray-200 dark:divide-gray-700">
+              {filteredUsers.map((user: any) => {
+                const roleBadge = getRoleBadge(user.role);
+                const statusBadge = getStatusBadge(user);
+                const RoleIcon = roleBadge.icon;
+                
+                const isStudentOrCollab = user.role === 'STUDENT' || user.role === 'COLLABORATOR';
+                const hasProfileCompleted = user.profileCompleted;
+                const targetId = user.student?.id || user.collaborator?.id;
+                const targetType = user.role === 'COLLABORATOR' ? 'COLLABORATOR' as const : 'STUDENT' as const;
+                const studentContract = user.student?.contracts?.[0];
+                const collabContract = user.collaborator?.contracts?.[0];
+                const lastContract = studentContract || collabContract;
+                const hasActiveContract = lastContract && (lastContract.status === 'PENDING' || lastContract.status === 'SIGNED');
+                const hasPendingContract = lastContract?.status === 'PENDING';
+                const canAssignContract = isStudentOrCollab && hasProfileCompleted && !hasActiveContract && targetId;
+                const hasSignedContract = lastContract?.status === 'SIGNED' || (user.isActive && lastContract);
+                const contractId = lastContract?.id;
+
+                return (
+                  <div key={user.id} className="p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className={`w-12 h-12 rounded-full ${roleBadge.bg} flex items-center justify-center text-lg font-semibold ${roleBadge.color} flex-shrink-0`}>
+                          {user.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={`font-medium ${colors.text.primary} truncate`}>{user.name}</p>
+                          <p className={`text-sm ${colors.text.muted} truncate`}>{user.email}</p>
+                        </div>
+                      </div>
+                      <span
+                        className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium flex-shrink-0"
+                        style={{ backgroundColor: statusBadge.bg, color: statusBadge.color }}
+                      >
+                        {statusBadge.label}
+                      </span>
+                    </div>
+                    
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${roleBadge.bg} ${roleBadge.color}`}>
+                        <RoleIcon className="w-3 h-3" />
+                        {roleBadge.label}
+                      </span>
+                      <span className={`text-xs ${colors.text.muted}`}>
+                        Reg. {formatDate(user.createdAt)}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 flex items-center gap-2">
+                      {hasSignedContract && contractId && (
+                        <button
+                          onClick={() => window.open(`/api/contracts/${contractId}/view`, '_blank')}
+                          className={`p-2 rounded-lg ${colors.status.success.softBg} ${colors.status.success.text}`}
+                          title="Visualizza contratto"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      )}
+                      {hasPendingContract && contractId && (
+                        <>
+                          <button
+                            onClick={() => window.open(`/api/contracts/${contractId}/view`, '_blank')}
+                            className={`p-2 rounded-lg ${colors.status.info.softBg} ${colors.status.info.text}`}
+                            title="Visualizza contratto in attesa"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => openRevokeContractModal(contractId, user.name)}
+                            className={`p-2 rounded-lg ${colors.status.warning.softBg} ${colors.status.warning.text}`}
+                            title="Revoca contratto"
+                          >
+                            <FileX className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                      {canAssignContract && (
+                        <button
+                          onClick={() => setContractModal({ isOpen: true, targetId: targetId!, targetType })}
+                          className={`p-2 rounded-lg ${colors.status.info.softBg} ${colors.status.info.text}`}
+                          title="Assegna contratto"
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                      )}
+                      {user.profileCompleted && (
+                        <button
+                          onClick={() => openToggleActiveModal(user.id, user.name, user.isActive, lastContract?.status === 'SIGNED', user.role)}
+                          className={`p-2 rounded-lg ${user.isActive ? colors.status.warning.softBg : colors.status.success.softBg} ${user.isActive ? colors.status.warning.text : colors.status.success.text}`}
+                          title={user.isActive ? 'Disattiva' : 'Attiva'}
+                        >
+                          {user.isActive ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => openDeleteModal(user.id, user.name)}
+                        className={`p-2 rounded-lg ${colors.status.error.softBg} ${colors.status.error.text}`}
+                        title="Elimina"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      
+                      {/* Role change dropdown for mobile */}
+                      <div className="ml-auto">
+                        <RoleDropdown
+                          currentRole={user.role}
+                          onSelect={(newRole) => {
+                            if (newRole !== user.role) {
+                              openChangeRoleModal(user.id, user.name, newRole);
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden lg:block pb-16">
+              <table className="w-full min-w-[800px]">
+                <thead className={`${colors.background.secondary} border-b ${colors.border.primary}`}>
+                  <tr>
+                    <th className="text-left px-4 xl:px-6 py-4 font-semibold text-sm">Utente</th>
+                    <th className="text-left px-4 xl:px-6 py-4 font-semibold text-sm">Email</th>
+                    <th className="text-left px-4 xl:px-6 py-4 font-semibold text-sm">Ruolo</th>
+                    <th className="text-left px-4 xl:px-6 py-4 font-semibold text-sm whitespace-nowrap">Registrazione</th>
+                    <th className="text-left px-4 xl:px-6 py-4 font-semibold text-sm">Stato</th>
+                    <th className="text-right px-4 xl:px-6 py-4 font-semibold text-sm">Azioni</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredUsers.map((user: any) => {
+                    const roleBadge = getRoleBadge(user.role);
+                    const statusBadge = getStatusBadge(user);
+                    const RoleIcon = roleBadge.icon;
+                    
+                    const isStudentOrCollab = user.role === 'STUDENT' || user.role === 'COLLABORATOR';
+                    const hasProfileCompleted = user.profileCompleted;
+                    const targetId = user.student?.id || user.collaborator?.id;
+                    const targetType = user.role === 'COLLABORATOR' ? 'COLLABORATOR' as const : 'STUDENT' as const;
+                    const studentContract = user.student?.contracts?.[0];
+                    const collabContract = user.collaborator?.contracts?.[0];
+                    const lastContract = studentContract || collabContract;
+                    const hasActiveContract = lastContract && (lastContract.status === 'PENDING' || lastContract.status === 'SIGNED');
+                    const hasPendingContract = lastContract?.status === 'PENDING';
+                    const canAssignContract = isStudentOrCollab && hasProfileCompleted && !hasActiveContract && targetId;
+                    const hasSignedContract = lastContract?.status === 'SIGNED' || (user.isActive && lastContract);
+                    const contractId = lastContract?.id;
+
+                    return (
+                      <tr key={user.id} className={`border-b ${colors.border.primary} hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors`}>
+                        <td className="px-4 xl:px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-full ${roleBadge.bg} flex items-center justify-center text-lg font-semibold ${roleBadge.color} flex-shrink-0`}>
+                              {user.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className={`font-medium ${colors.text.primary} truncate max-w-[150px] xl:max-w-none`}>{user.name}</p>
+                              {(user.student?.fiscalCode || user.collaborator?.fiscalCode) && (
+                                <p className={`text-xs ${colors.text.muted} truncate`}>
+                                  {user.student?.fiscalCode || user.collaborator?.fiscalCode}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 xl:px-6 py-4">
+                          <div className="flex items-center gap-2 text-sm">
+                            <Mail className="w-4 h-4 flex-shrink-0" />
+                            <span className="truncate max-w-[180px] xl:max-w-none">{user.email}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 xl:px-6 py-4">
+                          {/* Role dropdown */}
+                          <RoleDropdown
+                            currentRole={user.role}
+                            onSelect={(newRole) => {
+                              if (newRole !== user.role) {
+                                openChangeRoleModal(user.id, user.name, newRole);
+                              }
+                            }}
+                          />
+                        </td>
+                        <td className="px-4 xl:px-6 py-4">
+                          <div className="flex items-center gap-2 text-sm whitespace-nowrap">
+                            <Calendar className="w-4 h-4 flex-shrink-0" />
+                            <span>{formatDate(user.createdAt)}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 xl:px-6 py-4">
+                          <span
+                            className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap"
+                            style={{ backgroundColor: statusBadge.bg, color: statusBadge.color }}
+                          >
+                            {statusBadge.label}
+                          </span>
+                        </td>
+                        <td className="px-4 xl:px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* View User Profile - Always show for students/collaborators */}
+                            {isStudentOrCollab && (
+                              <button
+                                onClick={() => setViewUserModal({ isOpen: true, user })}
+                                className={`p-2 rounded-lg ${colors.background.secondary} hover:opacity-80 transition-opacity`}
+                                title="Visualizza profilo"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                            )}
+                            {hasSignedContract && contractId && (
+                              <button
+                                onClick={() => window.open(`/api/contracts/${contractId}/view`, '_blank')}
+                                className={`p-2 rounded-lg ${colors.status.success.softBg} ${colors.status.success.text} hover:opacity-80 transition-opacity`}
+                                title="Visualizza contratto firmato"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                            )}
+                            {hasPendingContract && contractId && (
+                              <>
+                                <button
+                                  onClick={() => window.open(`/api/contracts/${contractId}/view`, '_blank')}
+                                  className={`p-2 rounded-lg ${colors.status.info.softBg} ${colors.status.info.text} hover:opacity-80 transition-opacity`}
+                                  title="Visualizza contratto in attesa"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => openRevokeContractModal(contractId, user.name)}
+                                  className={`p-2 rounded-lg ${colors.status.warning.softBg} ${colors.status.warning.text} hover:opacity-80 transition-opacity`}
+                                  title="Revoca contratto"
+                                >
+                                  <FileX className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
+                            {canAssignContract && (
+                              <button
+                                onClick={() => setContractModal({ isOpen: true, targetId: targetId!, targetType })}
+                                className={`p-2 rounded-lg ${colors.status.info.softBg} ${colors.status.info.text} hover:opacity-80 transition-opacity`}
+                                title="Assegna contratto"
+                              >
+                                <Send className="w-4 h-4" />
+                              </button>
+                            )}
+                            {user.profileCompleted && (
+                              <button
+                                onClick={() => openToggleActiveModal(user.id, user.name, user.isActive, lastContract?.status === 'SIGNED', user.role)}
+                                className={`p-2 rounded-lg transition-opacity hover:opacity-80 ${
+                                  user.isActive
+                                    ? `${colors.status.warning.softBg} ${colors.status.warning.text}`
+                                    : `${colors.status.success.softBg} ${colors.status.success.text}`
+                                }`}
+                                title={user.isActive ? 'Disattiva' : 'Attiva'}
+                              >
+                                {user.isActive ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => openDeleteModal(user.id, user.name)}
+                              className={`p-2 rounded-lg ${colors.status.error.softBg} ${colors.status.error.text} hover:opacity-80 transition-opacity`}
+                              title="Elimina account"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {usersData && usersData.pagination.totalPages > 1 && (
+              <div className={`px-6 py-4 border-t ${colors.border.primary} flex items-center justify-between`}>
+                <p className={`text-sm ${colors.text.secondary}`}>
+                  Pagina {usersData.pagination.page} di {usersData.pagination.totalPages}
+                  {' '}({usersData.pagination.total} utenti)
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className={`p-2 rounded-lg ${colors.background.secondary} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setPage(p => Math.min(usersData.pagination.totalPages, p + 1))}
+                    disabled={page === usersData.pagination.totalPages}
+                    className={`p-2 rounded-lg ${colors.background.secondary} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={closeConfirmModal}
+        onConfirm={handleConfirm}
+        {...modalConfig}
+      />
+
+      {/* Assign Contract Modal */}
+      <AssignContractModal
+        isOpen={contractModal.isOpen}
+        onClose={() => setContractModal({ isOpen: false, targetId: '', targetType: 'STUDENT' })}
+        onAssign={handleAssignContract}
+        templates={templates || []}
+        isLoading={assignContractMutation.isPending}
+        targetId={contractModal.targetId}
+        targetType={contractModal.targetType}
+      />
+
+      {/* View User Profile Modal */}
+      {viewUserModal.isOpen && viewUserModal.user && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className={`${colors.background.card} rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto`}>
+            <div className={`flex items-center justify-between p-6 border-b ${colors.border.primary}`}>
+              <h2 className="text-xl font-bold">Profilo Utente</h2>
+              <button
+                onClick={() => setViewUserModal({ isOpen: false, user: null })}
+                className={`p-2 rounded-lg ${colors.background.secondary} hover:opacity-80`}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* User Info */}
+              <div className="flex items-center gap-4">
+                <div className={`w-16 h-16 rounded-full ${colors.primary.softBg} flex items-center justify-center text-2xl font-bold ${colors.primary.text}`}>
+                  {viewUserModal.user.name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold">{viewUserModal.user.name}</h3>
+                  <p className={`text-sm ${colors.text.secondary}`}>{viewUserModal.user.email}</p>
+                  <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-medium ${
+                    viewUserModal.user.role === 'STUDENT' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                    viewUserModal.user.role === 'COLLABORATOR' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' :
+                    'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
+                  }`}>
+                    {viewUserModal.user.role === 'STUDENT' ? 'Studente' : 
+                     viewUserModal.user.role === 'COLLABORATOR' ? 'Collaboratore' : 'Admin'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Profile Status */}
+              <div className={`p-4 rounded-xl ${viewUserModal.user.profileCompleted ? colors.status.success.softBg : colors.status.warning.softBg}`}>
+                <div className="flex items-center gap-2">
+                  {viewUserModal.user.profileCompleted ? (
+                    <>
+                      <CheckCircle className={`w-5 h-5 ${colors.status.success.text}`} />
+                      <span className={`font-medium ${colors.status.success.text}`}>Profilo Completo</span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle className={`w-5 h-5 ${colors.status.warning.text}`} />
+                      <span className={`font-medium ${colors.status.warning.text}`}>Profilo Incompleto</span>
+                    </>
+                  )}
+                </div>
+                {!viewUserModal.user.profileCompleted && (
+                  <p className={`text-sm mt-1 ${colors.status.warning.text} opacity-80`}>
+                    L'utente deve completare il profilo prima di poter ricevere un contratto.
+                  </p>
+                )}
+              </div>
+
+              {/* Profile Data */}
+              {(() => {
+                const profile = viewUserModal.user.student || viewUserModal.user.collaborator;
+                if (!profile) {
+                  return (
+                    <div className={`p-4 rounded-xl ${colors.background.secondary}`}>
+                      <p className={`text-sm ${colors.text.muted}`}>Nessun profilo associato</p>
+                    </div>
+                  );
+                }
+
+                const fields = [
+                  { label: 'Codice Fiscale', value: profile.fiscalCode },
+                  { label: 'Data di Nascita', value: profile.dateOfBirth ? new Date(profile.dateOfBirth).toLocaleDateString('it-IT') : null },
+                  { label: 'Telefono', value: profile.phone },
+                  { label: 'Indirizzo', value: profile.address },
+                  { label: 'Città', value: profile.city },
+                  { label: 'Provincia', value: profile.province },
+                  { label: 'CAP', value: profile.postalCode },
+                ];
+
+                return (
+                  <div className="space-y-3">
+                    <h4 className={`font-semibold ${colors.text.primary}`}>Dati Profilo</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      {fields.map((field) => (
+                        <div key={field.label} className={`p-3 rounded-lg ${colors.background.secondary}`}>
+                          <p className={`text-xs ${colors.text.muted} mb-1`}>{field.label}</p>
+                          <p className={`text-sm font-medium ${field.value ? colors.text.primary : colors.status.error.text}`}>
+                            {field.value || 'Mancante'}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Account Status */}
+              <div className="space-y-3">
+                <h4 className={`font-semibold ${colors.text.primary}`}>Stato Account</h4>
+                <div className="flex gap-3">
+                  <div className={`flex-1 p-3 rounded-lg ${colors.background.secondary}`}>
+                    <p className={`text-xs ${colors.text.muted} mb-1`}>Account</p>
+                    <p className={`text-sm font-medium ${viewUserModal.user.isActive ? colors.status.success.text : colors.status.error.text}`}>
+                      {viewUserModal.user.isActive ? 'Attivo' : 'Non Attivo'}
+                    </p>
+                  </div>
+                  <div className={`flex-1 p-3 rounded-lg ${colors.background.secondary}`}>
+                    <p className={`text-xs ${colors.text.muted} mb-1`}>Registrato il</p>
+                    <p className="text-sm font-medium">
+                      {new Date(viewUserModal.user.createdAt).toLocaleDateString('it-IT')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Contract Info */}
+              {(() => {
+                const contract = viewUserModal.user.student?.contracts?.[0] || viewUserModal.user.collaborator?.contracts?.[0];
+                if (!contract) {
+                  return (
+                    <div className={`p-4 rounded-xl ${colors.background.secondary}`}>
+                      <p className={`text-sm ${colors.text.muted}`}>Nessun contratto assegnato</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-3">
+                    <h4 className={`font-semibold ${colors.text.primary}`}>Ultimo Contratto</h4>
+                    <div className={`p-4 rounded-xl ${colors.background.secondary}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium">{contract.template?.name || 'Contratto'}</span>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          contract.status === 'SIGNED' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                          contract.status === 'PENDING' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                          'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400'
+                        }`}>
+                          {contract.status === 'SIGNED' ? 'Firmato' : 
+                           contract.status === 'PENDING' ? 'In Attesa' : contract.status}
+                        </span>
+                      </div>
+                      {contract.signedAt && (
+                        <p className={`text-sm ${colors.text.secondary}`}>
+                          Firmato il {new Date(contract.signedAt).toLocaleDateString('it-IT')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className={`p-6 border-t ${colors.border.primary}`}>
+              <button
+                onClick={() => setViewUserModal({ isOpen: false, user: null })}
+                className={`w-full py-3 rounded-lg ${colors.background.secondary} font-medium hover:opacity-80 transition-opacity`}
+              >
+                Chiudi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
