@@ -52,6 +52,7 @@ export const colors = {
     matematica: {
       main: '#D54F8A',
       bg: 'bg-[#D54F8A]',
+      softBg: 'bg-pink-100 dark:bg-pink-900/30',
       text: 'text-[#D54F8A]',
       border: 'border-[#D54F8A]',
       hover: 'hover:bg-[#D54F8A]',
@@ -62,6 +63,7 @@ export const colors = {
     biologia: {
       main: '#68BCE8',
       bg: 'bg-[#68BCE8]',
+      softBg: 'bg-sky-100 dark:bg-sky-900/30',
       text: 'text-[#68BCE8]',
       border: 'border-[#68BCE8]',
       hover: 'hover:bg-[#68BCE8]',
@@ -72,6 +74,7 @@ export const colors = {
     chimica: {
       main: '#42BFED',
       bg: 'bg-[#42BFED]',
+      softBg: 'bg-cyan-100 dark:bg-cyan-900/30',
       text: 'text-[#42BFED]',
       border: 'border-[#42BFED]',
       hover: 'hover:bg-[#5AACDB]',
@@ -81,6 +84,7 @@ export const colors = {
     fisica: {
       main: '#EEB550',
       bg: 'bg-[#EEB550]',
+      softBg: 'bg-amber-100 dark:bg-amber-900/30',
       text: 'text-[#EEB550]',
       border: 'border-[#EEB550]',
       hover: 'hover:bg-[#EEB550]',
@@ -91,6 +95,7 @@ export const colors = {
     logica: {
       main: '#B6B21D',
       bg: 'bg-[#B6B21D]',
+      softBg: 'bg-lime-100 dark:bg-lime-900/30',
       text: 'text-[#B6B21D]',
       border: 'border-[#B6B21D]',
       hover: 'hover:bg-[#A5A238]',
@@ -102,6 +107,7 @@ export const colors = {
     culturaGenerale: {
       main: '#E7418B',
       bg: 'bg-[#E7418B]',
+      softBg: 'bg-rose-100 dark:bg-rose-900/30',
       text: 'text-[#E7418B]',
       border: 'border-[#E7418B]',
       hover: 'hover:bg-[#C4407A]',
@@ -341,7 +347,7 @@ export const colors = {
  */
 export function getSubjectColor(
   subject: 'MATEMATICA' | 'BIOLOGIA' | 'CHIMICA' | 'FISICA' | 'LOGICA' | 'CULTURA_GENERALE',
-  variant: 'bg' | 'text' | 'border' | 'hover' | 'main' = 'bg'
+  variant: 'bg' | 'softBg' | 'text' | 'border' | 'hover' | 'main' = 'bg'
 ) {
   const mapping = {
     MATEMATICA: colors.subjects.matematica,

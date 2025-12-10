@@ -1,5 +1,5 @@
 // Students Router - Handles student profile and data
-import { router, protectedProcedure } from '../init';
+import { router, protectedProcedure, adminProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { emailService } from '../../services/emailService';
@@ -216,5 +216,18 @@ export const studentsRouter = router({
     }
 
     return student;
+  }),
+
+  /**
+   * Get all students for admin (used in materials assignment)
+   */
+  getAllForAdmin: adminProcedure.query(async ({ ctx }) => {
+    return ctx.prisma.user.findMany({
+      where: { role: 'STUDENT' },
+      include: {
+        student: true,
+      },
+      orderBy: { name: 'asc' },
+    });
   }),
 });

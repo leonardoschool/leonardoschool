@@ -119,6 +119,7 @@ model Student {
   alerts            Alert[]
   stats             StudentStats?
   contracts         Contract[]
+  materialAccess    MaterialStudentAccess[]
   
   @@index([userId])
   @@index([classId])
@@ -403,6 +404,7 @@ model ContractTemplate {
   createdBy   String?   // Admin userId
   
   contracts   Contract[]
+  materialAccess MaterialCourseAccess[]
   
   @@index([isActive])
   @@map("contract_templates")
@@ -473,4 +475,139 @@ model AdminNotification {
   @@index([createdAt])
   @@index([isUrgent])
   @@map("admin_notifications")
+}
+
+// ==================== LEARNING MATERIALS ====================
+
+enum MaterialType {
+  PDF
+  VIDEO
+  LINK
+  DOCUMENT
+}
+
+enum MaterialVisibility {
+  ALL_STUDENTS      // Visible to all active students
+  COURSE_BASED      // Based on contract template / course
+  SELECTED_STUDENTS // Selected individual students
+}
+
+model MaterialCategory {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  icon        String?   // Lucide icon name
+  order       Int       @default(0)
+  isActive    Boolean   @default(true)
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  materials   Material[]
+  
+  @@index([isActive])
+  @@index([order])
+  @@map("material_categories")
+}
+
+// Custom subjects managed by admin (for materials, not for core simulations)
+model CustomSubject {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  code        String    @unique  // Short code like "BIO", "CHI", "FIS"
+  description String?
+  color       String?   // Hex color for UI
+  icon        String?   // Lucide icon name
+  order       Int       @default(0)
+  isActive    Boolean   @default(true)
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  materials   Material[]
+  
+  @@index([isActive])
+  @@index([order])
+  @@map("custom_subjects")
+}
+
+model Material {
+  id              String              @id @default(cuid())
+  title           String
+  description     String?             @db.Text
+  type            MaterialType
+  
+  // File/URL info
+  fileUrl         String?             // Firebase Storage URL for PDF/videos
+  fileName        String?             // Original filename
+  fileSize        Int?                // Size in bytes
+  externalUrl     String?             // For external links
+  thumbnailUrl    String?             // Thumbnail for videos
+  
+  // Visibility settings
+  visibility      MaterialVisibility  @default(ALL_STUDENTS)
+  
+  // Category
+  categoryId      String?
+  
+  // Subject (dynamic, managed by admin)
+  subjectId       String?
+  
+  // Metadata
+  tags            String[]
+  order           Int                 @default(0)
+  isActive        Boolean             @default(true)
+  
+  // Stats
+  viewCount       Int                 @default(0)
+  downloadCount   Int                 @default(0)
+  
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  createdBy       String?             // Admin userId
+  
+  // Relations
+  category        MaterialCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  subject         CustomSubject?      @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  courseAccess    MaterialCourseAccess[]
+  studentAccess   MaterialStudentAccess[]
+  
+  @@index([type])
+  @@index([visibility])
+  @@index([categoryId])
+  @@index([subjectId])
+  @@index([isActive])
+  @@map("materials")
+}
+
+// Course-based access (linked to contract templates)
+model MaterialCourseAccess {
+  id          String           @id @default(cuid())
+  materialId  String
+  templateId  String           // ContractTemplate id
+  
+  material    Material         @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  template    ContractTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  
+  @@unique([materialId, templateId])
+  @@index([materialId])
+  @@index([templateId])
+  @@map("material_course_access")
+}
+
+// Individual student access
+model MaterialStudentAccess {
+  id          String    @id @default(cuid())
+  materialId  String
+  studentId   String
+  grantedAt   DateTime  @default(now())
+  grantedBy   String?   // Admin userId
+  
+  material    Material  @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  @@unique([materialId, studentId])
+  @@index([materialId])
+  @@index([studentId])
+  @@map("material_student_access")
 }

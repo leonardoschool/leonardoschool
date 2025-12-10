@@ -26,7 +26,9 @@ import {
   Download,
   Eye,
   X,
+  FolderOpen,
 } from 'lucide-react';
+import Link from 'next/link';
 
 type ContractStatus = 'PENDING' | 'SIGNED' | 'EXPIRED' | 'CANCELLED';
 
@@ -536,7 +538,7 @@ export default function StudentDashboard() {
 
       {/* Quick Actions (only if active) */}
       {user?.isActive && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className={`${colors.background.card} rounded-2xl ${colors.effects.shadow.lg} p-6 hover:shadow-xl transition-shadow cursor-pointer group`}>
             <div className={`w-12 h-12 rounded-xl ${colors.subjects.biologia.bg} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
               <BookOpen className="w-6 h-6 text-white" />
@@ -544,6 +546,14 @@ export default function StudentDashboard() {
             <h3 className={`font-semibold ${colors.text.primary} mb-1`}>Simulazioni</h3>
             <p className={`text-sm ${colors.text.secondary}`}>Inizia una nuova simulazione d'esame</p>
           </div>
+
+          <Link href="/studente/materiali" className={`${colors.background.card} rounded-2xl ${colors.effects.shadow.lg} p-6 hover:shadow-xl transition-shadow cursor-pointer group`}>
+            <div className={`w-12 h-12 rounded-xl bg-teal-500 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
+              <FolderOpen className="w-6 h-6 text-white" />
+            </div>
+            <h3 className={`font-semibold ${colors.text.primary} mb-1`}>Materiale Didattico</h3>
+            <p className={`text-sm ${colors.text.secondary}`}>PDF, video e risorse per studiare</p>
+          </Link>
 
           <div className={`${colors.background.card} rounded-2xl ${colors.effects.shadow.lg} p-6 hover:shadow-xl transition-shadow cursor-pointer group`}>
             <div className={`w-12 h-12 rounded-xl ${colors.subjects.matematica.bg} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>

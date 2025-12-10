@@ -100,4 +100,39 @@ export const firebaseStorage = {
   uploadPDF: async (file: File, type: 'materials' | 'explanations'): Promise<{ url: string; path: string }> => {
     return await firebaseStorage.uploadFile(file, `pdf/${type}`);
   },
+
+  /**
+   * Upload learning material file (PDF, Video, Document)
+   * @param file File to upload
+   * @param type Material type (pdf, video, document)
+   * @param onProgress Progress callback
+   */
+  uploadMaterialFile: async (
+    file: File,
+    type: string,
+    onProgress?: (progress: number) => void
+  ): Promise<{ url: string; path: string }> => {
+    const fileName = `${nanoid()}-${file.name}`;
+    const filePath = `materials/${type}/${fileName}`;
+    const storageRef = ref(storage, filePath);
+
+    return new Promise((resolve, reject) => {
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+          onProgress?.(progress);
+        },
+        (error) => {
+          reject(error);
+        },
+        async () => {
+          const url = await getDownloadURL(uploadTask.snapshot.ref);
+          resolve({ url, path: filePath });
+        }
+      );
+    });
+  },
 };
