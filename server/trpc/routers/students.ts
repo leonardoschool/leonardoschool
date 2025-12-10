@@ -3,6 +3,51 @@ import { router, protectedProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 
+// Lista delle province italiane valide
+const PROVINCE_ITALIANE = [
+  'AG', 'AL', 'AN', 'AO', 'AP', 'AQ', 'AR', 'AT', 'AV', 'BA',
+  'BG', 'BI', 'BL', 'BN', 'BO', 'BR', 'BS', 'BT', 'BZ', 'CA',
+  'CB', 'CE', 'CH', 'CI', 'CL', 'CN', 'CO', 'CR', 'CS', 'CT',
+  'CZ', 'EN', 'FC', 'FE', 'FG', 'FI', 'FM', 'FR', 'GE', 'GO',
+  'GR', 'IM', 'IS', 'KR', 'LC', 'LE', 'LI', 'LO', 'LT', 'LU',
+  'MB', 'MC', 'ME', 'MI', 'MN', 'MO', 'MS', 'MT', 'NA', 'NO',
+  'NU', 'OG', 'OR', 'OT', 'PA', 'PC', 'PD', 'PE', 'PG', 'PI',
+  'PN', 'PO', 'PR', 'PT', 'PU', 'PV', 'PZ', 'RA', 'RC', 'RE',
+  'RG', 'RI', 'RM', 'RN', 'RO', 'SA', 'SI', 'SO', 'SP', 'SR',
+  'SS', 'SU', 'SV', 'TA', 'TE', 'TN', 'TO', 'TP', 'TR', 'TS',
+  'TV', 'UD', 'VA', 'VB', 'VC', 'VE', 'VI', 'VR', 'VS', 'VT', 'VV'
+] as const;
+
+// Regex per codice fiscale italiano
+const CODICE_FISCALE_REGEX = /^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$/;
+
+// Funzione per capitalizzare correttamente nomi di città/indirizzi
+const capitalizeWords = (str: string): string => {
+  return str.trim().toLowerCase()
+    .split(' ')
+    .map(word => {
+      // Non capitalizzare se inizia con un numero
+      if (/^\d/.test(word)) return word;
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(' ');
+};
+
+// Funzione per formattare il telefono
+const formatPhone = (phone: string): string => {
+  let cleaned = phone.replace(/[^\d+]/g, '');
+  
+  // Rimuovi prefisso internazionale se presente
+  if (cleaned.startsWith('+39')) {
+    cleaned = cleaned.substring(3);
+  } else if (cleaned.startsWith('0039')) {
+    cleaned = cleaned.substring(4);
+  }
+  
+  // Formatta come +39 XXX XXX XXXX
+  return `+39 ${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6)}`;
+};
+
 export const studentsRouter = router({
   /**
    * Complete student profile with required personal information
@@ -11,13 +56,39 @@ export const studentsRouter = router({
   completeProfile: protectedProcedure
     .input(
       z.object({
-        fiscalCode: z.string().length(16).toUpperCase(),
-        dateOfBirth: z.date(),
-        phone: z.string().min(10),
-        address: z.string().min(5),
-        city: z.string().min(2),
-        province: z.string().length(2).toUpperCase(),
-        postalCode: z.string().length(5),
+        fiscalCode: z.string()
+          .length(16, 'Il codice fiscale deve essere di 16 caratteri')
+          .regex(CODICE_FISCALE_REGEX, 'Formato codice fiscale non valido')
+          .transform(val => val.toUpperCase()),
+        dateOfBirth: z.date()
+          .refine(date => {
+            const age = new Date().getFullYear() - date.getFullYear();
+            return age >= 14 && age <= 100;
+          }, 'Devi avere almeno 14 anni per registrarti'),
+        phone: z.string()
+          .min(9, 'Il numero di telefono è troppo corto')
+          .max(20, 'Il numero di telefono è troppo lungo')
+          .transform(formatPhone),
+        address: z.string()
+          .min(5, "L'indirizzo è troppo corto")
+          .max(200, "L'indirizzo è troppo lungo")
+          .transform(capitalizeWords),
+        city: z.string()
+          .min(2, 'Il nome della città è troppo corto')
+          .max(100, 'Il nome della città è troppo lungo')
+          .transform(capitalizeWords),
+        province: z.string()
+          .length(2, 'La provincia deve essere di 2 lettere')
+          .transform(val => val.toUpperCase())
+          .refine(val => PROVINCE_ITALIANE.includes(val as typeof PROVINCE_ITALIANE[number]), 
+            'Sigla provincia non valida'),
+        postalCode: z.string()
+          .length(5, 'Il CAP deve essere di 5 cifre')
+          .regex(/^\d{5}$/, 'Il CAP deve contenere solo numeri')
+          .refine(val => {
+            const num = parseInt(val, 10);
+            return num >= 10 && num <= 98168;
+          }, 'CAP non valido'),
       })
     )
     .mutation(async ({ ctx, input }) => {

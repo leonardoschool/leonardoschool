@@ -1,60 +1,101 @@
-# Leonardo School - AI Agent Instructions
+# Leonardo School - Istruzioni per AI Agent
 
-## Architecture Overview
+## Panoramica Architettura
 
-This is a **Next.js 16 (App Router)** application for university admission test preparation, using a **hybrid architecture**:
-- **Firebase Auth + Storage** for authentication and file management
-- **PostgreSQL + Prisma** for all structured data (questions, simulations, results, stats)
-- **tRPC** for type-safe API layer between frontend and backend
+Questa è un'applicazione **Next.js 16 (App Router)** per la preparazione ai test universitari, con **architettura ibrida**:
+- **Firebase Auth + Storage** per autenticazione e gestione file
+- **PostgreSQL + Prisma** per tutti i dati strutturati (domande, simulazioni, risultati, statistiche)
+- **tRPC** per layer API type-safe tra frontend e backend
 
-### Key Structural Pattern: Route Groups
-The app uses Next.js route groups to separate concerns:
-- `app/(marketing)/` - Public marketing site (SEO-optimized, with Header/Footer from layout)
-- `app/(app)/` - Private application area (student/admin dashboards, protected by middleware)
-- `app/auth/` - Standalone auth pages (minimal layout)
+### Pattern Strutturale: Route Groups
+L'app usa i route groups di Next.js per separare le funzionalità:
+- `app/(marketing)/` - Sito pubblico di marketing (SEO-optimized, con Header/Footer dal layout)
+- `app/(app)/` - Area applicazione privata (dashboard studenti/admin, protetta da middleware)
+- `app/auth/` - Pagine di autenticazione standalone (layout minimale)
 
-**Homepage is at** `app/(marketing)/page.tsx` (re-exports from `app/_homepage.tsx`)
+**Homepage** in `app/(marketing)/page.tsx` (re-esporta da `app/_homepage.tsx`)
 
-## Authentication Flow
+## Flusso di Autenticazione
 
-1. **Client** uses `lib/firebase/auth.ts` helpers (e.g., `firebaseAuth.login()`)
-2. **Firebase** returns JWT token
-3. **All tRPC calls** automatically attach token via `lib/trpc/Provider.tsx` headers
-4. **Server** (`server/trpc/context.ts`) verifies token with Firebase Admin and loads user from PostgreSQL
-5. User metadata (role, profile) lives in **PostgreSQL**, not Firebase
+### Login e Registrazione
+1. **Client** usa helpers di `lib/firebase/auth.ts` (es. `firebaseAuth.login()`, `firebaseAuth.register()`)
+2. **Firebase** ritorna JWT token
+3. **Client** chiama API `/api/auth/me` (POST) con il token per sincronizzare i dati utente
+4. **Server** (`app/api/auth/me/route.ts`) verifica token con Firebase Admin e recupera/crea utente in PostgreSQL
+5. **Server** setta cookie HttpOnly sicuri:
+   - `auth-token` (HttpOnly, Secure) - Non accessibile da JavaScript
+   - `user-role` (non-HttpOnly) - Solo per routing client-side
+   - `profile-completed` (non-HttpOnly) - Solo per routing client-side
+6. **Client** salva dati non sensibili in localStorage per UI
 
-**Critical**: User records have `firebaseUid` linking to Firebase Auth, but all app data is in Prisma.
+### Completamento Profilo Obbligatorio
+Dopo la registrazione, gli studenti DEVONO compilare il profilo con:
+- Codice Fiscale (16 caratteri, uppercase)
+- Data di nascita
+- Telefono
+- Indirizzo completo (via, città, provincia, CAP)
+
+**Workflow:**
+1. Registrazione → redirect a `/auth/complete-profile`
+2. Submit form → `trpc.students.completeProfile.mutate()` (transazione atomica)
+3. Aggiorna `user.profileCompleted = true` in database
+4. Redirect a dashboard appropriata (studente/admin)
+
+**Middleware** (`proxy.ts`) blocca accesso a `/app/*` se `profileCompleted = false`
+
+### Attivazione Account
+Account studente attivo solo quando:
+- `profileCompleted = true` (compilato dal studente)
+- `isActive = true` (approvato manualmente da admin via Prisma Studio)
+
+### Logout
+- Chiama `firebaseAuth.logout()` che:
+  1. Chiama `/api/auth/logout` (POST) per cancellare cookie server-side
+  2. Pulisce localStorage
+  3. Esegue `signOut()` da Firebase
+  4. Redirect a `/auth/login`
+
+### Sicurezza Cookie
+✅ **Approccio sicuro implementato:**
+- `auth-token`: HttpOnly + Secure → Non leggibile da JS, protetto da XSS
+- `user-role`, `profile-completed`: NON HttpOnly, usati SOLO per routing client-side
+- **TUTTI** gli endpoint tRPC verificano il token Firebase e leggono i dati reali dal database
+- I cookie non-HttpOnly non sono MAI usati per autorizzazione, solo per UX
 
 ## Database Schema (Prisma)
 
-Located at `prisma/schema.prisma`. Key models:
-- **User** (firebaseUid, role: ADMIN|STUDENT) → links to Student or Admin profile
-- **Question** (subject, difficulty, answers, correctAnswer)
-- **Simulation** (test configuration, timing, scoring rules)
-- **SimulationResult** (student answers, scores, ranking)
-- **StudentStats** (aggregated performance metrics)
+File: `prisma/schema.prisma`. Modelli chiave:
+- **User** (firebaseUid, role: ADMIN|STUDENT, profileCompleted, isActive, emailVerified)
+  - `profileCompleted`: Boolean @default(false) - Studente ha compilato dati anagrafici
+  - `isActive`: Boolean @default(false) - Admin ha approvato l'account
+- **Student** (fiscalCode, dateOfBirth, phone, address, city, province, postalCode)
+- **Admin** (dati amministratore)
+- **Question** (subject, difficulty, answers, correctAnswer, imageUrl)
+- **Simulation** (configurazione test, timing, regole punteggio)
+- **SimulationResult** (risposte studente, punteggi, ranking)
+- **StudentStats** (metriche performance aggregate)
 
-**Enum values** (important for filters/queries):
+**Valori Enum** (importante per filtri/query):
 - Subject: `BIOLOGIA`, `CHIMICA`, `FISICA`, `MATEMATICA`, `LOGICA`, `CULTURA_GENERALE`
 - UserRole: `ADMIN`, `STUDENT`
 - SimulationType: `FULL_TEST`, `SUBJECT_TEST`, `CUSTOM_TEST`, `QUICK_QUIZ`
 
-## tRPC Patterns
+## Pattern tRPC
 
-All API logic goes in `server/trpc/routers/`. Structure:
+Tutta la logica API va in `server/trpc/routers/`. Struttura:
 ```typescript
 import { router, publicProcedure, protectedProcedure, adminProcedure } from '../init';
 
 export const exampleRouter = router({
   publicEndpoint: publicProcedure.query(...),
-  userEndpoint: protectedProcedure.query(...),    // Requires auth
-  adminEndpoint: adminProcedure.mutation(...),    // Requires ADMIN role
+  userEndpoint: protectedProcedure.query(...),    // Richiede auth
+  adminEndpoint: adminProcedure.mutation(...),    // Richiede ruolo ADMIN
 });
 ```
 
-**Add new routers** to `server/trpc/routers/index.ts` (merge into `appRouter`).
+**Aggiungere nuovi router** in `server/trpc/routers/index.ts` (merge in `appRouter`).
 
-**Client usage** (in components):
+**Uso client** (nei componenti):
 ```typescript
 'use client';
 import { trpc } from '@/lib/trpc/client';
@@ -63,58 +104,59 @@ const { data, isLoading } = trpc.auth.me.useQuery();
 const mutation = trpc.students.update.useMutation();
 ```
 
-## Development Workflows
+## Workflow di Sviluppo
 
 ### Setup Database
 ```bash
-pnpm prisma:generate   # Generate Prisma client
-pnpm prisma:migrate    # Run migrations
-pnpm prisma:studio     # Open DB GUI
+pnpm prisma:generate   # Genera Prisma client
+pnpm prisma:migrate    # Esegue migrations
+pnpm prisma:studio     # Apre DB GUI
 ```
 
 ### Dev Server
 ```bash
-pnpm dev               # Starts on localhost:3000
+pnpm dev               # Parte su localhost:3000
 ```
 
-### Environment Variables
-Copy `.env.example` to `.env.local` and configure:
-- Firebase credentials (NEXT_PUBLIC_FIREBASE_*)
-- Firebase Admin service account (FIREBASE_SERVICE_ACCOUNT_KEY as JSON string)
-- PostgreSQL connection (DATABASE_URL)
+### Variabili d'Ambiente
+Copia `.env.example` in `.env.local` e configura:
+- Credenziali Firebase (NEXT_PUBLIC_FIREBASE_*)
+- Firebase Admin service account (FIREBASE_SERVICE_ACCOUNT_KEY come stringa JSON)
+- Connessione PostgreSQL (DATABASE_URL) - porta 5433
 
-## File Organization Conventions
+## Organizzazione File
 
-### Components
-- `components/layout/` - Header, Footer, Sidebar (shared layouts)
-- `components/ui/` - Reusable UI primitives (Button, Card, Input)
-- `components/student/` - Student-specific features
-- `components/admin/` - Admin-specific features
+### Componenti
+- `components/layout/` - Header, Footer, Sidebar (layout condivisi)
+- `components/ui/` - Primitive UI riutilizzabili (Button, Card, Input)
+- `components/student/` - Funzionalità specifiche studenti
+- `components/admin/` - Funzionalità specifiche admin
 
-### Libraries
-- `lib/firebase/` - Firebase client & admin SDK wrappers
+### Librerie
+- `lib/firebase/` - Wrapper Firebase client & admin SDK
 - `lib/prisma/` - Prisma client singleton
-- `lib/trpc/` - tRPC client & React Query provider
+- `lib/trpc/` - Client tRPC & React Query provider
 - `lib/hooks/` - Custom React hooks
 - `lib/stores/` - Zustand state management
-- `lib/validations/` - Zod schemas for form validation
-- `lib/theme/` - Design system (colors, typography, spacing)
+- `lib/validations/` - Schema Zod per validazione form
+- `lib/theme/` - Design system (colori, tipografia, spaziatura)
 
-### Server Code
-- `server/trpc/routers/` - tRPC route handlers (business logic)
-- `server/services/` - Reusable service layer (email, stats calculations, etc.)
+### Codice Server
+- `server/trpc/routers/` - Handler route tRPC (logica business)
+- `server/services/` - Layer servizi riutilizzabili (email, calcoli stats, etc.)
+- `app/api/` - Route handler Next.js (es. `/api/auth/me`, `/api/auth/logout`)
 
-## Critical Integration Points
+## Punti di Integrazione Critici
 
-### Firebase Storage Upload Pattern
-Use `lib/firebase/storage.ts` helpers:
+### Upload Firebase Storage
+Usa helpers di `lib/firebase/storage.ts`:
 ```typescript
 const { url, path } = await firebaseStorage.uploadQuestionImage(file);
-// Store `url` in PostgreSQL question.imageUrl field
+// Salva `url` in PostgreSQL nel campo question.imageUrl
 ```
 
-### Prisma Transactions
-For atomic operations (e.g., submitting test results):
+### Transazioni Prisma
+Per operazioni atomiche (es. submit risultati test):
 ```typescript
 await ctx.prisma.$transaction(async (tx) => {
   await tx.simulationResult.create(...);
@@ -122,62 +164,170 @@ await ctx.prisma.$transaction(async (tx) => {
 });
 ```
 
-### Role-Based Access
-- Use `protectedProcedure` for any authenticated endpoint
-- Use `adminProcedure` for admin-only operations
-- Client-side route protection via `proxy.ts` (Next.js 16 convention)
+### Controllo Accesso Basato su Ruolo
+- Usa `protectedProcedure` per endpoint autenticati
+- Usa `adminProcedure` per operazioni solo admin
+- Protezione route client-side via `proxy.ts` (convenzione Next.js 16)
 
-### Color System (IMPORTANT)
-**ALWAYS use the centralized color system** from `lib/theme/colors.ts` instead of hardcoding hex values:
+### Sistema Colori (IMPORTANTISSIMO)
+**USA SEMPRE il sistema colori centralizzato** da `lib/theme/colors.ts` invece di hardcodare valori hex, se non dovesse essere presente il colore desiderato, aggiungilo lì.:
 
 ```typescript
 import { colors, getSubjectColor } from '@/lib/theme/colors';
 
-// ✅ Correct - Use color constants
+// ✅ Corretto - Usa costanti colore
 <div className={colors.subjects.matematica.bg} />
 <h1 className={colors.primary.gradient} />
 
-// ✅ Dynamic subject colors
+// ✅ Colori materia dinamici
 <div className={getSubjectColor('BIOLOGIA', 'bg')} />
 
-// ❌ Wrong - Don't hardcode hex values
+// ❌ Sbagliato - Non hardcodare valori hex
 <div className="bg-[#D54F8A]" />
 ```
 
-**Available color categories:**
-- `colors.primary.*` - Brand colors (rosso bordeaux Leonardo School)
-- `colors.subjects.*` - Subject-specific colors (matematica, biologia, chimica, fisica, logica, culturaGenerale)
-- `colors.neutral.*` - Gray scale and neutral UI colors
-- `colors.effects.*` - Shadows, hovers, interactive states
-- `colors.status.*` - Success, warning, error, info states
+**Categorie colori disponibili:**
+- `colors.primary.*` - Colori brand (rosso bordeaux Leonardo School)
+- `colors.subjects.*` - Colori specifici materie (matematica, biologia, chimica, fisica, logica, culturaGenerale)
+- `colors.neutral.*` - Scala grigi e colori UI neutri
+- `colors.background.*` - Sfondi (authPage, card, input, primary, secondary)
+- `colors.text.*` - Testi (primary, secondary, muted)
+- `colors.border.*` - Bordi
+- `colors.effects.*` - Ombre, hover, stati interattivi
+- `colors.status.*` - Success, warning, error, info
 
-See `lib/theme/colors.ts` for full documentation.
+Vedi `lib/theme/colors.ts` per documentazione completa.
 
-## Testing & Debugging
+## Linee Guida UI/UX
 
-**No formal test suite yet.** Manual testing workflow:
-1. Use `pnpm prisma:studio` to inspect/modify DB state
-2. Check browser Network tab for tRPC calls (endpoint: `/api/trpc`)
-3. Firebase Auth errors logged to console in `server/trpc/context.ts`
+### Design Responsive
+**SEMPRE** creare componenti che si adattano perfettamente a tutti gli schermi:
 
-## Future Expansion (Planned)
+```typescript
+// ✅ Esempio buono - Responsive con breakpoint Tailwind
+<div className="w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-20">
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6 xl:gap-8">
+    {/* Content */}
+  </div>
+</div>
 
-- **Expo mobile app** will share tRPC routers and Prisma types
-- **Redis caching** for ranking/statistics (when needed)
-- **Background jobs** (BullMQ) for heavy computations
+// ❌ Evitare - Width fissa o troppo stretta su desktop
+<div className="max-w-md mx-auto px-4">
+```
 
-## Common Pitfalls
+**Breakpoint Tailwind:**
+- `sm:` 640px - Tablet piccoli
+- `md:` 768px - Tablet
+- `lg:` 1024px - Desktop
+- `xl:` 1280px - Desktop large
+- `2xl:` 1536px - Desktop extra large
 
-1. **Forgetting to sync Firebase user**: After Firebase registration, MUST call `trpc.auth.syncUser.mutate()` to create DB record
-2. **Prisma not generated**: Run `pnpm prisma:generate` after schema changes
-3. **Missing Firebase token**: Ensure `TRPCProvider` wraps app in `layout.tsx`
-4. **Route group confusion**: Public pages go in `(marketing)`, private in `(app)`, auth is standalone
-5. **Hardcoding colors**: ALWAYS use `lib/theme/colors.ts` instead of inline hex values (e.g., `bg-[#D54F8A]`)
-6. **Proxy vs Middleware**: Use `proxy.ts` not `middleware.ts` (Next.js 16 convention)
+### Spaziatura e Layout
+- **Card/Form**: Usare padding generoso (`px-6 sm:px-10 lg:px-16 xl:px-20`)
+- **Gap tra elementi**: `gap-4` mobile, `gap-6` tablet, `gap-8` desktop
+- **Sezioni form**: Raggruppare logicamente con titoli e divisori
+- **Input**: `py-3` per tocco facile su mobile
 
-## Examples from Codebase
+### Form Best Practices
+```typescript
+// ✅ Form ben strutturato
+<form className="space-y-6 sm:space-y-8">
+  {/* Sezione 1 */}
+  <div className="space-y-5">
+    <h3 className="text-sm font-semibold uppercase tracking-wide">
+      Titolo Sezione
+    </h3>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
+      <div>
+        <label className="block text-sm font-medium mb-2">
+          Campo <span className={colors.status.error.text}>*</span>
+        </label>
+        <input className="block w-full px-4 py-3 rounded-lg..." />
+      </div>
+    </div>
+  </div>
+  
+  {/* Divisore */}
+  <div className={`border-t ${colors.border.primary}`}></div>
+  
+  {/* Sezione 2 */}
+  ...
+</form>
+```
 
-- **tRPC router**: `server/trpc/routers/auth.ts` (sync Firebase user to DB)
-- **Firebase auth wrapper**: `lib/firebase/auth.ts` (login, register, logout helpers)
-- **Prisma usage**: `server/trpc/context.ts` (fetch user by firebaseUid)
-- **Route group layout**: `app/(marketing)/layout.tsx` (wraps with Header/Footer)
+### Loading States
+- Usare spinner animato con `colors.primary.main`
+- Mostrare overlay durante operazioni (es. login, submit form)
+- Disabilitare bottoni con `disabled:opacity-50 disabled:cursor-not-allowed`
+
+### Dark Mode
+- L'app supporta dark mode via Tailwind `media` query
+- Usare SEMPRE classi colore da `colors.ts` che gestiscono automaticamente dark mode
+- Non usare `bg-white`, `text-black` direttamente
+
+## Testing & Debug
+
+**Non c'è test suite formale.** Workflow testing manuale:
+1. Usa `pnpm prisma:studio` per ispezionare/modificare stato DB
+2. Controlla tab Network del browser per chiamate tRPC (endpoint: `/api/trpc`)
+3. Errori Firebase Auth loggati in console in `server/trpc/context.ts`
+4. Per testare flow completo:
+   - Registra nuovo utente
+   - Verifica redirect a `/auth/complete-profile`
+   - Compila form profilo
+   - Verifica `profileCompleted = true` in DB
+   - Attiva account (`isActive = true`) via Prisma Studio
+   - Login e verifica accesso dashboard
+
+## Espansioni Future (Pianificate)
+
+- **App mobile Expo** condividerà router tRPC e tipi Prisma
+- **Redis caching** per ranking/statistiche (quando necessario)
+- **Background jobs** (BullMQ) per computazioni pesanti
+- **Admin panel** per approvazione utenti (attualmente manuale via Prisma Studio)
+
+## Errori Comuni da Evitare
+
+1. **Dimenticare sync Firebase user**: Dopo registrazione Firebase, DEVI chiamare endpoint `/api/auth/me` per creare record DB
+2. **Prisma non generato**: Esegui `pnpm prisma:generate` dopo modifiche schema
+3. **Token Firebase mancante**: Assicurati `TRPCProvider` wrappa app in `layout.tsx`
+4. **Confusione route groups**: Pagine pubbliche in `(marketing)`, private in `(app)`, auth standalone
+5. **Hardcodare colori**: USA SEMPRE `lib/theme/colors.ts` invece di valori hex inline (es. `bg-[#D54F8A]`)
+6. **Proxy vs Middleware**: Usa `proxy.ts` non `middleware.ts` (convenzione Next.js 16)
+7. **Card troppo strette su desktop**: Usa `w-full` con `max-w-6xl` o larghezze percentuali, padding generoso
+8. **Form senza responsive**: Testa SEMPRE su mobile, tablet, desktop con DevTools
+9. **Cookie non sicuri**: Token auth DEVE essere HttpOnly, altri cookie solo per routing
+
+## Esempi dal Codebase
+
+- **Router tRPC auth**: `server/trpc/routers/auth.ts` (sync Firebase user a DB, get current user)
+- **Router tRPC students**: `server/trpc/routers/students.ts` (completeProfile mutation con transaction)
+- **Wrapper Firebase auth**: `lib/firebase/auth.ts` (login, register, logout, onAuthStateChanged)
+- **API route login**: `app/api/auth/me/route.ts` (POST endpoint per sync user dopo login)
+- **API route logout**: `app/api/auth/logout/route.ts` (POST endpoint per clear cookies)
+- **Uso Prisma**: `server/trpc/context.ts` (fetch user by firebaseUid)
+- **Layout route group**: `app/(marketing)/layout.tsx` (wrappa con Header/Footer)
+- **Pagina complete-profile**: `app/auth/complete-profile/page.tsx` (form responsive con validazione)
+- **Middleware**: `proxy.ts` (verifica auth, profile completion, role-based access)
+
+## Note Tecniche Aggiuntive
+
+### PostgreSQL
+- Porta: 5433
+- Credenziali: postgres/postgres
+- Database: leonardo_school
+
+### Firebase
+- Client SDK configurato in `lib/firebase/config.ts`
+- Admin SDK configurato in `lib/firebase/admin.ts`
+- Service account key in variabile ambiente `FIREBASE_SERVICE_ACCOUNT_KEY`
+
+### tRPC Context
+- Creato in `server/trpc/context.ts`
+- Verifica token con `adminAuth.verifyIdToken()`
+- Include `prisma`, `user`, `firebaseUid` nel context
+
+### Componente Preloader
+- Usato durante caricamento iniziale app
+- Supporta dark mode con `colors.background.primary`
+- Animazione dots con `colors.primary.main`
