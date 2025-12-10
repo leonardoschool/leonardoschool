@@ -598,8 +598,11 @@ export default function UsersManagementPage() {
     limit: 15,
   });
 
-  // Fetch stats - filtered by selected role
+  // Fetch stats - filtered by selected role (for breakdown by status)
   const { data: stats } = trpc.users.getStats.useQuery({ role });
+  
+  // Fetch global stats (always ALL roles) for total count
+  const { data: globalStats } = trpc.users.getStats.useQuery({ role: 'ALL' });
 
   // Fetch contract templates
   const { data: templates } = trpc.contracts.getTemplates.useQuery();
@@ -830,8 +833,8 @@ export default function UsersManagementPage() {
     }).format(new Date(date));
   };
 
-  // Filter out current user
-  const filteredUsers = usersData?.users.filter((u: any) => u.id !== currentUser?.id) || [];
+  // Show all users including current user
+  const filteredUsers = usersData?.users || [];
 
   const modalConfig = getModalConfig();
 
@@ -863,7 +866,7 @@ export default function UsersManagementPage() {
             </div>
             <div className="text-left">
               <p className={`text-xs ${colors.text.muted}`}>Totale</p>
-              <p className="text-xl font-bold">{stats?.total || 0}</p>
+              <p className="text-xl font-bold">{globalStats?.total || 0}</p>
             </div>
           </div>
         </button>
@@ -947,7 +950,7 @@ export default function UsersManagementPage() {
               const Icon = option.icon;
               const getCount = () => {
                 switch (option.value) {
-                  case 'all': return stats?.total || 0;
+                  case 'all': return role === 'ALL' ? (globalStats?.total || 0) : (stats?.total || 0);
                   case 'pending_profile': return stats?.pendingProfile || 0;
                   case 'pending_contract': return stats?.pendingContract || 0;
                   case 'pending_sign': return stats?.pendingSign || 0;
@@ -1009,6 +1012,9 @@ export default function UsersManagementPage() {
                 const statusBadge = getStatusBadge(user);
                 const RoleIcon = roleBadge.icon;
                 
+                // Check if this is the current user (self)
+                const isSelf = user.id === currentUser?.id;
+                
                 const isStudentOrCollab = user.role === 'STUDENT' || user.role === 'COLLABORATOR';
                 const hasProfileCompleted = user.profileCompleted;
                 const targetId = user.student?.id || user.collaborator?.id;
@@ -1018,7 +1024,7 @@ export default function UsersManagementPage() {
                 const lastContract = studentContract || collabContract;
                 const hasActiveContract = lastContract && (lastContract.status === 'PENDING' || lastContract.status === 'SIGNED');
                 const hasPendingContract = lastContract?.status === 'PENDING';
-                const canAssignContract = isStudentOrCollab && hasProfileCompleted && !hasActiveContract && targetId;
+                const canAssignContract = isStudentOrCollab && hasProfileCompleted && !hasActiveContract && targetId && !isSelf;
                 const hasSignedContract = lastContract?.status === 'SIGNED' || (user.isActive && lastContract);
                 const contractId = lastContract?.id;
 
@@ -1053,6 +1059,16 @@ export default function UsersManagementPage() {
                     </div>
 
                     <div className="mt-3 flex items-center gap-2">
+                      {/* View profile - always available */}
+                      {isStudentOrCollab && (
+                        <button
+                          onClick={() => setViewUserModal({ isOpen: true, user })}
+                          className={`p-2 rounded-lg ${colors.background.secondary} hover:opacity-80 transition-opacity`}
+                          title="Visualizza profilo"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      )}
                       {hasSignedContract && contractId && (
                         <button
                           onClick={() => window.open(`/api/contracts/${contractId}/view`, '_blank')}
@@ -1071,13 +1087,15 @@ export default function UsersManagementPage() {
                           >
                             <Eye className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => openRevokeContractModal(contractId, user.name)}
-                            className={`p-2 rounded-lg ${colors.status.warning.softBg} ${colors.status.warning.text}`}
-                            title="Revoca contratto"
-                          >
-                            <FileX className="w-4 h-4" />
-                          </button>
+                          {!isSelf && (
+                            <button
+                              onClick={() => openRevokeContractModal(contractId, user.name)}
+                              className={`p-2 rounded-lg ${colors.status.warning.softBg} ${colors.status.warning.text}`}
+                              title="Revoca contratto"
+                            >
+                              <FileX className="w-4 h-4" />
+                            </button>
+                          )}
                         </>
                       )}
                       {canAssignContract && (
@@ -1089,7 +1107,7 @@ export default function UsersManagementPage() {
                           <Send className="w-4 h-4" />
                         </button>
                       )}
-                      {user.profileCompleted && (
+                      {user.profileCompleted && !isSelf && (
                         <button
                           onClick={() => openToggleActiveModal(user.id, user.name, user.isActive, lastContract?.status === 'SIGNED', user.role)}
                           className={`p-2 rounded-lg ${user.isActive ? colors.status.warning.softBg : colors.status.success.softBg} ${user.isActive ? colors.status.warning.text : colors.status.success.text}`}
@@ -1098,25 +1116,29 @@ export default function UsersManagementPage() {
                           {user.isActive ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                         </button>
                       )}
-                      <button
-                        onClick={() => openDeleteModal(user.id, user.name)}
-                        className={`p-2 rounded-lg ${colors.status.error.softBg} ${colors.status.error.text}`}
-                        title="Elimina"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {!isSelf && (
+                        <button
+                          onClick={() => openDeleteModal(user.id, user.name)}
+                          className={`p-2 rounded-lg ${colors.status.error.softBg} ${colors.status.error.text}`}
+                          title="Elimina"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                       
-                      {/* Role change dropdown for mobile */}
-                      <div className="ml-auto">
-                        <RoleDropdown
-                          currentRole={user.role}
-                          onSelect={(newRole) => {
-                            if (newRole !== user.role) {
-                              openChangeRoleModal(user.id, user.name, newRole);
-                            }
-                          }}
-                        />
-                      </div>
+                      {/* Role change dropdown for mobile - disabled for self */}
+                      {!isSelf && (
+                        <div className="ml-auto">
+                          <RoleDropdown
+                            currentRole={user.role}
+                            onSelect={(newRole) => {
+                              if (newRole !== user.role) {
+                                openChangeRoleModal(user.id, user.name, newRole);
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -1142,6 +1164,9 @@ export default function UsersManagementPage() {
                     const statusBadge = getStatusBadge(user);
                     const RoleIcon = roleBadge.icon;
                     
+                    // Check if this is the current user (self)
+                    const isSelf = user.id === currentUser?.id;
+                    
                     const isStudentOrCollab = user.role === 'STUDENT' || user.role === 'COLLABORATOR';
                     const hasProfileCompleted = user.profileCompleted;
                     const targetId = user.student?.id || user.collaborator?.id;
@@ -1151,7 +1176,7 @@ export default function UsersManagementPage() {
                     const lastContract = studentContract || collabContract;
                     const hasActiveContract = lastContract && (lastContract.status === 'PENDING' || lastContract.status === 'SIGNED');
                     const hasPendingContract = lastContract?.status === 'PENDING';
-                    const canAssignContract = isStudentOrCollab && hasProfileCompleted && !hasActiveContract && targetId;
+                    const canAssignContract = isStudentOrCollab && hasProfileCompleted && !hasActiveContract && targetId && !isSelf;
                     const hasSignedContract = lastContract?.status === 'SIGNED' || (user.isActive && lastContract);
                     const contractId = lastContract?.id;
 
@@ -1170,6 +1195,7 @@ export default function UsersManagementPage() {
                                 </p>
                               )}
                             </div>
+
                           </div>
                         </td>
                         <td className="px-4 xl:px-6 py-4">
@@ -1179,15 +1205,22 @@ export default function UsersManagementPage() {
                           </div>
                         </td>
                         <td className="px-4 xl:px-6 py-4">
-                          {/* Role dropdown */}
-                          <RoleDropdown
-                            currentRole={user.role}
-                            onSelect={(newRole) => {
-                              if (newRole !== user.role) {
-                                openChangeRoleModal(user.id, user.name, newRole);
-                              }
-                            }}
-                          />
+                          {/* Role dropdown - disabled for self */}
+                          {isSelf ? (
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${roleBadge.bg} ${roleBadge.color}`}>
+                              <RoleIcon className="w-3 h-3" />
+                              {roleBadge.label}
+                            </span>
+                          ) : (
+                            <RoleDropdown
+                              currentRole={user.role}
+                              onSelect={(newRole) => {
+                                if (newRole !== user.role) {
+                                  openChangeRoleModal(user.id, user.name, newRole);
+                                }
+                              }}
+                            />
+                          )}
                         </td>
                         <td className="px-4 xl:px-6 py-4">
                           <div className="flex items-center gap-2 text-sm whitespace-nowrap">
