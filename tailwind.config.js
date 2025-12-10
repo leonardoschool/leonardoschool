@@ -1,16 +1,25 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: 'media', // Usa le preferenze del browser
   content: [
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
     './app/**/*.{js,ts,jsx,tsx,mdx}',
+    './lib/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
       colors: {
         primary: {
           red: '#a8012b',
-          black: '#000000',
+          dark: '#8a0125',
+          light: '#d1163b',
+        },
+        // Estendo i colori slate per dark mode
+        slate: {
+          750: '#1e293b',
+          850: '#172033',
+          950: '#0f172a',
         },
         red: {
           50: '#fef2f2',

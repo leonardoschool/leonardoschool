@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
 import Preloader from "@/components/ui/Preloader";
 import CookieBanner from "@/components/ui/CookieBanner";
 import { SITE_NAME, SITE_DESCRIPTION, SITE_KEYWORDS } from "@/lib/constants";
 import { Analytics } from '@vercel/analytics/next';
+import { TRPCProvider } from "@/lib/trpc/Provider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -78,14 +77,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="it">
-      <body className={`${inter.variable} font-sans antialiased`} suppressHydrationWarning>
-        <Preloader />
-        <Header />
-        <main className="min-h-screen">{children}</main>
-        <Footer />
-        <CookieBanner />
-        <Analytics />
+    <html lang="it" className="h-full">
+      <body className={`${inter.variable} font-sans antialiased h-full transition-colors duration-300`} style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }} suppressHydrationWarning>
+        <TRPCProvider>
+          <Preloader />
+          {children}
+          <CookieBanner />
+          <Analytics />
+        </TRPCProvider>
       </body>
     </html>
   );
