@@ -17,6 +17,7 @@ export async function createContext(opts: FetchCreateContextFnOptions) {
     try {
       // Verify Firebase token
       const decodedToken = await adminAuth.verifyIdToken(token);
+      console.log('[tRPC Context] Firebase UID:', decodedToken.uid);
 
       // Get user from database
       user = await prisma.user.findUnique({
@@ -26,10 +27,18 @@ export async function createContext(opts: FetchCreateContextFnOptions) {
           admin: true,
         },
       });
+      
+      if (user) {
+        console.log('[tRPC Context] User found:', { id: user.id, email: user.email, role: user.role });
+      } else {
+        console.log('[tRPC Context] No user found in DB for UID:', decodedToken.uid);
+      }
     } catch (error) {
-      console.error('Token verification failed:', error);
+      console.error('[tRPC Context] Token verification failed:', error);
       // Don't throw error - just set user to null
     }
+  } else {
+    console.log('[tRPC Context] No token provided');
   }
 
   return {

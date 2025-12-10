@@ -54,6 +54,21 @@ enum AlertType {
   ERROR
 }
 
+enum ContractStatus {
+  PENDING      // Contratto assegnato, in attesa di firma
+  SIGNED       // Contratto firmato dallo studente
+  EXPIRED      // Contratto scaduto (non firmato in tempo)
+  CANCELLED    // Contratto annullato dall'admin
+}
+
+enum NotificationType {
+  CONTRACT_ASSIGNED    // Contratto assegnato a studente
+  CONTRACT_SIGNED      // Studente ha firmato
+  ACCOUNT_ACTIVATED    // Account attivato
+  PROFILE_COMPLETED    // Studente ha completato profilo
+  GENERAL              // Notifica generica
+}
+
 // ==================== AUTH & USERS ====================
 
 model User {
@@ -103,6 +118,7 @@ model Student {
   simulationResults SimulationResult[]
   alerts            Alert[]
   stats             StudentStats?
+  contracts         Contract[]
   
   @@index([userId])
   @@index([classId])
@@ -369,4 +385,92 @@ model Event {
   @@index([startDate])
   @@index([isPublic])
   @@map("events")
+}
+
+// ==================== CONTRACTS ====================
+
+model ContractTemplate {
+  id          String    @id @default(cuid())
+  name        String    // "Corso Annuale Medicina", "Corso Intensivo", etc.
+  description String?   @db.Text
+  content     String    @db.Text  // HTML/Markdown del contratto con placeholder
+  price       Float?    // Prezzo opzionale
+  duration    String?   // "12 mesi", "6 mesi", etc.
+  isActive    Boolean   @default(true)
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdBy   String?   // Admin userId
+  
+  contracts   Contract[]
+  
+  @@index([isActive])
+  @@map("contract_templates")
+}
+
+model Contract {
+  id                String          @id @default(cuid())
+  studentId         String
+  templateId        String
+  
+  // Contract status
+  status            ContractStatus  @default(PENDING)
+  
+  // Content snapshot (frozen at assignment time)
+  contentSnapshot   String          @db.Text  // HTML with student data filled in
+  
+  // Signature
+  signedAt          DateTime?
+  signatureData     String?         @db.Text  // Base64 signature image or digital signature data
+  signatureIp       String?         // IP address at signing
+  signatureUserAgent String?        // Browser info at signing
+  
+  // Token for email link
+  signToken         String          @unique @default(cuid())
+  signTokenExpiresAt DateTime?
+  
+  // Timestamps
+  assignedAt        DateTime        @default(now())
+  expiresAt         DateTime?       // Deadline for signing
+  
+  // Admin notes
+  adminNotes        String?         @db.Text
+  assignedBy        String?         // Admin userId who assigned
+  
+  // Relations
+  student           Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  template          ContractTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  
+  @@index([studentId])
+  @@index([templateId])
+  @@index([status])
+  @@index([signToken])
+  @@map("contracts")
+}
+
+// ==================== ADMIN NOTIFICATIONS ====================
+
+model AdminNotification {
+  id          String            @id @default(cuid())
+  type        NotificationType
+  title       String
+  message     String            @db.Text
+  
+  // Related entities
+  studentId   String?           // Related student (if applicable)
+  contractId  String?           // Related contract (if applicable)
+  
+  // Read status per admin (JSON: {adminId: readAt})
+  readBy      Json              @default("{}")
+  
+  // Priority
+  isUrgent    Boolean           @default(false)
+  
+  createdAt   DateTime          @default(now())
+  expiresAt   DateTime?
+  
+  @@index([type])
+  @@index([createdAt])
+  @@index([isUrgent])
+  @@map("admin_notifications")
 }

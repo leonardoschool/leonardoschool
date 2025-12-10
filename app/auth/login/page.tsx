@@ -57,9 +57,9 @@ export default function LoginPage() {
       if (dbUser.role === 'STUDENT' && !dbUser.profileCompleted) {
         router.push('/auth/complete-profile');
       } else if (dbUser.role === 'ADMIN') {
-        router.push('/app/admin');
+        router.push('/admin');
       } else {
-        router.push('/app/studente');
+        router.push('/studente');
       }
     } catch (err: any) {
       console.error('Login error:', err);

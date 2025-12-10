@@ -2,6 +2,7 @@
 import { router, protectedProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import { emailService } from '../../services/emailService';
 
 // Lista delle province italiane valide
 const PROVINCE_ITALIANE = [
@@ -152,7 +153,26 @@ export const studentsRouter = router({
           data: { profileCompleted: true },
         });
 
+        // Create admin notification
+        await tx.adminNotification.create({
+          data: {
+            type: 'PROFILE_COMPLETED',
+            title: 'Nuovo profilo completato',
+            message: `${ctx.user!.name} ha completato il profilo anagrafico`,
+            studentId: student.id,
+          },
+        });
+
         return studentUpdate;
+      });
+
+      // Send notification email to admin (outside transaction, not critical)
+      await emailService.sendProfileCompletedAdminNotification({
+        studentName: ctx.user.name,
+        studentEmail: ctx.user.email,
+        studentId: student.id,
+      }).catch(err => {
+        console.error('Failed to send profile completed admin notification:', err);
       });
 
       return {

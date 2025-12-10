@@ -37,6 +37,7 @@ export const colors = {
     textHover: 'hover:text-[#8a0125] dark:hover:text-[#d1163b]',
     border: 'border-[#a8012b]',
     hover: 'hover:bg-[#8a0125]',
+    softBg: 'bg-red-50 dark:bg-red-950/30',
     
     // Gradiente per elementi decorativi
     accentGradient: 'bg-gradient-to-r from-red-500 to-red-600',
@@ -187,6 +188,11 @@ export const colors = {
     borderPrimary: 'border-gray-200 dark:border-gray-700',
     borderSecondary: 'border-gray-300 dark:border-gray-600',
     
+    // Grays diretti (per usi speciali)
+    gray100: 'bg-gray-100 dark:bg-gray-800',
+    gray500: 'text-gray-500 dark:text-gray-400',
+    gray600: 'text-gray-600 dark:text-gray-400',
+    
     // Classi legacy (da deprecare gradualmente)
     white: 'bg-white dark:bg-gray-900',
     black: 'bg-black dark:bg-gray-950',
@@ -259,24 +265,28 @@ export const colors = {
       text: 'text-green-700 dark:text-green-400',
       border: 'border-green-500 dark:border-green-600',
       bgLight: 'bg-green-50 dark:bg-green-950/30',
+      softBg: 'bg-green-50 dark:bg-green-950/30', // alias per bgLight
     },
     warning: {
       bg: 'bg-yellow-500 dark:bg-yellow-600',
       text: 'text-yellow-700 dark:text-yellow-400',
       border: 'border-yellow-500 dark:border-yellow-600',
       bgLight: 'bg-yellow-50 dark:bg-yellow-950/30',
+      softBg: 'bg-yellow-50 dark:bg-yellow-950/30', // alias per bgLight
     },
     error: {
       bg: 'bg-red-500 dark:bg-red-600',
       text: 'text-red-700 dark:text-red-400',
       border: 'border-red-500 dark:border-red-600',
       bgLight: 'bg-red-50 dark:bg-red-950/30',
+      softBg: 'bg-red-50 dark:bg-red-950/30', // alias per bgLight
     },
     info: {
       bg: 'bg-blue-500 dark:bg-blue-600',
       text: 'text-blue-700 dark:text-blue-400',
       border: 'border-blue-500 dark:border-blue-600',
       bgLight: 'bg-blue-50 dark:bg-blue-950/30',
+      softBg: 'bg-blue-50 dark:bg-blue-950/30', // alias per bgLight
     },
   },
 

@@ -9,8 +9,14 @@ export function proxy(request: NextRequest) {
   const userRole = request.cookies.get('user-role')?.value;
   const profileCompleted = request.cookies.get('profile-completed')?.value === 'true';
   
-  // Protect /app/* routes (private application area)
-  if (pathname.startsWith('/app')) {
+  // Define protected routes (inside (app) route group)
+  const isAdminRoute = pathname.startsWith('/admin');
+  const isStudentRoute = pathname.startsWith('/studente');
+  const isProtectedRoute = isAdminRoute || isStudentRoute;
+  const isContractSignRoute = pathname.startsWith('/contratto');
+  
+  // Protect private application routes
+  if (isProtectedRoute) {
     if (!authToken) {
       // Not authenticated, redirect to login
       const loginUrl = new URL('/auth/login', request.url);
@@ -25,23 +31,23 @@ export function proxy(request: NextRequest) {
     }
     
     // Check role-based access
-    if (pathname.startsWith('/app/admin') && userRole !== 'ADMIN') {
+    if (isAdminRoute && userRole !== 'ADMIN') {
       // Not admin, redirect to student dashboard
-      return NextResponse.redirect(new URL('/app/studente', request.url));
+      return NextResponse.redirect(new URL('/studente', request.url));
     }
     
-    if (pathname.startsWith('/app/studente') && userRole !== 'STUDENT') {
+    if (isStudentRoute && userRole !== 'STUDENT') {
       // Not student, redirect to admin dashboard
-      return NextResponse.redirect(new URL('/app/admin', request.url));
+      return NextResponse.redirect(new URL('/admin', request.url));
     }
-    
-    // Redirect /app to role-specific dashboard
-    if (pathname === '/app' || pathname === '/app/') {
-      if (userRole === 'ADMIN') {
-        return NextResponse.redirect(new URL('/app/admin', request.url));
-      } else if (userRole === 'STUDENT') {
-        return NextResponse.redirect(new URL('/app/studente', request.url));
-      }
+  }
+  
+  // Contract signing page - requires authentication but any role can access
+  if (isContractSignRoute) {
+    if (!authToken) {
+      const loginUrl = new URL('/auth/login', request.url);
+      loginUrl.searchParams.set('redirect', pathname);
+      return NextResponse.redirect(loginUrl);
     }
   }
   
@@ -54,9 +60,9 @@ export function proxy(request: NextRequest) {
     
     // Otherwise redirect to dashboard
     if (userRole === 'ADMIN') {
-      return NextResponse.redirect(new URL('/app/admin', request.url));
+      return NextResponse.redirect(new URL('/admin', request.url));
     } else if (userRole === 'STUDENT') {
-      return NextResponse.redirect(new URL('/app/studente', request.url));
+      return NextResponse.redirect(new URL('/studente', request.url));
     }
   }
   
@@ -65,7 +71,9 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/app/:path*',
+    '/admin/:path*',
+    '/studente/:path*',
+    '/contratto/:path*',
     '/auth/:path*',
   ],
 };
