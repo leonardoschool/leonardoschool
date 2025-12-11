@@ -6,11 +6,13 @@ import Link from 'next/link';
 import { firebaseAuth } from '@/lib/firebase/auth';
 import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
+import { useToast } from '@/components/ui/Toast';
 
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const _redirect = searchParams.get('redirect') || '/app';
+  const { showError } = useToast();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -108,17 +110,20 @@ export default function LoginPage() {
       console.error('Login error:', err);
       const firebaseError = err as { code?: string };
       
+      let errorMessage = 'Errore durante il login. Riprova';
+      
       if (firebaseError.code === 'auth/invalid-credential') {
-        setError('Email o password non validi');
+        errorMessage = 'Email o password non validi';
       } else if (firebaseError.code === 'auth/user-not-found') {
-        setError('Utente non trovato');
+        errorMessage = 'Utente non trovato';
       } else if (firebaseError.code === 'auth/wrong-password') {
-        setError('Password errata');
+        errorMessage = 'Password errata';
       } else if (firebaseError.code === 'auth/too-many-requests') {
-        setError('Troppi tentativi. Riprova più tardi');
-      } else {
-        setError('Errore durante il login. Riprova');
+        errorMessage = 'Troppi tentativi. Riprova più tardi';
       }
+      
+      setError(errorMessage);
+      showError('Errore di accesso', errorMessage);
       setLoading(false);
     }
   };

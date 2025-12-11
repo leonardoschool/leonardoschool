@@ -9,9 +9,11 @@ import { colors } from '@/lib/theme/colors';
 import { isValidEmail, calculatePasswordStrength } from '@/lib/validations/authValidation';
 import { normalizeName } from '@/lib/utils/stringUtils';
 import { Spinner } from '@/components/ui/loaders';
+import { useToast } from '@/components/ui/Toast';
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { showError, showSuccess } = useToast();
 
   const [formData, setFormData] = useState({
     name: '',
@@ -66,20 +68,24 @@ export default function RegisterPage() {
       });
 
       // 3. Redirect to complete profile page (keep loading true)
+      showSuccess('Registrazione completata', 'Ora completa il tuo profilo per continuare.');
       router.push('/auth/complete-profile');
     } catch (err) {
       console.error('Registration error:', err);
       const firebaseError = err as { code?: string };
 
+      let errorMessage = 'Errore durante la registrazione. Riprova';
+
       if (firebaseError.code === 'auth/email-already-in-use') {
-        setError('Questa email è già registrata');
+        errorMessage = 'Questa email è già registrata';
       } else if (firebaseError.code === 'auth/invalid-email') {
-        setError('Email non valida');
+        errorMessage = 'Email non valida';
       } else if (firebaseError.code === 'auth/weak-password') {
-        setError('Password troppo debole');
-      } else {
-        setError('Errore durante la registrazione. Riprova');
+        errorMessage = 'Password troppo debole';
       }
+      
+      setError(errorMessage);
+      showError('Registrazione fallita', errorMessage);
       setLoading(false);
     }
   };

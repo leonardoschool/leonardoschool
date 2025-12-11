@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
+import { useApiError } from '@/lib/hooks/useApiError';
+import { useToast } from '@/components/ui/Toast';
 import { 
   FileText, 
   Plus, 
@@ -16,7 +18,6 @@ import {
   X,
   Eye,
   AlertCircle,
-  Check,
   FileCode,
   Info,
   GraduationCap,
@@ -29,7 +30,6 @@ export default function ContractTemplatesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [previewContent, setPreviewContent] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState('');
 
   // Form state
   const [formData, setFormData] = useState({
@@ -46,6 +46,8 @@ export default function ContractTemplatesPage() {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   const utils = trpc.useUtils();
+  const { handleMutationError } = useApiError();
+  const { showSuccess } = useToast();
 
   // Fetch templates
   const { data: templates, isLoading } = trpc.contracts.getTemplates.useQuery();
@@ -54,28 +56,28 @@ export default function ContractTemplatesPage() {
   const createMutation = trpc.contracts.createTemplate.useMutation({
     onSuccess: () => {
       utils.contracts.getTemplates.invalidate();
-      setSuccessMessage('Template creato con successo!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      showSuccess('Modello creato', 'Il nuovo modello di contratto è stato creato.');
       resetForm();
     },
+    onError: handleMutationError,
   });
 
   const updateMutation = trpc.contracts.updateTemplate.useMutation({
     onSuccess: () => {
       utils.contracts.getTemplates.invalidate();
-      setSuccessMessage('Template aggiornato con successo!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      showSuccess('Modello aggiornato', 'Il modello di contratto è stato aggiornato.');
       resetForm();
     },
+    onError: handleMutationError,
   });
 
   const deleteMutation = trpc.contracts.deleteTemplate.useMutation({
     onSuccess: () => {
       utils.contracts.getTemplates.invalidate();
-      setSuccessMessage('Template eliminato con successo!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      showSuccess('Modello eliminato', 'Il modello di contratto è stato eliminato.');
       setDeleteModal({ isOpen: false, templateId: '', templateName: '' });
     },
+    onError: handleMutationError,
   });
 
   // Delete modal state
@@ -434,14 +436,6 @@ Email: {{EMAIL}}</p>
           </button>
         )}
       </div>
-
-      {/* Success Message */}
-      {successMessage && (
-        <div className={`${colors.status.success.bgLight} border ${colors.status.success.border} ${colors.status.success.text} px-4 py-3 rounded-xl text-sm flex items-center gap-2`}>
-          <Check className="w-5 h-5 flex-shrink-0" />
-          {successMessage}
-        </div>
-      )}
 
       {/* Form */}
       {showForm && (

@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
+import { useApiError } from '@/lib/hooks/useApiError';
+import { useToast } from '@/components/ui/Toast';
 import { 
   Users,
   Search,
@@ -117,18 +119,32 @@ export default function AdminCollaboratorsPage() {
   // Get all collaborators
   const { data: collaborators, isLoading, refetch } = trpc.collaborators.getAll.useQuery();
   const utils = trpc.useUtils();
+  const { handleMutationError } = useApiError();
+  const { showSuccess } = useToast();
 
   // Mutations
   const toggleActiveMutation = trpc.collaborators.toggleActive.useMutation({
-    onSuccess: () => refetch(),
+    onSuccess: () => {
+      refetch();
+      showSuccess('Stato aggiornato');
+    },
+    onError: handleMutationError,
   });
 
   const updatePermissionsMutation = trpc.collaborators.updatePermissions.useMutation({
-    onSuccess: () => refetch(),
+    onSuccess: () => {
+      refetch();
+      showSuccess('Permessi aggiornati');
+    },
+    onError: handleMutationError,
   });
 
   const createContractMutation = trpc.collaborators.createContract.useMutation({
-    onSuccess: () => refetch(),
+    onSuccess: () => {
+      refetch();
+      showSuccess('Contratto creato');
+    },
+    onError: handleMutationError,
   });
 
   const deleteUserMutation = trpc.users.deleteUser.useMutation({
@@ -137,7 +153,9 @@ export default function AdminCollaboratorsPage() {
       utils.users.getAll.invalidate();
       utils.users.getStats.invalidate();
       setDeleteModal({ isOpen: false, userId: '', userName: '' });
+      showSuccess('Collaboratore eliminato');
     },
+    onError: handleMutationError,
   });
 
   const filteredCollaborators = collaborators?.filter(c => 

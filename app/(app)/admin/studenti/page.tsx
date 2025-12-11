@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
+import { useApiError } from '@/lib/hooks/useApiError';
+import { useToast } from '@/components/ui/Toast';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import { 
   Users, 
@@ -146,6 +148,8 @@ export default function StudentsManagementPage() {
   });
 
   const utils = trpc.useUtils();
+  const { handleMutationError } = useApiError();
+  const { showSuccess } = useToast();
 
   // Fetch students
   const { data: studentsData, isLoading } = trpc.contracts.getAllStudents.useQuery({
@@ -174,19 +178,25 @@ export default function StudentsManagementPage() {
       setShowAssignModal(false);
       setSelectedStudent(null);
       setSelectedTemplate(null);
+      showSuccess('Contratto assegnato', 'Il contratto è stato assegnato allo studente.');
     },
+    onError: handleMutationError,
   });
 
   const activateStudentMutation = trpc.contracts.activateStudent.useMutation({
     onSuccess: () => {
       utils.contracts.getAllStudents.invalidate();
+      showSuccess('Studente attivato', 'Lo studente è stato attivato con successo.');
     },
+    onError: handleMutationError,
   });
 
   const deactivateStudentMutation = trpc.contracts.deactivateStudent.useMutation({
     onSuccess: () => {
       utils.contracts.getAllStudents.invalidate();
+      showSuccess('Studente disattivato', 'Lo studente è stato disattivato.');
     },
+    onError: handleMutationError,
   });
 
   const deleteUserMutation = trpc.users.deleteUser.useMutation({
@@ -194,7 +204,9 @@ export default function StudentsManagementPage() {
       utils.contracts.getAllStudents.invalidate();
       utils.contracts.getStudentsStats.invalidate();
       closeConfirmModal();
+      showSuccess('Studente eliminato', 'L\'account dello studente è stato eliminato.');
     },
+    onError: handleMutationError,
   });
 
   const closeConfirmModal = () => {

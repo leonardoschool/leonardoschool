@@ -35,6 +35,8 @@ import {
   User,
   FileEdit,
 } from 'lucide-react';
+import { useApiError } from '@/lib/hooks/useApiError';
+import { useToast } from '@/components/ui/Toast';
 
 type RoleFilter = 'ALL' | 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
 type StatusFilter = 'all' | 'active' | 'inactive' | 'pending_profile' | 'pending_contract' | 'pending_sign' | 'pending_activation';
@@ -598,6 +600,8 @@ export default function UsersManagementPage() {
 
   // Get current user to hide self
   const { data: currentUser } = trpc.auth.me.useQuery();
+  const { handleMutationError } = useApiError();
+  const { showSuccess } = useToast();
 
   // Fetch users
   const { data: usersData, isLoading } = trpc.users.getAll.useQuery({
@@ -630,7 +634,9 @@ export default function UsersManagementPage() {
       utils.users.getAll.invalidate();
       utils.users.getStats.invalidate();
       closeConfirmModal();
+      showSuccess('Stato aggiornato', 'Lo stato dell\'utente è stato aggiornato.');
     },
+    onError: handleMutationError,
   });
 
   const changeRoleMutation = trpc.users.changeRole.useMutation({
@@ -638,7 +644,9 @@ export default function UsersManagementPage() {
       utils.users.getAll.invalidate();
       utils.users.getStats.invalidate();
       closeConfirmModal();
+      showSuccess('Ruolo aggiornato', 'Il ruolo dell\'utente è stato aggiornato.');
     },
+    onError: handleMutationError,
   });
 
   const deleteUserMutation = trpc.users.deleteUser.useMutation({
@@ -646,14 +654,18 @@ export default function UsersManagementPage() {
       utils.users.getAll.invalidate();
       utils.users.getStats.invalidate();
       closeConfirmModal();
+      showSuccess('Utente eliminato', 'L\'utente è stato eliminato con successo.');
     },
+    onError: handleMutationError,
   });
 
   const assignContractMutation = trpc.contracts.assignContract.useMutation({
     onSuccess: () => {
       utils.users.getAll.invalidate();
       setContractModal({ isOpen: false, targetId: '', targetType: 'STUDENT' });
+      showSuccess('Contratto assegnato', 'Il contratto è stato assegnato con successo.');
     },
+    onError: handleMutationError,
   });
 
   const revokeContractMutation = trpc.contracts.revokeContract.useMutation({
@@ -661,7 +673,9 @@ export default function UsersManagementPage() {
       utils.users.getAll.invalidate();
       utils.users.getStats.invalidate();
       closeConfirmModal();
+      showSuccess('Contratto revocato', 'Il contratto è stato revocato con successo.');
     },
+    onError: handleMutationError,
   });
 
   const closeConfirmModal = () => {

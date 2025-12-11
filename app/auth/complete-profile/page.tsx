@@ -8,6 +8,8 @@ import { firebaseAuth } from '@/lib/firebase/auth';
 import DatePicker from '@/components/ui/DatePicker';
 import CustomSelect from '@/components/ui/CustomSelect';
 import { Spinner, ButtonLoader } from '@/components/ui/loaders';
+import { useToast } from '@/components/ui/Toast';
+import { parseError } from '@/lib/utils/errorHandler';
 import {
   validateCodiceFiscale,
   validateTelefono,
@@ -23,6 +25,7 @@ import {
 
 export default function CompleteProfilePage() {
   const router = useRouter();
+  const { showError, showSuccess } = useToast();
   const [loading, setLoading] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
   const [error, setError] = useState('');
@@ -230,10 +233,12 @@ export default function CompleteProfilePage() {
 
       // Use hard navigation to ensure new cookies are used by middleware
       const dashboardUrl = isCollaborator ? '/collaboratore' : '/studente';
+      showSuccess('Profilo completato', 'In attesa di attivazione da parte dell\'amministratore.');
       window.location.href = dashboardUrl;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Errore durante il salvataggio. Riprova';
-      setError(message);
+      const parsed = parseError(err);
+      setError(parsed.message);
+      showError(parsed.title, parsed.message);
     } finally {
       setLoading(false);
     }

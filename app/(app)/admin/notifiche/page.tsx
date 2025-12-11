@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
+import { useApiError } from '@/lib/hooks/useApiError';
+import { useToast } from '@/components/ui/Toast';
 import { 
   Bell, 
   Check, 
@@ -37,6 +39,8 @@ export default function NotificationsPage() {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   
   const utils = trpc.useUtils();
+  const { handleMutationError } = useApiError();
+  const { showSuccess } = useToast();
   
   // Fetch notifications
   const { data: notifications, isLoading } = trpc.contracts.getAdminNotifications.useQuery({
@@ -48,7 +52,9 @@ export default function NotificationsPage() {
   const markReadMutation = trpc.contracts.markNotificationRead.useMutation({
     onSuccess: () => {
       utils.contracts.getAdminNotifications.invalidate();
+      showSuccess('Notifica letta', 'La notifica è stata segnata come letta.');
     },
+    onError: handleMutationError,
   });
 
   const formatDate = (date: Date | string) => {

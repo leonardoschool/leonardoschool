@@ -5,6 +5,8 @@
 import { useState, useRef } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
+import { useApiError } from '@/lib/hooks/useApiError';
+import { useToast } from '@/components/ui/Toast';
 import { Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import { 
@@ -72,7 +74,6 @@ export default function MaterialsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState('');
   const [activeTab, setActiveTab] = useState<'materials' | 'categories' | 'subjects'>('materials');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [uploading, setUploading] = useState(false);
@@ -83,6 +84,9 @@ export default function MaterialsPage() {
   const [courseSearch, setCourseSearch] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { handleMutationError } = useApiError();
+  const { showSuccess, showError } = useToast();
 
   // Form state
   const [formData, setFormData] = useState({
@@ -138,60 +142,57 @@ export default function MaterialsPage() {
     onSuccess: () => {
       utils.materials.getAll.invalidate();
       utils.materials.getStats.invalidate();
-      setSuccessMessage('Materiale caricato con successo!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      showSuccess('Materiale creato', 'Il nuovo materiale è stato aggiunto.');
       resetForm();
     },
+    onError: handleMutationError,
   });
 
   const updateMutation = trpc.materials.update.useMutation({
     onSuccess: () => {
       utils.materials.getAll.invalidate();
-      setSuccessMessage('Materiale aggiornato con successo!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      showSuccess('Materiale aggiornato', 'Le modifiche sono state salvate.');
       resetForm();
     },
+    onError: handleMutationError,
   });
 
   const deleteMutation = trpc.materials.delete.useMutation({
     onSuccess: () => {
       utils.materials.getAll.invalidate();
       utils.materials.getStats.invalidate();
-      setSuccessMessage('Materiale eliminato!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      showSuccess('Materiale eliminato', 'Il materiale è stato rimosso.');
     },
+    onError: handleMutationError,
   });
 
   const createCategoryMutation = trpc.materials.createCategory.useMutation({
     onSuccess: () => {
       utils.materials.getAllCategories.invalidate();
       utils.materials.getCategories.invalidate();
-      setSuccessMessage('Categoria creata!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      showSuccess('Categoria creata', 'La nuova categoria è stata aggiunta.');
       resetCategoryForm();
     },
+    onError: handleMutationError,
   });
 
   const updateCategoryMutation = trpc.materials.updateCategory.useMutation({
     onSuccess: () => {
       utils.materials.getAllCategories.invalidate();
       utils.materials.getCategories.invalidate();
-      setSuccessMessage('Categoria aggiornata!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      showSuccess('Categoria aggiornata', 'Le modifiche sono state salvate.');
       resetCategoryForm();
     },
+    onError: handleMutationError,
   });
 
   const deleteCategoryMutation = trpc.materials.deleteCategory.useMutation({
     onSuccess: () => {
       utils.materials.getAllCategories.invalidate();
       utils.materials.getCategories.invalidate();
-      setSuccessMessage('Categoria eliminata!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      showSuccess('Categoria eliminata', 'La categoria è stata rimossa.');
     },
-    onError: (error) => {
-      alert(error.message);
-    },
+    onError: handleMutationError,
   });
 
   // Subject mutations
@@ -199,32 +200,29 @@ export default function MaterialsPage() {
     onSuccess: () => {
       utils.materials.getAllSubjects.invalidate();
       utils.materials.getSubjects.invalidate();
-      setSuccessMessage('Materia creata!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      showSuccess('Materia creata', 'La nuova materia è stata aggiunta.');
       resetSubjectForm();
     },
+    onError: handleMutationError,
   });
 
   const updateSubjectMutation = trpc.materials.updateSubject.useMutation({
     onSuccess: () => {
       utils.materials.getAllSubjects.invalidate();
       utils.materials.getSubjects.invalidate();
-      setSuccessMessage('Materia aggiornata!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      showSuccess('Materia aggiornata', 'Le modifiche sono state salvate.');
       resetSubjectForm();
     },
+    onError: handleMutationError,
   });
 
   const deleteSubjectMutation = trpc.materials.deleteSubject.useMutation({
     onSuccess: () => {
       utils.materials.getAllSubjects.invalidate();
       utils.materials.getSubjects.invalidate();
-      setSuccessMessage('Materia eliminata!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      showSuccess('Materia eliminata', 'La materia è stata rimossa.');
     },
-    onError: (error) => {
-      alert(error.message);
-    },
+    onError: handleMutationError,
   });
 
   const resetForm = () => {
@@ -326,9 +324,9 @@ export default function MaterialsPage() {
         fileName: file.name,
         fileSize: file.size,
       }));
-    } catch (error) {
-      console.error('Upload error:', error);
-      alert('Errore durante il caricamento del file');
+      showSuccess('File caricato', 'Il file è stato caricato con successo.');
+    } catch {
+      showError('Errore caricamento', 'Si è verificato un errore durante il caricamento del file.');
     } finally {
       setUploading(false);
       setUploadProgress(0);
@@ -464,14 +462,6 @@ export default function MaterialsPage() {
           </button>
         </div>
       </div>
-
-      {/* Success Message */}
-      {successMessage && (
-        <div className={`${colors.status.success.softBg} border ${colors.status.success.border} rounded-xl p-4 flex items-center gap-3`}>
-          <Check className={`w-5 h-5 ${colors.status.success.text}`} />
-          <span className={colors.status.success.text}>{successMessage}</span>
-        </div>
-      )}
 
       {/* Stats Cards */}
       {stats && (

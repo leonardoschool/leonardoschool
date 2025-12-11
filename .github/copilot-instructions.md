@@ -96,8 +96,47 @@ Required in `.env.local`:
 - Pay attention to performance implications of your code
 - Pay attention to eslint and prettier rules
 - If you use a color check in the file if the color exists in 'lib/theme/colors' if not add it there following the existing patterns
-- Use my personal loader components from when data is being fetched or processed, do not use generic "Loading..." texts, my personal loader components are in 'components/ui/loaders'
-- If a new api is needed, manage error handling and edge cases properly, if necessary show a friendly error message to the user in Italian
+
+### Loader Components
+- Use loader components from `components/ui/loaders` - never use generic "Loading..." texts or custom spinners
+- Available loaders: `Spinner` (xs/sm/md/lg/xl sizes, primary/white/muted variants), `PageLoader`, `ButtonLoader`, `DotsLoader`, `Skeleton`, `SkeletonCard`, `SkeletonTable`
+- For buttons with loading states, wrap content with `<ButtonLoader loading={isLoading} loadingText="Testo...">Children</ButtonLoader>`
+- For full-page loading states (loading.tsx files), use `<PageLoader />`
+
+### Error Handling & Toast Notifications
+- For tRPC mutations, always add `onError: handleMutationError` using the `useApiError` hook from `lib/hooks/useApiError`
+- For success feedback, use `showSuccess(title, message)` from the `useToast` hook in `components/ui/Toast`
+- Use `parseError()` from `lib/utils/errorHandler` to convert technical errors to user-friendly Italian messages
+- All user-facing error/success messages must be in Italian
+- Example pattern for mutations:
+  ```typescript
+  const { handleMutationError } = useApiError();
+  const { showSuccess } = useToast();
+  
+  const mutation = trpc.example.action.useMutation({
+    onSuccess: () => {
+      showSuccess('Titolo', 'Messaggio di successo.');
+    },
+    onError: handleMutationError,
+  });
+  ```
+
+### Form Validations
+- Use existing validation functions from `lib/validations/`:
+  - `isValidEmail()` from `authValidation.ts` for email validation
+  - `calculatePasswordStrength()` from `authValidation.ts` for password strength
+  - Profile validations (codice fiscale, telefono, CAP, etc.) from `profileValidation.ts`
+- Use `normalizeName()` from `lib/utils/stringUtils` for user names
+- Use `sanitizeHtml()` from `lib/utils/sanitizeHtml` for HTML content
+
+### tRPC Procedures
+- Register new routers in `server/trpc/routers/index.ts`
+- Use appropriate procedures from `server/trpc/init.ts`:
+  - `publicProcedure` - No auth required
+  - `protectedProcedure` - Requires authentication
+  - `adminProcedure` - Requires ADMIN role
+  - `staffProcedure` - ADMIN or COLLABORATOR
+  - `collaboratorProcedure` - COLLABORATOR only
 ------
 description: This file contains instructions for AI code generation specific to the Leonardo School project.
 

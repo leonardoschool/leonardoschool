@@ -7,6 +7,8 @@ import { colors } from '@/lib/theme/colors';
 import Preloader from '@/components/ui/Preloader';
 import { ButtonLoader } from '@/components/ui/loaders';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
+import { useToast } from '@/components/ui/Toast';
+import { parseError } from '@/lib/utils/errorHandler';
 import { 
   CheckCircle, 
   AlertCircle, 
@@ -25,6 +27,7 @@ export default function ContractSignPage() {
   const params = useParams();
   const router = useRouter();
   const token = params.token as string;
+  const { showSuccess, showError } = useToast();
 
   // Canvas per la firma
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -49,9 +52,12 @@ export default function ContractSignPage() {
   const signMutation = trpc.contracts.signContract.useMutation({
     onSuccess: () => {
       setSuccess(true);
+      showSuccess('Contratto firmato', 'Il contratto è stato firmato con successo!');
     },
     onError: (err) => {
-      setError(err.message);
+      const parsed = parseError(err);
+      setError(parsed.message);
+      showError(parsed.title, parsed.message);
       setSigning(false);
     },
   });
@@ -555,14 +561,12 @@ export default function ContractSignPage() {
               }
             `}
           >
-            {signing ? (
-              <ButtonLoader text="Firma in corso..." />
-            ) : (
+            <ButtonLoader loading={signing} loadingText="Firma in corso...">
               <span className="flex items-center gap-2">
                 <Pen className="w-5 h-5" />
                 Firma il Contratto
               </span>
-            )}
+            </ButtonLoader>
           </button>
         </div>
 
