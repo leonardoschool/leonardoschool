@@ -91,6 +91,7 @@ model User {
   student          Student?
   admin            Admin?
   collaborator     Collaborator?
+  alerts           Alert[]
   
   @@index([firebaseUid])
   @@index([email])
@@ -119,7 +120,6 @@ model Student {
   user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   class             Class?              @relation(fields: [classId], references: [id], onDelete: SetNull)
   simulationResults SimulationResult[]
-  alerts            Alert[]
   stats             StudentStats?
   contracts         Contract[]
   materialAccess    MaterialStudentAccess[]
@@ -173,40 +173,10 @@ model Collaborator {
   updatedAt       DateTime @updatedAt
   
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  collaboratorContracts  CollaboratorContract[]
   contracts       Contract[]  // Unified contract system
   
   @@index([userId])
   @@map("collaborators")
-}
-
-// Contratti specifici per collaboratori
-model CollaboratorContract {
-  id              String   @id @default(cuid())
-  collaboratorId  String
-  
-  // Contract details
-  templateName    String?
-  pdfUrl          String?
-  signedPdfUrl    String?
-  
-  status          ContractStatus @default(PENDING)
-  
-  // Signature
-  signedAt        DateTime?
-  signatureIp     String?
-  
-  // Validity
-  expiresAt       DateTime?
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  collaborator    Collaborator @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
-  
-  @@index([collaboratorId])
-  @@index([status])
-  @@map("collaborator_contracts")
 }
 
 // ==================== CLASSES ====================
@@ -414,7 +384,7 @@ model StudentStats {
 
 model Alert {
   id          String    @id @default(cuid())
-  studentId   String?   // null = broadcast to all
+  userId      String?   // null = broadcast to all users
   title       String
   message     String    @db.Text
   type        AlertType @default(INFO)
@@ -427,9 +397,9 @@ model Alert {
   createdAt   DateTime  @default(now())
   expiresAt   DateTime?
   
-  student     Student?  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  @@index([studentId])
+  @@index([userId])
   @@index([createdAt])
   @@index([isRead])
   @@map("alerts")

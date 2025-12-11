@@ -237,26 +237,6 @@ export const collaboratorsRouter = router({
     }),
 
   /**
-   * Create contract for collaborator (admin only)
-   */
-  createContract: adminProcedure
-    .input(z.object({
-      collaboratorId: z.string(),
-      templateName: z.string().optional(),
-      expiresAt: z.date().optional(),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      return (ctx.prisma as any).collaboratorContract.create({
-        data: {
-          collaboratorId: input.collaboratorId,
-          templateName: input.templateName,
-          expiresAt: input.expiresAt,
-          status: 'PENDING',
-        },
-      });
-    }),
-
-  /**
    * Get pending collaborator registrations (admin only)
    */
   getPendingRegistrations: adminProcedure.query(async ({ ctx }) => {

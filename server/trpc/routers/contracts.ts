@@ -591,7 +591,7 @@ export const contractsRouter = router({
     }),
 
   /**
-   * Cancel a pending contract
+   * Cancel a pending contract (deletes it from DB to save space)
    */
   cancelContract: adminProcedure
     .input(z.object({ contractId: z.string() }))
@@ -614,10 +614,12 @@ export const contractsRouter = router({
         });
       }
 
-      return ctx.prisma.contract.update({
+      // Delete the contract from DB to save space
+      await ctx.prisma.contract.delete({
         where: { id: input.contractId },
-        data: { status: 'CANCELLED' },
       });
+
+      return { success: true, message: 'Contratto eliminato' };
     }),
 
   /**
@@ -671,6 +673,44 @@ export const contractsRouter = router({
         where: { id: input.notificationId },
         data: { readBy },
       });
+    }),
+
+  /**
+   * Delete a single notification from DB
+   */
+  deleteNotification: adminProcedure
+    .input(z.object({ notificationId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const notification = await ctx.prisma.adminNotification.findUnique({
+        where: { id: input.notificationId },
+      });
+
+      if (!notification) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Notifica non trovata',
+        });
+      }
+
+      await ctx.prisma.adminNotification.delete({
+        where: { id: input.notificationId },
+      });
+
+      return { success: true, message: 'Notifica eliminata' };
+    }),
+
+  /**
+   * Delete all notifications from DB
+   */
+  deleteAllNotifications: adminProcedure
+    .mutation(async ({ ctx }) => {
+      const result = await ctx.prisma.adminNotification.deleteMany({});
+
+      return { 
+        success: true, 
+        message: `${result.count} notifiche eliminate`,
+        count: result.count,
+      };
     }),
 
   /**
@@ -847,30 +887,27 @@ export const contractsRouter = router({
         });
       }
 
-      // Update contract status to CANCELLED
-      const updatedContract = await ctx.prisma.contract.update({
-        where: { id: input.contractId },
-        data: {
-          status: 'CANCELLED',
-          signTokenExpiresAt: new Date(), // Expire the token immediately
-        },
-      });
-
-      // Get user info for notification
+      // Get user info for notification before deleting
       const userName = contract.student?.user?.name || contract.collaborator?.user?.name || 'Utente';
+      const templateName = contract.template.name;
+      const studentId = contract.studentId;
+
+      // Delete the contract from DB to save space
+      await ctx.prisma.contract.delete({
+        where: { id: input.contractId },
+      });
 
       // Create notification
       await ctx.prisma.adminNotification.create({
         data: {
           type: 'CONTRACT_CANCELLED',
           title: 'Contratto revocato',
-          message: `Contratto "${contract.template.name}" per ${userName} è stato revocato`,
-          studentId: contract.studentId || undefined,
-          contractId: contract.id,
+          message: `Contratto "${templateName}" per ${userName} è stato revocato ed eliminato`,
+          studentId: studentId || undefined,
         },
       });
 
-      return updatedContract;
+      return { success: true, message: 'Contratto revocato ed eliminato' };
     }),
 
   // ==================== STUDENT ENDPOINTS ====================

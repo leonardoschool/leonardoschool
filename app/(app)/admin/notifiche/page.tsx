@@ -6,6 +6,7 @@ import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { 
   Bell, 
   Check, 
@@ -13,6 +14,7 @@ import {
   FileText,
   UserCheck,
   UserPlus,
+  Trash2,
   LucideProps,
 } from 'lucide-react';
 import { ForwardRefExoticComponent, RefAttributes } from 'react';
@@ -37,6 +39,7 @@ const notificationColors: Record<string, { bg: string; text: string }> = {
 
 export default function NotificationsPage() {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
   
   const utils = trpc.useUtils();
   const { handleMutationError } = useApiError();
@@ -53,6 +56,25 @@ export default function NotificationsPage() {
     onSuccess: () => {
       utils.contracts.getAdminNotifications.invalidate();
       showSuccess('Notifica letta', 'La notifica è stata segnata come letta.');
+    },
+    onError: handleMutationError,
+  });
+
+  // Delete single notification mutation
+  const deleteNotificationMutation = trpc.contracts.deleteNotification.useMutation({
+    onSuccess: () => {
+      utils.contracts.getAdminNotifications.invalidate();
+      showSuccess('Notifica eliminata', 'La notifica è stata eliminata definitivamente.');
+    },
+    onError: handleMutationError,
+  });
+
+  // Delete all notifications mutation
+  const deleteAllNotificationsMutation = trpc.contracts.deleteAllNotifications.useMutation({
+    onSuccess: (data) => {
+      utils.contracts.getAdminNotifications.invalidate();
+      showSuccess('Notifiche eliminate', `${data.count} notifiche sono state eliminate.`);
+      setShowDeleteAllModal(false);
     },
     onError: handleMutationError,
   });
@@ -111,7 +133,7 @@ export default function NotificationsPage() {
         </div>
         
         {/* Filter */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => setFilter('all')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -132,6 +154,15 @@ export default function NotificationsPage() {
           >
             Non lette
           </button>
+          {notifications && notifications.length > 0 && (
+            <button
+              onClick={() => setShowDeleteAllModal(true)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${colors.status.error.softBg} ${colors.status.error.text} hover:opacity-80`}
+            >
+              <Trash2 className="w-4 h-4" />
+              Elimina tutte
+            </button>
+          )}
         </div>
       </div>
 
@@ -188,16 +219,26 @@ export default function NotificationsPage() {
                         </div>
 
                         {/* Actions */}
-                        {unread && (
+                        <div className="flex items-center gap-1">
+                          {unread && (
+                            <button
+                              onClick={() => markReadMutation.mutate({ notificationId: notification.id })}
+                              disabled={markReadMutation.isPending}
+                              className={`p-2 rounded-lg ${colors.background.secondary} hover:${colors.background.tertiary} transition-colors`}
+                              title="Segna come letta"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
-                            onClick={() => markReadMutation.mutate({ notificationId: notification.id })}
-                            disabled={markReadMutation.isPending}
-                            className={`p-2 rounded-lg ${colors.background.secondary} hover:${colors.background.tertiary} transition-colors`}
-                            title="Segna come letta"
+                            onClick={() => deleteNotificationMutation.mutate({ notificationId: notification.id })}
+                            disabled={deleteNotificationMutation.isPending}
+                            className={`p-2 rounded-lg hover:${colors.status.error.softBg} transition-colors`}
+                            title="Elimina notifica"
                           >
-                            <Check className="w-4 h-4" />
+                            <Trash2 className={`w-4 h-4 ${colors.status.error.text}`} />
                           </button>
-                        )}
+                        </div>
                       </div>
                     </div>
 
@@ -212,6 +253,19 @@ export default function NotificationsPage() {
           </div>
         )}
       </div>
+
+      {/* Delete All Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteAllModal}
+        onClose={() => setShowDeleteAllModal(false)}
+        onConfirm={() => deleteAllNotificationsMutation.mutate()}
+        title="Elimina tutte le notifiche"
+        message="Sei sicuro di voler eliminare definitivamente tutte le notifiche? Questa azione non può essere annullata."
+        confirmLabel="Elimina tutte"
+        cancelLabel="Annulla"
+        variant="danger"
+        isLoading={deleteAllNotificationsMutation.isPending}
+      />
     </div>
   );
 }

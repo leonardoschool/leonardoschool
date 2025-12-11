@@ -513,8 +513,8 @@ export const usersRouter = router({
         // Delete collaborator-related data if exists
         if ((user as any).collaborator) {
           const collaboratorId = (user as any).collaborator.id;
-          // Delete collaborator contracts
-          await (tx as any).collaboratorContract.deleteMany({ where: { collaboratorId } });
+          // Delete collaborator contracts from unified table
+          await tx.contract.deleteMany({ where: { collaboratorId } });
           // Delete collaborator
           await (tx as any).collaborator.delete({ where: { id: collaboratorId } });
         }
