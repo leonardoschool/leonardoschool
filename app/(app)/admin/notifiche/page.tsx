@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
+import { Spinner } from '@/components/ui/loaders';
 import { 
   Bell, 
   Check, 
@@ -132,7 +133,7 @@ export default function NotificationsPage() {
       <div className={`${colors.background.card} rounded-xl shadow-sm overflow-hidden`}>
         {isLoading ? (
           <div className="p-12 text-center">
-            <div className="w-8 h-8 border-2 border-red-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <Spinner size="lg" />
             <p className={`mt-4 ${colors.text.secondary}`}>Caricamento notifiche...</p>
           </div>
         ) : !notifications?.length ? (

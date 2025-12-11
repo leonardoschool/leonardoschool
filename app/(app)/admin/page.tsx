@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { colors } from '@/lib/theme/colors';
 import { trpc } from '@/lib/trpc/client';
+import { Spinner } from '@/components/ui/loaders';
 import { 
   Users, 
   FileText, 
@@ -27,13 +28,13 @@ export default function AdminDashboard() {
   const { data: pendingContract } = trpc.contracts.getStudentsPendingContract.useQuery();
   const { data: pendingSignature } = trpc.contracts.getStudentsPendingSignature.useQuery();
   const { data: pendingActivation } = trpc.contracts.getContractsPendingActivation.useQuery();
-  
+
   // Show loading only on initial load or if user data not ready
   if (isLoading || !user) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className={`w-10 h-10 border-2 border-red-600 border-t-transparent rounded-full animate-spin mx-auto`}></div>
+          <Spinner size="lg" />
           <p className={`mt-4 ${colors.text.secondary}`}>Caricamento...</p>
         </div>
       </div>

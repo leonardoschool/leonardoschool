@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
+import { Spinner } from '@/components/ui/loaders';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import {
   User,
@@ -211,7 +212,7 @@ export default function StudentDashboard() {
     return (
       <div className={`min-h-screen ${colors.background.primary} flex items-center justify-center`}>
         <div className="text-center">
-          <div className="w-12 h-12 border-2 border-red-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <Spinner size="lg" />
           <p className={`mt-4 ${colors.text.secondary}`}>Caricamento dashboard...</p>
         </div>
       </div>
@@ -223,7 +224,7 @@ export default function StudentDashboard() {
     return (
       <div className={`min-h-screen ${colors.background.primary} flex items-center justify-center`}>
         <div className="text-center">
-          <div className="w-12 h-12 border-2 border-red-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <Spinner size="lg" />
           <p className={`mt-4 ${colors.text.secondary}`}>Reindirizzamento...</p>
         </div>
       </div>
@@ -582,7 +583,7 @@ export default function StudentDashboard() {
             <div className="flex-1 overflow-y-auto p-6">
               {signedContractLoading ? (
                 <div className="flex items-center justify-center py-12">
-                  <div className="w-8 h-8 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+                  <Spinner size="md" />
                 </div>
               ) : signedContractDetails ? (
                 <div className="space-y-6">

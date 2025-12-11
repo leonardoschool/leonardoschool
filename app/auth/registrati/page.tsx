@@ -8,6 +8,7 @@ import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { isValidEmail, calculatePasswordStrength } from '@/lib/validations/authValidation';
 import { normalizeName } from '@/lib/utils/stringUtils';
+import { Spinner } from '@/components/ui/loaders';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -89,7 +90,7 @@ export default function RegisterPage() {
         {loading && (
           <div className="absolute inset-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg">
             <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-t-2" style={{ borderColor: colors.primary.main }}></div>
+              <Spinner size="lg" />
               <p className={`mt-4 text-sm font-medium ${colors.text.primary}`}>Registrazione in corso...</p>
             </div>
           </div>

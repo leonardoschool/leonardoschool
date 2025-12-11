@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Suspense } from 'react';
+import { Spinner } from '@/components/ui/loaders';
 
 // Type for course detail items
 interface CourseDetail {
@@ -793,7 +794,7 @@ export default function DidatticaPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-600"></div>
+        <Spinner size="lg" />
       </div>
     }>
       <DidatticaContent />

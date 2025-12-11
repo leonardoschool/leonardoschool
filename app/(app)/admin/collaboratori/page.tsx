@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
+import { Spinner } from '@/components/ui/loaders';
 import { 
   Users,
   Search,
@@ -91,7 +92,7 @@ function ConfirmModal({
           >
             {isLoading ? (
               <span className="flex items-center justify-center gap-2">
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                <Spinner size="xs" variant="white" />
                 Attendere...
               </span>
             ) : (
@@ -192,8 +193,8 @@ export default function AdminCollaboratorsPage() {
         <div className={`${colors.background.card} rounded-xl border ${colors.border.primary} overflow-hidden`}>
           {isLoading ? (
             <div className="p-8 text-center">
-              <div className="w-8 h-8 border-2 border-[#a8012b] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-              <p className={colors.text.secondary}>Caricamento...</p>
+              <Spinner size="lg" />
+              <p className={`mt-4 ${colors.text.secondary}`}>Caricamento...</p>
             </div>
           ) : filteredCollaborators.length === 0 ? (
             <div className="p-8 text-center">

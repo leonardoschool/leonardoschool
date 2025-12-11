@@ -5,6 +5,7 @@
 import { useState, useRef } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
+import { Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import { 
   FolderOpen, 
@@ -654,7 +655,7 @@ export default function MaterialsPage() {
                         >
                           {uploading ? (
                             <>
-                              <div className="w-8 h-8 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                              <Spinner size="lg" />
                               <span>Caricamento... {uploadProgress}%</span>
                             </>
                           ) : (
@@ -953,7 +954,7 @@ export default function MaterialsPage() {
                     >
                       {(createMutation.isPending || updateMutation.isPending) ? (
                         <>
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <Spinner size="xs" variant="white" />
                           Salvataggio...
                         </>
                       ) : (
@@ -1010,7 +1011,7 @@ export default function MaterialsPage() {
             {/* Materials List */}
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                <Spinner size="lg" />
               </div>
             ) : !filteredMaterials?.length ? (
               <div className="text-center py-12">

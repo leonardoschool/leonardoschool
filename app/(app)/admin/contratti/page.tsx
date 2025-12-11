@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
+import { Spinner } from '@/components/ui/loaders';
 import { 
   FileText, 
   Plus, 
@@ -700,7 +701,7 @@ Email: {{EMAIL}}</p>
               >
                 {(createMutation.isPending || updateMutation.isPending) ? (
                   <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <Spinner size="sm" variant="white" />
                     Salvataggio...
                   </>
                 ) : (
@@ -731,7 +732,7 @@ Email: {{EMAIL}}</p>
 
         {isLoading ? (
           <div className="p-12 text-center">
-            <div className="w-10 h-10 border-2 border-red-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <Spinner size="lg" />
             <p className={`mt-4 ${colors.text.secondary}`}>Caricamento template...</p>
           </div>
         ) : !templates?.length ? (
@@ -943,7 +944,7 @@ Email: {{EMAIL}}</p>
               >
                 {deleteMutation.isPending ? (
                   <span className="flex items-center justify-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <Spinner size="xs" variant="white" />
                     Eliminazione...
                   </span>
                 ) : (

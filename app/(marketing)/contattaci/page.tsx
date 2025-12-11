@@ -1,6 +1,7 @@
 'use client';
 
 import ContactForm from '@/components/ui/ContactForm';
+import { Spinner } from '@/components/ui/loaders';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
@@ -161,7 +162,7 @@ export default function ContattaciPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-600"></div>
+        <Spinner size="lg" />
       </div>
     }>
       <ContattaciContent />

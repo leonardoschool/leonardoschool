@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
+import { Spinner } from '@/components/ui/loaders';
 import { 
   Search,
   Users,
@@ -66,8 +67,8 @@ export default function CollaboratorStudentsPage() {
         <div className={`${colors.background.card} rounded-xl border ${colors.border.primary} overflow-hidden`}>
           {isLoading ? (
             <div className="p-8 text-center">
-              <div className="w-8 h-8 border-2 border-[#a8012b] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-              <p className={colors.text.secondary}>Caricamento studenti...</p>
+              <Spinner size="lg" />
+              <p className={`mt-2 ${colors.text.secondary}`}>Caricamento studenti...</p>
             </div>
           ) : filteredStudents.length === 0 ? (
             <div className="p-8 text-center">

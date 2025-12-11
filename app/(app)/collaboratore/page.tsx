@@ -2,6 +2,7 @@
 
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
+import { Spinner } from '@/components/ui/loaders';
 import { 
   BookOpen, 
   FolderOpen, 
@@ -14,7 +15,6 @@ import {
   PenTool,
   ExternalLink,
   AlertTriangle,
-  Loader2,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -50,7 +50,7 @@ export default function CollaboratorDashboard() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className={`w-12 h-12 animate-spin mx-auto ${colors.primary.text}`} />
+          <Spinner size="lg" />
           <p className={`mt-4 ${colors.text.secondary}`}>Caricamento...</p>
         </div>
       </div>

@@ -5,6 +5,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
+import { Spinner } from '@/components/ui/loaders';
 import {
   Users,
   Search,
@@ -191,7 +192,7 @@ function ConfirmModal({
           >
             {isLoading ? (
               <span className="flex items-center justify-center gap-2">
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                <Spinner size="xs" variant="white" />
                 Attendere...
               </span>
             ) : (
@@ -383,7 +384,7 @@ function AssignContractModal({
             <div className="space-y-6">
               {previewLoading ? (
                 <div className="flex items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" />
+                  <Spinner size="lg" />
                 </div>
               ) : preview ? (
                 <>
@@ -534,7 +535,7 @@ function AssignContractModal({
             >
               {isLoading ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                  <Spinner size="xs" variant="white" />
                   Invio...
                 </>
               ) : (
@@ -1011,7 +1012,7 @@ export default function UsersManagementPage() {
       <div className={`${colors.background.card} rounded-xl shadow-sm`}>
         {isLoading ? (
           <div className="p-12 text-center">
-            <div className="w-8 h-8 border-2 border-red-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <Spinner size="lg" />
             <p className={`mt-4 ${colors.text.secondary}`}>Caricamento utenti...</p>
           </div>
         ) : !filteredUsers.length ? (

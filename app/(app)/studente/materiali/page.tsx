@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
+import { Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import { 
   FolderOpen, 
@@ -197,7 +198,7 @@ export default function StudentMaterialsPage() {
       {/* Materials List */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
-          <div className="w-8 h-8 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+          <Spinner size="lg" />
         </div>
       ) : !filteredMaterials?.length ? (
         <div className={`${colors.background.card} rounded-xl shadow-sm p-12 text-center`}>
