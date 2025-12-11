@@ -143,7 +143,7 @@ export default function ProvePage() {
                                                     </div>
                                                     <div>
                                                         <p className="text-sm font-semibold text-gray-900">
-                                                            {selectedAppeal}° appello {selectedAppeal === '1' ? '(20 novembre 2025)' : '(11 dicembre 2025)'}
+                                                            {selectedAppeal}° appello {selectedAppeal === '1' ? '(20 novembre 2025)' : '(10 dicembre 2025)'}
                                                         </p>
                                                         <p className="text-xs text-gray-500">Soluzioni</p>
                                                     </div>
