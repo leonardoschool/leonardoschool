@@ -85,6 +85,21 @@ export function proxy(request: NextRequest) {
     }
   }
   
+  // If user with completed profile tries to access complete-profile page, redirect to dashboard
+  // Also redirect ADMIN users - they never need to complete profile
+  if (authToken && pathname.startsWith('/auth/complete-profile')) {
+    if (userRole === 'ADMIN') {
+      return NextResponse.redirect(new URL('/admin', request.url));
+    }
+    if (profileCompleted) {
+      if (userRole === 'COLLABORATOR') {
+        return NextResponse.redirect(new URL('/collaboratore', request.url));
+      } else {
+        return NextResponse.redirect(new URL('/studente', request.url));
+      }
+    }
+  }
+  
   return NextResponse.next();
 }
 

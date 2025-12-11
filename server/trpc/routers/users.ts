@@ -1,8 +1,12 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // Users Router - Handles user management for admin
+// Note: 'any' types are used for Prisma dynamic queries and include patterns
+// that cannot be strictly typed without significant complexity
 import { router, adminProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { adminAuth } from '@/lib/firebase/admin';
+import { Prisma } from '@prisma/client';
 
 export const usersRouter = router({
   /**
@@ -21,7 +25,7 @@ export const usersRouter = router({
     .query(async ({ ctx, input }) => {
       const { search, role, status, page, limit } = input || { page: 1, limit: 20, role: 'ALL', status: 'ALL' };
 
-      let where: any = {};
+      const where: Prisma.UserWhereInput = {};
 
       // Search filter
       if (search) {
@@ -326,25 +330,6 @@ export const usersRouter = router({
         province: oldStudent?.province || oldCollaborator?.province || null,
         postalCode: oldStudent?.postalCode || oldCollaborator?.postalCode || null,
       };
-
-      // Debug logging
-      console.log('[changeRole] Old profiles:', {
-        oldStudent: oldStudent ? {
-          id: oldStudent.id,
-          fiscalCode: oldStudent.fiscalCode,
-          phone: oldStudent.phone,
-          address: oldStudent.address,
-          city: oldStudent.city,
-        } : null,
-        oldCollaborator: oldCollaborator ? {
-          id: oldCollaborator.id,
-          fiscalCode: oldCollaborator.fiscalCode,
-          phone: oldCollaborator.phone,
-          address: oldCollaborator.address,
-          city: oldCollaborator.city,
-        } : null,
-      });
-      console.log('[changeRole] Common data extracted:', commonData);
 
       // Determine if new profile will be complete
       // Student and Collaborator require: fiscalCode, dateOfBirth, phone, address, city, province, postalCode

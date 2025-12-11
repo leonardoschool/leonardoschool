@@ -5,7 +5,28 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Suspense } from 'react';
 
-const coursesData = {
+// Type for course detail items
+interface CourseDetail {
+  icon: string;
+  label: string;
+  text?: string;
+  subtext?: string;
+}
+
+interface Course {
+  id: string;
+  logo: string;
+  badge: string;
+  badgeColor: string;
+  headerColor: string;
+  category: string;
+  title: string;
+  language: string;
+  details: CourseDetail[];
+  ctaColor: string;
+}
+
+const coursesData: Record<string, Course[]> = {
   medicina: [
     {
       id: 'starter',
@@ -532,9 +553,9 @@ function DidatticaContent() {
                                         {detail.text}
                                       </div>
                                     )}
-                                    {(detail as any).subtext && (
+                                    {detail.subtext && (
                                       <div className="text-[9px] text-gray-600 mt-0.5 leading-tight">
-                                        {(detail as any).subtext}
+                                        {detail.subtext}
                                       </div>
                                     )}
                                   </div>
@@ -565,9 +586,9 @@ function DidatticaContent() {
                                     {detail.text}
                                   </div>
                                 )}
-                                {(detail as any).subtext && (
-                                  <div className="text-[10px] text-gray-600 mt-0.5 leading-tight">
-                                    {(detail as any).subtext}
+                                {detail.subtext && (
+                                    <div className="text-[9px] text-gray-600 mt-0.5 leading-tight">
+                                        {detail.subtext}
                                   </div>
                                 )}
                               </div>
@@ -702,9 +723,9 @@ function DidatticaContent() {
                                     {detail.text}
                                   </div>
                                 )}
-                                {(detail as any).subtext && (
+                                {detail.subtext && (
                                   <div className="text-[10px] text-gray-600 mt-0.5 leading-tight">
-                                    {(detail as any).subtext}
+                                    {detail.subtext}
                                   </div>
                                 )}
                               </div>

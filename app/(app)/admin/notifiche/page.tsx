@@ -6,16 +6,17 @@ import { colors } from '@/lib/theme/colors';
 import { 
   Bell, 
   Check, 
-  CheckCheck, 
   AlertTriangle,
   FileText,
   UserCheck,
   UserPlus,
-  Mail,
-  Filter
+  LucideProps,
 } from 'lucide-react';
+import { ForwardRefExoticComponent, RefAttributes } from 'react';
 
-const notificationIcons: Record<string, any> = {
+type LucideIcon = ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>;
+
+const notificationIcons: Record<string, LucideIcon> = {
   CONTRACT_ASSIGNED: FileText,
   CONTRACT_SIGNED: FileText,
   ACCOUNT_ACTIVATED: UserCheck,
@@ -81,8 +82,8 @@ export default function NotificationsPage() {
     }).format(d);
   };
 
-  const isUnread = (notification: any) => {
-    const readBy = notification.readBy as Record<string, string> || {};
+  const isUnread = (notification: { readBy?: unknown }) => {
+    const readBy = (notification.readBy ?? {}) as Record<string, string>;
     // For simplicity, we check if the notification has any reads
     // In a real app, you'd check for the current admin's ID
     return Object.keys(readBy).length === 0;

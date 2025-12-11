@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Note: 'any' types used for complex tRPC query results with nested includes
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -7,7 +9,6 @@ import {
   Users,
   Search,
   CheckCircle,
-  XCircle,
   Clock,
   ChevronLeft,
   ChevronRight,
@@ -238,25 +239,40 @@ function AssignContractModal({
     { enabled: !!selectedTemplate && !!targetId && step === 'customize' }
   );
 
-  // Reset state when modal opens/closes
-  useEffect(() => {
-    if (!isOpen) {
-      setStep('select');
-      setSelectedTemplate(null);
-      setCustomContent('');
-      setCustomPrice('');
-      setAdminNotes('');
-      setExpiresInDays(7);
-      setShowPreview(false);
-    }
-  }, [isOpen]);
+  // Reset handler for when modal closes - called from parent via onClose callback
+  const resetState = () => {
+    setStep('select');
+    setSelectedTemplate(null);
+    setCustomContent('');
+    setCustomPrice('');
+    setAdminNotes('');
+    setExpiresInDays(7);
+    setShowPreview(false);
+  };
 
-  // When preview loads, set the content
+  // Handle close with reset
+  const handleClose = () => {
+    resetState();
+    onClose();
+  };
+
+  // Sync content from preview when it loads
+  // Using a ref to track previous preview to avoid unnecessary updates
+  const prevPreviewRef = useRef<typeof preview>(null);
+  
   useEffect(() => {
-    if (preview) {
-      setCustomContent(preview.previewContent);
-      setCustomPrice(preview.template.price?.toString() || '');
+    if (preview && preview !== prevPreviewRef.current) {
+      prevPreviewRef.current = preview;
+      // Only update if values are different to avoid re-render loops
+      if (customContent !== preview.previewContent) {
+        setCustomContent(preview.previewContent);
+      }
+      const newPrice = preview.template.price?.toString() || '';
+      if (customPrice !== newPrice) {
+        setCustomPrice(newPrice);
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview]);
 
   const handleSelectTemplate = (templateId: string) => {
@@ -302,7 +318,7 @@ function AssignContractModal({
               </p>
             </div>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className={`p-2 rounded-lg hover:${colors.background.secondary}`}
             >
               <X className="w-5 h-5" />
@@ -426,7 +442,7 @@ function AssignContractModal({
                       />
                     )}
                     <p className={`text-xs ${colors.text.muted} mt-1`}>
-                      I placeholder come {'{{NOME_COMPLETO}}'} sono già stati sostituiti con i dati dell'utente.
+                      I placeholder come {'{{NOME_COMPLETO}}'} sono già stati sostituiti con i dati dell&apos;utente.
                     </p>
                   </div>
 
@@ -478,7 +494,7 @@ function AssignContractModal({
                   {/* Admin Notes */}
                   <div>
                     <label className="block text-sm font-medium mb-2">
-                      Note Admin (non visibili all'utente)
+                      Note Admin (non visibili all&apos;utente)
                     </label>
                     <textarea
                       value={adminNotes}
@@ -505,7 +521,7 @@ function AssignContractModal({
             </button>
           )}
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className={`flex-1 px-4 py-3 rounded-xl ${colors.background.secondary} font-medium`}
           >
             Annulla
@@ -1412,7 +1428,7 @@ export default function UsersManagementPage() {
                 </div>
                 {!viewUserModal.user.profileCompleted && (
                   <p className={`text-sm mt-1 ${colors.status.warning.text} opacity-80`}>
-                    L'utente deve completare il profilo prima di poter ricevere un contratto.
+                    L&apos;utente deve completare il profilo prima di poter ricevere un contratto.
                   </p>
                 )}
               </div>

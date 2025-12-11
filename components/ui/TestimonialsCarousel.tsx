@@ -59,7 +59,7 @@ export default function TestimonialsCarousel({ testimonials }: TestimonialsCarou
                     </div>
                     <div className="flex-1 mb-4">
                       <p className="text-gray-600 text-sm italic text-center">
-                        "{testimonial.text}"
+                        &ldquo;{testimonial.text}&rdquo;
                       </p>
                     </div>
                     <div className="text-center">

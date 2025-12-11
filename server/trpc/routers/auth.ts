@@ -18,7 +18,22 @@ export const authRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { firebaseUid, email, name, role } = input;
+      if (!ctx.firebaseUid) {
+        throw new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: 'Token non valido',
+        });
+      }
+
+      if (ctx.firebaseUid !== input.firebaseUid) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'UID non corrispondente',
+        });
+      }
+
+      const { firebaseUid, email, name } = input;
+      const enforcedRole = 'STUDENT' as const;
 
       // Check if user already exists
       let user = await ctx.prisma.user.findUnique({
@@ -37,15 +52,9 @@ export const authRouter = router({
           firebaseUid,
           email,
           name,
-          role,
-          ...(role === 'STUDENT' && {
+          role: enforcedRole,
+          ...(enforcedRole === 'STUDENT' && {
             student: { create: {} },
-          }),
-          ...(role === 'ADMIN' && {
-            admin: { create: {} },
-          }),
-          ...(role === 'COLLABORATOR' && {
-            collaborator: { create: {} },
           }),
         },
         include: {
@@ -56,7 +65,7 @@ export const authRouter = router({
       });
 
       // Create stats for students
-      if (role === 'STUDENT' && user.student) {
+      if (user.student) {
         await ctx.prisma.studentStats.create({
           data: {
             studentId: user.student.id,

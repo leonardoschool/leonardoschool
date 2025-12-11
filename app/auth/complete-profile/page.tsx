@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
@@ -50,13 +50,14 @@ export default function CompleteProfilePage() {
   // Type assertion needed because Prisma types might not be updated yet
   const isCollaborator = (user?.role as string) === 'COLLABORATOR';
 
-  const updateStudentProfileMutation = trpc.students.completeProfile.useMutation();
-  const updateCollaboratorProfileMutation = trpc.collaborators.completeProfile.useMutation();
+  // Profile completion mutations
+  const studentCompleteProfile = trpc.students.completeProfile.useMutation();
+  const collaboratorCompleteProfile = trpc.collaborators.completeProfile.useMutation();
 
-  // Check if user is authenticated
+  // Check if user is authenticated and if profile is already completed
   useEffect(() => {
-    const unsubscribe = firebaseAuth.onAuthStateChanged((user) => {
-      if (!user) {
+    const unsubscribe = firebaseAuth.onAuthStateChanged((firebaseUser) => {
+      if (!firebaseUser) {
         router.push('/auth/login');
       } else {
         setAuthChecking(false);
@@ -65,6 +66,28 @@ export default function CompleteProfilePage() {
     
     return () => unsubscribe();
   }, [router]);
+
+  // Redirect if profile is already completed OR if user is admin (admins don't need profile completion)
+  useEffect(() => {
+    if (user) {
+      const role = user.role as string;
+      
+      // Admin users should never see this page - redirect immediately
+      if (role === 'ADMIN') {
+        window.location.href = '/admin';
+        return;
+      }
+      
+      // Redirect users with completed profiles to their dashboard
+      if (user.profileCompleted) {
+        if (role === 'COLLABORATOR') {
+          window.location.href = '/collaboratore';
+        } else {
+          window.location.href = '/studente';
+        }
+      }
+    }
+  }, [user, router]);
 
   // Validate a single field and update errors
   const validateField = (field: keyof ProfileFormData, value: string) => {
@@ -170,32 +193,46 @@ export default function CompleteProfilePage() {
     setLoading(true);
 
     try {
-      const mutationData = {
-        fiscalCode: validation.data.fiscalCode,
-        dateOfBirth: validation.data.dateOfBirth,
-        phone: validation.data.phone,
-        address: validation.data.address,
-        city: validation.data.city,
-        province: validation.data.province,
-        postalCode: validation.data.postalCode,
+      // Prepare profile data with proper types
+      const profileData = {
+        fiscalCode: formData.fiscalCode,
+        dateOfBirth: new Date(formData.dateOfBirth), // Convert string to Date
+        phone: formData.phone,
+        address: formData.address,
+        city: formData.city,
+        province: formData.province,
+        postalCode: formData.postalCode,
       };
+
+      // Call the appropriate mutation based on user role
+      // Note: Admin users should not reach this point (redirected in useEffect)
+      if (isCollaborator) {
+        await collaboratorCompleteProfile.mutateAsync(profileData);
+      } else if (user?.role !== 'ADMIN') {
+        await studentCompleteProfile.mutateAsync(profileData);
+      }
 
       // Update cookies by calling the auth endpoint with current token
       const currentUser = firebaseAuth.getCurrentUser();
       if (currentUser) {
         const token = await currentUser.getIdToken();
-        await fetch('/api/auth/me', {
+        const response = await fetch('/api/auth/me', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token }),
         });
+        
+        if (!response.ok) {
+          throw new Error('Errore nell\'aggiornamento del profilo');
+        }
       }
 
-      // Redirect to appropriate dashboard
+      // Use hard navigation to ensure new cookies are used by middleware
       const dashboardUrl = isCollaborator ? '/collaboratore' : '/studente';
-      router.push(dashboardUrl);
-    } catch (err: any) {
-      setError(err.message || 'Errore durante il salvataggio. Riprova');
+      window.location.href = dashboardUrl;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Errore durante il salvataggio. Riprova';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -219,6 +256,18 @@ export default function CompleteProfilePage() {
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-t-2" style={{ borderColor: colors.primary.main }}></div>
           <p className={`mt-4 text-sm ${colors.text.secondary}`}>Caricamento...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loader while checking if profile is already completed (redirect will happen)
+  if (user?.profileCompleted) {
+    return (
+      <div className={`min-h-screen ${colors.background.authPage} flex items-center justify-center`}>
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-t-2" style={{ borderColor: colors.primary.main }}></div>
+          <p className={`mt-4 text-sm ${colors.text.secondary}`}>Profilo già completato, reindirizzamento...</p>
         </div>
       </div>
     );

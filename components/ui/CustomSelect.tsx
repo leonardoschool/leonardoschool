@@ -165,6 +165,7 @@ export default function CustomSelect({
         role="combobox"
         aria-expanded={isOpen}
         aria-haspopup="listbox"
+        aria-controls={`${id}-listbox`}
         tabIndex={disabled ? -1 : 0}
         onClick={toggleOpen}
         onKeyDown={handleKeyDown}
@@ -218,6 +219,7 @@ export default function CustomSelect({
           {/* Options List */}
           <div 
             ref={listRef}
+            id={`${id}-listbox`}
             role="listbox"
             className="max-h-60 overflow-y-auto overscroll-contain"
           >

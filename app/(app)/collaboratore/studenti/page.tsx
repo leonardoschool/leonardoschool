@@ -8,8 +8,6 @@ import {
   Users,
   Mail,
   Calendar,
-  BookOpen,
-  TrendingUp,
   AlertCircle
 } from 'lucide-react';
 
@@ -116,7 +114,7 @@ export default function CollaboratorStudentsPage() {
                         <>
                           <div className="text-center">
                             <p className={`text-lg font-semibold ${colors.text.primary}`}>
-                              {student.stats.totalTests || 0}
+                              {student.stats.totalSimulations || 0}
                             </p>
                             <p className={`text-xs ${colors.text.muted}`}>Test</p>
                           </div>

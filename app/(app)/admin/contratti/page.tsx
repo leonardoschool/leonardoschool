@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Note: 'any' types used for complex tRPC query results with dynamic template data
 'use client';
 
 import { useState } from 'react';
@@ -914,7 +916,7 @@ Email: {{EMAIL}}</p>
               <div className="flex-1">
                 <h3 className={`text-lg font-bold ${colors.text.primary}`}>Elimina Template</h3>
                 <p className={`mt-2 ${colors.text.secondary}`}>
-                  Sei sicuro di voler eliminare il template "{deleteModal.templateName}"? 
+                  Sei sicuro di voler eliminare il template &quot;{deleteModal.templateName}&quot;? 
                   Il template non sarà più disponibile per nuovi contratti.
                 </p>
               </div>

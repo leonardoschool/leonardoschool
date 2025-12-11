@@ -66,14 +66,15 @@ export default function RegisterPage() {
 
       // 3. Redirect to complete profile page (keep loading true)
       router.push('/auth/complete-profile');
-    } catch (err: any) {
+    } catch (err) {
       console.error('Registration error:', err);
+      const firebaseError = err as { code?: string };
 
-      if (err.code === 'auth/email-already-in-use') {
+      if (firebaseError.code === 'auth/email-already-in-use') {
         setError('Questa email è già registrata');
-      } else if (err.code === 'auth/invalid-email') {
+      } else if (firebaseError.code === 'auth/invalid-email') {
         setError('Email non valida');
-      } else if (err.code === 'auth/weak-password') {
+      } else if (firebaseError.code === 'auth/weak-password') {
         setError('Password troppo debole');
       } else {
         setError('Errore durante la registrazione. Riprova');

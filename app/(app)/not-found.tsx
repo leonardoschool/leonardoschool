@@ -1,28 +1,27 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { colors } from '@/lib/theme/colors';
 import { 
   Home, 
   ArrowLeft, 
-  HelpCircle, 
-  LogOut,
   User,
   Settings,
   BookOpen
 } from 'lucide-react';
 
-export default function AppNotFound() {
-  const [userRole, setUserRole] = useState<string | null>(null);
+// Helper to get user role from cookie on client
+function getUserRoleFromCookie(): string | null {
+  if (typeof document === 'undefined') return null;
+  const cookies = document.cookie.split(';');
+  const roleCookie = cookies.find(c => c.trim().startsWith('user-role='));
+  return roleCookie?.split('=')[1] || null;
+}
 
-  useEffect(() => {
-    // Get user role from cookie for showing appropriate links
-    const cookies = document.cookie.split(';');
-    const roleCookie = cookies.find(c => c.trim().startsWith('user-role='));
-    const role = roleCookie?.split('=')[1];
-    setUserRole(role || null);
-  }, []);
+export default function AppNotFound() {
+  // Use lazy initializer to get role without useEffect
+  const [userRole] = useState(getUserRoleFromCookie);
 
   const getDashboardLink = () => {
     if (userRole === 'ADMIN') return '/admin';

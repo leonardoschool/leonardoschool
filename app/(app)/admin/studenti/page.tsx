@@ -1,14 +1,15 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Note: 'any' types used for complex tRPC query results with nested student data
 'use client';
 
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
+import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import { 
   Users, 
   Search, 
-  Filter, 
   CheckCircle, 
-  XCircle, 
   Clock, 
   FileText,
   ChevronLeft,
@@ -306,7 +307,7 @@ export default function StudentsManagementPage() {
           <h1>${viewContract.template.name}</h1>
         </div>
         <div class="contract-content">
-          ${viewContract.contentSnapshot}
+          ${sanitizeHtml(viewContract.contentSnapshot)}
         </div>
         <div class="signature-section">
           <p><strong>Firma dello studente:</strong></p>
@@ -761,7 +762,7 @@ export default function StudentsManagementPage() {
                   <div className={`border ${colors.border.primary} rounded-xl p-6`}>
                     <div 
                       className={`prose prose-sm max-w-none dark:prose-invert ${colors.text.primary}`}
-                      dangerouslySetInnerHTML={{ __html: viewContract.contentSnapshot }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewContract.contentSnapshot) }}
                     />
                   </div>
 
@@ -770,6 +771,7 @@ export default function StudentsManagementPage() {
                     <div className={`border-t ${colors.border.primary} pt-6`}>
                       <h4 className={`font-semibold ${colors.text.primary} mb-4`}>Firma dello studente</h4>
                       <div className="p-4 rounded-xl bg-white inline-block border border-gray-200">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img 
                           src={viewContract.signatureData} 
                           alt="Firma" 

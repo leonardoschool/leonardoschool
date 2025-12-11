@@ -75,10 +75,11 @@ export async function POST(request: NextRequest) {
     });
 
     return response;
-  } catch (error: any) {
+  } catch (error) {
     console.error('Errore nel recupero utente:', error);
+    const message = error instanceof Error ? error.message : 'Errore nel recupero dati utente';
     return NextResponse.json(
-      { error: error.message || 'Errore nel recupero dati utente' },
+      { error: message },
       { status: 500 }
     );
   }

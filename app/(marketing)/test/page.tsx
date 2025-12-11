@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import TestCard from '@/components/ui/TestCard';
 import { TestCard as TestCardType } from '@/types';
 import { Metadata } from 'next';
@@ -179,7 +180,7 @@ export default function TestPage() {
               <div className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100">
                 <div className="flex justify-center mb-6">
                   <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
-                    <img src="/images/hunimed.png" alt="Hunimed" className="w-14 h-14 object-contain" />
+                    <Image src="/images/hunimed.png" alt="Hunimed" width={56} height={56} className="object-contain" />
                   </div>
                 </div>
                 <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test Hunimed</h3>
@@ -198,7 +199,7 @@ export default function TestPage() {
               <div className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100">
                 <div className="flex justify-center mb-6">
                   <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
-                    <img src="/images/ucbm.png" alt="UCBM" className="w-14 h-14 object-contain" />
+                    <Image src="/images/ucbm.png" alt="UCBM" width={56} height={56} className="object-contain" />
                   </div>
                 </div>
                 <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test UBCM</h3>
@@ -214,7 +215,7 @@ export default function TestPage() {
                     <span className="text-red-600 mr-2">›</span> Medicine and Surgery
                   </a>
                   <a href="https://www.unicampus.it/ammissioni-trasferim/medicine-and-surgery-medtech-a-a-2026-2027-cittadini-italiani-europei-ed-equiparati/" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicine and Surgery "MedTech"
+                    <span className="text-red-600 mr-2">›</span> Medicine and Surgery &quot;MedTech&quot;
                   </a>
                 </div>
               </div>
@@ -223,7 +224,7 @@ export default function TestPage() {
               <div className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100">
                 <div className="flex justify-center mb-6">
                   <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
-                    <img src="/images/uniCamillus.png" alt="UniCamillus" className="w-14 h-14 object-contain" />
+                    <Image src="/images/uniCamillus.png" alt="UniCamillus" width={56} height={56} className="object-contain" />
                   </div>
                 </div>
                 <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test UniCamillus</h3>
@@ -248,7 +249,7 @@ export default function TestPage() {
               <div className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100">
                 <div className="flex justify-center mb-6">
                   <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
-                    <img src="/images/unicatt.png" alt="UniCatt" className="w-14 h-14 object-contain" />
+                    <Image src="/images/unicatt.png" alt="UniCatt" width={56} height={56} className="object-contain" />
                   </div>
                 </div>
                 <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test UniCatt</h3>
@@ -267,7 +268,7 @@ export default function TestPage() {
               <div className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100">
                 <div className="flex justify-center mb-6">
                   <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
-                    <img src="/images/unilink.png" alt="UniLink" className="w-14 h-14 object-contain" />
+                    <Image src="/images/unilink.png" alt="UniLink" width={56} height={56} className="object-contain" />
                   </div>
                 </div>
                 <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test UniLink</h3>
@@ -286,7 +287,7 @@ export default function TestPage() {
               <div className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100">
                 <div className="flex justify-center mb-6">
                   <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
-                    <img src="/images/uniSR.jpeg" alt="UniSR" className="w-14 h-14 object-contain rounded-full" />
+                    <Image src="/images/uniSR.jpeg" alt="UniSR" width={56} height={56} className="object-contain rounded-full" />
                   </div>
                 </div>
                 <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test UniSR</h3>

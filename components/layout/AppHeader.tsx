@@ -9,7 +9,6 @@ import { firebaseAuth } from '@/lib/firebase/auth';
 import { colors } from '@/lib/theme/colors';
 import {
   Bell,
-  User,
   Settings,
   LogOut,
   ChevronDown,
@@ -26,7 +25,6 @@ import {
   Check,
   X,
   AlertTriangle,
-  GraduationCap,
   Briefcase,
   Eye,
 } from 'lucide-react';
@@ -85,13 +83,7 @@ export default function AppHeader() {
     ? user?.isActive && (hasSignedContract || (hasNoContract && !hasPendingContract))
     : true;
 
-  // Theme handling
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') as Theme || 'system';
-    setCurrentTheme(savedTheme);
-    applyTheme(savedTheme);
-  }, []);
-
+  // Theme application function (defined before useEffect to avoid hoisting issues)
   const applyTheme = (theme: Theme) => {
     const root = document.documentElement;
     
@@ -102,6 +94,14 @@ export default function AppHeader() {
       root.classList.toggle('dark', theme === 'dark');
     }
   };
+
+  // Theme handling - load saved preference on mount
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') as Theme || 'system';
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCurrentTheme(savedTheme);
+    applyTheme(savedTheme);
+  }, []);
 
   const handleThemeChange = (theme: Theme) => {
     setCurrentTheme(theme);

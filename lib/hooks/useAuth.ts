@@ -1,13 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { useEffect, useState, useRef } from 'react';
+import { onIdTokenChanged, User as FirebaseUser } from 'firebase/auth';
 import { auth } from '@/lib/firebase/config';
 import { trpc } from '@/lib/trpc/client';
 
+/**
+ * Hook for Firebase auth state with cookie synchronization.
+ * Use this only when you need to sync cookies (e.g., after login/logout).
+ * For just reading user data, use trpc.auth.me.useQuery() directly.
+ */
 export function useAuth() {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const lastSyncedUid = useRef<string | null>(null);
 
   // Get user data from database
   const { data: dbUser, isLoading: isLoadingUser } = trpc.auth.me.useQuery(undefined, {
@@ -15,33 +21,39 @@ export function useAuth() {
   });
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onIdTokenChanged(auth, (user) => {
       setFirebaseUser(user);
-      
-      // Store token in cookie for middleware
-      if (user) {
-        user.getIdToken().then((token) => {
-          document.cookie = `auth-token=${token}; path=/; max-age=3600`;
-        });
-      } else {
-        document.cookie = 'auth-token=; path=/; max-age=0';
-        document.cookie = 'user-role=; path=/; max-age=0';
-        document.cookie = 'profile-completed=; path=/; max-age=0';
-      }
-      
-      setLoading(false);
+
+      (async () => {
+        try {
+          if (user) {
+            // Only sync cookies if user changed (not on every token refresh)
+            if (lastSyncedUid.current !== user.uid) {
+              const token = await user.getIdToken();
+              await fetch('/api/auth/me', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token }),
+                cache: 'no-store',
+              });
+              lastSyncedUid.current = user.uid;
+            }
+          } else {
+            if (lastSyncedUid.current !== null) {
+              await fetch('/api/auth/logout', { method: 'POST' });
+              lastSyncedUid.current = null;
+            }
+          }
+        } catch (error) {
+          console.error('[useAuth] Failed to synchronize auth session:', error);
+        } finally {
+          setLoading(false);
+        }
+      })();
     });
 
     return () => unsubscribe();
   }, []);
-
-  // Update role and profileCompleted cookies when user data is loaded
-  useEffect(() => {
-    if (dbUser) {
-      document.cookie = `user-role=${dbUser.role}; path=/; max-age=3600`;
-      document.cookie = `profile-completed=${dbUser.profileCompleted}; path=/; max-age=3600`;
-    }
-  }, [dbUser]);
 
   return {
     firebaseUser,

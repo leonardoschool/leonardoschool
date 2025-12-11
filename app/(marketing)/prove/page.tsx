@@ -51,7 +51,7 @@ export default function ProvePage() {
                             PROVE UFFICIALI
                         </h1>
                         <p className="text-xl text-red-100 mb-8">
-                            Consulta le prove ufficiali per preparati al meglio all'ammissione universitaria
+                            Consulta le prove ufficiali per preparati al meglio all&apos;ammissione universitaria
                         </p>
                         <div className="inline-flex items-center gap-2 bg-yellow-400/90 text-gray-900 px-6 py-3 rounded-lg font-semibold">
                             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -120,7 +120,7 @@ export default function ProvePage() {
                     {/* Subject Cards */}
                     <div className="max-w-6xl mx-auto">
                         <h2 className="text-3xl font-bold text-gray-900 mb-4 text-center">
-                            Prove d'esame disponibili
+                            Prove d&apos;esame disponibili
                         </h2>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                             {subjects.map((subject) => {

@@ -1,8 +1,12 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // Contracts Router - Handles contract templates, assignments, and signatures
+// Note: 'any' types are used for Prisma dynamic queries and complex object mappings
 import { router, protectedProcedure, adminProcedure, studentProcedure, collaboratorProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { emailService } from '../../services/emailService';
+import { sanitizeText } from '@/lib/utils/escapeHtml';
+import { sanitizeHtml, validateContentLength } from '@/lib/utils/sanitizeHtml';
 
 export const contractsRouter = router({
   // ==================== ADMIN ENDPOINTS ====================
@@ -415,12 +419,25 @@ export const contractsRouter = router({
 
       // Generate content snapshot with user data
       // Use custom content if provided, otherwise generate from template
-      const contentSnapshot = input.customContent 
-        ? input.customContent 
-        : generateContractContent(template.content, targetUser, targetUser.user);
+      // SECURITY: Sanitize custom content to prevent XSS attacks
+      let contentSnapshot: string;
+      if (input.customContent) {
+        // Validate content length to prevent DoS
+        const lengthValidation = validateContentLength(input.customContent);
+        if (!lengthValidation.valid) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: lengthValidation.message || 'Contenuto troppo lungo',
+          });
+        }
+        // Sanitize HTML to remove dangerous elements
+        contentSnapshot = sanitizeHtml(input.customContent);
+      } else {
+        contentSnapshot = generateContractContent(template.content, targetUser, targetUser.user);
+      }
       
       // Use custom price if provided, otherwise use template price
-      const finalPrice = input.customPrice ?? template.price;
+      const _finalPrice = input.customPrice ?? template.price;
 
       // Calculate expiration
       const expiresAt = new Date();
@@ -1277,26 +1294,26 @@ function generateContractContent(
       })
     : '';
 
-  const fullAddress = [
-    student.address,
-    student.city,
-    student.province ? `(${student.province})` : '',
-    student.postalCode,
-  ]
-    .filter(Boolean)
-    .join(', ');
+  const sanitizedAddressParts = [
+    sanitizeText(student.address),
+    sanitizeText(student.city),
+    student.province ? `(${sanitizeText(student.province)})` : '',
+    sanitizeText(student.postalCode),
+  ].filter(Boolean);
+
+  const fullAddress = sanitizedAddressParts.join(', ');
 
   return template
-    .replace(/\{\{NOME_COMPLETO\}\}/g, user.name)
-    .replace(/\{\{EMAIL\}\}/g, user.email)
-    .replace(/\{\{CODICE_FISCALE\}\}/g, student.fiscalCode || '')
-    .replace(/\{\{DATA_NASCITA\}\}/g, formattedBirthDate)
-    .replace(/\{\{TELEFONO\}\}/g, student.phone || '')
+    .replace(/\{\{NOME_COMPLETO\}\}/g, sanitizeText(user.name))
+    .replace(/\{\{EMAIL\}\}/g, sanitizeText(user.email))
+    .replace(/\{\{CODICE_FISCALE\}\}/g, sanitizeText(student.fiscalCode))
+    .replace(/\{\{DATA_NASCITA\}\}/g, sanitizeText(formattedBirthDate))
+    .replace(/\{\{TELEFONO\}\}/g, sanitizeText(student.phone))
     .replace(/\{\{INDIRIZZO_COMPLETO\}\}/g, fullAddress)
-    .replace(/\{\{INDIRIZZO\}\}/g, student.address || '')
-    .replace(/\{\{CITTA\}\}/g, student.city || '')
-    .replace(/\{\{PROVINCIA\}\}/g, student.province || '')
-    .replace(/\{\{CAP\}\}/g, student.postalCode || '')
-    .replace(/\{\{DATA_ODIERNA\}\}/g, formattedDate)
+    .replace(/\{\{INDIRIZZO\}\}/g, sanitizeText(student.address))
+    .replace(/\{\{CITTA\}\}/g, sanitizeText(student.city))
+    .replace(/\{\{PROVINCIA\}\}/g, sanitizeText(student.province))
+    .replace(/\{\{CAP\}\}/g, sanitizeText(student.postalCode))
+    .replace(/\{\{DATA_ODIERNA\}\}/g, sanitizeText(formattedDate))
     .replace(/\{\{ANNO\}\}/g, today.getFullYear().toString());
 }

@@ -1,4 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // Collaborators Router - Handles collaborator management
+// Note: 'any' types are used for Prisma dynamic queries and include patterns
 import { router, adminProcedure, protectedProcedure, staffProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';

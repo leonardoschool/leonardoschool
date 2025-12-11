@@ -4,8 +4,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { httpBatchLink } from '@trpc/client';
 import { useState, useEffect } from 'react';
+import { transformer } from './transformer';
 import { trpc } from './client';
-import superjson from 'superjson';
 import { firebaseAuth } from '@/lib/firebase/auth';
 import { colors } from '@/lib/theme/colors';
 
@@ -32,9 +32,10 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
       queries: {
         staleTime: 5 * 1000, // 5 seconds
         refetchOnWindowFocus: false,
-        retry: (failureCount, error: any) => {
+        retry: (failureCount, error) => {
           // Don't retry on 401/403 errors
-          if (error?.data?.httpStatus === 401 || error?.data?.httpStatus === 403) {
+          const httpStatus = (error as { data?: { httpStatus?: number } })?.data?.httpStatus;
+          if (httpStatus === 401 || httpStatus === 403) {
             return false;
           }
           return failureCount < 2;
@@ -48,7 +49,9 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
       links: [
         httpBatchLink({
           url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/trpc`,
-          transformer: superjson,
+          // Transformer must match server config for proper serialization
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          transformer: transformer as any,
           // Add Firebase token to all requests
           async headers() {
             try {
@@ -59,7 +62,7 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
                   authorization: `Bearer ${freshToken}`,
                 };
               }
-            } catch (error) {
+            } catch {
               // Firebase not initialized or user not logged in
               console.debug('[tRPC] Could not get Firebase token');
             }

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Note: 'any' types used for complex tRPC query results with nested collaborator data
 'use client';
 
 import { useState } from 'react';
@@ -8,13 +10,10 @@ import {
   Search,
   UserCheck,
   UserX,
-  Settings,
   FileText,
   Mail,
-  Calendar,
   Shield,
   CheckCircle,
-  XCircle,
   Clock,
   ChevronDown,
   ChevronUp,

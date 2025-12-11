@@ -1,7 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Note: 'any' types used for Prisma query results with dynamic includes
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/firebase/admin';
 import { prisma } from '@/lib/prisma/client';
 import { cookies } from 'next/headers';
+import { sanitizeText } from '@/lib/utils/escapeHtml';
+import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 
 export async function GET(
   request: NextRequest,
@@ -73,6 +77,70 @@ export async function GET(
     const targetUser = contract.student?.user || contract.collaborator?.user;
     const targetProfile = contract.student || contract.collaborator;
 
+    const safeTemplateName = sanitizeText(contract.template.name);
+    const safeTemplateDescription = sanitizeText(contract.template.description);
+    const safeTargetName = sanitizeText(targetUser?.name || 'N/D');
+    const safeTargetEmail = sanitizeText(targetUser?.email || 'N/D');
+    const safeFiscalCode = sanitizeText((targetProfile as any)?.fiscalCode || 'N/D');
+    const safeAssignedAt = sanitizeText(
+      new Date(contract.assignedAt).toLocaleDateString('it-IT', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+      })
+    );
+    const safeExpiresAt = contract.expiresAt
+      ? sanitizeText(
+          new Date(contract.expiresAt).toLocaleDateString('it-IT', {
+            day: '2-digit',
+            month: 'long',
+            year: 'numeric',
+          })
+        )
+      : '';
+    const safePrice = contract.template.price
+      ? sanitizeText(
+          `€ ${contract.template.price.toLocaleString('it-IT', {
+            minimumFractionDigits: 2,
+          })}`
+        )
+      : '';
+    const safeSignatureDate = contract.signedAt
+      ? sanitizeText(
+          new Date(contract.signedAt).toLocaleDateString('it-IT', {
+            day: '2-digit',
+            month: 'long',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        )
+      : '';
+    const safeSignatureIp = sanitizeText(contract.signatureIp);
+
+    const statusClassMap: Record<string, string> = {
+      PENDING: 'status-pending',
+      SIGNED: 'status-signed',
+      EXPIRED: 'status-expired',
+      CANCELLED: 'status-cancelled',
+    };
+
+    const statusLabelMap: Record<string, string> = {
+      PENDING: '⌛ In attesa di firma',
+      SIGNED: '✔ Firmato',
+      EXPIRED: '⚠ Scaduto',
+      CANCELLED: '✖ Annullato',
+    };
+
+    // Status class and label are computed but used in templates - kept for future HTML template updates
+    const _statusClass = statusClassMap[contract.status] ?? 'status-pending';
+    const _statusLabel = statusLabelMap[contract.status] ?? 'Stato non disponibile';
+
+    const safeSignatureData =
+      contract.signatureData && contract.signatureData.startsWith('data:image/')
+        ? sanitizeText(contract.signatureData)
+        : null;
+
     // Build HTML response
     const html = `
 <!DOCTYPE html>
@@ -80,7 +148,7 @@ export async function GET(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Contratto - ${contract.template.name}</title>
+  <title>Contratto - ${safeTemplateName}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -214,12 +282,10 @@ export async function GET(
 <body>
   <div class="container">
     <div class="header">
-      <h1>${contract.template.name}</h1>
-      <p>${contract.template.description || 'Contratto Leonardo School'}</p>
-      <span class="status-badge status-${contract.status.toLowerCase()}">
-        ${contract.status === 'PENDING' ? '⏳ In attesa di firma' : 
-          contract.status === 'SIGNED' ? '✓ Firmato' : 
-          contract.status === 'EXPIRED' ? '⚠ Scaduto' : '✕ Annullato'}
+      <h1>${safeTemplateName}</h1>
+      <p>${safeTemplateDescription || 'Contratto Leonardo School'}</p>
+            <span class="status-badge ">
+        
       </span>
       <div class="actions">
         <button class="btn btn-primary" onclick="window.print()">
@@ -234,53 +300,47 @@ export async function GET(
     <div class="info-grid">
       <div class="info-item">
         <label>Intestatario</label>
-        <span>${targetUser?.name || 'N/D'}</span>
+        <span>${safeTargetName}</span>
       </div>
       <div class="info-item">
         <label>Email</label>
-        <span>${targetUser?.email || 'N/D'}</span>
+        <span>${safeTargetEmail}</span>
       </div>
       <div class="info-item">
         <label>Codice Fiscale</label>
-        <span>${(targetProfile as any)?.fiscalCode || 'N/D'}</span>
+        <span>${safeFiscalCode}</span>
       </div>
       <div class="info-item">
         <label>Data Assegnazione</label>
-        <span>${new Date(contract.assignedAt).toLocaleDateString('it-IT', { 
-          day: '2-digit', month: 'long', year: 'numeric' 
-        })}</span>
+        <span>${safeAssignedAt}</span>
       </div>
       ${contract.expiresAt ? `
       <div class="info-item">
         <label>Scadenza Firma</label>
-        <span>${new Date(contract.expiresAt).toLocaleDateString('it-IT', { 
-          day: '2-digit', month: 'long', year: 'numeric' 
-        })}</span>
+        <span>${safeExpiresAt}</span>
       </div>
       ` : ''}
       ${contract.template.price ? `
       <div class="info-item">
         <label>Importo</label>
-        <span>€ ${contract.template.price.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
+        <span>${safePrice}</span>
       </div>
       ` : ''}
     </div>
     
     <div class="content">
       <h2>Contenuto del Contratto</h2>
-      <div class="contract-text">${contract.contentSnapshot || 'Contenuto non disponibile'}</div>
+      <div class="contract-text">${sanitizeHtml(contract.contentSnapshot) || 'Contenuto non disponibile'}</div>
       
       ${contract.status === 'SIGNED' && contract.signedAt ? `
       <div class="signature-section">
         <h3>✓ Contratto Firmato</h3>
         <div class="signature-info">
-          <p><strong>Data firma:</strong> ${new Date(contract.signedAt).toLocaleDateString('it-IT', { 
-            day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' 
-          })}</p>
-          ${contract.signatureIp ? `<p><strong>IP:</strong> ${contract.signatureIp}</p>` : ''}
+          <p><strong>Data firma:</strong> ${safeSignatureDate}</p>
+          ${contract.signatureIp ? `<p><strong>IP:</strong> ${safeSignatureIp}</p>` : ''}
         </div>
-        ${contract.signatureData ? `
-        <img src="${contract.signatureData}" alt="Firma" class="signature-image" />
+        ${safeSignatureData ? `
+        <img src="${safeSignatureData}" alt="Firma" class="signature-image" />
         ` : ''}
       </div>
       ` : ''}

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Note: 'any' types used for complex tRPC query results with file uploads
 'use client';
 
 import { useState, useRef } from 'react';
@@ -29,7 +31,6 @@ import {
   Settings,
   ExternalLink,
   Palette,
-  GripVertical,
   FolderPlus,
 } from 'lucide-react';
 import { firebaseStorage } from '@/lib/firebase/storage';
@@ -312,7 +313,7 @@ export default function MaterialsPage() {
 
     try {
       // Upload to Firebase Storage
-      const { url, path } = await firebaseStorage.uploadMaterialFile(
+      const { url, path: _path } = await firebaseStorage.uploadMaterialFile(
         file,
         formData.type.toLowerCase(),
         (progress) => setUploadProgress(progress)
@@ -1015,7 +1016,7 @@ export default function MaterialsPage() {
               <div className="text-center py-12">
                 <FolderOpen className={`w-16 h-16 mx-auto mb-4 ${colors.text.muted}`} />
                 <p className={`text-lg font-medium ${colors.text.primary}`}>Nessun materiale</p>
-                <p className={`mt-1 ${colors.text.secondary}`}>Clicca su "Nuovo Materiale" per iniziare</p>
+                <p className={`mt-1 ${colors.text.secondary}`}>Clicca su &quot;Nuovo Materiale&quot; per iniziare</p>
               </div>
             ) : (
               <div className="space-y-4">

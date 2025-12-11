@@ -27,7 +27,7 @@ export default function DatePicker({
   value,
   onChange,
   onBlur,
-  required = false,
+  required: _required = false,
   hasError = false,
   placeholder = 'Seleziona data',
   minYear = 1920,

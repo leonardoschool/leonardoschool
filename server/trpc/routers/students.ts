@@ -257,7 +257,7 @@ export const studentsRouter = router({
             },
             stats: {
               select: {
-                totalTests: true,
+                totalSimulations: true,
                 avgScore: true,
               }
             },

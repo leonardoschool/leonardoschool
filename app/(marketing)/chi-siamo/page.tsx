@@ -53,11 +53,11 @@ export default function ChiSiamoPage() {
 
               <div className="space-y-6 text-gray-700 leading-relaxed text-lg">
                 <p>
-                  I nostri <span className="text-red-600 font-semibold">tutor</span>, studenti e neolaureati selezionati, seguono da anni le nostre classi con un <span className="text-gray-900 font-semibold">metodo rapido, moderno e coinvolgente</span>, capace di rendere l'apprendimento <span className="text-red-600 font-semibold">immediato e naturale</span>.
+                  I nostri <span className="text-red-600 font-semibold">tutor</span>, studenti e neolaureati selezionati, seguono da anni le nostre classi con un <span className="text-gray-900 font-semibold">metodo rapido, moderno e coinvolgente</span>, capace di rendere l&apos;apprendimento <span className="text-red-600 font-semibold">immediato e naturale</span>.
                 </p>
 
                 <p>
-                  Sono sempre <span className="text-red-600 font-semibold">disponibili</span> anche fuori dall'orario delle lezioni per dubbi, chiarimenti e supporto aggiuntivo.
+                  Sono sempre <span className="text-red-600 font-semibold">disponibili</span> anche fuori dall&apos;orario delle lezioni per dubbi, chiarimenti e supporto aggiuntivo.
                 </p>
 
                 <div className="bg-gradient-to-r from-red-50 to-red-100 border-l-4 border-red-600 p-6 rounded-r-xl mt-8 shadow-md">
@@ -104,7 +104,7 @@ export default function ChiSiamoPage() {
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-3">Metodo innovativo</h3>
             <p className="text-gray-700">
-              Tecniche di insegnamento moderne e coinvolgenti che rendono l'apprendimento efficace e piacevole.
+              Tecniche di insegnamento moderne e coinvolgenti che rendono l&apos;apprendimento efficace e piacevole.
             </p>
           </div>
 
@@ -117,7 +117,7 @@ export default function ChiSiamoPage() {
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-3">Tutor esperti</h3>
             <p className="text-gray-700">
-              Studenti universitari e neolaureati che conoscono perfettamente le sfide dei test d'ingresso.
+              Studenti universitari e neolaureati che conoscono perfettamente le sfide dei test d&apos;ingresso.
             </p>
           </div>
 
@@ -130,7 +130,7 @@ export default function ChiSiamoPage() {
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-3">Supporto continuo</h3>
             <p className="text-gray-700">
-              Assistenza anche fuori dall'orario di lezione per garantire il tuo successo in ogni momento.
+              Assistenza anche fuori dall&apos;orario di lezione per garantire il tuo successo in ogni momento.
             </p>
           </div>
         </div>
@@ -145,11 +145,12 @@ export default function ChiSiamoPage() {
           </div>
 
           <div className="bg-black border border-gray-300 rounded-xl pt-6 pr-6 pl-6 hover:border-red-500 hover:shadow-lg transition-all duration-300">
-            <img
+            <Image
               src="/images/partner.png"
               alt="Partner - Centro Fonolinguistico"
+              width={320}
+              height={200}
               className="w-full h-auto mx-auto group-hover:scale-105 transition-transform duration-300"
-              style={{ maxWidth: '320px' }}
             />
           </div>
         </div>

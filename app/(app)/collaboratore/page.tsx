@@ -1,7 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { 
@@ -33,7 +31,6 @@ type ContractWithTemplate = {
 };
 
 export default function CollaboratorDashboard() {
-  const router = useRouter();
   const { data: user, isLoading: userLoading } = trpc.auth.me.useQuery();
   
   // Get collaborator's contract
@@ -45,25 +42,16 @@ export default function CollaboratorDashboard() {
     }
   );
 
-  // Redirect to complete-profile if profile is not complete
-  useEffect(() => {
-    if (!userLoading && user && !user.profileCompleted) {
-      router.replace('/auth/complete-profile');
-    }
-  }, [user, userLoading, router]);
-
   // Cast contract to include template info
   const contract = contractData as ContractWithTemplate | null | undefined;
 
-  // Loading state OR redirecting to complete-profile
-  if (userLoading || contractLoading || (user && !user.profileCompleted)) {
+  // Loading state
+  if (userLoading || contractLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <Loader2 className={`w-12 h-12 animate-spin mx-auto ${colors.primary.text}`} />
-          <p className={`mt-4 ${colors.text.secondary}`}>
-            {user && !user.profileCompleted ? 'Reindirizzamento...' : 'Caricamento...'}
-          </p>
+          <p className={`mt-4 ${colors.text.secondary}`}>Caricamento...</p>
         </div>
       </div>
     );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { firebaseAuth } from '@/lib/firebase/auth';
@@ -9,13 +9,52 @@ import { colors } from '@/lib/theme/colors';
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get('redirect') || '/app';
+  const _redirect = searchParams.get('redirect') || '/app';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  // Check if user is already logged in Firebase - if so, sync cookies and redirect
+  useEffect(() => {
+    const unsubscribe = firebaseAuth.onAuthStateChanged(async (user) => {
+      if (user) {
+        try {
+          // User is logged in Firebase but arrived at login page
+          // This means cookies might be out of sync - resync them
+          const token = await user.getIdToken();
+          const response = await fetch('/api/auth/me', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token }),
+          });
+          
+          if (response.ok) {
+            const dbUser = await response.json();
+            // Redirect based on role
+            if ((dbUser.role === 'STUDENT' || dbUser.role === 'COLLABORATOR') && !dbUser.profileCompleted) {
+              router.push('/auth/complete-profile');
+            } else if (dbUser.role === 'ADMIN') {
+              window.location.href = '/admin';
+            } else if (dbUser.role === 'COLLABORATOR') {
+              window.location.href = '/collaboratore';
+            } else {
+              window.location.href = '/studente';
+            }
+            return;
+          }
+        } catch (err) {
+          console.error('Error syncing auth:', err);
+        }
+      }
+      setCheckingAuth(false);
+    });
+    
+    return () => unsubscribe();
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,23 +93,27 @@ export default function LoginPage() {
       }));
       
       // 5. Redirect in base a completamento profilo e ruolo
-      if (dbUser.role === 'STUDENT' && !dbUser.profileCompleted) {
+      // Use hard navigation for protected routes to ensure cookies are properly read by middleware
+      if ((dbUser.role === 'STUDENT' || dbUser.role === 'COLLABORATOR') && !dbUser.profileCompleted) {
         router.push('/auth/complete-profile');
       } else if (dbUser.role === 'ADMIN') {
-        router.push('/admin');
+        window.location.href = '/admin';
+      } else if (dbUser.role === 'COLLABORATOR') {
+        window.location.href = '/collaboratore';
       } else {
-        router.push('/studente');
+        window.location.href = '/studente';
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Login error:', err);
+      const firebaseError = err as { code?: string };
       
-      if (err.code === 'auth/invalid-credential') {
+      if (firebaseError.code === 'auth/invalid-credential') {
         setError('Email o password non validi');
-      } else if (err.code === 'auth/user-not-found') {
+      } else if (firebaseError.code === 'auth/user-not-found') {
         setError('Utente non trovato');
-      } else if (err.code === 'auth/wrong-password') {
+      } else if (firebaseError.code === 'auth/wrong-password') {
         setError('Password errata');
-      } else if (err.code === 'auth/too-many-requests') {
+      } else if (firebaseError.code === 'auth/too-many-requests') {
         setError('Troppi tentativi. Riprova più tardi');
       } else {
         setError('Errore durante il login. Riprova');
@@ -78,6 +121,22 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  // Show loading while checking if user is already authenticated
+  if (checkingAuth) {
+    return (
+      <div className="max-w-md mx-auto w-full">
+        <div className={`relative ${colors.background.card} py-8 px-6 ${colors.effects.shadow.xl} rounded-lg ${colors.effects.transition}`}>
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-t-2" style={{ borderColor: colors.primary.main }}></div>
+              <p className={`mt-4 text-sm font-medium ${colors.text.primary}`}>Verifica sessione...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-md mx-auto w-full">

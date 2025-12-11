@@ -1,6 +1,5 @@
 'use client';
 
-import { useAuth } from '@/lib/hooks/useAuth';
 import Link from 'next/link';
 import { colors } from '@/lib/theme/colors';
 import { trpc } from '@/lib/trpc/client';
@@ -21,14 +20,16 @@ import {
 } from 'lucide-react';
 
 export default function AdminDashboard() {
-  const { user, loading } = useAuth();
+  // Use tRPC directly instead of useAuth hook to avoid duplicate calls
+  const { data: user, isLoading } = trpc.auth.me.useQuery();
 
   // Fetch pending students data
   const { data: pendingContract } = trpc.contracts.getStudentsPendingContract.useQuery();
   const { data: pendingSignature } = trpc.contracts.getStudentsPendingSignature.useQuery();
   const { data: pendingActivation } = trpc.contracts.getContractsPendingActivation.useQuery();
-
-  if (loading) {
+  
+  // Show loading only on initial load or if user data not ready
+  if (isLoading || !user) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
@@ -38,6 +39,9 @@ export default function AdminDashboard() {
       </div>
     );
   }
+
+  // Get user name with fallback
+  const userName = user?.name?.split(' ')[0] || 'Admin';
 
   const dashboardCards = [
     {
@@ -117,7 +121,7 @@ export default function AdminDashboard() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className={`text-2xl sm:text-3xl font-bold ${colors.text.primary}`}>
-              Benvenuto, {user?.name?.split(' ')[0]}! 👋
+              Benvenuto, {userName}! 👋
             </h1>
             <p className={`mt-2 ${colors.text.secondary}`}>
               Ecco un riepilogo della situazione attuale.

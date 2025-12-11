@@ -1,17 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
-import { firebaseAuth } from '@/lib/firebase/auth';
 import { colors } from '@/lib/theme/colors';
+import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import {
   User,
   FileText,
   CheckCircle,
   Clock,
   AlertTriangle,
-  LogOut,
   PenTool,
   BookOpen,
   BarChart3,
@@ -33,22 +31,13 @@ import Link from 'next/link';
 type ContractStatus = 'PENDING' | 'SIGNED' | 'EXPIRED' | 'CANCELLED';
 
 export default function StudentDashboard() {
-  const router = useRouter();
-  const [loggingOut, setLoggingOut] = useState(false);
   const [showContractModal, setShowContractModal] = useState(false);
 
   // Get current user
   const { data: user, isLoading: userLoading, error: userError } = trpc.auth.me.useQuery();
 
-  // Redirect to complete-profile if profile is not complete
-  useEffect(() => {
-    if (!userLoading && user && !user.profileCompleted) {
-      router.replace('/auth/complete-profile');
-    }
-  }, [user, userLoading, router]);
-
   // Get student's contract - only if user is a student with student data
-  const { data: contract, isLoading: contractLoading } = trpc.contracts.getMyContract.useQuery(
+  const { data: contract } = trpc.contracts.getMyContract.useQuery(
     undefined,
     { 
       enabled: !!user?.student,
@@ -63,17 +52,6 @@ export default function StudentDashboard() {
       enabled: !!contract?.id && contract?.status === 'SIGNED' && showContractModal,
     }
   );
-
-  const handleLogout = async () => {
-    setLoggingOut(true);
-    try {
-      await firebaseAuth.logout();
-      router.push('/auth/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-      setLoggingOut(false);
-    }
-  };
 
   const handleDownloadContract = () => {
     if (!signedContractDetails) return;
@@ -115,7 +93,7 @@ export default function StudentDashboard() {
           <h1>${signedContractDetails.template.name}</h1>
         </div>
         <div class="contract-content">
-          ${signedContractDetails.contentSnapshot}
+          ${sanitizeHtml(signedContractDetails.contentSnapshot)}
         </div>
         <div class="signature-section">
           <p><strong>Firma dello studente:</strong></p>
@@ -228,23 +206,20 @@ export default function StudentDashboard() {
   // Only show loading for user query, contract can load in background
   const isLoading = userLoading;
 
-  // Handle loading state OR redirecting to complete-profile
-  if (isLoading || (user && !user.profileCompleted)) {
+  // Handle loading state
+  if (isLoading) {
     return (
       <div className={`min-h-screen ${colors.background.primary} flex items-center justify-center`}>
         <div className="text-center">
           <div className="w-12 h-12 border-2 border-red-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className={`mt-4 ${colors.text.secondary}`}>
-            {user && !user.profileCompleted ? 'Reindirizzamento...' : 'Caricamento dashboard...'}
-          </p>
+          <p className={`mt-4 ${colors.text.secondary}`}>Caricamento dashboard...</p>
         </div>
       </div>
     );
   }
 
-  // Handle error or no user (redirect to login)
+  // Handle error or no user - proxy should have already redirected to login
   if (userError || !user) {
-    router.push('/auth/login');
     return (
       <div className={`min-h-screen ${colors.background.primary} flex items-center justify-center`}>
         <div className="text-center">
@@ -536,7 +511,7 @@ export default function StudentDashboard() {
               <BookOpen className="w-6 h-6 text-white" />
             </div>
             <h3 className={`font-semibold ${colors.text.primary} mb-1`}>Simulazioni</h3>
-            <p className={`text-sm ${colors.text.secondary}`}>Inizia una nuova simulazione d'esame</p>
+            <p className={`text-sm ${colors.text.secondary}`}>Inizia una nuova simulazione d&apos;esame</p>
           </div>
 
           <Link href="/studente/materiali" className={`${colors.background.card} rounded-2xl ${colors.effects.shadow.lg} p-6 hover:shadow-xl transition-shadow cursor-pointer group`}>
@@ -614,7 +589,7 @@ export default function StudentDashboard() {
                   {/* Contract Content */}
                   <div 
                     className={`prose prose-sm max-w-none dark:prose-invert ${colors.text.primary}`}
-                    dangerouslySetInnerHTML={{ __html: signedContractDetails.contentSnapshot }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(signedContractDetails.contentSnapshot) }}
                   />
 
                   {/* Signature */}
@@ -622,6 +597,7 @@ export default function StudentDashboard() {
                     <div className={`border-t ${colors.border.primary} pt-6`}>
                       <h4 className={`font-semibold ${colors.text.primary} mb-4`}>Firma</h4>
                       <div className="p-4 rounded-xl bg-white inline-block border border-gray-200">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img 
                           src={signedContractDetails.signatureData} 
                           alt="Firma" 

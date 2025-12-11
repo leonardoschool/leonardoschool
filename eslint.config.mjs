@@ -12,7 +12,20 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Legacy Flutter webapp (not part of current project)
+    "webapp_old/**",
   ]),
+  // Custom rules
+  {
+    rules: {
+      // Allow unused variables with underscore prefix (intentionally ignored)
+      "@typescript-eslint/no-unused-vars": ["warn", { 
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_"
+      }],
+    },
+  },
 ]);
 
 export default eslintConfig;

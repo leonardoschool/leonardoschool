@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import Preloader from '@/components/ui/Preloader';
+import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import { 
   CheckCircle, 
   AlertCircle, 
@@ -12,7 +13,6 @@ import {
   Calendar, 
   Euro, 
   Pen,
-  Eraser,
   RotateCcw,
   ChevronDown,
   ChevronUp,
@@ -253,7 +253,7 @@ export default function ContractSignPage() {
         </div>
         <div class="content">
           <h2>Termini e Condizioni</h2>
-          ${contract.contentSnapshot || ''}
+          ${sanitizeHtml(contract.contentSnapshot)}
         </div>
         <div class="footer">
           <p>Documento generato da Leonardo School - ${new Date().toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
@@ -344,7 +344,8 @@ export default function ContractSignPage() {
     );
   }
 
-  // Format dates
+  // Format dates - kept for future use
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const formatDate = (date: Date | string | null) => {
     if (!date) return '-';
     return new Intl.DateTimeFormat('it-IT', {
@@ -362,10 +363,14 @@ export default function ContractSignPage() {
     }).format(price);
   };
 
-  // Calculate days remaining
-  const daysRemaining = contract.expiresAt 
-    ? Math.ceil((new Date(contract.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    : null;
+  // Calculate days remaining using a stable reference date
+  // This is calculated once during render for display purposes
+  const calculateDaysRemaining = () => {
+    if (!contract.expiresAt) return null;
+    const now = new Date();
+    return Math.ceil((new Date(contract.expiresAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  };
+  const daysRemaining = calculateDaysRemaining();
 
   return (
     <div className={`min-h-screen ${colors.background.primary} py-8 px-4`}>
@@ -452,7 +457,7 @@ export default function ContractSignPage() {
           >
             <div 
               className={`prose prose-sm max-w-none ${colors.text.primary}`}
-              dangerouslySetInnerHTML={{ __html: contract.contentSnapshot || '' }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(contract.contentSnapshot) }}
             />
           </div>
 

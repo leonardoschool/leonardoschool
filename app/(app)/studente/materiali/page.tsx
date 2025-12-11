@@ -23,6 +23,23 @@ import {
 
 type MaterialType = 'PDF' | 'VIDEO' | 'LINK' | 'DOCUMENT';
 
+// Type for material data from tRPC query
+interface Material {
+  id: string;
+  title: string;
+  description?: string | null;
+  type: MaterialType;
+  fileUrl?: string | null;
+  externalUrl?: string | null;
+  fileSize?: number | null;
+  categoryId?: string | null;
+  subjects?: string[] | null;
+  subject?: {
+    name: string;
+    color?: string | null;
+  } | null;
+}
+
 const typeIcons: Record<MaterialType, typeof FileText> = {
   PDF: FileText,
   VIDEO: Video,
@@ -42,7 +59,7 @@ export default function StudentMaterialsPage() {
   const [filterType, setFilterType] = useState<MaterialType | ''>('');
   const [filterCategory, setFilterCategory] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['all']));
-  const [viewingMaterial, setViewingMaterial] = useState<any>(null);
+  const [viewingMaterial, setViewingMaterial] = useState<Material | null>(null);
 
   // Queries
   const { data: materials, isLoading } = trpc.materials.getMyMaterials.useQuery({
@@ -86,7 +103,7 @@ export default function StudentMaterialsPage() {
     setExpandedCategories(newExpanded);
   };
 
-  const handleView = (material: any) => {
+  const handleView = (material: Material) => {
     recordViewMutation.mutate({ id: material.id });
     
     if (material.type === 'LINK' && material.externalUrl) {
@@ -96,7 +113,7 @@ export default function StudentMaterialsPage() {
     }
   };
 
-  const handleDownload = (material: any) => {
+  const handleDownload = (material: Material) => {
     recordDownloadMutation.mutate({ id: material.id });
     
     if (material.fileUrl) {
@@ -104,6 +121,8 @@ export default function StudentMaterialsPage() {
     }
   };
 
+  // Utility functions - kept for future use
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const formatFileSize = (bytes?: number | null) => {
     if (!bytes) return '';
     if (bytes < 1024) return bytes + ' B';
@@ -111,6 +130,7 @@ export default function StudentMaterialsPage() {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const getTypeColor = (type: MaterialType) => {
     switch (type) {
       case 'PDF': return 'bg-red-100 dark:bg-red-900/30 text-red-600';
@@ -226,7 +246,7 @@ export default function StudentMaterialsPage() {
                 {isExpanded && (
                   <div className="border-t border-gray-200 dark:border-gray-700">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-5">
-                      {catMaterials.map((material: any) => (
+                      {catMaterials.map((material: Material) => (
                         <MaterialCard
                           key={material.id}
                           material={material}
@@ -267,7 +287,7 @@ export default function StudentMaterialsPage() {
               {expandedCategories.has('uncategorized') && (
                 <div className="border-t border-gray-200 dark:border-gray-700">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-5">
-                    {groupedMaterials.uncategorized.map((material: any) => (
+                    {groupedMaterials.uncategorized.map((material: Material) => (
                       <MaterialCard
                         key={material.id}
                         material={material}
@@ -361,9 +381,9 @@ function MaterialCard({
   onView,
   onDownload,
 }: {
-  material: any;
-  onView: (m: any) => void;
-  onDownload: (m: any) => void;
+  material: Material;
+  onView: (m: Material) => void;
+  onDownload: (m: Material) => void;
 }) {
   const TypeIcon = typeIcons[material.type as MaterialType] || File;
 
