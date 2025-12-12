@@ -34,7 +34,7 @@ export const collaboratorsRouter = router({
         collaborator: {
           include: {
             contracts: {
-              orderBy: { createdAt: 'desc' },
+              orderBy: { assignedAt: 'desc' },
               take: 1,
             },
           },
@@ -56,7 +56,7 @@ export const collaboratorsRouter = router({
           collaborator: {
             include: {
               contracts: {
-                orderBy: { createdAt: 'desc' },
+                orderBy: { assignedAt: 'desc' },
               },
             },
           },
@@ -96,7 +96,7 @@ export const collaboratorsRouter = router({
       include: {
         user: true,
         contracts: {
-          orderBy: { createdAt: 'desc' },
+          orderBy: { assignedAt: 'desc' },
         },
       },
     });
@@ -249,7 +249,7 @@ export const collaboratorsRouter = router({
         collaborator: {
           include: {
             contracts: {
-              orderBy: { createdAt: 'desc' },
+              orderBy: { assignedAt: 'desc' },
               take: 1,
             },
           },

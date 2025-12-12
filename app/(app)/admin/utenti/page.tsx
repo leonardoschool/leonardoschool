@@ -335,7 +335,7 @@ function AssignContractModal({
             </div>
             <button
               onClick={handleClose}
-              className={`p-2 rounded-lg hover:${colors.background.secondary}`}
+              className={`p-2 rounded-lg hover:${colors.background.secondary} text-gray-600 dark:text-gray-400`}
             >
               <X className="w-5 h-5" />
             </button>
@@ -722,7 +722,7 @@ function ManageSubjectsModal({
                 <h3 className={`text-xl font-bold ${colors.text.primary}`}>Gestione Materie</h3>
                 <p className={`${colors.text.secondary} text-sm mt-1`}>{collaboratorName}</p>
               </div>
-              <button onClick={onClose} className={`p-2 rounded-lg hover:${colors.background.secondary}`}>
+              <button onClick={onClose} className={`p-2 rounded-lg hover:${colors.background.secondary} text-gray-600 dark:text-gray-400`}>
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1309,7 +1309,7 @@ export default function UsersManagementPage() {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className={`w-full pl-10 pr-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} focus:ring-2 focus:ring-red-500/20 focus:border-red-500`}
+              className={`w-full pl-10 pr-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-red-500/20 focus:border-red-500`}
             />
           </div>
 
@@ -1813,7 +1813,7 @@ export default function UsersManagementPage() {
               <h2 className="text-xl font-bold">Profilo Utente</h2>
               <button
                 onClick={() => setViewUserModal({ isOpen: false, user: null })}
-                className={`p-2 rounded-lg ${colors.background.secondary} hover:opacity-80`}
+                className={`p-2 rounded-lg ${colors.background.secondary} hover:opacity-80 text-gray-600 dark:text-gray-400`}
               >
                 <X className="w-5 h-5" />
               </button>

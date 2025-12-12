@@ -17,6 +17,7 @@ import {
   Monitor,
   Home,
   Users,
+  UsersRound,
   UserCog,
   FileText,
   BookOpen,
@@ -258,9 +259,10 @@ export default function AppHeader() {
     { value: 'system' as Theme, label: 'Sistema', icon: Monitor },
   ];
 
-  // Menu Gestione (dropdown) - Admin only: Utenti, Contratti, Candidature, Richieste
+  // Menu Gestione (dropdown) - Admin only: Utenti, Gruppi, Contratti, Candidature, Richieste
   const gestioneItems = [
     { href: '/admin/utenti', label: 'Utenti', icon: Users },
+    { href: '/admin/gruppi', label: 'Gruppi', icon: UsersRound },
     { href: '/admin/contratti', label: 'Contratti', icon: FileSignature },
     { href: '/admin/candidature', label: 'Candidature', icon: Briefcase },
     { href: '/admin/richieste', label: 'Richieste', icon: Mail },
@@ -557,7 +559,7 @@ export default function AppHeader() {
                                     e.stopPropagation();
                                     handleMarkAsRead(notification.id);
                                   }}
-                                  className={`p-1 rounded ${colors.effects.hover.bgMuted} transition-colors`}
+                                  className={`p-1 rounded ${colors.effects.hover.bgMuted} transition-colors text-gray-500 dark:text-gray-400`}
                                   title="Segna come letta"
                                 >
                                   <X className="w-4 h-4" />

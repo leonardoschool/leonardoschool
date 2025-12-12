@@ -125,6 +125,8 @@ model Student {
   stats             StudentStats?
   contracts         Contract[]
   materialAccess    MaterialStudentAccess[]
+  groupMemberships  GroupMember[]       // Gruppi a cui appartiene
+  referenceGroups   Group[]             @relation("GroupReferenceStudent") // Gruppi di cui è riferimento
   
   @@index([userId])
   @@index([classId])
@@ -142,6 +144,7 @@ model Admin {
   canViewStats    Boolean  @default(true)
   
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceGroups Group[]  @relation("GroupReferenceAdmin")
   
   @@index([userId])
   @@map("admins")
@@ -177,6 +180,8 @@ model Collaborator {
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   contracts       Contract[]  // Unified contract system
   subjects        CollaboratorSubject[]  // Materie insegnate
+  groupMemberships  GroupMember[]       // Gruppi a cui appartiene
+  referenceGroups   Group[]             @relation("GroupReferenceCollaborator") // Gruppi di cui è riferimento
   
   @@index([userId])
   @@map("collaborators")
@@ -577,10 +582,59 @@ model CustomSubject {
   
   materials     Material[]
   collaborators CollaboratorSubject[]  // Collaboratori che insegnano questa materia
+  topics        Topic[]                // Argomenti della materia
   
   @@index([isActive])
   @@index([order])
   @@map("custom_subjects")
+}
+
+// Topics (Argomenti) - Main topics within a subject
+model Topic {
+  id          String          @id @default(cuid())
+  name        String
+  description String?
+  difficulty  DifficultyLevel @default(MEDIUM)
+  order       Int             @default(0)
+  isActive    Boolean         @default(true)
+  
+  subjectId   String
+  subject     CustomSubject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  
+  subTopics   SubTopic[]
+  
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  createdBy   String?         // userId who created it
+  
+  @@unique([subjectId, name])
+  @@index([subjectId])
+  @@index([isActive])
+  @@index([order])
+  @@map("topics")
+}
+
+// SubTopics (Sotto-argomenti) - Sub-topics within a topic
+model SubTopic {
+  id          String          @id @default(cuid())
+  name        String
+  description String?
+  difficulty  DifficultyLevel @default(MEDIUM)
+  order       Int             @default(0)
+  isActive    Boolean         @default(true)
+  
+  topicId     String
+  topic       Topic           @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  createdBy   String?         // userId who created it
+  
+  @@unique([topicId, name])
+  @@index([topicId])
+  @@index([isActive])
+  @@index([order])
+  @@map("sub_topics")
 }
 
 model Material {
@@ -767,4 +821,62 @@ model CollaboratorSubject {
   @@index([collaboratorId])
   @@index([subjectId])
   @@map("collaborator_subjects")
+}
+
+// ==================== GROUPS ====================
+
+enum GroupType {
+  STUDENTS         // Gruppo di soli studenti
+  COLLABORATORS    // Gruppo di soli collaboratori
+  MIXED            // Gruppo misto (studenti + collaboratori)
+}
+
+model Group {
+  id              String    @id @default(cuid())
+  name            String
+  description     String?   @db.Text
+  color           String?   // Colore del gruppo (hex)
+  type            GroupType @default(MIXED)
+  isActive        Boolean   @default(true)
+  
+  // Riferimenti (responsabili del gruppo)
+  referenceStudentId      String?   // Studente di riferimento
+  referenceCollaboratorId String?   // Collaboratore di riferimento
+  referenceAdminId        String?   // Admin di riferimento
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  referenceStudent      Student?      @relation("GroupReferenceStudent", fields: [referenceStudentId], references: [id], onDelete: SetNull)
+  referenceCollaborator Collaborator? @relation("GroupReferenceCollaborator", fields: [referenceCollaboratorId], references: [id], onDelete: SetNull)
+  referenceAdmin        Admin?        @relation("GroupReferenceAdmin", fields: [referenceAdminId], references: [id], onDelete: SetNull)
+  members               GroupMember[]
+  
+  @@index([type])
+  @@index([isActive])
+  @@map("groups")
+}
+
+model GroupMember {
+  id        String   @id @default(cuid())
+  groupId   String
+  
+  // Solo uno di questi sarà popolato
+  studentId      String?
+  collaboratorId String?
+  
+  joinedAt  DateTime @default(now())
+  
+  // Relations
+  group        Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  student      Student?      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  collaborator Collaborator? @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
+  
+  @@unique([groupId, studentId])
+  @@unique([groupId, collaboratorId])
+  @@index([groupId])
+  @@index([studentId])
+  @@index([collaboratorId])
+  @@map("group_members")
 }

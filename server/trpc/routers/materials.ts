@@ -180,6 +180,465 @@ export const materialsRouter = router({
       });
     }),
 
+  // ==================== TOPICS (Argomenti) ====================
+
+  // Get all topics for a subject with subtopics
+  getTopics: protectedProcedure
+    .input(z.object({
+      subjectId: z.string(),
+      includeInactive: z.boolean().optional().default(false),
+    }))
+    .query(async ({ ctx, input }) => {
+      return ctx.prisma.topic.findMany({
+        where: {
+          subjectId: input.subjectId,
+          ...(input.includeInactive ? {} : { isActive: true }),
+        },
+        orderBy: { order: 'asc' },
+        include: {
+          subTopics: {
+            where: input.includeInactive ? {} : { isActive: true },
+            orderBy: { order: 'asc' },
+          },
+          _count: {
+            select: { subTopics: true },
+          },
+        },
+      });
+    }),
+
+  // Get subject with all topics and subtopics (for editing)
+  getSubjectWithTopics: protectedProcedure
+    .input(z.object({ subjectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.prisma.customSubject.findUnique({
+        where: { id: input.subjectId },
+        include: {
+          topics: {
+            orderBy: { order: 'asc' },
+            include: {
+              subTopics: {
+                orderBy: { order: 'asc' },
+              },
+            },
+          },
+        },
+      });
+    }),
+
+  // Create topic (admin or collaborator with this subject)
+  createTopic: protectedProcedure
+    .input(z.object({
+      subjectId: z.string(),
+      name: z.string().min(1).max(200),
+      description: z.string().optional(),
+      difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']).default('MEDIUM'),
+      order: z.number().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      const userRole = ctx.user.role;
+
+      // Check if user can manage this subject (admin or collaborator with subject assigned)
+      if (userRole !== 'ADMIN') {
+        const collaborator = await ctx.prisma.collaborator.findFirst({
+          where: {
+            userId,
+            subjects: {
+              some: { subjectId: input.subjectId },
+            },
+          },
+        });
+        
+        if (!collaborator) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Non hai i permessi per gestire questa materia.',
+          });
+        }
+      }
+
+      // Get max order if not provided
+      const maxOrder = input.order ?? await ctx.prisma.topic.count({
+        where: { subjectId: input.subjectId },
+      });
+
+      return ctx.prisma.topic.create({
+        data: {
+          name: input.name,
+          description: input.description,
+          difficulty: input.difficulty,
+          order: maxOrder,
+          subjectId: input.subjectId,
+          createdBy: userId,
+        },
+        include: {
+          subTopics: true,
+        },
+      });
+    }),
+
+  // Update topic
+  updateTopic: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+      name: z.string().min(1).max(200).optional(),
+      description: z.string().optional().nullable(),
+      difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']).optional(),
+      order: z.number().optional(),
+      isActive: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      const userRole = ctx.user.role;
+
+      // Get topic with subject
+      const topic = await ctx.prisma.topic.findUnique({
+        where: { id: input.id },
+        include: { subject: true },
+      });
+
+      if (!topic) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Argomento non trovato.',
+        });
+      }
+
+      // Check permissions
+      if (userRole !== 'ADMIN') {
+        const collaborator = await ctx.prisma.collaborator.findFirst({
+          where: {
+            userId,
+            subjects: {
+              some: { subjectId: topic.subjectId },
+            },
+          },
+        });
+        
+        if (!collaborator) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Non hai i permessi per modificare questo argomento.',
+          });
+        }
+      }
+
+      const { id, ...data } = input;
+      return ctx.prisma.topic.update({
+        where: { id },
+        data,
+        include: {
+          subTopics: true,
+        },
+      });
+    }),
+
+  // Delete topic
+  deleteTopic: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      const userRole = ctx.user.role;
+
+      const topic = await ctx.prisma.topic.findUnique({
+        where: { id: input.id },
+      });
+
+      if (!topic) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Argomento non trovato.',
+        });
+      }
+
+      // Check permissions
+      if (userRole !== 'ADMIN') {
+        const collaborator = await ctx.prisma.collaborator.findFirst({
+          where: {
+            userId,
+            subjects: {
+              some: { subjectId: topic.subjectId },
+            },
+          },
+        });
+        
+        if (!collaborator) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Non hai i permessi per eliminare questo argomento.',
+          });
+        }
+      }
+
+      // Delete topic (cascades to subtopics)
+      return ctx.prisma.topic.delete({
+        where: { id: input.id },
+      });
+    }),
+
+  // ==================== SUBTOPICS (Sotto-argomenti) ====================
+
+  // Create subtopic
+  createSubTopic: protectedProcedure
+    .input(z.object({
+      topicId: z.string(),
+      name: z.string().min(1).max(200),
+      description: z.string().optional(),
+      difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']).default('MEDIUM'),
+      order: z.number().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      const userRole = ctx.user.role;
+
+      // Get topic with subject
+      const topic = await ctx.prisma.topic.findUnique({
+        where: { id: input.topicId },
+        include: { subject: true },
+      });
+
+      if (!topic) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Argomento non trovato.',
+        });
+      }
+
+      // Check permissions
+      if (userRole !== 'ADMIN') {
+        const collaborator = await ctx.prisma.collaborator.findFirst({
+          where: {
+            userId,
+            subjects: {
+              some: { subjectId: topic.subjectId },
+            },
+          },
+        });
+        
+        if (!collaborator) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Non hai i permessi per gestire questa materia.',
+          });
+        }
+      }
+
+      // Get max order if not provided
+      const maxOrder = input.order ?? await ctx.prisma.subTopic.count({
+        where: { topicId: input.topicId },
+      });
+
+      return ctx.prisma.subTopic.create({
+        data: {
+          name: input.name,
+          description: input.description,
+          difficulty: input.difficulty,
+          order: maxOrder,
+          topicId: input.topicId,
+          createdBy: userId,
+        },
+      });
+    }),
+
+  // Update subtopic
+  updateSubTopic: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+      name: z.string().min(1).max(200).optional(),
+      description: z.string().optional().nullable(),
+      difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']).optional(),
+      order: z.number().optional(),
+      isActive: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      const userRole = ctx.user.role;
+
+      // Get subtopic with topic and subject
+      const subTopic = await ctx.prisma.subTopic.findUnique({
+        where: { id: input.id },
+        include: {
+          topic: {
+            include: { subject: true },
+          },
+        },
+      });
+
+      if (!subTopic) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Sotto-argomento non trovato.',
+        });
+      }
+
+      // Check permissions
+      if (userRole !== 'ADMIN') {
+        const collaborator = await ctx.prisma.collaborator.findFirst({
+          where: {
+            userId,
+            subjects: {
+              some: { subjectId: subTopic.topic.subjectId },
+            },
+          },
+        });
+        
+        if (!collaborator) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Non hai i permessi per modificare questo sotto-argomento.',
+          });
+        }
+      }
+
+      const { id, ...data } = input;
+      return ctx.prisma.subTopic.update({
+        where: { id },
+        data,
+      });
+    }),
+
+  // Delete subtopic
+  deleteSubTopic: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      const userRole = ctx.user.role;
+
+      const subTopic = await ctx.prisma.subTopic.findUnique({
+        where: { id: input.id },
+        include: {
+          topic: true,
+        },
+      });
+
+      if (!subTopic) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Sotto-argomento non trovato.',
+        });
+      }
+
+      // Check permissions
+      if (userRole !== 'ADMIN') {
+        const collaborator = await ctx.prisma.collaborator.findFirst({
+          where: {
+            userId,
+            subjects: {
+              some: { subjectId: subTopic.topic.subjectId },
+            },
+          },
+        });
+        
+        if (!collaborator) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Non hai i permessi per eliminare questo sotto-argomento.',
+          });
+        }
+      }
+
+      return ctx.prisma.subTopic.delete({
+        where: { id: input.id },
+      });
+    }),
+
+  // Reorder topics
+  reorderTopics: protectedProcedure
+    .input(z.object({
+      subjectId: z.string(),
+      topicIds: z.array(z.string()),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      const userRole = ctx.user.role;
+
+      // Check permissions
+      if (userRole !== 'ADMIN') {
+        const collaborator = await ctx.prisma.collaborator.findFirst({
+          where: {
+            userId,
+            subjects: {
+              some: { subjectId: input.subjectId },
+            },
+          },
+        });
+        
+        if (!collaborator) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Non hai i permessi per riordinare gli argomenti.',
+          });
+        }
+      }
+
+      // Update order for each topic
+      await ctx.prisma.$transaction(
+        input.topicIds.map((id, index) =>
+          ctx.prisma.topic.update({
+            where: { id },
+            data: { order: index },
+          })
+        )
+      );
+
+      return { success: true };
+    }),
+
+  // Reorder subtopics
+  reorderSubTopics: protectedProcedure
+    .input(z.object({
+      topicId: z.string(),
+      subTopicIds: z.array(z.string()),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      const userRole = ctx.user.role;
+
+      // Get topic
+      const topic = await ctx.prisma.topic.findUnique({
+        where: { id: input.topicId },
+      });
+
+      if (!topic) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Argomento non trovato.',
+        });
+      }
+
+      // Check permissions
+      if (userRole !== 'ADMIN') {
+        const collaborator = await ctx.prisma.collaborator.findFirst({
+          where: {
+            userId,
+            subjects: {
+              some: { subjectId: topic.subjectId },
+            },
+          },
+        });
+        
+        if (!collaborator) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Non hai i permessi per riordinare i sotto-argomenti.',
+          });
+        }
+      }
+
+      // Update order for each subtopic
+      await ctx.prisma.$transaction(
+        input.subTopicIds.map((id, index) =>
+          ctx.prisma.subTopic.update({
+            where: { id },
+            data: { order: index },
+          })
+        )
+      );
+
+      return { success: true };
+    }),
+
   // ==================== MATERIALS ====================
 
   // Get all materials (admin only)

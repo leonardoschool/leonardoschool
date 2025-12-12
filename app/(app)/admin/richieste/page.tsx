@@ -341,7 +341,7 @@ export default function ContactRequestsPage() {
               <h2 className="text-xl font-bold">Dettaglio Richiesta</h2>
               <button
                 onClick={() => setSelectedRequest(null)}
-                className={`p-2 rounded-lg ${colors.background.secondary} hover:opacity-80`}
+                className={`p-2 rounded-lg ${colors.background.secondary} hover:opacity-80 text-gray-600 dark:text-gray-400`}
               >
                 <X className="w-5 h-5" />
               </button>

@@ -9,6 +9,7 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
+import TopicsManager from '@/components/admin/TopicsManager';
 import { 
   FolderOpen, 
   Plus, 
@@ -35,8 +36,116 @@ import {
   ExternalLink,
   Palette,
   FolderPlus,
+  List,
+  Dna,
+  Atom,
+  Calculator,
+  Brain,
+  Beaker,
+  Microscope,
+  FlaskConical,
+  TestTube,
+  Stethoscope,
+  Heart,
+  Activity,
+  Sigma,
+  Pi,
+  Binary,
+  Code,
+  Lightbulb,
+  GraduationCap,
+  type LucideIcon,
 } from 'lucide-react';
 import { firebaseStorage } from '@/lib/firebase/storage';
+
+// Map of icon names to Lucide components
+const iconMap: Record<string, LucideIcon> = {
+  dna: Dna,
+  atom: Atom,
+  calculator: Calculator,
+  brain: Brain,
+  beaker: Beaker,
+  microscope: Microscope,
+  flask: FlaskConical,
+  'flask-conical': FlaskConical,
+  'test-tube': TestTube,
+  testtube: TestTube,
+  stethoscope: Stethoscope,
+  heart: Heart,
+  activity: Activity,
+  sigma: Sigma,
+  pi: Pi,
+  binary: Binary,
+  code: Code,
+  lightbulb: Lightbulb,
+  graduation: GraduationCap,
+  'graduation-cap': GraduationCap,
+  book: BookOpen,
+  'book-open': BookOpen,
+};
+
+// Helper to check if string is an emoji
+const isEmoji = (str: string): boolean => {
+  const emojiRegex = /^[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u;
+  return emojiRegex.test(str);
+};
+
+// Component to render subject icon (Lucide icon, emoji, or fallback)
+const SubjectIcon = ({ icon, color, size = 'md' }: { icon?: string | null; color?: string | null; size?: 'sm' | 'md' }) => {
+  const sizeClasses = size === 'sm' ? 'w-4 h-4' : 'w-5 h-5';
+  const containerSize = size === 'sm' ? 'w-8 h-8' : 'w-10 h-10';
+  const emojiSize = size === 'sm' ? 'text-lg' : 'text-xl';
+  
+  if (!icon) {
+    // Fallback: colored circle
+    return (
+      <div 
+        className={`${containerSize} rounded-lg flex items-center justify-center`}
+        style={{ backgroundColor: `${color || '#6366f1'}20` }}
+      >
+        <div 
+          className={sizeClasses}
+          style={{ backgroundColor: color || '#6366f1', borderRadius: '50%' }}
+        />
+      </div>
+    );
+  }
+
+  // Check if it's an emoji
+  if (isEmoji(icon)) {
+    return (
+      <div 
+        className={`${containerSize} rounded-lg flex items-center justify-center ${emojiSize}`}
+        style={{ backgroundColor: `${color || '#6366f1'}20` }}
+      >
+        {icon}
+      </div>
+    );
+  }
+
+  // Try to find Lucide icon
+  const IconComponent = iconMap[icon.toLowerCase()];
+  if (IconComponent) {
+    return (
+      <div 
+        className={`${containerSize} rounded-lg flex items-center justify-center`}
+        style={{ backgroundColor: `${color || '#6366f1'}20` }}
+      >
+        <IconComponent className={sizeClasses} style={{ color: color || '#6366f1' }} />
+      </div>
+    );
+  }
+
+  // Fallback: show the text as-is (first 2 chars)
+  return (
+    <div 
+      className={`${containerSize} rounded-lg flex items-center justify-center text-sm font-bold`}
+      style={{ backgroundColor: `${color || '#6366f1'}20`, color: color || '#6366f1' }}
+    >
+      {icon.slice(0, 2).toUpperCase()}
+    </div>
+  );
+};
 
 type MaterialType = 'PDF' | 'VIDEO' | 'LINK' | 'DOCUMENT';
 type MaterialVisibility = 'ALL_STUDENTS' | 'COURSE_BASED' | 'SELECTED_STUDENTS';
@@ -84,6 +193,14 @@ export default function MaterialsPage() {
   const [courseSearch, setCourseSearch] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Topics manager modal state
+  const [topicsModal, setTopicsModal] = useState<{
+    isOpen: boolean;
+    subjectId: string;
+    subjectName: string;
+    subjectColor: string | null;
+  }>({ isOpen: false, subjectId: '', subjectName: '', subjectColor: null });
 
   const { handleMutationError } = useApiError();
   const { showSuccess, showError } = useToast();
@@ -1303,15 +1420,18 @@ export default function MaterialsPage() {
                     </div>
                     <div>
                       <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        Icona (nome Lucide)
+                        Icona (nome o emoji)
                       </label>
                       <input
                         type="text"
                         value={subjectFormData.icon}
                         onChange={(e) => setSubjectFormData({ ...subjectFormData, icon: e.target.value })}
                         className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent`}
-                        placeholder="Es: dna, atom, calculator..."
+                        placeholder="Es: dna, atom, 🧬, 🔬..."
                       />
+                      <p className={`text-xs ${colors.text.muted} mt-1`}>
+                        Usa un nome Lucide (dna, atom, brain, calculator, microscope) o un&apos;emoji
+                      </p>
                     </div>
                   </div>
 
@@ -1367,15 +1487,7 @@ export default function MaterialsPage() {
                   className={`flex items-center justify-between p-4 rounded-xl border ${colors.border.primary} hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors`}
                 >
                   <div className="flex items-center gap-4">
-                    <div 
-                      className="w-10 h-10 rounded-lg flex items-center justify-center"
-                      style={{ backgroundColor: `${subject.color}20` }}
-                    >
-                      <div 
-                        className="w-5 h-5 rounded-full"
-                        style={{ backgroundColor: subject.color || '#6366f1' }}
-                      />
-                    </div>
+                    <SubjectIcon icon={subject.icon} color={subject.color} />
                     <div>
                       <div className="flex items-center gap-2">
                         <p className={`font-medium ${colors.text.primary}`}>{subject.name}</p>
@@ -1400,6 +1512,18 @@ export default function MaterialsPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setTopicsModal({
+                        isOpen: true,
+                        subjectId: subject.id,
+                        subjectName: subject.name,
+                        subjectColor: subject.color,
+                      })}
+                      className="p-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg"
+                      title="Gestisci argomenti"
+                    >
+                      <List className="w-4 h-4 text-blue-500" />
+                    </button>
                     <button
                       onClick={() => handleEditSubject(subject)}
                       className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
@@ -1436,6 +1560,15 @@ export default function MaterialsPage() {
           </div>
         )}
       </div>
+
+      {/* Topics Manager Modal */}
+      <TopicsManager
+        isOpen={topicsModal.isOpen}
+        onClose={() => setTopicsModal({ isOpen: false, subjectId: '', subjectName: '', subjectColor: null })}
+        subjectId={topicsModal.subjectId}
+        subjectName={topicsModal.subjectName}
+        subjectColor={topicsModal.subjectColor}
+      />
     </div>
   );
 }

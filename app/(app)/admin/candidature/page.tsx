@@ -328,7 +328,7 @@ export default function JobApplicationsPage() {
                 onClick={() => setSelectedApplication(null)}
                 className={`p-2 rounded-lg ${colors.background.secondary} hover:opacity-80`}
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
 

@@ -1,0 +1,720 @@
+import { z } from 'zod';
+import { TRPCError } from '@trpc/server';
+import { adminProcedure, router, staffProcedure } from '../init';
+
+// Group Types
+const GroupTypeEnum = z.enum(['STUDENTS', 'COLLABORATORS', 'MIXED']);
+
+// ==================== GROUPS ROUTER ====================
+export const groupsRouter = router({
+  // Get all groups with member counts
+  getAll: staffProcedure
+    .input(
+      z.object({
+        type: GroupTypeEnum.optional(),
+        search: z.string().optional(),
+        includeInactive: z.boolean().optional().default(false),
+      }).optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const groups = await ctx.prisma.group.findMany({
+        where: {
+          ...(input?.type && { type: input.type }),
+          ...(input?.search && {
+            OR: [
+              { name: { contains: input.search, mode: 'insensitive' } },
+              { description: { contains: input.search, mode: 'insensitive' } },
+            ],
+          }),
+          ...(!input?.includeInactive && { isActive: true }),
+        },
+        include: {
+          referenceStudent: {
+            include: {
+              user: { select: { name: true, email: true } },
+            },
+          },
+          referenceCollaborator: {
+            include: {
+              user: { select: { name: true, email: true } },
+            },
+          },
+          referenceAdmin: {
+            include: {
+              user: { select: { name: true, email: true } },
+            },
+          },
+          _count: {
+            select: { members: true },
+          },
+        },
+        orderBy: { name: 'asc' },
+      });
+
+      return groups.map((group) => ({
+        ...group,
+        memberCount: group._count.members,
+      }));
+    }),
+
+  // Get a single group with full member details
+  getById: staffProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const group = await ctx.prisma.group.findUnique({
+        where: { id: input.id },
+        include: {
+          referenceStudent: {
+            include: {
+              user: { select: { id: true, name: true, email: true } },
+            },
+          },
+          referenceCollaborator: {
+            include: {
+              user: { select: { id: true, name: true, email: true } },
+            },
+          },
+          referenceAdmin: {
+            include: {
+              user: { select: { id: true, name: true, email: true } },
+            },
+          },
+          members: {
+            include: {
+              student: {
+                include: {
+                  user: { select: { id: true, name: true, email: true } },
+                },
+              },
+              collaborator: {
+                include: {
+                  user: { select: { id: true, name: true, email: true } },
+                },
+              },
+            },
+            orderBy: { joinedAt: 'asc' },
+          },
+        },
+      });
+
+      if (!group) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Gruppo non trovato',
+        });
+      }
+
+      return group;
+    }),
+
+  // Create a new group
+  create: adminProcedure
+    .input(
+      z.object({
+        name: z.string().min(2, 'Nome troppo corto').max(100),
+        description: z.string().max(500).nullish(),
+        color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullish(),
+        type: GroupTypeEnum.default('MIXED'),
+        referenceStudentId: z.string().nullish(),
+        referenceCollaboratorId: z.string().nullish(), // Can be "admin:ID" or collaborator ID
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Validate references exist
+      if (input.referenceStudentId) {
+        const student = await ctx.prisma.student.findUnique({
+          where: { id: input.referenceStudentId },
+        });
+        if (!student) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Studente di riferimento non trovato',
+          });
+        }
+      }
+
+      // Parse referenceCollaboratorId - can be "admin:ID" or collaborator ID
+      let referenceCollaboratorId: string | null = null;
+      let referenceAdminId: string | null = null;
+
+      if (input.referenceCollaboratorId) {
+        if (input.referenceCollaboratorId.startsWith('admin:')) {
+          // It's an admin reference
+          referenceAdminId = input.referenceCollaboratorId.replace('admin:', '');
+          const admin = await ctx.prisma.admin.findUnique({
+            where: { id: referenceAdminId },
+          });
+          if (!admin) {
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: 'Admin di riferimento non trovato',
+            });
+          }
+        } else {
+          // It's a collaborator reference
+          referenceCollaboratorId = input.referenceCollaboratorId;
+          const collaborator = await ctx.prisma.collaborator.findUnique({
+            where: { id: referenceCollaboratorId },
+          });
+          if (!collaborator) {
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: 'Collaboratore di riferimento non trovato',
+            });
+          }
+        }
+      }
+
+      const group = await ctx.prisma.group.create({
+        data: {
+          name: input.name,
+          description: input.description,
+          color: input.color,
+          type: input.type,
+          referenceStudentId: input.referenceStudentId,
+          referenceCollaboratorId,
+          referenceAdminId,
+        },
+        include: {
+          referenceStudent: {
+            include: { user: { select: { name: true } } },
+          },
+          referenceCollaborator: {
+            include: { user: { select: { name: true } } },
+          },
+          referenceAdmin: {
+            include: { user: { select: { name: true } } },
+          },
+        },
+      });
+
+      return group;
+    }),
+
+  // Update a group
+  update: adminProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        name: z.string().min(2).max(100).optional(),
+        description: z.string().max(500).nullable().optional(),
+        color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable().optional(),
+        type: GroupTypeEnum.optional(),
+        isActive: z.boolean().optional(),
+        referenceStudentId: z.string().nullable().optional(),
+        referenceCollaboratorId: z.string().nullable().optional(), // Can be "admin:ID" or collaborator ID
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id, referenceCollaboratorId: rawCollaboratorId, ...data } = input;
+
+      // Check group exists
+      const existing = await ctx.prisma.group.findUnique({ where: { id } });
+      if (!existing) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Gruppo non trovato',
+        });
+      }
+
+      // Validate references if provided
+      if (data.referenceStudentId) {
+        const student = await ctx.prisma.student.findUnique({
+          where: { id: data.referenceStudentId },
+        });
+        if (!student) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Studente di riferimento non trovato',
+          });
+        }
+      }
+
+      // Parse referenceCollaboratorId - can be "admin:ID" or collaborator ID
+      let referenceCollaboratorId: string | null | undefined = undefined;
+      let referenceAdminId: string | null | undefined = undefined;
+
+      if (rawCollaboratorId !== undefined) {
+        if (rawCollaboratorId === null || rawCollaboratorId === '') {
+          // Clear both references
+          referenceCollaboratorId = null;
+          referenceAdminId = null;
+        } else if (rawCollaboratorId.startsWith('admin:')) {
+          // It's an admin reference
+          referenceAdminId = rawCollaboratorId.replace('admin:', '');
+          referenceCollaboratorId = null; // Clear collaborator if setting admin
+          const admin = await ctx.prisma.admin.findUnique({
+            where: { id: referenceAdminId },
+          });
+          if (!admin) {
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: 'Admin di riferimento non trovato',
+            });
+          }
+        } else {
+          // It's a collaborator reference
+          referenceCollaboratorId = rawCollaboratorId;
+          referenceAdminId = null; // Clear admin if setting collaborator
+          const collaborator = await ctx.prisma.collaborator.findUnique({
+            where: { id: referenceCollaboratorId },
+          });
+          if (!collaborator) {
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: 'Collaboratore di riferimento non trovato',
+            });
+          }
+        }
+      }
+
+      const group = await ctx.prisma.group.update({
+        where: { id },
+        data: {
+          ...data,
+          ...(referenceCollaboratorId !== undefined && { referenceCollaboratorId }),
+          ...(referenceAdminId !== undefined && { referenceAdminId }),
+        },
+        include: {
+          referenceStudent: {
+            include: { user: { select: { name: true } } },
+          },
+          referenceCollaborator: {
+            include: { user: { select: { name: true } } },
+          },
+          referenceAdmin: {
+            include: { user: { select: { name: true } } },
+          },
+          _count: { select: { members: true } },
+        },
+      });
+
+      return group;
+    }),
+
+  // Delete a group (soft delete by setting isActive = false, or hard delete if no members)
+  delete: adminProcedure
+    .input(z.object({ id: z.string(), force: z.boolean().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const group = await ctx.prisma.group.findUnique({
+        where: { id: input.id },
+        include: { _count: { select: { members: true } } },
+      });
+
+      if (!group) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Gruppo non trovato',
+        });
+      }
+
+      if (group._count.members > 0 && !input.force) {
+        // Soft delete - deactivate
+        await ctx.prisma.group.update({
+          where: { id: input.id },
+          data: { isActive: false },
+        });
+        return { deleted: false, deactivated: true };
+      } else {
+        // Hard delete - remove members first, then group
+        await ctx.prisma.$transaction([
+          ctx.prisma.groupMember.deleteMany({ where: { groupId: input.id } }),
+          ctx.prisma.group.delete({ where: { id: input.id } }),
+        ]);
+        return { deleted: true, deactivated: false };
+      }
+    }),
+
+  // ==================== MEMBER MANAGEMENT ====================
+
+  // Add a member to a group
+  addMember: adminProcedure
+    .input(
+      z.object({
+        groupId: z.string(),
+        studentId: z.string().optional(),
+        collaboratorId: z.string().optional(),
+      }).refine(
+        (data) => (data.studentId && !data.collaboratorId) || (!data.studentId && data.collaboratorId),
+        { message: 'Specificare esattamente uno tra studentId e collaboratorId' }
+      )
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Check group exists and is active
+      const group = await ctx.prisma.group.findUnique({
+        where: { id: input.groupId },
+      });
+
+      if (!group) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Gruppo non trovato',
+        });
+      }
+
+      // Validate group type allows this member type
+      if (input.studentId && group.type === 'COLLABORATORS') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Questo gruppo accetta solo collaboratori',
+        });
+      }
+
+      if (input.collaboratorId && group.type === 'STUDENTS') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Questo gruppo accetta solo studenti',
+        });
+      }
+
+      // Check if already a member
+      const existingMember = await ctx.prisma.groupMember.findFirst({
+        where: {
+          groupId: input.groupId,
+          ...(input.studentId ? { studentId: input.studentId } : {}),
+          ...(input.collaboratorId ? { collaboratorId: input.collaboratorId } : {}),
+        },
+      });
+
+      if (existingMember) {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: 'L\'utente è già membro di questo gruppo',
+        });
+      }
+
+      // Validate student/collaborator exists
+      if (input.studentId) {
+        const student = await ctx.prisma.student.findUnique({
+          where: { id: input.studentId },
+        });
+        if (!student) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Studente non trovato',
+          });
+        }
+      }
+
+      if (input.collaboratorId) {
+        const collaborator = await ctx.prisma.collaborator.findUnique({
+          where: { id: input.collaboratorId },
+        });
+        if (!collaborator) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Collaboratore non trovato',
+          });
+        }
+      }
+
+      // Add member
+      const member = await ctx.prisma.groupMember.create({
+        data: {
+          groupId: input.groupId,
+          studentId: input.studentId,
+          collaboratorId: input.collaboratorId,
+        },
+        include: {
+          student: { include: { user: { select: { name: true, email: true } } } },
+          collaborator: { include: { user: { select: { name: true, email: true } } } },
+        },
+      });
+
+      return member;
+    }),
+
+  // Add multiple members at once
+  addMembers: adminProcedure
+    .input(
+      z.object({
+        groupId: z.string(),
+        studentIds: z.array(z.string()).optional(),
+        collaboratorIds: z.array(z.string()).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { groupId, studentIds = [], collaboratorIds = [] } = input;
+
+      // Check group exists
+      const group = await ctx.prisma.group.findUnique({
+        where: { id: groupId },
+      });
+
+      if (!group) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Gruppo non trovato',
+        });
+      }
+
+      // Validate group type
+      if (studentIds.length > 0 && group.type === 'COLLABORATORS') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Questo gruppo accetta solo collaboratori',
+        });
+      }
+
+      if (collaboratorIds.length > 0 && group.type === 'STUDENTS') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Questo gruppo accetta solo studenti',
+        });
+      }
+
+      // Get existing members to avoid duplicates
+      const existingMembers = await ctx.prisma.groupMember.findMany({
+        where: { groupId },
+        select: { studentId: true, collaboratorId: true },
+      });
+
+      const existingStudentIds = new Set(existingMembers.map((m) => m.studentId).filter(Boolean));
+      const existingCollaboratorIds = new Set(existingMembers.map((m) => m.collaboratorId).filter(Boolean));
+
+      // Filter out already existing members
+      const newStudentIds = studentIds.filter((id) => !existingStudentIds.has(id));
+      const newCollaboratorIds = collaboratorIds.filter((id) => !existingCollaboratorIds.has(id));
+
+      // Create new members
+      const membersToCreate = [
+        ...newStudentIds.map((studentId) => ({
+          groupId,
+          studentId,
+          collaboratorId: null,
+        })),
+        ...newCollaboratorIds.map((collaboratorId) => ({
+          groupId,
+          studentId: null,
+          collaboratorId,
+        })),
+      ];
+
+      if (membersToCreate.length === 0) {
+        return { added: 0, skipped: studentIds.length + collaboratorIds.length };
+      }
+
+      await ctx.prisma.groupMember.createMany({
+        data: membersToCreate,
+        skipDuplicates: true,
+      });
+
+      return {
+        added: membersToCreate.length,
+        skipped: studentIds.length + collaboratorIds.length - membersToCreate.length,
+      };
+    }),
+
+  // Remove a member from a group
+  removeMember: adminProcedure
+    .input(z.object({ memberId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const member = await ctx.prisma.groupMember.findUnique({
+        where: { id: input.memberId },
+      });
+
+      if (!member) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Membro non trovato',
+        });
+      }
+
+      await ctx.prisma.groupMember.delete({
+        where: { id: input.memberId },
+      });
+
+      return { success: true };
+    }),
+
+  // Get members of a group
+  getMembers: staffProcedure
+    .input(z.object({ groupId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const members = await ctx.prisma.groupMember.findMany({
+        where: { groupId: input.groupId },
+        include: {
+          student: {
+            include: {
+              user: { select: { id: true, name: true, email: true, isActive: true } },
+            },
+          },
+          collaborator: {
+            include: {
+              user: { select: { id: true, name: true, email: true, isActive: true } },
+            },
+          },
+        },
+        orderBy: { joinedAt: 'asc' },
+      });
+
+      return members;
+    }),
+
+  // Get groups that a user belongs to
+  getUserGroups: staffProcedure
+    .input(
+      z.object({
+        userId: z.string(),
+        userType: z.enum(['STUDENT', 'COLLABORATOR']),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      // First get the student/collaborator id from user id
+      let entityId: string | null = null;
+
+      if (input.userType === 'STUDENT') {
+        const student = await ctx.prisma.student.findUnique({
+          where: { userId: input.userId },
+        });
+        entityId = student?.id || null;
+      } else {
+        const collaborator = await ctx.prisma.collaborator.findUnique({
+          where: { userId: input.userId },
+        });
+        entityId = collaborator?.id || null;
+      }
+
+      if (!entityId) {
+        return [];
+      }
+
+      const memberships = await ctx.prisma.groupMember.findMany({
+        where: input.userType === 'STUDENT'
+          ? { studentId: entityId }
+          : { collaboratorId: entityId },
+        include: {
+          group: {
+            include: {
+              referenceStudent: {
+                include: { user: { select: { name: true } } },
+              },
+              referenceCollaborator: {
+                include: { user: { select: { name: true } } },
+              },
+              _count: { select: { members: true } },
+            },
+          },
+        },
+      });
+
+      return memberships.map((m) => ({
+        ...m.group,
+        joinedAt: m.joinedAt,
+        memberCount: m.group._count.members,
+      }));
+    }),
+
+  // Get available students/collaborators to add to a group
+  getAvailableUsers: adminProcedure
+    .input(
+      z.object({
+        groupId: z.string(),
+        userType: z.enum(['STUDENT', 'COLLABORATOR']),
+        search: z.string().optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      // Get current members
+      const currentMembers = await ctx.prisma.groupMember.findMany({
+        where: { groupId: input.groupId },
+        select: {
+          studentId: true,
+          collaboratorId: true,
+        },
+      });
+
+      if (input.userType === 'STUDENT') {
+        const existingIds = currentMembers
+          .map((m) => m.studentId)
+          .filter((id): id is string => id !== null);
+
+        const students = await ctx.prisma.student.findMany({
+          where: {
+            id: { notIn: existingIds },
+            user: {
+              isActive: true,
+              ...(input.search && {
+                OR: [
+                  { name: { contains: input.search, mode: 'insensitive' } },
+                  { email: { contains: input.search, mode: 'insensitive' } },
+                ],
+              }),
+            },
+          },
+          include: {
+            user: { select: { id: true, name: true, email: true } },
+          },
+          take: 50,
+        });
+
+        return students.map((s) => ({
+          id: s.id,
+          userId: s.user.id,
+          name: s.user.name,
+          email: s.user.email,
+          type: 'STUDENT' as const,
+        }));
+      } else {
+        const existingIds = currentMembers
+          .map((m) => m.collaboratorId)
+          .filter((id): id is string => id !== null);
+
+        const collaborators = await ctx.prisma.collaborator.findMany({
+          where: {
+            id: { notIn: existingIds },
+            user: {
+              isActive: true,
+              ...(input.search && {
+                OR: [
+                  { name: { contains: input.search, mode: 'insensitive' } },
+                  { email: { contains: input.search, mode: 'insensitive' } },
+                ],
+              }),
+            },
+          },
+          include: {
+            user: { select: { id: true, name: true, email: true } },
+          },
+          take: 50,
+        });
+
+        return collaborators.map((c) => ({
+          id: c.id,
+          userId: c.user.id,
+          name: c.user.name,
+          email: c.user.email,
+          type: 'COLLABORATOR' as const,
+        }));
+      }
+    }),
+
+  // Get stats for groups
+  getStats: staffProcedure.query(async ({ ctx }) => {
+    const [total, byType, activeGroups] = await Promise.all([
+      ctx.prisma.group.count(),
+      ctx.prisma.group.groupBy({
+        by: ['type'],
+        _count: true,
+        where: { isActive: true },
+      }),
+      ctx.prisma.group.count({ where: { isActive: true } }),
+    ]);
+
+    const totalMembers = await ctx.prisma.groupMember.count();
+
+    return {
+      total,
+      active: activeGroups,
+      inactive: total - activeGroups,
+      totalMembers,
+      byType: byType.reduce(
+        (acc, item) => {
+          acc[item.type] = item._count;
+          return acc;
+        },
+        {} as Record<string, number>
+      ),
+    };
+  }),
+});

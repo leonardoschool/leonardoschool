@@ -67,7 +67,7 @@ export function ContractViewModal({
           </div>
           <button
             onClick={onClose}
-            className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors`}
+            className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400`}
           >
             <X className="w-6 h-6" />
           </button>

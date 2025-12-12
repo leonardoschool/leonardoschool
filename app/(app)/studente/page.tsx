@@ -573,7 +573,7 @@ export default function StudentDashboard() {
               </div>
               <button
                 onClick={() => setShowContractModal(false)}
-                className={`p-2 rounded-lg hover:${colors.background.secondary} transition-colors`}
+                className={`p-2 rounded-lg hover:${colors.background.secondary} transition-colors text-gray-600 dark:text-gray-400`}
               >
                 <X className="w-6 h-6" />
               </button>

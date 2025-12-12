@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { colors } from '@/lib/theme/colors';
 
 export interface SelectOption {
@@ -40,9 +41,12 @@ export default function CustomSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   // Find selected option
   const selectedOption = options.find(opt => opt.value === value);
@@ -55,14 +59,56 @@ export default function CustomSelect({
       )
     : options;
 
-  // Close on click outside
+  // Set mounted state for Portal
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Calculate dropdown position
+  const updateDropdownPosition = useCallback(() => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + 8, // 8px gap
+        left: rect.left,
+        width: rect.width,
+      });
+    }
+  }, []);
+
+  // Update position when opening
+  useEffect(() => {
+    if (isOpen) {
+      updateDropdownPosition();
+      // Also update on scroll/resize
+      window.addEventListener('scroll', updateDropdownPosition, true);
+      window.addEventListener('resize', updateDropdownPosition);
+      return () => {
+        window.removeEventListener('scroll', updateDropdownPosition, true);
+        window.removeEventListener('resize', updateDropdownPosition);
+      };
+    }
+  }, [isOpen, updateDropdownPosition]);
+
+  // Close on click outside - need to check both container and dropdown (which is in Portal)
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-        setSearchTerm('');
-        onBlur?.();
+      const target = e.target as Node;
+      // Check if click is inside the trigger container
+      if (containerRef.current?.contains(target)) {
+        return;
       }
+      // Check if click is inside the dropdown (portal)
+      const dropdowns = document.querySelectorAll('[data-custom-select-dropdown]');
+      for (const dropdown of dropdowns) {
+        if (dropdown.contains(target)) {
+          return;
+        }
+      }
+      // Click is outside, close
+      setIsOpen(false);
+      setSearchTerm('');
+      onBlur?.();
     };
 
     if (isOpen) {
@@ -161,6 +207,7 @@ export default function CustomSelect({
     <div ref={containerRef} className={`relative ${className}`}>
       {/* Trigger Button */}
       <div
+        ref={triggerRef}
         id={id}
         role="combobox"
         aria-expanded={isOpen}
@@ -184,10 +231,17 @@ export default function CustomSelect({
         </svg>
       </div>
 
-      {/* Dropdown */}
-      {isOpen && (
+      {/* Dropdown - rendered via Portal to escape overflow:hidden containers */}
+      {isOpen && isMounted && createPortal(
         <div 
-          className={`absolute z-50 mt-2 w-full ${colors.background.card} border ${colors.border.primary} rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150 ${dropdownClassName}`}
+          data-custom-select-dropdown
+          className={`fixed z-[9999] ${colors.background.card} border ${colors.border.primary} rounded-xl shadow-2xl overflow-hidden ${dropdownClassName}`}
+          style={{
+            top: dropdownPosition.top,
+            left: dropdownPosition.left,
+            width: dropdownPosition.width,
+          }}
+          onMouseDown={(e) => e.preventDefault()} // Prevent blur on click
         >
           {/* Search Input */}
           {searchable && (
@@ -245,8 +299,8 @@ export default function CustomSelect({
                       ${isSelected 
                         ? `${colors.primary.bg} text-white` 
                         : isHighlighted
-                          ? 'bg-white/10'
-                          : `${colors.text.primary} hover:bg-white/5`
+                          ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
+                          : `${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700`
                       }
                     `}
                   >
@@ -261,7 +315,8 @@ export default function CustomSelect({
               })
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

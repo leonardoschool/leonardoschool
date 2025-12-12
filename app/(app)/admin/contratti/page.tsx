@@ -452,7 +452,7 @@ Email: {{EMAIL}}</p>
             </div>
             <button
               onClick={resetForm}
-              className={`p-2 rounded-lg ${colors.background.secondary} hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors`}
+              className={`p-2 rounded-lg ${colors.background.secondary} hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-400`}
             >
               <X className="w-5 h-5" />
             </button>
@@ -842,7 +842,7 @@ Email: {{EMAIL}}</p>
               </div>
               <button
                 onClick={() => setPreviewContent(null)}
-                className={`p-2 rounded-lg ${colors.background.secondary} hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors`}
+                className={`p-2 rounded-lg ${colors.background.secondary} hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-400`}
               >
                 <X className="w-5 h-5" />
               </button>

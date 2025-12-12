@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const decodedToken = await adminAuth.verifyIdToken(token);
 
     // Recupera utente dal database
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { firebaseUid: decodedToken.uid },
       include: {
         student: true,
@@ -33,6 +33,19 @@ export async function POST(request: NextRequest) {
         { error: 'Utente non trovato' },
         { status: 404 }
       );
+    }
+
+    // Sincronizza emailVerified da Firebase al database se è cambiato
+    if (decodedToken.email_verified && !user.emailVerified) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { emailVerified: true },
+        include: {
+          student: true,
+          admin: true,
+          collaborator: true,
+        },
+      });
     }
 
     // Crea response con dati utente
