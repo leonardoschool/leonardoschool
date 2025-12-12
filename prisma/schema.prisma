@@ -33,11 +33,46 @@ enum DifficultyLevel {
   HARD
 }
 
+// ==================== QUESTION ENUMS ====================
+
+enum QuestionType {
+  MULTIPLE_CHOICE // Risposta multipla (più risposte corrette possibili)
+  SINGLE_CHOICE // Risposta singola (una sola risposta corretta)
+  OPEN_TEXT // Risposta aperta/libera
+}
+
+enum QuestionStatus {
+  DRAFT // Bozza, non visibile agli studenti
+  PUBLISHED // Pubblicata, visibile e utilizzabile
+  ARCHIVED // Archiviata, non più utilizzabile ma storico mantenuto
+}
+
+enum OpenAnswerValidationType {
+  MANUAL // Valutazione manuale da parte di admin/collaboratore
+  KEYWORDS // Valutazione automatica tramite keywords
+  BOTH // Entrambe: prima keywords, poi conferma manuale
+}
+
+enum QuestionFeedbackType {
+  ERROR_IN_QUESTION // Errore nel testo della domanda
+  ERROR_IN_ANSWER // Errore nelle risposte
+  UNCLEAR // Domanda poco chiara
+  SUGGESTION // Suggerimento miglioramento
+  OTHER // Altro
+}
+
+enum QuestionFeedbackStatus {
+  PENDING // In attesa di revisione
+  REVIEWED // Revisionata
+  FIXED // Corretta
+  REJECTED // Rifiutata (non era un errore)
+}
+
 enum SimulationType {
-  FULL_TEST        // Test completo (60 domande)
-  SUBJECT_TEST     // Test per materia
-  CUSTOM_TEST      // Test personalizzato
-  QUICK_QUIZ       // Quiz rapido (10-20 domande)
+  FULL_TEST // Test completo (60 domande)
+  SUBJECT_TEST // Test per materia
+  CUSTOM_TEST // Test personalizzato
+  QUICK_QUIZ // Quiz rapido (10-20 domande)
 }
 
 enum SimulationStatus {
@@ -56,45 +91,46 @@ enum AlertType {
 }
 
 enum ContractStatus {
-  PENDING      // Contratto assegnato, in attesa di firma
-  SIGNED       // Contratto firmato dallo studente
-  EXPIRED      // Contratto scaduto (non firmato in tempo)
-  CANCELLED    // Contratto annullato dall'admin
+  PENDING // Contratto assegnato, in attesa di firma
+  SIGNED // Contratto firmato dallo studente
+  EXPIRED // Contratto scaduto (non firmato in tempo)
+  CANCELLED // Contratto annullato dall'admin
 }
 
 enum NotificationType {
-  CONTRACT_ASSIGNED    // Contratto assegnato a studente
-  CONTRACT_SIGNED      // Studente ha firmato
-  CONTRACT_CANCELLED   // Contratto revocato
-  ACCOUNT_ACTIVATED    // Account attivato
-  PROFILE_COMPLETED    // Studente ha completato profilo
-  JOB_APPLICATION      // Nuova candidatura lavoro
-  CONTACT_REQUEST      // Nuova richiesta informazioni
-  GENERAL              // Notifica generica
+  CONTRACT_ASSIGNED // Contratto assegnato a studente
+  CONTRACT_SIGNED // Studente ha firmato
+  CONTRACT_CANCELLED // Contratto revocato
+  ACCOUNT_ACTIVATED // Account attivato
+  PROFILE_COMPLETED // Studente ha completato profilo
+  JOB_APPLICATION // Nuova candidatura lavoro
+  CONTACT_REQUEST // Nuova richiesta informazioni
+  GENERAL // Notifica generica
 }
 
 // ==================== AUTH & USERS ====================
 
 model User {
-  id               String    @id @default(cuid())
-  firebaseUid      String    @unique  // Link a Firebase Auth
-  email            String    @unique
+  id               String   @id @default(cuid())
+  firebaseUid      String   @unique // Link a Firebase Auth
+  email            String   @unique
   name             String
-  role             UserRole  @default(STUDENT)
-  isActive         Boolean   @default(false)  // true solo quando profilo completo + admin approva
-  profileCompleted Boolean   @default(false)  // true quando compila dati anagrafici
-  emailVerified    Boolean   @default(false)
-  
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  lastLoginAt      DateTime?
-  
+  role             UserRole @default(STUDENT)
+  isActive         Boolean  @default(false) // true solo quando profilo completo + admin approva
+  profileCompleted Boolean  @default(false) // true quando compila dati anagrafici
+  emailVerified    Boolean  @default(false)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastLoginAt DateTime?
+
   // Relations
-  student          Student?
-  admin            Admin?
-  collaborator     Collaborator?
-  alerts           Alert[]
-  
+  student           Student?
+  admin             Admin?
+  collaborator      Collaborator?
+  alerts            Alert[]
+  questionsCreated  Question[]  @relation("QuestionCreatedBy")
+
   @@index([firebaseUid])
   @@index([email])
   @@map("users")
@@ -103,31 +139,36 @@ model User {
 // ==================== STUDENTS ====================
 
 model Student {
-  id                String   @id @default(cuid())
-  userId            String   @unique
-  fiscalCode        String?  @unique
-  dateOfBirth       DateTime?
-  phone             String?
-  address           String?
-  city              String?
-  province          String?
-  postalCode        String?
-  
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  fiscalCode  String?   @unique
+  dateOfBirth DateTime?
+  phone       String?
+  address     String?
+  city        String?
+  province    String?
+  postalCode  String?
+
   // School info
-  classId           String?
-  enrollmentDate    DateTime @default(now())
-  graduationYear    Int?
-  
+  classId        String?
+  enrollmentDate DateTime @default(now())
+  graduationYear Int?
+
   // Relations
-  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  class             Class?              @relation(fields: [classId], references: [id], onDelete: SetNull)
+  user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class             Class?                  @relation(fields: [classId], references: [id], onDelete: SetNull)
   simulationResults SimulationResult[]
   stats             StudentStats?
   contracts         Contract[]
   materialAccess    MaterialStudentAccess[]
-  groupMemberships  GroupMember[]       // Gruppi a cui appartiene
-  referenceGroups   Group[]             @relation("GroupReferenceStudent") // Gruppi di cui è riferimento
-  
+  groupMemberships  GroupMember[] // Gruppi a cui appartiene
+  referenceGroups   Group[]                 @relation("GroupReferenceStudent") // Gruppi di cui è riferimento
+
+  // Question-related relations
+  questionFeedbacks     QuestionFeedback[] // Segnalazioni domande
+  questionFavorites     QuestionFavorite[] // Domande preferite
+  openAnswerSubmissions OpenAnswerSubmission[] // Risposte aperte
+
   @@index([userId])
   @@index([classId])
   @@map("students")
@@ -136,16 +177,16 @@ model Student {
 // ==================== ADMIN ====================
 
 model Admin {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  phone           String?
-  canManageUsers  Boolean  @default(false)
-  canManageTests  Boolean  @default(true)
-  canViewStats    Boolean  @default(true)
-  
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  referenceGroups Group[]  @relation("GroupReferenceAdmin")
-  
+  id             String  @id @default(cuid())
+  userId         String  @unique
+  phone          String?
+  canManageUsers Boolean @default(false)
+  canManageTests Boolean @default(true)
+  canViewStats   Boolean @default(true)
+
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceGroups Group[] @relation("GroupReferenceAdmin")
+
   @@index([userId])
   @@map("admins")
 }
@@ -153,36 +194,36 @@ model Admin {
 // ==================== COLLABORATORS ====================
 
 model Collaborator {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  fiscalCode      String?  @unique
-  dateOfBirth     DateTime?
-  phone           String?
-  address         String?
-  city            String?
-  province        String?
-  postalCode      String?
-  
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  fiscalCode  String?   @unique
+  dateOfBirth DateTime?
+  phone       String?
+  address     String?
+  city        String?
+  province    String?
+  postalCode  String?
+
   // Permissions
-  canManageQuestions  Boolean  @default(true)
-  canManageMaterials  Boolean  @default(true)
-  canViewStats        Boolean  @default(true)
-  canViewStudents     Boolean  @default(true)  // Vista limitata (no dati sensibili)
-  
+  canManageQuestions Boolean @default(true)
+  canManageMaterials Boolean @default(true)
+  canViewStats       Boolean @default(true)
+  canViewStudents    Boolean @default(true) // Vista limitata (no dati sensibili)
+
   // Employment info
-  hireDate        DateTime @default(now())
-  specialization  String?  // Area di competenza (es. "Biologia", "Matematica")
-  notes           String?  @db.Text
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  contracts       Contract[]  // Unified contract system
-  subjects        CollaboratorSubject[]  // Materie insegnate
-  groupMemberships  GroupMember[]       // Gruppi a cui appartiene
-  referenceGroups   Group[]             @relation("GroupReferenceCollaborator") // Gruppi di cui è riferimento
-  
+  hireDate       DateTime @default(now())
+  specialization String? // Area di competenza (es. "Biologia", "Matematica")
+  notes          String?  @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contracts        Contract[] // Unified contract system
+  subjects         CollaboratorSubject[] // Materie insegnate
+  groupMemberships GroupMember[] // Gruppi a cui appartiene
+  referenceGroups  Group[]               @relation("GroupReferenceCollaborator") // Gruppi di cui è riferimento
+
   @@index([userId])
   @@map("collaborators")
 }
@@ -190,19 +231,19 @@ model Collaborator {
 // ==================== CLASSES ====================
 
 model Class {
-  id            String    @id @default(cuid())
-  name          String
-  description   String?
-  year          Int
-  section       String?
-  isActive      Boolean   @default(true)
-  
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
-  students      Student[]
-  simulations   Simulation[]
-  
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  year        Int
+  section     String?
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  students    Student[]
+  simulations Simulation[]
+
   @@unique([year, section])
   @@index([year])
   @@map("classes")
@@ -211,88 +252,325 @@ model Class {
 // ==================== QUESTIONS ====================
 
 model Question {
-  id              String          @id @default(cuid())
-  subject         Subject
-  difficulty      DifficultyLevel @default(MEDIUM)
-  
-  // Question content
-  text            String          @db.Text
-  textLatex       String?         @db.Text  // For LaTeX formulas
-  imageUrl        String?
-  
-  // Answers (multiple choice)
-  answerA         String          @db.Text
-  answerB         String          @db.Text
-  answerC         String          @db.Text
-  answerD         String          @db.Text
-  answerE         String?         @db.Text
-  correctAnswer   String          // 'A', 'B', 'C', 'D', 'E'
-  
-  // Explanation
-  explanation     String?         @db.Text
-  explanationUrl  String?         // Link to video/pdf
-  
-  // Metadata
-  tags            String[]
-  year            Int?            // Year it appeared in exam
-  source          String?         // "Medicina 2023", etc.
-  
-  isActive        Boolean         @default(true)
-  timesUsed       Int             @default(0)
-  avgCorrectRate  Float?          // % of correct answers
-  
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  createdBy       String?         // Admin userId
-  
-  // Relations
-  simulationQuestions SimulationQuestion[]
-  
-  @@index([subject])
+  id String @id @default(cuid())
+
+  // === TYPE & STATUS ===
+  type   QuestionType   @default(SINGLE_CHOICE)
+  status QuestionStatus @default(DRAFT)
+
+  // === CONTENT ===
+  text        String  @db.Text // Testo della domanda
+  textLatex   String? @db.Text // Formula LaTeX (opzionale)
+  description String? @db.Text // Descrizione/contesto aggiuntivo
+  imageUrl    String? // Immagine della domanda
+  imageAlt    String? // Alt text per accessibilità
+
+  // === CATEGORIZATION ===
+  // Collegamento a CustomSubject invece di enum (più flessibile)
+  subjectId  String?
+  topicId    String? // Argomento
+  subTopicId String? // Sotto-argomento
+  difficulty DifficultyLevel @default(MEDIUM)
+
+  // === SCORING ===
+  points         Float @default(1.0) // Punti per risposta corretta
+  negativePoints Float @default(0.0) // Punti negativi per risposta errata (es. -0.25)
+  blankPoints    Float @default(0.0) // Punti per risposta non data
+
+  // === TIMING ===
+  timeLimitSeconds Int? // Tempo limite per questa domanda (opzionale)
+
+  // === EXPLANATIONS ===
+  correctExplanation  String? @db.Text // Spiegazione mostrata se risposta corretta
+  wrongExplanation    String? @db.Text // Spiegazione mostrata se risposta errata
+  generalExplanation  String? @db.Text // Spiegazione generale (sempre mostrata)
+  explanationVideoUrl String? // Link a video esplicativo
+  explanationPdfUrl   String? // Link a PDF esplicativo
+
+  // === OPEN ANSWER VALIDATION (for OPEN_TEXT type) ===
+  openValidationType OpenAnswerValidationType? // Tipo di validazione per risposte aperte
+  openMinLength      Int? // Lunghezza minima risposta aperta
+  openMaxLength      Int? // Lunghezza massima risposta aperta
+  openCaseSensitive  Boolean                   @default(false) // Keywords case-sensitive?
+  openPartialMatch   Boolean                   @default(true) // Match parziale keywords?
+
+  // === DISPLAY OPTIONS ===
+  shuffleAnswers  Boolean @default(false) // Mescola ordine risposte
+  showExplanation Boolean @default(true) // Mostra spiegazione dopo risposta
+
+  // === METADATA ===
+  tags       String[] // Tag per ricerca/filtro
+  year       Int? // Anno in cui è apparsa (es. esame 2023)
+  source     String? // Fonte ("Medicina 2023", "Veterinaria 2022")
+  externalId String? // ID esterno per import
+
+  // === STATISTICS ===
+  timesUsed      Int    @default(0) // Volte usata in simulazioni
+  timesAnswered  Int    @default(0) // Volte risposte ricevute
+  timesCorrect   Int    @default(0) // Risposte corrette
+  timesWrong     Int    @default(0) // Risposte errate
+  timesSkipped   Int    @default(0) // Risposte saltate
+  avgTimeSeconds Float? // Tempo medio di risposta
+  avgCorrectRate Float? // % risposte corrette
+
+  // === AUDIT ===
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdById String? // User ID di chi ha creato
+  updatedById String? // User ID ultimo aggiornamento
+  publishedAt DateTime? // Data pubblicazione
+  archivedAt  DateTime? // Data archiviazione
+
+  // === VERSIONING ===
+  version Int @default(1) // Versione corrente
+
+  // === LEGACY (per retrocompatibilità con enum Subject) ===
+  legacySubject Subject? // Mantenuto per migrazione
+
+  // === RELATIONS ===
+  subject   CustomSubject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  topic     Topic?         @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  subTopic  SubTopic?      @relation(fields: [subTopicId], references: [id], onDelete: SetNull)
+  createdBy User?          @relation("QuestionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  answers               QuestionAnswer[] // Risposte possibili
+  keywords              QuestionKeyword[] // Keywords per validazione open text
+  simulationQuestions   SimulationQuestion[] // Uso in simulazioni
+  feedbacks             QuestionFeedback[] // Segnalazioni studenti
+  favorites             QuestionFavorite[] // Preferiti studenti
+  versions              QuestionVersion[] // Storico versioni
+  openAnswerSubmissions OpenAnswerSubmission[] // Risposte aperte ricevute
+
+  @@index([subjectId])
+  @@index([topicId])
+  @@index([subTopicId])
   @@index([difficulty])
+  @@index([type])
+  @@index([status])
   @@index([year])
-  @@index([isActive])
+  @@index([legacySubject])
+  @@index([createdById])
   @@map("questions")
+}
+
+// ==================== QUESTION ANSWERS ====================
+
+model QuestionAnswer {
+  id         String @id @default(cuid())
+  questionId String
+
+  // Content
+  text      String  @db.Text // Testo della risposta
+  textLatex String? @db.Text // Formula LaTeX (opzionale)
+  imageUrl  String? // Immagine della risposta
+  imageAlt  String? // Alt text per accessibilità
+
+  // Correctness
+  isCorrect Boolean @default(false) // Se è risposta corretta
+
+  // Explanation (specifica per questa risposta)
+  explanation String? @db.Text // Perché questa risposta è giusta/sbagliata
+
+  // Display
+  order Int     @default(0) // Ordine visualizzazione
+  label String? // Label personalizzata (A, B, C... o custom)
+
+  // Stats
+  timesSelected Int @default(0) // Volte selezionata
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@index([isCorrect])
+  @@map("question_answers")
+}
+
+// ==================== QUESTION KEYWORDS (for open text validation) ====================
+
+model QuestionKeyword {
+  id         String @id @default(cuid())
+  questionId String
+
+  // Keyword
+  keyword     String // La keyword da cercare
+  weight      Float   @default(1.0) // Peso della keyword (per punteggio parziale)
+  isRequired  Boolean @default(false) // Se obbligatoria per risposta corretta
+  isSuggested Boolean @default(false) // Se è un suggerimento del sistema
+
+  // Matching options
+  caseSensitive Boolean @default(false) // Case sensitive per questa keyword?
+  exactMatch    Boolean @default(false) // Match esatto o parziale?
+
+  // Synonyms (alternative accettate)
+  synonyms String[] // Array di sinonimi accettati
+
+  createdAt   DateTime @default(now())
+  createdById String? // Chi ha aggiunto la keyword
+
+  // Relations
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@map("question_keywords")
+}
+
+// ==================== QUESTION FEEDBACK (student reports) ====================
+
+model QuestionFeedback {
+  id         String @id @default(cuid())
+  questionId String
+  studentId  String
+
+  // Feedback details
+  type    QuestionFeedbackType
+  status  QuestionFeedbackStatus @default(PENDING)
+  message String                 @db.Text // Descrizione del problema
+
+  // Admin response
+  adminResponse String?   @db.Text // Risposta dell'admin
+  reviewedById  String? // Admin che ha revisionato
+  reviewedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@index([studentId])
+  @@index([status])
+  @@index([type])
+  @@map("question_feedbacks")
+}
+
+// ==================== QUESTION FAVORITES ====================
+
+model QuestionFavorite {
+  id         String @id @default(cuid())
+  questionId String
+  studentId  String
+
+  // Optional notes
+  notes String? @db.Text // Note personali dello studente
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, studentId])
+  @@index([studentId])
+  @@map("question_favorites")
+}
+
+// ==================== QUESTION VERSIONS (history) ====================
+
+model QuestionVersion {
+  id         String @id @default(cuid())
+  questionId String
+  version    Int // Numero versione
+
+  // Snapshot of question at this version
+  snapshot Json // JSON con tutti i dati della domanda
+
+  // Change info
+  changeReason String?  @db.Text // Motivo della modifica
+  changedById  String? // Chi ha modificato
+  changedAt    DateTime @default(now())
+
+  // Relations
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, version])
+  @@index([questionId])
+  @@index([changedAt])
+  @@map("question_versions")
+}
+
+// ==================== OPEN ANSWER SUBMISSIONS ====================
+
+model OpenAnswerSubmission {
+  id                 String  @id @default(cuid())
+  questionId         String
+  studentId          String
+  simulationResultId String? // Collegamento al risultato simulazione
+
+  // Student's answer
+  answerText String @db.Text // Testo risposta studente
+
+  // Auto-validation (keywords)
+  keywordsMatched String[] // Keywords trovate
+  keywordsMissed  String[] // Keywords mancanti (required)
+  autoScore       Float? // Punteggio automatico (0-1)
+
+  // Manual validation
+  manualScore    Float? // Punteggio manuale (0-1)
+  isValidated    Boolean   @default(false) // Se è stata validata manualmente
+  validatedById  String? // Chi ha validato
+  validatedAt    DateTime?
+  validatorNotes String?   @db.Text // Note del validatore
+
+  // Final score (uses manual if validated, otherwise auto)
+  finalScore Float?
+
+  submittedAt DateTime @default(now())
+
+  // Relations
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@index([studentId])
+  @@index([isValidated])
+  @@index([simulationResultId])
+  @@map("open_answer_submissions")
 }
 
 // ==================== SIMULATIONS ====================
 
 model Simulation {
-  id              String            @id @default(cuid())
-  title           String
-  description     String?           @db.Text
-  type            SimulationType
-  status          SimulationStatus  @default(DRAFT)
-  
+  id          String           @id @default(cuid())
+  title       String
+  description String?          @db.Text
+  type        SimulationType
+  status      SimulationStatus @default(DRAFT)
+
   // Timing
   startDate       DateTime?
   endDate         DateTime?
-  durationMinutes Int               // Duration in minutes
-  
+  durationMinutes Int // Duration in minutes
+
   // Configuration
-  totalQuestions  Int
-  showResults     Boolean           @default(true)  // Show results immediately
-  allowReview     Boolean           @default(true)  // Allow review after completion
-  randomizeOrder  Boolean           @default(false)
-  
+  totalQuestions Int
+  showResults    Boolean @default(true) // Show results immediately
+  allowReview    Boolean @default(true) // Allow review after completion
+  randomizeOrder Boolean @default(false)
+
   // Scoring
-  correctPoints   Float             @default(1.0)
-  wrongPoints     Float             @default(-0.25)
-  blankPoints     Float             @default(0.0)
-  
+  correctPoints Float @default(1.0)
+  wrongPoints   Float @default(-0.25)
+  blankPoints   Float @default(0.0)
+
   // Class assignment
-  classId         String?
-  isPublic        Boolean           @default(false)  // Available to all students
-  
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  createdBy       String?           // Admin userId
-  
+  classId  String?
+  isPublic Boolean @default(false) // Available to all students
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String? // Admin userId
+
   // Relations
-  class           Class?            @relation(fields: [classId], references: [id], onDelete: SetNull)
-  questions       SimulationQuestion[]
-  results         SimulationResult[]
-  
+  class     Class?               @relation(fields: [classId], references: [id], onDelete: SetNull)
+  questions SimulationQuestion[]
+  results   SimulationResult[]
+
   @@index([status])
   @@index([startDate])
   @@index([classId])
@@ -301,14 +579,14 @@ model Simulation {
 }
 
 model SimulationQuestion {
-  id            String     @id @default(cuid())
-  simulationId  String
-  questionId    String
-  order         Int        // Order in the simulation
-  
-  simulation    Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
-  question      Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  
+  id           String @id @default(cuid())
+  simulationId String
+  questionId   String
+  order        Int // Order in the simulation
+
+  simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
   @@unique([simulationId, questionId])
   @@index([simulationId])
   @@index([questionId])
@@ -318,36 +596,36 @@ model SimulationQuestion {
 // ==================== RESULTS ====================
 
 model SimulationResult {
-  id              String      @id @default(cuid())
-  simulationId    String
-  studentId       String
-  
+  id           String @id @default(cuid())
+  simulationId String
+  studentId    String
+
   // Timing
-  startedAt       DateTime    @default(now())
+  startedAt       DateTime  @default(now())
   completedAt     DateTime?
   durationSeconds Int?
-  
+
   // Scoring
   totalQuestions  Int
-  correctAnswers  Int         @default(0)
-  wrongAnswers    Int         @default(0)
-  blankAnswers    Int         @default(0)
-  totalScore      Float       @default(0.0)
-  percentageScore Float       @default(0.0)
-  
+  correctAnswers  Int   @default(0)
+  wrongAnswers    Int   @default(0)
+  blankAnswers    Int   @default(0)
+  totalScore      Float @default(0.0)
+  percentageScore Float @default(0.0)
+
   // Answers (JSON array)
-  answers         Json        // [{questionId, answer: 'A'|'B'|'C'|'D'|'E'|'BLANK', isCorrect, timeSpent}]
-  
+  answers Json // [{questionId, answer: 'A'|'B'|'C'|'D'|'E'|'BLANK', isCorrect, timeSpent}]
+
   // Subject breakdown (JSON)
-  subjectScores   Json?       // {BIOLOGIA: {correct: 5, wrong: 2, blank: 1}, ...}
-  
+  subjectScores Json? // {BIOLOGIA: {correct: 5, wrong: 2, blank: 1}, ...}
+
   // Ranking
-  rankPosition    Int?
+  rankPosition      Int?
   totalParticipants Int?
-  
-  simulation      Simulation  @relation(fields: [simulationId], references: [id], onDelete: Cascade)
-  student         Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  
+
+  simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  student    Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
   @@unique([simulationId, studentId])
   @@index([studentId])
   @@index([simulationId])
@@ -359,54 +637,54 @@ model SimulationResult {
 // ==================== STATS & ANALYTICS ====================
 
 model StudentStats {
-  id                    String   @id @default(cuid())
-  studentId             String   @unique
-  
+  id        String @id @default(cuid())
+  studentId String @unique
+
   // Overall stats
-  totalSimulations      Int      @default(0)
-  totalQuestions        Int      @default(0)
-  totalCorrectAnswers   Int      @default(0)
-  avgScore              Float    @default(0.0)
-  bestScore             Float    @default(0.0)
-  
+  totalSimulations    Int   @default(0)
+  totalQuestions      Int   @default(0)
+  totalCorrectAnswers Int   @default(0)
+  avgScore            Float @default(0.0)
+  bestScore           Float @default(0.0)
+
   // Subject stats (JSON)
-  subjectStats          Json?    // {BIOLOGIA: {total: 100, correct: 75, avg: 0.75}, ...}
-  
+  subjectStats Json? // {BIOLOGIA: {total: 100, correct: 75, avg: 0.75}, ...}
+
   // Time stats
-  totalStudyTimeMinutes Int      @default(0)
-  avgSimulationTime     Int      @default(0)
-  
+  totalStudyTimeMinutes Int @default(0)
+  avgSimulationTime     Int @default(0)
+
   // Streaks
-  currentStreak         Int      @default(0)
-  longestStreak         Int      @default(0)
-  lastActivityDate      DateTime?
-  
-  updatedAt             DateTime @updatedAt
-  
-  student               Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  
+  currentStreak    Int       @default(0)
+  longestStreak    Int       @default(0)
+  lastActivityDate DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
   @@map("student_stats")
 }
 
 // ==================== ALERTS & NOTIFICATIONS ====================
 
 model Alert {
-  id          String    @id @default(cuid())
-  userId      String?   // null = broadcast to all users
-  title       String
-  message     String    @db.Text
-  type        AlertType @default(INFO)
-  isRead      Boolean   @default(false)
-  
+  id      String    @id @default(cuid())
+  userId  String? // null = broadcast to all users
+  title   String
+  message String    @db.Text
+  type    AlertType @default(INFO)
+  isRead  Boolean   @default(false)
+
   // Optional link
-  linkUrl     String?
-  linkText    String?
-  
-  createdAt   DateTime  @default(now())
-  expiresAt   DateTime?
-  
-  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  linkUrl  String?
+  linkText String?
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@index([createdAt])
   @@index([isRead])
@@ -416,18 +694,18 @@ model Alert {
 // ==================== EVENTS & CALENDAR ====================
 
 model Event {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   title       String
-  description String?   @db.Text
+  description String?  @db.Text
   startDate   DateTime
   endDate     DateTime
   location    String?
-  isPublic    Boolean   @default(true)
-  
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  createdBy   String?   // Admin userId
-  
+  isPublic    Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String? // Admin userId
+
   @@index([startDate])
   @@index([isPublic])
   @@map("events")
@@ -441,62 +719,62 @@ enum ContractTargetRole {
 }
 
 model ContractTemplate {
-  id          String    @id @default(cuid())
-  name        String    // "Corso Annuale Medicina", "Corso Intensivo", etc.
-  description String?   @db.Text
-  content     String    @db.Text  // HTML/Markdown del contratto con placeholder
-  price       Float?    // Prezzo opzionale
-  duration    String?   // "12 mesi", "6 mesi", etc.
-  targetRole  ContractTargetRole @default(STUDENT)  // Per chi è destinato questo template
-  isActive    Boolean   @default(true)
-  
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  createdBy   String?   // Admin userId
-  
-  contracts   Contract[]
+  id          String             @id @default(cuid())
+  name        String // "Corso Annuale Medicina", "Corso Intensivo", etc.
+  description String?            @db.Text
+  content     String             @db.Text // HTML/Markdown del contratto con placeholder
+  price       Float? // Prezzo opzionale
+  duration    String? // "12 mesi", "6 mesi", etc.
+  targetRole  ContractTargetRole @default(STUDENT) // Per chi è destinato questo template
+  isActive    Boolean            @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String? // Admin userId
+
+  contracts      Contract[]
   materialAccess MaterialCourseAccess[]
-  
+
   @@index([isActive])
   @@index([targetRole])
   @@map("contract_templates")
 }
 
 model Contract {
-  id                String          @id @default(cuid())
-  studentId         String?
-  collaboratorId    String?
-  templateId        String
-  
+  id             String  @id @default(cuid())
+  studentId      String?
+  collaboratorId String?
+  templateId     String
+
   // Contract status
-  status            ContractStatus  @default(PENDING)
-  
+  status ContractStatus @default(PENDING)
+
   // Content snapshot (frozen at assignment time)
-  contentSnapshot   String          @db.Text  // HTML with student data filled in
-  
+  contentSnapshot String @db.Text // HTML with student data filled in
+
   // Signature
-  signedAt          DateTime?
-  signatureData     String?         @db.Text  // Base64 signature image or digital signature data
-  signatureIp       String?         // IP address at signing
-  signatureUserAgent String?        // Browser info at signing
-  
+  signedAt           DateTime?
+  signatureData      String?   @db.Text // Base64 signature image or digital signature data
+  signatureIp        String? // IP address at signing
+  signatureUserAgent String? // Browser info at signing
+
   // Token for email link
-  signToken         String          @unique @default(cuid())
+  signToken          String    @unique @default(cuid())
   signTokenExpiresAt DateTime?
-  
+
   // Timestamps
-  assignedAt        DateTime        @default(now())
-  expiresAt         DateTime?       // Deadline for signing
-  
+  assignedAt DateTime  @default(now())
+  expiresAt  DateTime? // Deadline for signing
+
   // Admin notes
-  adminNotes        String?         @db.Text
-  assignedBy        String?         // Admin userId who assigned
-  
+  adminNotes String? @db.Text
+  assignedBy String? // Admin userId who assigned
+
   // Relations
-  student           Student?        @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  collaborator      Collaborator?   @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
-  template          ContractTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  
+  student      Student?         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  collaborator Collaborator?    @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
+  template     ContractTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
   @@index([studentId])
   @@index([collaboratorId])
   @@index([templateId])
@@ -508,25 +786,25 @@ model Contract {
 // ==================== ADMIN NOTIFICATIONS ====================
 
 model AdminNotification {
-  id             String            @id @default(cuid())
-  type           NotificationType
-  title          String
-  message        String            @db.Text
-  
+  id      String           @id @default(cuid())
+  type    NotificationType
+  title   String
+  message String           @db.Text
+
   // Related entities
-  studentId      String?           // Related student (if applicable)
-  collaboratorId String?           // Related collaborator (if applicable)
-  contractId     String?           // Related contract (if applicable)
-  
+  studentId      String? // Related student (if applicable)
+  collaboratorId String? // Related collaborator (if applicable)
+  contractId     String? // Related contract (if applicable)
+
   // Read status per admin (JSON: {adminId: readAt})
-  readBy         Json              @default("{}")
-  
+  readBy Json @default("{}")
+
   // Priority
-  isUrgent       Boolean           @default(false)
-  
-  createdAt      DateTime          @default(now())
-  expiresAt      DateTime?
-  
+  isUrgent Boolean @default(false)
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+
   @@index([type])
   @@index([createdAt])
   @@index([isUrgent])
@@ -543,47 +821,48 @@ enum MaterialType {
 }
 
 enum MaterialVisibility {
-  ALL_STUDENTS      // Visible to all active students
-  COURSE_BASED      // Based on contract template / course
+  ALL_STUDENTS // Visible to all active students
+  COURSE_BASED // Based on contract template / course
   SELECTED_STUDENTS // Selected individual students
 }
 
 model MaterialCategory {
-  id          String    @id @default(cuid())
-  name        String    @unique
+  id          String  @id @default(cuid())
+  name        String  @unique
   description String?
-  icon        String?   // Lucide icon name
-  order       Int       @default(0)
-  isActive    Boolean   @default(true)
-  
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
-  materials   Material[]
-  
+  icon        String? // Lucide icon name
+  order       Int     @default(0)
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  materials Material[]
+
   @@index([isActive])
   @@index([order])
   @@map("material_categories")
 }
 
-// Custom subjects managed by admin (for materials, not for core simulations)
+// Custom subjects managed by admin (for materials AND questions)
 model CustomSubject {
-  id          String    @id @default(cuid())
-  name        String    @unique
-  code        String    @unique  // Short code like "BIO", "CHI", "FIS"
+  id          String  @id @default(cuid())
+  name        String  @unique
+  code        String  @unique // Short code like "BIO", "CHI", "FIS"
   description String?
-  color       String?   // Hex color for UI
-  icon        String?   // Lucide icon name
-  order       Int       @default(0)
-  isActive    Boolean   @default(true)
-  
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
+  color       String? // Hex color for UI
+  icon        String? // Lucide icon name
+  order       Int     @default(0)
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   materials     Material[]
-  collaborators CollaboratorSubject[]  // Collaboratori che insegnano questa materia
-  topics        Topic[]                // Argomenti della materia
-  
+  collaborators CollaboratorSubject[] // Collaboratori che insegnano questa materia
+  topics        Topic[] // Argomenti della materia
+  questions     Question[] // Domande di questa materia
+
   @@index([isActive])
   @@index([order])
   @@map("custom_subjects")
@@ -597,16 +876,17 @@ model Topic {
   difficulty  DifficultyLevel @default(MEDIUM)
   order       Int             @default(0)
   isActive    Boolean         @default(true)
-  
-  subjectId   String
-  subject     CustomSubject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  
-  subTopics   SubTopic[]
-  
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  createdBy   String?         // userId who created it
-  
+
+  subjectId String
+  subject   CustomSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  subTopics SubTopic[]
+  questions Question[] // Domande di questo argomento
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String? // userId who created it
+
   @@unique([subjectId, name])
   @@index([subjectId])
   @@index([isActive])
@@ -622,14 +902,16 @@ model SubTopic {
   difficulty  DifficultyLevel @default(MEDIUM)
   order       Int             @default(0)
   isActive    Boolean         @default(true)
-  
-  topicId     String
-  topic       Topic           @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  createdBy   String?         // userId who created it
-  
+
+  topicId String
+  topic   Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  questions Question[] // Domande di questo sotto-argomento
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String? // userId who created it
+
   @@unique([topicId, name])
   @@index([topicId])
   @@index([isActive])
@@ -638,46 +920,46 @@ model SubTopic {
 }
 
 model Material {
-  id              String              @id @default(cuid())
-  title           String
-  description     String?             @db.Text
-  type            MaterialType
-  
+  id          String       @id @default(cuid())
+  title       String
+  description String?      @db.Text
+  type        MaterialType
+
   // File/URL info
-  fileUrl         String?             // Firebase Storage URL for PDF/videos
-  fileName        String?             // Original filename
-  fileSize        Int?                // Size in bytes
-  externalUrl     String?             // For external links
-  thumbnailUrl    String?             // Thumbnail for videos
-  
+  fileUrl      String? // Firebase Storage URL for PDF/videos
+  fileName     String? // Original filename
+  fileSize     Int? // Size in bytes
+  externalUrl  String? // For external links
+  thumbnailUrl String? // Thumbnail for videos
+
   // Visibility settings
-  visibility      MaterialVisibility  @default(ALL_STUDENTS)
-  
+  visibility MaterialVisibility @default(ALL_STUDENTS)
+
   // Category
-  categoryId      String?
-  
+  categoryId String?
+
   // Subject (dynamic, managed by admin)
-  subjectId       String?
-  
+  subjectId String?
+
   // Metadata
-  tags            String[]
-  order           Int                 @default(0)
-  isActive        Boolean             @default(true)
-  
+  tags     String[]
+  order    Int      @default(0)
+  isActive Boolean  @default(true)
+
   // Stats
-  viewCount       Int                 @default(0)
-  downloadCount   Int                 @default(0)
-  
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  createdBy       String?             // Admin userId
-  
+  viewCount     Int @default(0)
+  downloadCount Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String? // Admin userId
+
   // Relations
-  category        MaterialCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  subject         CustomSubject?      @relation(fields: [subjectId], references: [id], onDelete: SetNull)
-  courseAccess    MaterialCourseAccess[]
-  studentAccess   MaterialStudentAccess[]
-  
+  category      MaterialCategory?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  subject       CustomSubject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  courseAccess  MaterialCourseAccess[]
+  studentAccess MaterialStudentAccess[]
+
   @@index([type])
   @@index([visibility])
   @@index([categoryId])
@@ -688,13 +970,13 @@ model Material {
 
 // Course-based access (linked to contract templates)
 model MaterialCourseAccess {
-  id          String           @id @default(cuid())
-  materialId  String
-  templateId  String           // ContractTemplate id
-  
-  material    Material         @relation(fields: [materialId], references: [id], onDelete: Cascade)
-  template    ContractTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  
+  id         String @id @default(cuid())
+  materialId String
+  templateId String // ContractTemplate id
+
+  material Material         @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  template ContractTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
   @@unique([materialId, templateId])
   @@index([materialId])
   @@index([templateId])
@@ -703,15 +985,15 @@ model MaterialCourseAccess {
 
 // Individual student access
 model MaterialStudentAccess {
-  id          String    @id @default(cuid())
-  materialId  String
-  studentId   String
-  grantedAt   DateTime  @default(now())
-  grantedBy   String?   // Admin userId
-  
-  material    Material  @relation(fields: [materialId], references: [id], onDelete: Cascade)
-  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  
+  id         String   @id @default(cuid())
+  materialId String
+  studentId  String
+  grantedAt  DateTime @default(now())
+  grantedBy  String? // Admin userId
+
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
   @@unique([materialId, studentId])
   @@index([materialId])
   @@index([studentId])
@@ -721,41 +1003,41 @@ model MaterialStudentAccess {
 // ==================== JOB APPLICATIONS ====================
 
 enum JobApplicationStatus {
-  PENDING     // In attesa di revisione
-  REVIEWING   // In corso di valutazione
-  APPROVED    // Approvata (collaboratore creato)
-  REJECTED    // Rifiutata
+  PENDING // In attesa di revisione
+  REVIEWING // In corso di valutazione
+  APPROVED // Approvata (collaboratore creato)
+  REJECTED // Rifiutata
 }
 
 model JobApplication {
-  id            String   @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Candidato info
-  name          String
-  email         String
-  phone         String
-  
+  name  String
+  email String
+  phone String
+
   // Candidatura
-  subject       String              // Oggetto della candidatura
-  materia       String              // Materia di competenza indicata
-  message       String   @db.Text   // Messaggio/presentazione
-  cvUrl         String?             // URL del CV su Firebase Storage
-  cvFileName    String?             // Nome originale del file CV
-  
+  subject    String // Oggetto della candidatura
+  materia    String // Materia di competenza indicata
+  message    String  @db.Text // Messaggio/presentazione
+  cvUrl      String? // URL del CV su Firebase Storage
+  cvFileName String? // Nome originale del file CV
+
   // Status
-  status        JobApplicationStatus @default(PENDING)
-  
+  status JobApplicationStatus @default(PENDING)
+
   // Admin review
-  adminNotes    String?  @db.Text   // Note dell'admin
-  reviewedAt    DateTime?
-  reviewedBy    String?             // Admin userId che ha revisionato
-  
+  adminNotes String?   @db.Text // Note dell'admin
+  reviewedAt DateTime?
+  reviewedBy String? // Admin userId che ha revisionato
+
   // Se approvata, link al collaboratore creato
-  collaboratorId String?  @unique
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  collaboratorId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([status])
   @@index([createdAt])
   @@index([email])
@@ -765,36 +1047,36 @@ model JobApplication {
 // ==================== CONTACT REQUESTS ====================
 
 enum ContactRequestStatus {
-  PENDING     // In attesa di risposta
-  READ        // Letta
-  REPLIED     // Risposta inviata
-  ARCHIVED    // Archiviata
+  PENDING // In attesa di risposta
+  READ // Letta
+  REPLIED // Risposta inviata
+  ARCHIVED // Archiviata
 }
 
 model ContactRequest {
-  id            String   @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Richiedente info
-  name          String
-  email         String
-  phone         String
-  
+  name  String
+  email String
+  phone String
+
   // Richiesta
-  subject       String              // Oggetto della richiesta
-  message       String   @db.Text   // Messaggio
-  
+  subject String // Oggetto della richiesta
+  message String @db.Text // Messaggio
+
   // Status
-  status        ContactRequestStatus @default(PENDING)
-  
+  status ContactRequestStatus @default(PENDING)
+
   // Admin review
-  adminNotes    String?  @db.Text   // Note dell'admin
-  readAt        DateTime?
-  repliedAt     DateTime?
-  handledBy     String?             // Admin userId che ha gestito
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  adminNotes String?   @db.Text // Note dell'admin
+  readAt     DateTime?
+  repliedAt  DateTime?
+  handledBy  String? // Admin userId che ha gestito
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([status])
   @@index([createdAt])
   @@index([email])
@@ -805,18 +1087,18 @@ model ContactRequest {
 
 // Many-to-many: un collaboratore può insegnare più materie
 model CollaboratorSubject {
-  id              String   @id @default(cuid())
-  collaboratorId  String
-  subjectId       String
-  
+  id             String @id @default(cuid())
+  collaboratorId String
+  subjectId      String
+
   // Indica se è la materia principale
-  isPrimary       Boolean  @default(false)
-  
-  assignedAt      DateTime @default(now())
-  
-  collaborator    Collaborator  @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
-  subject         CustomSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  
+  isPrimary Boolean @default(false)
+
+  assignedAt DateTime @default(now())
+
+  collaborator Collaborator  @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
+  subject      CustomSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
   @@unique([collaboratorId, subjectId])
   @@index([collaboratorId])
   @@index([subjectId])
@@ -826,53 +1108,53 @@ model CollaboratorSubject {
 // ==================== GROUPS ====================
 
 enum GroupType {
-  STUDENTS         // Gruppo di soli studenti
-  COLLABORATORS    // Gruppo di soli collaboratori
-  MIXED            // Gruppo misto (studenti + collaboratori)
+  STUDENTS // Gruppo di soli studenti
+  COLLABORATORS // Gruppo di soli collaboratori
+  MIXED // Gruppo misto (studenti + collaboratori)
 }
 
 model Group {
-  id              String    @id @default(cuid())
-  name            String
-  description     String?   @db.Text
-  color           String?   // Colore del gruppo (hex)
-  type            GroupType @default(MIXED)
-  isActive        Boolean   @default(true)
-  
+  id          String    @id @default(cuid())
+  name        String
+  description String?   @db.Text
+  color       String? // Colore del gruppo (hex)
+  type        GroupType @default(MIXED)
+  isActive    Boolean   @default(true)
+
   // Riferimenti (responsabili del gruppo)
-  referenceStudentId      String?   // Studente di riferimento
-  referenceCollaboratorId String?   // Collaboratore di riferimento
-  referenceAdminId        String?   // Admin di riferimento
-  
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  
+  referenceStudentId      String? // Studente di riferimento
+  referenceCollaboratorId String? // Collaboratore di riferimento
+  referenceAdminId        String? // Admin di riferimento
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relations
   referenceStudent      Student?      @relation("GroupReferenceStudent", fields: [referenceStudentId], references: [id], onDelete: SetNull)
   referenceCollaborator Collaborator? @relation("GroupReferenceCollaborator", fields: [referenceCollaboratorId], references: [id], onDelete: SetNull)
   referenceAdmin        Admin?        @relation("GroupReferenceAdmin", fields: [referenceAdminId], references: [id], onDelete: SetNull)
   members               GroupMember[]
-  
+
   @@index([type])
   @@index([isActive])
   @@map("groups")
 }
 
 model GroupMember {
-  id        String   @id @default(cuid())
-  groupId   String
-  
+  id      String @id @default(cuid())
+  groupId String
+
   // Solo uno di questi sarà popolato
   studentId      String?
   collaboratorId String?
-  
-  joinedAt  DateTime @default(now())
-  
+
+  joinedAt DateTime @default(now())
+
   // Relations
   group        Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
   student      Student?      @relation(fields: [studentId], references: [id], onDelete: Cascade)
   collaborator Collaborator? @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
-  
+
   @@unique([groupId, studentId])
   @@unique([groupId, collaboratorId])
   @@index([groupId])

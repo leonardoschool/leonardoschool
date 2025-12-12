@@ -47,7 +47,7 @@ export default function CompleteProfilePage() {
   });
 
   // Get user to determine role
-  const { data: user } = trpc.auth.me.useQuery(undefined, {
+  const { data: user, error: authError } = trpc.auth.me.useQuery(undefined, {
     retry: false,
   });
   
@@ -57,6 +57,13 @@ export default function CompleteProfilePage() {
   // Profile completion mutations
   const studentCompleteProfile = trpc.students.completeProfile.useMutation();
   const collaboratorCompleteProfile = trpc.collaborators.completeProfile.useMutation();
+
+  // Handle auth error - redirect to login if not authenticated
+  useEffect(() => {
+    if (authError?.data?.code === 'UNAUTHORIZED') {
+      router.push('/auth/login');
+    }
+  }, [authError, router]);
 
   // Check if user is authenticated and if profile is already completed
   useEffect(() => {
@@ -255,13 +262,15 @@ export default function CompleteProfilePage() {
     return `${baseClass} ${colors.border.primary} focus:ring-[#A01B3B] focus:border-transparent`;
   };
 
-  // Show loader while checking authentication
-  if (authChecking) {
+  // Show loader while checking authentication or redirecting due to auth error
+  if (authChecking || authError?.data?.code === 'UNAUTHORIZED') {
     return (
       <div className={`min-h-screen ${colors.background.authPage} flex items-center justify-center`}>
         <div className="text-center">
           <Spinner size="lg" />
-          <p className={`mt-4 text-sm ${colors.text.secondary}`}>Caricamento...</p>
+          <p className={`mt-4 text-sm ${colors.text.secondary}`}>
+            {authError ? 'Reindirizzamento al login...' : 'Caricamento...'}
+          </p>
         </div>
       </div>
     );

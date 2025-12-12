@@ -9,7 +9,7 @@ export interface SelectOption {
   label: string;
 }
 
-interface CustomSelectProps {
+export interface CustomSelectProps {
   id?: string;
   value: string;
   options: SelectOption[];
@@ -22,6 +22,7 @@ interface CustomSelectProps {
   className?: string;
   dropdownClassName?: string;
   size?: 'sm' | 'md' | 'lg';
+  label?: string;
 }
 
 export default function CustomSelect({
@@ -37,6 +38,7 @@ export default function CustomSelect({
   className = '',
   dropdownClassName = '',
   size = 'md',
+  label,
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -205,6 +207,12 @@ export default function CustomSelect({
 
   return (
     <div ref={containerRef} className={`relative ${className}`}>
+      {/* Label */}
+      {label && (
+        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+          {label}
+        </label>
+      )}
       {/* Trigger Button */}
       <div
         ref={triggerRef}

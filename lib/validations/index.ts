@@ -1,6 +1,7 @@
 // Validations barrel export
 export * from './authValidation';
 export * from './profileValidation';
+export * from './questionValidation';
 
 // Re-export formValidation with renamed types to avoid conflicts
 export {

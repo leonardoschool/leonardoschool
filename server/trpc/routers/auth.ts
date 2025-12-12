@@ -35,15 +35,28 @@ export const authRouter = router({
       const { firebaseUid, email, name } = input;
       const enforcedRole = 'STUDENT' as const;
 
-      // Check if user already exists
+      // Check if user already exists by firebaseUid
       let user = await ctx.prisma.user.findUnique({
         where: { firebaseUid },
         include: { student: true, admin: true, collaborator: true },
       });
 
       if (user) {
-        // User exists, just return it
+        // User exists with this firebaseUid, just return it
         return user;
+      }
+
+      // Check if user exists with same email (different Firebase account)
+      const existingUserByEmail = await ctx.prisma.user.findUnique({
+        where: { email },
+      });
+
+      if (existingUserByEmail) {
+        // Email already registered with different Firebase account
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: 'Questa email è già registrata. Prova ad accedere con le tue credenziali esistenti.',
+        });
       }
 
       // Create new user with associated profile
