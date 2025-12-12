@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
@@ -15,29 +16,61 @@ import {
   UserCheck,
   UserPlus,
   Trash2,
-  LucideProps,
+  Briefcase,
+  Mail,
+  FileSignature,
+  XCircle,
+  type LucideIcon,
 } from 'lucide-react';
-import { ForwardRefExoticComponent, RefAttributes } from 'react';
 
-type LucideIcon = ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>;
+// Notification type config with icons and colors (same as AppHeader)
+type NotificationTypeKey = 'CONTRACT_ASSIGNED' | 'CONTRACT_SIGNED' | 'CONTRACT_CANCELLED' | 'ACCOUNT_ACTIVATED' | 'PROFILE_COMPLETED' | 'JOB_APPLICATION' | 'CONTACT_REQUEST' | 'GENERAL';
 
-const notificationIcons: Record<string, LucideIcon> = {
-  CONTRACT_ASSIGNED: FileText,
-  CONTRACT_SIGNED: FileText,
-  ACCOUNT_ACTIVATED: UserCheck,
-  PROFILE_COMPLETED: UserPlus,
-  GENERAL: Bell,
-};
-
-const notificationColors: Record<string, { bg: string; text: string }> = {
-  CONTRACT_ASSIGNED: { bg: colors.status.info.softBg, text: colors.status.info.text },
-  CONTRACT_SIGNED: { bg: colors.status.success.softBg, text: colors.status.success.text },
-  ACCOUNT_ACTIVATED: { bg: colors.status.success.softBg, text: colors.status.success.text },
-  PROFILE_COMPLETED: { bg: colors.status.warning.softBg, text: colors.status.warning.text },
-  GENERAL: { bg: colors.neutral.gray100, text: colors.neutral.gray600 },
+const notificationConfig: Record<NotificationTypeKey, { icon: LucideIcon; bgClass: string; iconColor: string }> = {
+  CONTRACT_ASSIGNED: {
+    icon: FileText,
+    bgClass: 'bg-blue-100 dark:bg-blue-900/30',
+    iconColor: 'text-blue-600 dark:text-blue-400',
+  },
+  CONTRACT_SIGNED: {
+    icon: FileSignature,
+    bgClass: 'bg-green-100 dark:bg-green-900/30',
+    iconColor: 'text-green-600 dark:text-green-400',
+  },
+  CONTRACT_CANCELLED: {
+    icon: XCircle,
+    bgClass: 'bg-red-100 dark:bg-red-900/30',
+    iconColor: 'text-red-600 dark:text-red-400',
+  },
+  ACCOUNT_ACTIVATED: {
+    icon: UserCheck,
+    bgClass: 'bg-emerald-100 dark:bg-emerald-900/30',
+    iconColor: 'text-emerald-600 dark:text-emerald-400',
+  },
+  PROFILE_COMPLETED: {
+    icon: UserPlus,
+    bgClass: 'bg-purple-100 dark:bg-purple-900/30',
+    iconColor: 'text-purple-600 dark:text-purple-400',
+  },
+  JOB_APPLICATION: {
+    icon: Briefcase,
+    bgClass: 'bg-amber-100 dark:bg-amber-900/30',
+    iconColor: 'text-amber-600 dark:text-amber-400',
+  },
+  CONTACT_REQUEST: {
+    icon: Mail,
+    bgClass: 'bg-pink-100 dark:bg-pink-900/30',
+    iconColor: 'text-pink-600 dark:text-pink-400',
+  },
+  GENERAL: {
+    icon: Bell,
+    bgClass: 'bg-gray-100 dark:bg-gray-800',
+    iconColor: 'text-gray-600 dark:text-gray-400',
+  },
 };
 
 export default function NotificationsPage() {
+  const router = useRouter();
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
   
@@ -109,6 +142,51 @@ export default function NotificationsPage() {
       hour: '2-digit',
       minute: '2-digit',
     }).format(d);
+  };
+
+  // Handle notification click - navigate to relevant section
+  const handleNotificationClick = (notification: {
+    id?: string;
+    type?: string;
+    studentId?: string | null;
+    collaboratorId?: string | null;
+    contractId?: string | null;
+  }) => {
+    if (!notification.id) return;
+    
+    // Mark as read first
+    markReadMutation.mutate({ notificationId: notification.id });
+
+    // Navigate based on notification type
+    switch (notification.type) {
+      case 'JOB_APPLICATION':
+        router.push('/admin/candidature');
+        break;
+      case 'CONTACT_REQUEST':
+        router.push('/admin/richieste');
+        break;
+      case 'CONTRACT_ASSIGNED':
+      case 'CONTRACT_SIGNED':
+      case 'CONTRACT_CANCELLED':
+        if (notification.contractId) {
+          router.push(`/admin/contratti?contratto=${notification.contractId}`);
+        } else {
+          router.push('/admin/contratti');
+        }
+        break;
+      case 'ACCOUNT_ACTIVATED':
+      case 'PROFILE_COMPLETED':
+        if (notification.studentId) {
+          router.push(`/admin/utenti?utente=${notification.studentId}&tipo=studente`);
+        } else if (notification.collaboratorId) {
+          router.push(`/admin/utenti?utente=${notification.collaboratorId}&tipo=collaboratore`);
+        } else {
+          router.push('/admin/utenti');
+        }
+        break;
+      default:
+        router.push('/admin');
+    }
   };
 
   const isUnread = (notification: { readBy?: unknown }) => {
@@ -183,21 +261,26 @@ export default function NotificationsPage() {
         ) : (
           <div className="divide-y">
             {notifications.map((notification) => {
-              const IconComponent = notificationIcons[notification.type] || Bell;
-              const colorSet = notificationColors[notification.type] || notificationColors.GENERAL;
+              const config = notificationConfig[notification.type as NotificationTypeKey] || notificationConfig.GENERAL;
+              const NotificationIcon = config.icon;
               const unread = isUnread(notification);
 
               return (
                 <div 
                   key={notification.id}
-                  className={`p-5 transition-colors ${
+                  onClick={() => handleNotificationClick(notification)}
+                  className={`p-5 transition-colors cursor-pointer ${
                     unread ? `${colors.background.primary}` : ''
                   } hover:bg-gray-50 dark:hover:bg-gray-800/50`}
                 >
                   <div className="flex items-start gap-4">
                     {/* Icon */}
-                    <div className={`w-10 h-10 rounded-xl ${colorSet.bg} flex items-center justify-center flex-shrink-0`}>
-                      <IconComponent className={`w-5 h-5`} style={{ color: colorSet.text }} />
+                    <div className={`w-10 h-10 rounded-xl ${config.bgClass} flex items-center justify-center flex-shrink-0`}>
+                      {notification.isUrgent ? (
+                        <AlertTriangle className={`w-5 h-5 ${colors.status.warning.text}`} />
+                      ) : (
+                        <NotificationIcon className={`w-5 h-5 ${config.iconColor}`} />
+                      )}
                     </div>
 
                     {/* Content */}
@@ -207,7 +290,9 @@ export default function NotificationsPage() {
                           <p className={`font-medium ${unread ? 'font-semibold' : ''}`}>
                             {notification.title}
                             {notification.isUrgent && (
-                              <AlertTriangle className={`inline w-4 h-4 ml-2 ${colors.status.warning.text}`} />
+                              <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${colors.status.warning.softBg} ${colors.status.warning.text}`}>
+                                Urgente
+                              </span>
                             )}
                           </p>
                           <p className={`text-sm ${colors.text.secondary} mt-1`}>
@@ -222,7 +307,10 @@ export default function NotificationsPage() {
                         <div className="flex items-center gap-1">
                           {unread && (
                             <button
-                              onClick={() => markReadMutation.mutate({ notificationId: notification.id })}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                markReadMutation.mutate({ notificationId: notification.id });
+                              }}
                               disabled={markReadMutation.isPending}
                               className={`p-2 rounded-lg ${colors.background.secondary} hover:${colors.background.tertiary} transition-colors`}
                               title="Segna come letta"
@@ -231,7 +319,10 @@ export default function NotificationsPage() {
                             </button>
                           )}
                           <button
-                            onClick={() => deleteNotificationMutation.mutate({ notificationId: notification.id })}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteNotificationMutation.mutate({ notificationId: notification.id });
+                            }}
                             disabled={deleteNotificationMutation.isPending}
                             className={`p-2 rounded-lg hover:${colors.status.error.softBg} transition-colors`}
                             title="Elimina notifica"

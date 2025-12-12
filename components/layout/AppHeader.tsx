@@ -100,31 +100,56 @@ export default function AppHeader() {
   const themeMenuRef = useRef<HTMLDivElement>(null);
   const gestioneMenuRef = useRef<HTMLDivElement>(null);
 
+  // Polling interval for real-time updates (30 seconds)
+  const POLLING_INTERVAL = 30 * 1000;
+
   // Get current user
   const { data: user } = trpc.auth.me.useQuery();
   
   // Get collaborator contract status (collaborator only)
   const { data: collaboratorContract } = trpc.contracts.getMyCollaboratorContract.useQuery(
     undefined,
-    { enabled: (user?.role as string) === 'COLLABORATOR', retry: false }
+    { 
+      enabled: (user?.role as string) === 'COLLABORATOR', 
+      retry: false,
+      refetchInterval: POLLING_INTERVAL,
+    }
   );
   
-  // Get notifications (admin only)
+  // Get notifications (admin only) - auto-refresh every 30 seconds
   const { data: notifications, refetch: refetchNotifications } = trpc.contracts.getAdminNotifications.useQuery(
     { unreadOnly: true, limit: 10 },
-    { enabled: user?.role === 'ADMIN' }
+    { 
+      enabled: user?.role === 'ADMIN',
+      refetchInterval: POLLING_INTERVAL,
+    }
   );
 
   // Get job applications stats (admin only) - for badge count
   const { data: jobApplicationsStats } = trpc.jobApplications.getStats.useQuery(
     undefined,
-    { enabled: user?.role === 'ADMIN' }
+    { 
+      enabled: user?.role === 'ADMIN',
+      refetchInterval: POLLING_INTERVAL,
+    }
   );
 
   // Get contact requests stats (admin only) - for badge count
   const { data: contactRequestsStats } = trpc.contactRequests.getStats.useQuery(
     undefined,
-    { enabled: user?.role === 'ADMIN' }
+    { 
+      enabled: user?.role === 'ADMIN',
+      refetchInterval: POLLING_INTERVAL,
+    }
+  );
+
+  // Get students pending contract (admin only) - for badge count
+  const { data: studentsPendingContract } = trpc.contracts.getStudentsPendingContract.useQuery(
+    undefined,
+    { 
+      enabled: user?.role === 'ADMIN',
+      refetchInterval: POLLING_INTERVAL,
+    }
   );
 
   // Mark notification as read
@@ -138,7 +163,8 @@ export default function AppHeader() {
   const unreadCount = notifications?.length || 0;
   const pendingApplicationsCount = jobApplicationsStats?.pending || 0;
   const pendingContactRequestsCount = contactRequestsStats?.pending || 0;
-  const totalGestionePending = pendingApplicationsCount + pendingContactRequestsCount;
+  const pendingContractUsersCount = studentsPendingContract?.length || 0;
+  const totalGestionePending = pendingApplicationsCount + pendingContactRequestsCount + pendingContractUsersCount;
   
   // Collaborator can navigate only if:
   // 1. Account is active AND has signed contract
@@ -274,6 +300,52 @@ export default function AppHeader() {
     return `${days}g fa`;
   };
 
+  // Handle notification click - navigate to relevant section
+  const handleNotificationClick = (notification: {
+    id: string;
+    type: string;
+    studentId?: string | null;
+    collaboratorId?: string | null;
+    contractId?: string | null;
+  }) => {
+    // Mark as read first
+    handleMarkAsRead(notification.id);
+    setNotificationsOpen(false);
+
+    // Navigate based on notification type
+    switch (notification.type) {
+      case 'JOB_APPLICATION':
+        router.push('/admin/candidature');
+        break;
+      case 'CONTACT_REQUEST':
+        router.push('/admin/richieste');
+        break;
+      case 'CONTRACT_ASSIGNED':
+      case 'CONTRACT_SIGNED':
+      case 'CONTRACT_CANCELLED':
+        // Navigate to contracts, with specific contract if available
+        if (notification.contractId) {
+          router.push(`/admin/contratti?contratto=${notification.contractId}`);
+        } else {
+          router.push('/admin/contratti');
+        }
+        break;
+      case 'ACCOUNT_ACTIVATED':
+      case 'PROFILE_COMPLETED':
+        // Navigate to users, with specific user if available
+        if (notification.studentId) {
+          router.push(`/admin/utenti?utente=${notification.studentId}&tipo=studente`);
+        } else if (notification.collaboratorId) {
+          router.push(`/admin/utenti?utente=${notification.collaboratorId}&tipo=collaboratore`);
+        } else {
+          router.push('/admin/utenti');
+        }
+        break;
+      default:
+        router.push('/admin');
+    }
+  };
+
   return (
     <header className={`sticky top-0 z-50 ${colors.background.card} border-b ${colors.border.primary} shadow-sm`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -329,8 +401,9 @@ export default function AppHeader() {
                     <div className={`absolute left-0 top-full mt-1 w-56 ${colors.background.card} rounded-xl shadow-lg border ${colors.border.primary} py-1 z-50`}>
                       {gestioneItems.map((item) => {
                         const isItemActive = pathname.startsWith(item.href);
-                        // Show badge for Candidature and Richieste
+                        // Show badge for Utenti, Candidature and Richieste
                         const badgeCount = 
+                          item.href === '/admin/utenti' ? pendingContractUsersCount :
                           item.href === '/admin/candidature' ? pendingApplicationsCount :
                           item.href === '/admin/richieste' ? pendingContactRequestsCount : 0;
                         return (
@@ -458,6 +531,7 @@ export default function AppHeader() {
                           return (
                             <div
                               key={notification.id}
+                              onClick={() => handleNotificationClick(notification)}
                               className={`px-4 py-3 border-b ${colors.border.primary} ${colors.effects.hover.bg} transition-colors cursor-pointer`}
                             >
                               <div className="flex items-start gap-3">
