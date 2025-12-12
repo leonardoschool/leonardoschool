@@ -44,8 +44,55 @@ export const usersRouter = router({
       if (status === 'ACTIVE') {
         where.isActive = true;
       } else if (status === 'INACTIVE') {
+        // Disattivati manualmente - profilo completato, non attivo, ma NON in attesa di qualcosa
+        // Questi sono utenti che erano attivi e sono stati disattivati
         where.isActive = false;
         where.profileCompleted = true;
+        // Must have a cancelled/expired contract (or be admin) but still inactive = manually deactivated
+        where.OR = [
+          { role: 'ADMIN' }, // Admin without contracts
+          {
+            role: { in: ['STUDENT', 'COLLABORATOR'] },
+            OR: [
+              {
+                student: {
+                  contracts: {
+                    some: { 
+                      status: 'CANCELLED'
+                    }
+                  }
+                }
+              },
+              {
+                collaborator: {
+                  contracts: {
+                    some: { 
+                      status: 'CANCELLED' 
+                    }
+                  }
+                }
+              },
+              {
+                student: {
+                  contracts: {
+                    some: { 
+                      status: 'EXPIRED'
+                    }
+                  }
+                }
+              },
+              {
+                collaborator: {
+                  contracts: {
+                    some: { 
+                      status: 'EXPIRED'
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ];
       } else if (status === 'PENDING_PROFILE') {
         // Profilo incompleto
         where.profileCompleted = false;
@@ -231,6 +278,7 @@ export const usersRouter = router({
     let pendingContract = 0;
     let pendingSign = 0;
     let pendingActivation = 0;
+    let inactiveCount = 0;
 
     for (const user of usersWithProfile) {
       const contracts = (user as any).student?.contracts || (user as any).collaborator?.contracts || [];
@@ -242,6 +290,9 @@ export const usersRouter = router({
           pendingSign++;
         } else if (lastContract.status === 'SIGNED') {
           pendingActivation++;
+        } else if (lastContract.status === 'CANCELLED' || lastContract.status === 'EXPIRED') {
+          // User with cancelled or expired contract = can be considered inactive
+          inactiveCount++;
         }
       }
     }
@@ -252,9 +303,15 @@ export const usersRouter = router({
       pendingContract = 0;
       pendingSign = 0;
       pendingActivation = 0;
+      // Inactive admins are those with profileCompleted but not active
+      inactiveCount = await ctx.prisma.user.count({
+        where: {
+          role: 'ADMIN',
+          profileCompleted: true,
+          isActive: false,
+        }
+      });
     }
-
-    const inactive = total - active - pendingProfile - pendingContract - pendingSign - pendingActivation;
 
     return {
       total,
@@ -267,7 +324,7 @@ export const usersRouter = router({
       pendingContract,
       pendingSign,
       pendingActivation,
-      inactive: inactive > 0 ? inactive : 0,
+      inactive: inactiveCount,
     };
   }),
 

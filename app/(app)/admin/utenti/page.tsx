@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
+import { Portal } from '@/components/ui/Portal';
 import {
   Users,
   Search,
@@ -163,8 +164,9 @@ function ConfirmModal({
   const colorScheme = variantColors[variant];
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className={`${colors.background.card} rounded-2xl max-w-md w-full p-6 shadow-2xl`}>
+    <Portal>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+        <div className={`${colors.background.card} rounded-2xl max-w-md w-full p-6 shadow-2xl`}>
         <div className="flex items-start gap-4">
           <div className={`w-12 h-12 rounded-xl ${colorScheme.icon} flex items-center justify-center flex-shrink-0`}>
             <AlertTriangle className={`w-6 h-6 ${colorScheme.iconColor}`} />
@@ -204,6 +206,7 @@ function ConfirmModal({
         </div>
       </div>
     </div>
+    </Portal>
   );
 }
 
@@ -232,6 +235,12 @@ function AssignContractModal({
   const [adminNotes, setAdminNotes] = useState('');
   const [expiresInDays, setExpiresInDays] = useState(7);
   const [showPreview, setShowPreview] = useState(false);
+  const [templateFilter, setTemplateFilter] = useState<'ALL' | 'STUDENT' | 'COLLABORATOR'>(targetType);
+
+  // Filter templates based on selected filter
+  const filteredTemplates = templates?.filter(t => 
+    templateFilter === 'ALL' || t.targetRole === templateFilter
+  ) || [];
 
   // Fetch preview when template is selected
   const { data: preview, isLoading: previewLoading } = trpc.contracts.getContractPreview.useQuery(
@@ -248,6 +257,7 @@ function AssignContractModal({
     setSelectedTemplate(null);
     setCustomContent('');
     setCustomPrice('');
+    setTemplateFilter(targetType);
     setAdminNotes('');
     setExpiresInDays(7);
     setShowPreview(false);
@@ -304,8 +314,9 @@ function AssignContractModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className={`${colors.background.card} rounded-2xl w-full max-w-4xl my-8 shadow-2xl max-h-[90vh] flex flex-col`}>
+    <Portal>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 overflow-y-auto">
+        <div className={`${colors.background.card} rounded-2xl w-full max-w-4xl my-8 shadow-2xl max-h-[90vh] flex flex-col`}>
         {/* Header */}
         <div className={`p-6 border-b ${colors.border.primary} flex-shrink-0`}>
           <div className="flex items-center justify-between">
@@ -349,39 +360,93 @@ function AssignContractModal({
         {/* Content */}
         <div className="p-6 overflow-y-auto flex-1">
           {step === 'select' ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {templates?.map((template) => (
+            <>
+              {/* Filter buttons */}
+              <div className="flex items-center gap-2 mb-4">
+                <span className={`text-sm ${colors.text.muted}`}>Filtra:</span>
                 <button
-                  key={template.id}
-                  onClick={() => handleSelectTemplate(template.id)}
-                  className={`p-5 rounded-xl border-2 text-left transition-all hover:scale-[1.02] ${colors.border.primary} hover:border-red-400`}
+                  onClick={() => setTemplateFilter('ALL')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    templateFilter === 'ALL'
+                      ? `${colors.primary.bg} text-white`
+                      : `${colors.background.secondary} ${colors.text.secondary} hover:opacity-80`
+                  }`}
                 >
-                  <p className="font-semibold text-lg">{template.name}</p>
-                  {template.description && (
-                    <p className={`text-sm ${colors.text.secondary} mt-2 line-clamp-2`}>{template.description}</p>
-                  )}
-                  <div className="flex items-center justify-between mt-4">
-                    {template.price ? (
-                      <p className={`font-bold ${colors.primary.text}`}>
-                        {new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(template.price)}
-                      </p>
-                    ) : (
-                      <span className={colors.text.muted}>Prezzo da definire</span>
-                    )}
-                    {template.duration && (
-                      <span className={`text-sm ${colors.text.muted}`}>{template.duration}</span>
-                    )}
-                  </div>
+                  Tutti ({templates?.length || 0})
                 </button>
-              ))}
+                <button
+                  onClick={() => setTemplateFilter('STUDENT')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    templateFilter === 'STUDENT'
+                      ? 'bg-blue-600 text-white'
+                      : `${colors.background.secondary} ${colors.text.secondary} hover:opacity-80`
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <GraduationCap className="w-3.5 h-3.5" />
+                    Studenti ({templates?.filter(t => t.targetRole === 'STUDENT').length || 0})
+                  </span>
+                </button>
+                <button
+                  onClick={() => setTemplateFilter('COLLABORATOR')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    templateFilter === 'COLLABORATOR'
+                      ? 'bg-purple-600 text-white'
+                      : `${colors.background.secondary} ${colors.text.secondary} hover:opacity-80`
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <UserCog className="w-3.5 h-3.5" />
+                    Collaboratori ({templates?.filter(t => t.targetRole === 'COLLABORATOR').length || 0})
+                  </span>
+                </button>
+              </div>
 
-              {!templates?.length && (
-                <div className="col-span-2 text-center py-12">
-                  <FileText className={`w-12 h-12 mx-auto ${colors.text.muted} mb-4`} />
-                  <p className={colors.text.muted}>Nessun template disponibile.</p>
-                </div>
-              )}
-            </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredTemplates.map((template) => (
+                  <button
+                    key={template.id}
+                    onClick={() => handleSelectTemplate(template.id)}
+                    className={`p-5 rounded-xl border-2 text-left transition-all hover:scale-[1.02] ${colors.border.primary} hover:border-red-400`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold text-lg">{template.name}</p>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        template.targetRole === 'STUDENT' 
+                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                          : 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
+                      }`}>
+                        {template.targetRole === 'STUDENT' ? 'Studente' : 'Collaboratore'}
+                      </span>
+                    </div>
+                    {template.description && (
+                      <p className={`text-sm ${colors.text.secondary} mt-2 line-clamp-2`}>{template.description}</p>
+                    )}
+                    <div className="flex items-center justify-between mt-4">
+                      {template.price ? (
+                        <p className={`font-bold ${colors.primary.text}`}>
+                          {new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(template.price)}
+                        </p>
+                      ) : (
+                        <span className={colors.text.muted}>Prezzo da definire</span>
+                      )}
+                      {template.duration && (
+                        <span className={`text-sm ${colors.text.muted}`}>{template.duration}</span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+
+                {!filteredTemplates.length && (
+                  <div className="col-span-2 text-center py-12">
+                    <FileText className={`w-12 h-12 mx-auto ${colors.text.muted} mb-4`} />
+                    <p className={colors.text.muted}>
+                      {templates?.length ? 'Nessun template per questo filtro.' : 'Nessun template disponibile.'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </>
           ) : (
             <div className="space-y-6">
               {previewLoading ? (
@@ -551,6 +616,7 @@ function AssignContractModal({
         </div>
       </div>
     </div>
+    </Portal>
   );
 }
 
@@ -1023,7 +1089,7 @@ export default function UsersManagementPage() {
       </div>
 
       {/* Users Table */}
-      <div className={`${colors.background.card} rounded-xl shadow-sm`}>
+      <div className={`${colors.background.card} rounded-xl shadow-sm overflow-visible`}>
         {isLoading ? (
           <div className="p-12 text-center">
             <Spinner size="lg" />
@@ -1177,19 +1243,19 @@ export default function UsersManagementPage() {
             </div>
 
             {/* Desktop Table View */}
-            <div className="hidden lg:block pb-16 overflow-x-auto">
+            <div className="hidden lg:block pb-16 overflow-x-auto overflow-y-visible">
               <table className="w-full min-w-[900px]">
                 <thead className={`${colors.background.secondary} border-b ${colors.border.primary}`}>
                   <tr>
                     <th className="text-left px-4 py-4 font-semibold text-sm">Utente</th>
                     <th className="text-left px-4 py-4 font-semibold text-sm">Email</th>
-                    <th className="text-left px-4 py-4 font-semibold text-sm">Ruolo</th>
+                    <th className="text-left px-4 py-4 font-semibold text-sm" style={{ overflow: 'visible' }}>Ruolo</th>
                     <th className="text-left px-4 py-4 font-semibold text-sm whitespace-nowrap">Registrazione</th>
                     <th className="text-left px-4 py-4 font-semibold text-sm">Stato</th>
                     <th className="text-right px-4 py-4 font-semibold text-sm">Azioni</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="overflow-visible">
                   {filteredUsers.map((user: any) => {
                     const roleBadge = getRoleBadge(user.role);
                     const statusBadge = getStatusBadge(user);
@@ -1235,7 +1301,7 @@ export default function UsersManagementPage() {
                             <span className="truncate max-w-[160px]">{user.email}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 overflow-visible">
                           {/* Role dropdown - disabled for self */}
                           {isSelf ? (
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${roleBadge.bg} ${roleBadge.color}`}>
@@ -1394,8 +1460,9 @@ export default function UsersManagementPage() {
 
       {/* View User Profile Modal */}
       {viewUserModal.isOpen && viewUserModal.user && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className={`${colors.background.card} rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto`}>
+        <Portal>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+            <div className={`${colors.background.card} rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto`}>
             <div className={`flex items-center justify-between p-6 border-b ${colors.border.primary}`}>
               <h2 className="text-xl font-bold">Profilo Utente</h2>
               <button
@@ -1552,6 +1619,7 @@ export default function UsersManagementPage() {
             </div>
           </div>
         </div>
+        </Portal>
       )}
     </div>
   );
