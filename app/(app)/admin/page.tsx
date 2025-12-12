@@ -1,8 +1,10 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { colors } from '@/lib/theme/colors';
 import { trpc } from '@/lib/trpc/client';
+import { auth } from '@/lib/firebase/config';
 import { Spinner } from '@/components/ui/loaders';
 import { 
   Users, 
@@ -22,12 +24,29 @@ import {
 
 export default function AdminDashboard() {
   // Use tRPC directly instead of useAuth hook to avoid duplicate calls
-  const { data: user, isLoading } = trpc.auth.me.useQuery();
+  const { data: user, isLoading, error: userError } = trpc.auth.me.useQuery();
 
   // Fetch pending students data
   const { data: pendingContract } = trpc.contracts.getStudentsPendingContract.useQuery();
   const { data: pendingSignature } = trpc.contracts.getStudentsPendingSignature.useQuery();
   const { data: pendingActivation } = trpc.contracts.getContractsPendingActivation.useQuery();
+
+  // Handle error or no user - sign out and redirect to login
+  useEffect(() => {
+    if (userError || (!isLoading && !user)) {
+      const handleLogout = async () => {
+        try {
+          await auth.signOut();
+          await fetch('/api/auth/logout', { method: 'POST' });
+        } catch (e) {
+          console.error('Logout error:', e);
+        } finally {
+          window.location.href = '/auth/login';
+        }
+      };
+      handleLogout();
+    }
+  }, [userError, isLoading, user]);
 
   // Show loading only on initial load or if user data not ready
   if (isLoading || !user) {

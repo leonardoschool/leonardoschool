@@ -1321,4 +1321,49 @@ export const questionsRouter = router({
       .map(([tag, count]) => ({ tag, count }))
       .sort((a, b) => b.count - a.count);
   }),
+
+  // Get subjects with topics for simulation creation
+  getSubjects: protectedProcedure.query(async ({ ctx }) => {
+    const subjects = await ctx.prisma.customSubject.findMany({
+      select: {
+        id: true,
+        name: true,
+        color: true,
+        _count: {
+          select: {
+            questions: {
+              where: { status: 'PUBLISHED' },
+            },
+          },
+        },
+        topics: {
+          select: {
+            id: true,
+            name: true,
+            _count: {
+              select: {
+                questions: {
+                  where: { status: 'PUBLISHED' },
+                },
+              },
+            },
+          },
+          orderBy: { name: 'asc' },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return subjects.map(s => ({
+      id: s.id,
+      name: s.name,
+      color: s.color,
+      _count: { questions: s._count.questions },
+      topics: s.topics.map(t => ({
+        id: t.id,
+        name: t.name,
+        _count: { questions: t._count.questions },
+      })),
+    }));
+  }),
 });

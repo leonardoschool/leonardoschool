@@ -7,6 +7,63 @@ const GroupTypeEnum = z.enum(['STUDENTS', 'COLLABORATORS', 'MIXED']);
 
 // ==================== GROUPS ROUTER ====================
 export const groupsRouter = router({
+  // Get paginated groups list
+  getGroups: staffProcedure
+    .input(
+      z.object({
+        page: z.number().int().min(1).default(1),
+        pageSize: z.number().int().min(1).max(100).default(20),
+        type: GroupTypeEnum.optional(),
+        search: z.string().optional(),
+        includeInactive: z.boolean().optional().default(false),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { page, pageSize, type, search, includeInactive } = input;
+
+      const where: Record<string, unknown> = {};
+      if (type) where.type = type;
+      if (!includeInactive) where.isActive = true;
+      if (search) {
+        where.OR = [
+          { name: { contains: search, mode: 'insensitive' } },
+          { description: { contains: search, mode: 'insensitive' } },
+        ];
+      }
+
+      const total = await ctx.prisma.group.count({ where });
+
+      const groups = await ctx.prisma.group.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          _count: {
+            select: { members: true },
+          },
+        },
+        orderBy: { name: 'asc' },
+      });
+
+      return {
+        groups: groups.map((g) => ({
+          id: g.id,
+          name: g.name,
+          description: g.description,
+          color: g.color,
+          type: g.type,
+          isActive: g.isActive,
+          memberCount: g._count.members,
+        })),
+        pagination: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize),
+        },
+      };
+    }),
+
   // Get all groups with member counts
   getAll: staffProcedure
     .input(

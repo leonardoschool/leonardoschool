@@ -148,7 +148,7 @@ const SubjectIcon = ({ icon, color, size = 'md' }: { icon?: string | null; color
 };
 
 type MaterialType = 'PDF' | 'VIDEO' | 'LINK' | 'DOCUMENT';
-type MaterialVisibility = 'ALL_STUDENTS' | 'COURSE_BASED' | 'SELECTED_STUDENTS';
+type MaterialVisibility = 'ALL_STUDENTS' | 'GROUP_BASED' | 'SELECTED_STUDENTS';
 
 const typeIcons: Record<MaterialType, typeof FileText> = {
   PDF: FileText,
@@ -166,13 +166,13 @@ const typeLabels: Record<MaterialType, string> = {
 
 const visibilityIcons: Record<MaterialVisibility, typeof Globe> = {
   ALL_STUDENTS: Globe,
-  COURSE_BASED: BookOpen,
+  GROUP_BASED: Users,
   SELECTED_STUDENTS: UserCheck,
 };
 
 const visibilityLabels: Record<MaterialVisibility, string> = {
   ALL_STUDENTS: 'Tutti gli studenti',
-  COURSE_BASED: 'Per corso',
+  GROUP_BASED: 'Per gruppo',
   SELECTED_STUDENTS: 'Studenti selezionati',
 };
 
@@ -190,7 +190,7 @@ export default function MaterialsPage() {
   const [filterType, setFilterType] = useState<MaterialType | ''>('');
   const [filterCategory, setFilterCategory] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [courseSearch, setCourseSearch] = useState('');
+  const [groupSearch, setGroupSearch] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -219,7 +219,7 @@ export default function MaterialsPage() {
     categoryId: '',
     subjectId: '',
     tags: [] as string[],
-    courseIds: [] as string[],
+    groupIds: [] as string[],
     studentIds: [] as string[],
   });
 
@@ -250,7 +250,7 @@ export default function MaterialsPage() {
   });
   const { data: categories } = trpc.materials.getAllCategories.useQuery();
   const { data: subjects } = trpc.materials.getAllSubjects.useQuery();
-  const { data: templates } = trpc.contracts.getTemplates.useQuery();
+  const { data: groupsData } = trpc.groups.getGroups.useQuery({ page: 1, pageSize: 100 });
   const { data: allStudents } = trpc.students.getAllForAdmin.useQuery();
   const { data: stats } = trpc.materials.getStats.useQuery();
 
@@ -356,7 +356,7 @@ export default function MaterialsPage() {
       categoryId: '',
       subjectId: '',
       tags: [],
-      courseIds: [],
+      groupIds: [],
       studentIds: [],
     });
     setShowForm(false);
@@ -401,7 +401,7 @@ export default function MaterialsPage() {
       categoryId: material.categoryId || '',
       subjectId: material.subjectId || '',
       tags: material.tags || [],
-      courseIds: material.courseAccess?.map((ca: any) => ca.templateId) || [],
+      groupIds: material.groupAccess?.map((ga: any) => ga.groupId) || [],
       studentIds: material.studentAccess?.map((sa: any) => sa.studentId) || [],
     });
     setEditingId(material.id);
@@ -466,7 +466,7 @@ export default function MaterialsPage() {
       categoryId: formData.categoryId || undefined,
       subjectId: formData.subjectId || undefined,
       tags: formData.tags,
-      courseIds: formData.visibility === 'COURSE_BASED' ? formData.courseIds : undefined,
+      groupIds: formData.visibility === 'GROUP_BASED' ? formData.groupIds : undefined,
       studentIds: formData.visibility === 'SELECTED_STUDENTS' ? formData.studentIds : undefined,
     };
 
@@ -860,21 +860,21 @@ export default function MaterialsPage() {
                     </div>
                   </div>
 
-                  {/* Course Selection */}
-                  {formData.visibility === 'COURSE_BASED' && (
+                  {/* Group Selection */}
+                  {formData.visibility === 'GROUP_BASED' && (
                     <div>
                       <div className="flex items-center justify-between mb-3">
                         <label className={`block text-sm font-medium ${colors.text.primary}`}>
-                          Seleziona Corsi
-                          {formData.courseIds.length > 0 && (
+                          Seleziona Gruppi
+                          {formData.groupIds.length > 0 && (
                             <span className="ml-2 px-2 py-0.5 text-xs bg-red-100 dark:bg-red-900/30 text-red-600 rounded-full">
-                              {formData.courseIds.length} selezionati
+                              {formData.groupIds.length} selezionati
                             </span>
                           )}
                         </label>
                         <button
                           type="button"
-                          onClick={() => setFormData({ ...formData, courseIds: [] })}
+                          onClick={() => setFormData({ ...formData, groupIds: [] })}
                           className={`text-xs ${colors.text.muted} hover:text-red-600 transition-colors`}
                         >
                           Deseleziona tutti
@@ -887,22 +887,22 @@ export default function MaterialsPage() {
                             <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${colors.text.muted}`} />
                             <input
                               type="text"
-                              value={courseSearch}
-                              onChange={(e) => setCourseSearch(e.target.value)}
-                              placeholder="Cerca corso..."
+                              value={groupSearch}
+                              onChange={(e) => setGroupSearch(e.target.value)}
+                              placeholder="Cerca gruppo..."
                               className={`w-full pl-9 pr-4 py-2 text-sm rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent`}
                             />
                           </div>
                         </div>
                         {/* List */}
                         <div className="max-h-52 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
-                          {templates
-                            ?.filter((t) => t.name.toLowerCase().includes(courseSearch.toLowerCase()))
-                            .map((template) => {
-                              const isChecked = formData.courseIds.includes(template.id);
+                          {groupsData?.groups
+                            ?.filter((g) => g.name.toLowerCase().includes(groupSearch.toLowerCase()))
+                            .map((group) => {
+                              const isChecked = formData.groupIds.includes(group.id);
                               return (
                                 <label
-                                  key={template.id}
+                                  key={group.id}
                                   className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${
                                     isChecked 
                                       ? 'bg-red-50 dark:bg-red-900/20' 
@@ -921,23 +921,29 @@ export default function MaterialsPage() {
                                     checked={isChecked}
                                     onChange={(e) => {
                                       if (e.target.checked) {
-                                        setFormData({ ...formData, courseIds: [...formData.courseIds, template.id] });
+                                        setFormData({ ...formData, groupIds: [...formData.groupIds, group.id] });
                                       } else {
-                                        setFormData({ ...formData, courseIds: formData.courseIds.filter((id) => id !== template.id) });
+                                        setFormData({ ...formData, groupIds: formData.groupIds.filter((id) => id !== group.id) });
                                       }
                                     }}
                                     className="sr-only"
                                   />
-                                  <div className="flex-1">
-                                    <p className={`text-sm font-medium ${colors.text.primary}`}>{template.name}</p>
+                                  <div className="flex-1 flex items-center gap-2">
+                                    {group.color && (
+                                      <div 
+                                        className="w-3 h-3 rounded-full" 
+                                        style={{ backgroundColor: group.color }}
+                                      />
+                                    )}
+                                    <p className={`text-sm font-medium ${colors.text.primary}`}>{group.name}</p>
                                   </div>
-                                  <BookOpen className={`w-4 h-4 ${isChecked ? 'text-red-600' : colors.text.muted}`} />
+                                  <Users className={`w-4 h-4 ${isChecked ? 'text-red-600' : colors.text.muted}`} />
                                 </label>
                               );
                             })}
-                          {templates?.filter((t) => t.name.toLowerCase().includes(courseSearch.toLowerCase())).length === 0 && (
+                          {groupsData?.groups?.filter((g) => g.name.toLowerCase().includes(groupSearch.toLowerCase())).length === 0 && (
                             <div className="px-4 py-6 text-center">
-                              <p className={`text-sm ${colors.text.muted}`}>Nessun corso trovato</p>
+                              <p className={`text-sm ${colors.text.muted}`}>Nessun gruppo trovato</p>
                             </div>
                           )}
                         </div>

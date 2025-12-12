@@ -30,12 +30,23 @@ export function useAuth() {
             // Only sync cookies if user changed (not on every token refresh)
             if (lastSyncedUid.current !== user.uid) {
               const token = await user.getIdToken();
-              await fetch('/api/auth/me', {
+              const response = await fetch('/api/auth/me', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token }),
                 cache: 'no-store',
               });
+              
+              // If user not found in database (404), sign out from Firebase
+              if (response.status === 404) {
+                console.warn('[useAuth] User not found in database, signing out...');
+                await auth.signOut();
+                await fetch('/api/auth/logout', { method: 'POST' });
+                lastSyncedUid.current = null;
+                window.location.href = '/auth/login';
+                return;
+              }
+              
               lastSyncedUid.current = user.uid;
             }
           } else {

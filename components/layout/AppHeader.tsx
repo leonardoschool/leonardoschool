@@ -34,6 +34,7 @@ import {
   FileSignature,
   XCircle,
   ClipboardList,
+  ClipboardCheck,
   Mail,
   type LucideIcon,
 } from 'lucide-react';
@@ -272,6 +273,7 @@ export default function AppHeader() {
     { href: '/admin', label: 'Dashboard', icon: Home },
     { href: '/admin/materiali', label: 'Materiali', icon: FolderOpen },
     { href: '/admin/domande', label: 'Domande', icon: BookOpen },
+    { href: '/admin/simulazioni', label: 'Simulazioni', icon: ClipboardCheck },
     { href: '/admin/statistiche', label: 'Statistiche', icon: BarChart3 },
   ];
 
@@ -284,7 +286,17 @@ export default function AppHeader() {
     { href: '/collaboratore/statistiche', label: 'Statistiche', icon: BarChart3 },
   ];
 
-  const navItems = isAdmin ? adminNavItems : isCollaborator ? collaboratorNavItems : [];
+  // Student: simulazioni, materiale didattico, statistiche, il mio gruppo
+  const studentNavItems = [
+    { href: '/studente', label: 'Dashboard', icon: Home },
+    { href: '/studente/simulazioni', label: 'Simulazioni', icon: ClipboardList },
+    { href: '/studente/materiali', label: 'Materiale Didattico', icon: FolderOpen },
+    { href: '/studente/statistiche', label: 'Statistiche', icon: BarChart3 },
+    { href: '/studente/gruppo', label: 'Il Mio Gruppo', icon: UsersRound },
+  ];
+
+  const isStudent = user?.role === 'STUDENT';
+  const navItems = isAdmin ? adminNavItems : isCollaborator ? collaboratorNavItems : isStudent ? studentNavItems : [];
 
   // Check if current path is in Gestione
   const isGestioneActive = gestioneItems.some(item => pathname.startsWith(item.href));
@@ -457,6 +469,30 @@ export default function AppHeader() {
             </nav>
           )}
 
+          {/* Student Navigation (desktop) */}
+          {isStudent && (
+            <nav className="hidden lg:flex items-center gap-1">
+              {studentNavItems.map((item) => {
+                const isActive = pathname === item.href || 
+                  (item.href !== '/studente' && pathname.startsWith(item.href));
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                      isActive
+                        ? `${colors.primary.softBg} ${colors.primary.text}`
+                        : `${colors.text.primary} ${colors.effects.hover.bgSubtle}`
+                    }`}
+                  >
+                    <item.icon className="w-4 h-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          )}
+
           {/* Right side actions */}
           <div className="flex items-center gap-2">
             {/* Theme Toggle */}
@@ -527,13 +563,20 @@ export default function AppHeader() {
                     <div className="max-h-96 overflow-y-auto">
                       {notifications && notifications.length > 0 ? (
                         notifications.map((notification) => {
+                          if (!notification.id || !notification.type) return null;
                           const config = notificationConfig[notification.type as NotificationTypeKey] || notificationConfig.GENERAL;
                           const NotificationIcon = config.icon;
                           
                           return (
                             <div
                               key={notification.id}
-                              onClick={() => handleNotificationClick(notification)}
+                              onClick={() => handleNotificationClick({
+                                id: notification.id!,
+                                type: notification.type!,
+                                studentId: notification.studentId,
+                                collaboratorId: notification.collaboratorId,
+                                contractId: notification.contractId,
+                              })}
                               className={`px-4 py-3 border-b ${colors.border.primary} ${colors.effects.hover.bg} transition-colors cursor-pointer`}
                             >
                               <div className="flex items-start gap-3">
@@ -557,7 +600,7 @@ export default function AppHeader() {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleMarkAsRead(notification.id);
+                                    if (notification.id) handleMarkAsRead(notification.id);
                                   }}
                                   className={`p-1 rounded ${colors.effects.hover.bgMuted} transition-colors text-gray-500 dark:text-gray-400`}
                                   title="Segna come letta"
@@ -670,7 +713,7 @@ export default function AppHeader() {
         <div className={`lg:hidden border-t ${colors.border.primary} overflow-x-auto`}>
           <nav className="flex items-center gap-1 px-4 py-2">
             {navItems.map((item) => {
-              const isActive = pathname === item.href || 
+              const isActive = pathname === item.href ||
                 (item.href !== '/admin' && item.href !== '/collaboratore' && pathname.startsWith(item.href));
               return (
                 <Link
@@ -711,6 +754,32 @@ export default function AppHeader() {
                       {badgeCount > 99 ? '99+' : badgeCount}
                     </span>
                   )}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+      )}
+
+      {/* Mobile Navigation (Student) */}
+      {isStudent && (
+        <div className={`lg:hidden border-t ${colors.border.primary} overflow-x-auto`}>
+          <nav className="flex items-center gap-1 px-4 py-2">
+            {studentNavItems.map((item) => {
+              const isActive = pathname === item.href || 
+                (item.href !== '/studente' && pathname.startsWith(item.href));
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
+                    isActive
+                      ? `${colors.primary.softBg} ${colors.primary.text}`
+                      : `${colors.text.secondary} ${colors.effects.hover.bgSubtle}`
+                  }`}
+                >
+                  <item.icon className="w-4 h-4" />
+                  <span className="hidden sm:inline">{item.label}</span>
                 </Link>
               );
             })}

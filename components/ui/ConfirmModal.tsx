@@ -5,14 +5,17 @@ import { AlertTriangle, Info, AlertCircle } from 'lucide-react';
 
 export type ConfirmModalVariant = 'danger' | 'warning' | 'info';
 
-interface ConfirmModalProps {
+export interface ConfirmModalProps {
   isOpen: boolean;
-  onClose: () => void;
+  onClose?: () => void;
+  onCancel?: () => void;
   onConfirm: () => void;
   title: string;
-  message: string;
+  message: string | React.ReactNode;
   confirmLabel?: string;
+  confirmText?: string;
   cancelLabel?: string;
+  cancelText?: string;
   variant?: ConfirmModalVariant;
   isLoading?: boolean;
 }
@@ -45,11 +48,14 @@ const variantConfig = {
 export function ConfirmModal({
   isOpen,
   onClose,
+  onCancel,
   onConfirm,
   title,
   message,
-  confirmLabel = 'Conferma',
-  cancelLabel = 'Annulla',
+  confirmLabel,
+  confirmText,
+  cancelLabel,
+  cancelText,
   variant = 'danger',
   isLoading = false,
 }: ConfirmModalProps) {
@@ -57,6 +63,9 @@ export function ConfirmModal({
 
   const config = variantConfig[variant];
   const Icon = config.icon;
+  const handleClose = onCancel || onClose;
+  const confirmButtonText = confirmText || confirmLabel || 'Conferma';
+  const cancelButtonText = cancelText || cancelLabel || 'Annulla';
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -67,16 +76,16 @@ export function ConfirmModal({
           </div>
           <div className="flex-1">
             <h3 className={`text-lg font-bold ${colors.text.primary}`}>{title}</h3>
-            <p className={`mt-2 ${colors.text.secondary}`}>{message}</p>
+            <div className={`mt-2 ${colors.text.secondary}`}>{message}</div>
           </div>
         </div>
         <div className="flex gap-3 mt-6">
           <button
-            onClick={onClose}
+            onClick={handleClose}
             disabled={isLoading}
             className={`flex-1 px-4 py-3 rounded-xl ${colors.background.secondary} font-medium hover:opacity-80 transition-opacity disabled:opacity-50`}
           >
-            {cancelLabel}
+            {cancelButtonText}
           </button>
           <button
             onClick={onConfirm}
@@ -89,7 +98,7 @@ export function ConfirmModal({
                 Attendere...
               </span>
             ) : (
-              confirmLabel
+              confirmButtonText
             )}
           </button>
         </div>

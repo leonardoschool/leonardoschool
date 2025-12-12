@@ -1,6 +1,8 @@
 'use client';
 
+import { useEffect } from 'react';
 import { trpc } from '@/lib/trpc/client';
+import { auth } from '@/lib/firebase/config';
 import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
 import { 
@@ -31,7 +33,7 @@ type ContractWithTemplate = {
 };
 
 export default function CollaboratorDashboard() {
-  const { data: user, isLoading: userLoading } = trpc.auth.me.useQuery();
+  const { data: user, isLoading: userLoading, error: userError } = trpc.auth.me.useQuery();
   
   // Get collaborator's contract
   const { data: contractData, isLoading: contractLoading } = trpc.contracts.getMyCollaboratorContract.useQuery(
@@ -44,6 +46,23 @@ export default function CollaboratorDashboard() {
 
   // Cast contract to include template info
   const contract = contractData as ContractWithTemplate | null | undefined;
+
+  // Handle error or no user - sign out and redirect to login
+  useEffect(() => {
+    if (userError || (!userLoading && !user)) {
+      const handleLogout = async () => {
+        try {
+          await auth.signOut();
+          await fetch('/api/auth/logout', { method: 'POST' });
+        } catch (e) {
+          console.error('Logout error:', e);
+        } finally {
+          window.location.href = '/auth/login';
+        }
+      };
+      handleLogout();
+    }
+  }, [userError, userLoading, user]);
 
   // Loading state
   if (userLoading || contractLoading) {

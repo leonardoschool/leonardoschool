@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { trpc } from '@/lib/trpc/client';
+import { auth } from '@/lib/firebase/config';
 import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
@@ -53,6 +54,24 @@ export default function StudentDashboard() {
       enabled: !!contract?.id && contract?.status === 'SIGNED' && showContractModal,
     }
   );
+
+  // Handle error or no user - sign out and redirect to login
+  useEffect(() => {
+    if (userError || (!userLoading && !user)) {
+      // User not found or auth error - sign out from Firebase and redirect to login
+      const handleLogout = async () => {
+        try {
+          await auth.signOut();
+          await fetch('/api/auth/logout', { method: 'POST' });
+        } catch (e) {
+          console.error('Logout error:', e);
+        } finally {
+          window.location.href = '/auth/login';
+        }
+      };
+      handleLogout();
+    }
+  }, [userError, userLoading, user]);
 
   const handleDownloadContract = () => {
     if (!signedContractDetails) return;
@@ -219,13 +238,12 @@ export default function StudentDashboard() {
     );
   }
 
-  // Handle error or no user - proxy should have already redirected to login
   if (userError || !user) {
     return (
       <div className={`min-h-screen ${colors.background.primary} flex items-center justify-center`}>
         <div className="text-center">
           <Spinner size="lg" />
-          <p className={`mt-4 ${colors.text.secondary}`}>Reindirizzamento...</p>
+          <p className={`mt-4 ${colors.text.secondary}`}>Reindirizzamento al login...</p>
         </div>
       </div>
     );

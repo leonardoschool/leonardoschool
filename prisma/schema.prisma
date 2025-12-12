@@ -69,18 +69,24 @@ enum QuestionFeedbackStatus {
 }
 
 enum SimulationType {
-  FULL_TEST // Test completo (60 domande)
-  SUBJECT_TEST // Test per materia
-  CUSTOM_TEST // Test personalizzato
-  QUICK_QUIZ // Quiz rapido (10-20 domande)
+  OFFICIAL // Test ufficiali per graduatorie
+  PRACTICE // Pratica guidata
+  CUSTOM // Test personalizzato
+  QUICK_QUIZ // Quiz rapido autogenerato
 }
 
 enum SimulationStatus {
-  DRAFT
-  SCHEDULED
-  ACTIVE
-  COMPLETED
-  ARCHIVED
+  DRAFT // Bozza
+  PUBLISHED // Pubblicato e disponibile
+  ARCHIVED // Archiviato
+  CLOSED // Chiuso
+}
+
+enum SimulationVisibility {
+  PRIVATE // Solo assegnati specifici
+  CLASS // Visibile a tutta la classe
+  GROUP // Visibile a gruppi specifici
+  PUBLIC // Visibile a tutti gli studenti attivi
 }
 
 enum AlertType {
@@ -130,6 +136,10 @@ model User {
   collaborator      Collaborator?
   alerts            Alert[]
   questionsCreated  Question[]  @relation("QuestionCreatedBy")
+  
+  // Simulation relations
+  simulationsCreated        Simulation[]           @relation("SimulationCreatedBy")
+  assignmentsCreated        SimulationAssignment[] @relation("AssignmentCreator")
 
   @@index([firebaseUid])
   @@index([email])
@@ -168,6 +178,9 @@ model Student {
   questionFeedbacks     QuestionFeedback[] // Segnalazioni domande
   questionFavorites     QuestionFavorite[] // Domande preferite
   openAnswerSubmissions OpenAnswerSubmission[] // Risposte aperte
+  
+  // Simulation assignments
+  simulationAssignments SimulationAssignment[] // Simulazioni assegnate
 
   @@index([userId])
   @@index([classId])
@@ -243,6 +256,9 @@ model Class {
 
   students    Student[]
   simulations Simulation[]
+  
+  // Simulation assignments
+  simulationAssignments SimulationAssignment[] @relation("AssignmentClass")
 
   @@unique([year, section])
   @@index([year])
@@ -536,46 +552,107 @@ model OpenAnswerSubmission {
 // ==================== SIMULATIONS ====================
 
 model Simulation {
-  id          String           @id @default(cuid())
+  id          String               @id @default(cuid())
   title       String
-  description String?          @db.Text
+  description String?              @db.Text
   type        SimulationType
-  status      SimulationStatus @default(DRAFT)
+  status      SimulationStatus     @default(DRAFT)
+  visibility  SimulationVisibility @default(PRIVATE)
+
+  // Creator info
+  createdById   String? // User ID of creator
+  creatorRole   String? // ADMIN, COLLABORATOR, STUDENT
+  isOfficial    Boolean @default(false) // Official simulations count for rankings
 
   // Timing
-  startDate       DateTime?
-  endDate         DateTime?
-  durationMinutes Int // Duration in minutes
+  startDate       DateTime? // When simulation becomes available
+  endDate         DateTime? // When simulation closes
+  durationMinutes Int // Duration in minutes (0 = no time limit)
 
   // Configuration
-  totalQuestions Int
-  showResults    Boolean @default(true) // Show results immediately
-  allowReview    Boolean @default(true) // Allow review after completion
-  randomizeOrder Boolean @default(false)
+  totalQuestions     Int
+  showResults        Boolean @default(true) // Show results immediately after completion
+  showCorrectAnswers Boolean @default(true) // Show which answers were correct
+  allowReview        Boolean @default(true) // Allow review after completion
+  randomizeOrder     Boolean @default(false) // Randomize question order
+  randomizeAnswers   Boolean @default(false) // Randomize answer options order
 
-  // Scoring
-  correctPoints Float @default(1.0)
-  wrongPoints   Float @default(-0.25)
-  blankPoints   Float @default(0.0)
+  // Scoring configuration
+  useQuestionPoints Boolean @default(false) // Use individual question points or global
+  correctPoints     Float   @default(1.5) // Points for correct answer (if not using question points)
+  wrongPoints       Float   @default(-0.4) // Points for wrong answer (negative)
+  blankPoints       Float   @default(0.0) // Points for unanswered
 
-  // Class assignment
-  classId  String?
-  isPublic Boolean @default(false) // Available to all students
+  // Scoring targets (for official simulations)
+  maxScore     Float? // Maximum achievable score (calculated or manual)
+  passingScore Float? // Minimum score to pass
 
+  // Attempts configuration
+  isRepeatable Boolean @default(false) // Can students retry?
+  maxAttempts  Int? // Max attempts allowed (null = unlimited if repeatable)
+
+  // Question selection criteria (for auto-generation)
+  subjectDistribution    Json? // {subjectId: numberOfQuestions, ...}
+  difficultyDistribution Json? // {EASY: n, MEDIUM: n, HARD: n}
+  topicIds               Json? // Array of topic IDs to include
+
+  // Assignment - flexible targeting
+  classId String? // Assign to specific class
+  isPublic Boolean @default(false) // Available to all active students
+
+  // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  createdBy String? // Admin userId
 
   // Relations
-  class     Class?               @relation(fields: [classId], references: [id], onDelete: SetNull)
-  questions SimulationQuestion[]
-  results   SimulationResult[]
+  createdBy   User?                  @relation("SimulationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  class       Class?                 @relation(fields: [classId], references: [id], onDelete: SetNull)
+  questions   SimulationQuestion[]
+  results     SimulationResult[]
+  assignments SimulationAssignment[] // Specific student/group assignments
 
   @@index([status])
   @@index([startDate])
+  @@index([endDate])
   @@index([classId])
   @@index([isPublic])
+  @@index([createdById])
+  @@index([visibility])
+  @@index([isOfficial])
   @@map("simulations")
+}
+
+// Flexible assignment to students, groups, or classes
+model SimulationAssignment {
+  id           String @id @default(cuid())
+  simulationId String
+
+  // Target (one of these should be set)
+  studentId String? // Assign to specific student
+  groupId   String? // Assign to student group
+  classId   String? // Assign to class (alternative to simulation.classId)
+
+  // Assignment metadata
+  assignedById String? // Who assigned it
+  assignedAt   DateTime  @default(now())
+  dueDate      DateTime? // Optional specific due date for this assignment
+  notes        String?   @db.Text // Notes for this specific assignment
+
+  // Relations
+  simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  student    Student?   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  group      Group?     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  class      Class?     @relation("AssignmentClass", fields: [classId], references: [id], onDelete: Cascade)
+  assignedBy User?      @relation("AssignmentCreator", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@unique([simulationId, studentId])
+  @@unique([simulationId, groupId])
+  @@unique([simulationId, classId])
+  @@index([simulationId])
+  @@index([studentId])
+  @@index([groupId])
+  @@index([classId])
+  @@map("simulation_assignments")
 }
 
 model SimulationQuestion {
@@ -583,6 +660,10 @@ model SimulationQuestion {
   simulationId String
   questionId   String
   order        Int // Order in the simulation
+
+  // Optional override of question points for this simulation
+  customPoints         Float? // Override question's default points
+  customNegativePoints Float? // Override negative points
 
   simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
   question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
@@ -733,7 +814,6 @@ model ContractTemplate {
   createdBy String? // Admin userId
 
   contracts      Contract[]
-  materialAccess MaterialCourseAccess[]
 
   @@index([isActive])
   @@index([targetRole])
@@ -822,7 +902,7 @@ enum MaterialType {
 
 enum MaterialVisibility {
   ALL_STUDENTS // Visible to all active students
-  COURSE_BASED // Based on contract template / course
+  GROUP_BASED // Based on student groups
   SELECTED_STUDENTS // Selected individual students
 }
 
@@ -957,7 +1037,7 @@ model Material {
   // Relations
   category      MaterialCategory?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   subject       CustomSubject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
-  courseAccess  MaterialCourseAccess[]
+  groupAccess   MaterialGroupAccess[]
   studentAccess MaterialStudentAccess[]
 
   @@index([type])
@@ -968,19 +1048,19 @@ model Material {
   @@map("materials")
 }
 
-// Course-based access (linked to contract templates)
-model MaterialCourseAccess {
+// Group-based access (linked to student groups)
+model MaterialGroupAccess {
   id         String @id @default(cuid())
   materialId String
-  templateId String // ContractTemplate id
+  groupId    String
 
-  material Material         @relation(fields: [materialId], references: [id], onDelete: Cascade)
-  template ContractTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
-  @@unique([materialId, templateId])
+  @@unique([materialId, groupId])
   @@index([materialId])
-  @@index([templateId])
-  @@map("material_course_access")
+  @@index([groupId])
+  @@map("material_group_access")
 }
 
 // Individual student access
@@ -1134,6 +1214,12 @@ model Group {
   referenceCollaborator Collaborator? @relation("GroupReferenceCollaborator", fields: [referenceCollaboratorId], references: [id], onDelete: SetNull)
   referenceAdmin        Admin?        @relation("GroupReferenceAdmin", fields: [referenceAdminId], references: [id], onDelete: SetNull)
   members               GroupMember[]
+  
+  // Simulation assignments
+  simulationAssignments SimulationAssignment[]
+  
+  // Material access
+  materialAccess        MaterialGroupAccess[]
 
   @@index([type])
   @@index([isActive])

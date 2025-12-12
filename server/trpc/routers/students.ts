@@ -279,4 +279,272 @@ export const studentsRouter = router({
       stats: s.student?.stats,
     }));
   }),
+
+  /**
+   * Get all classes for simulation assignment
+   */
+  getClasses: staffProcedure.query(async ({ ctx }) => {
+    return ctx.prisma.class.findMany({
+      select: {
+        id: true,
+        name: true,
+        year: true,
+        section: true,
+        _count: {
+          select: {
+            students: true,
+          },
+        },
+      },
+      orderBy: [{ year: 'desc' }, { name: 'asc' }],
+    });
+  }),
+
+  /**
+   * Get paginated students list for simulation assignment
+   */
+  getStudents: staffProcedure
+    .input(z.object({
+      page: z.number().int().min(1).default(1),
+      pageSize: z.number().int().min(1).max(500).default(50),
+      search: z.string().optional(),
+      classId: z.string().optional(),
+      isActive: z.boolean().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const { page, pageSize, search, classId, isActive } = input;
+
+      const where: Record<string, unknown> = {
+        role: 'STUDENT',
+      };
+
+      if (typeof isActive === 'boolean') {
+        where.isActive = isActive;
+      }
+
+      if (search) {
+        where.OR = [
+          { name: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+        ];
+      }
+
+      if (classId) {
+        where.student = { classId };
+      }
+
+      const total = await ctx.prisma.user.count({ where });
+
+      const students = await ctx.prisma.user.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          isActive: true,
+          student: {
+            select: {
+              id: true,
+              class: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { name: 'asc' },
+      });
+
+      return {
+        students: students.map(s => ({
+          id: s.id,
+          name: s.name,
+          email: s.email,
+          isActive: s.isActive,
+          studentId: s.student?.id,
+          classId: s.student?.class?.id,
+          className: s.student?.class?.name,
+        })),
+        pagination: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize),
+        },
+      };
+    }),
+
+  // ==================== STUDENT SELF-SERVICE ====================
+
+  /**
+   * Get current student's stats (for student dashboard)
+   */
+  getMyStats: protectedProcedure.query(async ({ ctx }) => {
+    if (!ctx.user) {
+      throw new TRPCError({
+        code: 'UNAUTHORIZED',
+        message: 'Not authenticated',
+      });
+    }
+
+    const student = await ctx.prisma.student.findUnique({
+      where: { userId: ctx.user.id },
+      include: {
+        stats: true,
+      },
+    });
+
+    if (!student) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: 'Profilo studente non trovato',
+      });
+    }
+
+    // Get recent simulation results
+    const recentResults = await ctx.prisma.simulationResult.findMany({
+      where: { studentId: student.id },
+      orderBy: { startedAt: 'desc' },
+      take: 10,
+      include: {
+        simulation: {
+          select: {
+            id: true,
+            title: true,
+            type: true,
+          },
+        },
+      },
+    });
+
+    // Get subject breakdown from stats
+    const subjectStats = student.stats?.subjectStats as Record<string, { total: number; correct: number; avg: number }> | null;
+
+    return {
+      overview: {
+        totalSimulations: student.stats?.totalSimulations || 0,
+        totalQuestions: student.stats?.totalQuestions || 0,
+        totalCorrectAnswers: student.stats?.totalCorrectAnswers || 0,
+        avgScore: student.stats?.avgScore || 0,
+        bestScore: student.stats?.bestScore || 0,
+        totalStudyTimeMinutes: student.stats?.totalStudyTimeMinutes || 0,
+        currentStreak: student.stats?.currentStreak || 0,
+        longestStreak: student.stats?.longestStreak || 0,
+        lastActivityDate: student.stats?.lastActivityDate,
+      },
+      subjectStats: subjectStats || {},
+      recentResults: recentResults.map(r => ({
+        id: r.id,
+        simulationId: r.simulationId,
+        simulationTitle: r.simulation.title,
+        simulationType: r.simulation.type,
+        score: r.score,
+        percentageScore: r.percentageScore,
+        status: r.status,
+        startedAt: r.startedAt,
+        completedAt: r.completedAt,
+      })),
+    };
+  }),
+
+  /**
+   * Get current student's group (for student group page)
+   */
+  getMyGroup: protectedProcedure.query(async ({ ctx }) => {
+    if (!ctx.user) {
+      throw new TRPCError({
+        code: 'UNAUTHORIZED',
+        message: 'Not authenticated',
+      });
+    }
+
+    const student = await ctx.prisma.student.findUnique({
+      where: { userId: ctx.user.id },
+    });
+
+    if (!student) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: 'Profilo studente non trovato',
+      });
+    }
+
+    // Find groups where this student is a member
+    const groupMemberships = await ctx.prisma.groupMember.findMany({
+      where: { studentId: student.id },
+      include: {
+        group: {
+          include: {
+            referenceStudent: {
+              include: {
+                user: { select: { name: true, email: true } },
+              },
+            },
+            referenceCollaborator: {
+              include: {
+                user: { select: { name: true, email: true } },
+              },
+            },
+            members: {
+              include: {
+                student: {
+                  include: {
+                    user: { select: { name: true, email: true } },
+                  },
+                },
+                collaborator: {
+                  include: {
+                    user: { select: { name: true, email: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (groupMemberships.length === 0) {
+      return null;
+    }
+
+    // Return the first (primary) group
+    const membership = groupMemberships[0];
+    const group = membership.group;
+
+    return {
+      id: group.id,
+      name: group.name,
+      description: group.description,
+      color: group.color,
+      type: group.type,
+      joinedAt: membership.joinedAt,
+      reference: group.referenceStudent
+        ? {
+            type: 'STUDENT' as const,
+            name: group.referenceStudent.user.name,
+            email: group.referenceStudent.user.email,
+          }
+        : group.referenceCollaborator
+        ? {
+            type: 'COLLABORATOR' as const,
+            name: group.referenceCollaborator.user.name,
+            email: group.referenceCollaborator.user.email,
+          }
+        : null,
+      members: group.members.map(m => ({
+        id: m.id,
+        joinedAt: m.joinedAt,
+        type: m.studentId ? ('STUDENT' as const) : ('COLLABORATOR' as const),
+        name: m.student?.user.name || m.collaborator?.user.name || '',
+        email: m.student?.user.email || m.collaborator?.user.email || '',
+        isCurrentUser: m.studentId === student.id,
+      })),
+      totalMembers: group.members.length,
+    };
+  }),
 });

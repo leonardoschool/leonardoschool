@@ -146,6 +146,7 @@ export const colors = {
     // Cards e pannelli
     card: 'bg-white dark:bg-slate-800',
     cardHover: 'hover:bg-gray-50 dark:hover:bg-slate-700',
+    hover: 'hover:bg-gray-50 dark:hover:bg-slate-700',
     
     // Input fields
     input: 'bg-white dark:bg-slate-800',
@@ -186,6 +187,8 @@ export const colors = {
     secondary: 'border-gray-300 dark:border-slate-600',
     focus: 'focus:border-[#a8012b] dark:focus:border-[#a8012b]',
     hover: 'hover:border-gray-400 dark:hover:border-slate-500',
+    light: 'border-gray-200 dark:border-slate-700',
+    input: 'border-gray-300 dark:border-slate-600',
   },
 
   /**

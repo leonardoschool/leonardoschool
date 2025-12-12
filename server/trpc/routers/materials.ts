@@ -669,7 +669,7 @@ export const materialsRouter = router({
           subject: true,
           _count: {
             select: {
-              courseAccess: true,
+              groupAccess: true,
               studentAccess: true,
             },
           },
@@ -686,9 +686,9 @@ export const materialsRouter = router({
         include: {
           category: true,
           subject: true,
-          courseAccess: {
+          groupAccess: {
             include: {
-              template: true,
+              group: true,
             },
           },
           studentAccess: {
@@ -726,18 +726,18 @@ export const materialsRouter = router({
       fileSize: z.number().optional(),
       externalUrl: z.string().optional(),
       thumbnailUrl: z.string().optional(),
-      visibility: z.enum(['ALL_STUDENTS', 'COURSE_BASED', 'SELECTED_STUDENTS']).default('ALL_STUDENTS'),
+      visibility: z.enum(['ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).default('ALL_STUDENTS'),
       categoryId: z.string().optional(),
       subjectId: z.string().optional(),
       tags: z.array(z.string()).optional(),
       order: z.number().optional(),
-      // For course-based visibility
-      courseIds: z.array(z.string()).optional(),
+      // For group-based visibility
+      groupIds: z.array(z.string()).optional(),
       // For selected students visibility
       studentIds: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { courseIds, studentIds, categoryId, subjectId, ...materialData } = input;
+      const { groupIds, studentIds, categoryId, subjectId, ...materialData } = input;
 
       return ctx.prisma.$transaction(async (tx) => {
         // Create material
@@ -762,12 +762,12 @@ export const materialsRouter = router({
           },
         });
 
-        // If COURSE_BASED, create course access records
-        if (input.visibility === 'COURSE_BASED' && courseIds?.length) {
-          await tx.materialCourseAccess.createMany({
-            data: courseIds.map((templateId) => ({
+        // If GROUP_BASED, create group access records
+        if (input.visibility === 'GROUP_BASED' && groupIds?.length) {
+          await tx.materialGroupAccess.createMany({
+            data: groupIds.map((groupId) => ({
               materialId: material.id,
-              templateId,
+              groupId,
             })),
           });
         }
@@ -799,19 +799,19 @@ export const materialsRouter = router({
       fileSize: z.number().optional().nullable(),
       externalUrl: z.string().optional().nullable(),
       thumbnailUrl: z.string().optional().nullable(),
-      visibility: z.enum(['ALL_STUDENTS', 'COURSE_BASED', 'SELECTED_STUDENTS']).optional(),
+      visibility: z.enum(['ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).optional(),
       categoryId: z.string().optional().nullable(),
       subjectId: z.string().optional().nullable(),
       tags: z.array(z.string()).optional(),
       order: z.number().optional(),
       isActive: z.boolean().optional(),
-      // For course-based visibility
-      courseIds: z.array(z.string()).optional(),
+      // For group-based visibility
+      groupIds: z.array(z.string()).optional(),
       // For selected students visibility
       studentIds: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { id, courseIds, studentIds, subjectId, categoryId, ...materialData } = input;
+      const { id, groupIds, studentIds, subjectId, categoryId, ...materialData } = input;
 
       return ctx.prisma.$transaction(async (tx) => {
         // Update material
@@ -830,19 +830,19 @@ export const materialsRouter = router({
           },
         });
 
-        // If visibility changed to COURSE_BASED, update course access
-        if (input.visibility === 'COURSE_BASED' && courseIds !== undefined) {
-          // Remove existing course access
-          await tx.materialCourseAccess.deleteMany({
+        // If visibility changed to GROUP_BASED, update group access
+        if (input.visibility === 'GROUP_BASED' && groupIds !== undefined) {
+          // Remove existing group access
+          await tx.materialGroupAccess.deleteMany({
             where: { materialId: id },
           });
           
-          // Add new course access
-          if (courseIds.length) {
-            await tx.materialCourseAccess.createMany({
-              data: courseIds.map((templateId) => ({
+          // Add new group access
+          if (groupIds.length) {
+            await tx.materialGroupAccess.createMany({
+              data: groupIds.map((groupId) => ({
                 materialId: id,
-                templateId,
+                groupId,
               })),
             });
           }
@@ -941,34 +941,34 @@ export const materialsRouter = router({
       });
     }),
 
-  // Add course access to a material
-  addCourseAccess: adminProcedure
+  // Add group access to a material
+  addGroupAccess: adminProcedure
     .input(z.object({
       materialId: z.string(),
-      templateIds: z.array(z.string()),
+      groupIds: z.array(z.string()),
     }))
     .mutation(async ({ ctx, input }) => {
-      return ctx.prisma.materialCourseAccess.createMany({
-        data: input.templateIds.map((templateId) => ({
+      return ctx.prisma.materialGroupAccess.createMany({
+        data: input.groupIds.map((groupId) => ({
           materialId: input.materialId,
-          templateId,
+          groupId,
         })),
         skipDuplicates: true,
       });
     }),
 
-  // Remove course access from a material
-  removeCourseAccess: adminProcedure
+  // Remove group access from a material
+  removeGroupAccess: adminProcedure
     .input(z.object({
       materialId: z.string(),
-      templateId: z.string(),
+      groupId: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
-      return ctx.prisma.materialCourseAccess.delete({
+      return ctx.prisma.materialGroupAccess.delete({
         where: {
-          materialId_templateId: {
+          materialId_groupId: {
             materialId: input.materialId,
-            templateId: input.templateId,
+            groupId: input.groupId,
           },
         },
       });
@@ -983,15 +983,12 @@ export const materialsRouter = router({
       type: z.enum(['PDF', 'VIDEO', 'LINK', 'DOCUMENT']).optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
-      // First, get the student and their signed contract
+      // First, get the student and their group memberships
       const student = await ctx.prisma.student.findUnique({
         where: { userId: ctx.user.id },
         include: {
-          contracts: {
-            where: { status: 'SIGNED' },
-            orderBy: { signedAt: 'desc' },
-            take: 1,
-            select: { templateId: true },
+          groupMemberships: {
+            select: { groupId: true },
           },
         },
       });
@@ -1003,8 +1000,8 @@ export const materialsRouter = router({
         });
       }
 
-      // Get the template ID from the most recent signed contract
-      const templateId = student.contracts[0]?.templateId;
+      // Get the group IDs the student belongs to
+      const groupIds = student.groupMemberships.map(m => m.groupId);
 
       // Get materials visible to this student
       const materials = await ctx.prisma.material.findMany({
@@ -1015,15 +1012,15 @@ export const materialsRouter = router({
           OR: [
             // All students visibility
             { visibility: 'ALL_STUDENTS' },
-            // Course-based (if student has a contract)
-            templateId
+            // Group-based (if student belongs to groups)
+            groupIds.length > 0
               ? {
-                  visibility: 'COURSE_BASED',
-                  courseAccess: {
-                    some: { templateId },
+                  visibility: 'GROUP_BASED',
+                  groupAccess: {
+                    some: { groupId: { in: groupIds } },
                   },
                 }
-              : { id: 'never' }, // No match if no template
+              : { id: 'never' }, // No match if not in any group
             // Individual access
             {
               visibility: 'SELECTED_STUDENTS',
@@ -1054,11 +1051,8 @@ export const materialsRouter = router({
       const student = await ctx.prisma.student.findUnique({
         where: { userId: ctx.user.id },
         include: {
-          contracts: {
-            where: { status: 'SIGNED' },
-            orderBy: { signedAt: 'desc' },
-            take: 1,
-            select: { templateId: true },
+          groupMemberships: {
+            select: { groupId: true },
           },
         },
       });
@@ -1070,7 +1064,7 @@ export const materialsRouter = router({
         });
       }
 
-      const templateId = student.contracts[0]?.templateId;
+      const groupIds = student.groupMemberships.map(m => m.groupId);
 
       const material = await ctx.prisma.material.findFirst({
         where: {
@@ -1078,11 +1072,11 @@ export const materialsRouter = router({
           isActive: true,
           OR: [
             { visibility: 'ALL_STUDENTS' },
-            templateId
+            groupIds.length > 0
               ? {
-                  visibility: 'COURSE_BASED',
-                  courseAccess: {
-                    some: { templateId },
+                  visibility: 'GROUP_BASED',
+                  groupAccess: {
+                    some: { groupId: { in: groupIds } },
                   },
                 }
               : { id: 'never' },
