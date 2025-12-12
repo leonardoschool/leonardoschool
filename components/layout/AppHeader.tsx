@@ -27,7 +27,61 @@ import {
   AlertTriangle,
   Briefcase,
   Eye,
+  MessageSquare,
+  UserCheck,
+  UserPlus,
+  FileSignature,
+  XCircle,
+  ClipboardList,
+  Mail,
+  type LucideIcon,
 } from 'lucide-react';
+
+// Notification type config with icons and colors
+type NotificationTypeKey = 'CONTRACT_ASSIGNED' | 'CONTRACT_SIGNED' | 'CONTRACT_CANCELLED' | 'ACCOUNT_ACTIVATED' | 'PROFILE_COMPLETED' | 'JOB_APPLICATION' | 'CONTACT_REQUEST' | 'GENERAL';
+
+const notificationConfig: Record<NotificationTypeKey, { icon: LucideIcon; bgClass: string; iconColor: string }> = {
+  CONTRACT_ASSIGNED: {
+    icon: FileText,
+    bgClass: 'bg-blue-100 dark:bg-blue-900/30',
+    iconColor: 'text-blue-600 dark:text-blue-400',
+  },
+  CONTRACT_SIGNED: {
+    icon: FileSignature,
+    bgClass: 'bg-green-100 dark:bg-green-900/30',
+    iconColor: 'text-green-600 dark:text-green-400',
+  },
+  CONTRACT_CANCELLED: {
+    icon: XCircle,
+    bgClass: 'bg-red-100 dark:bg-red-900/30',
+    iconColor: 'text-red-600 dark:text-red-400',
+  },
+  ACCOUNT_ACTIVATED: {
+    icon: UserCheck,
+    bgClass: 'bg-emerald-100 dark:bg-emerald-900/30',
+    iconColor: 'text-emerald-600 dark:text-emerald-400',
+  },
+  PROFILE_COMPLETED: {
+    icon: UserPlus,
+    bgClass: 'bg-purple-100 dark:bg-purple-900/30',
+    iconColor: 'text-purple-600 dark:text-purple-400',
+  },
+  JOB_APPLICATION: {
+    icon: Briefcase,
+    bgClass: 'bg-amber-100 dark:bg-amber-900/30',
+    iconColor: 'text-amber-600 dark:text-amber-400',
+  },
+  CONTACT_REQUEST: {
+    icon: MessageSquare,
+    bgClass: 'bg-pink-100 dark:bg-pink-900/30',
+    iconColor: 'text-pink-600 dark:text-pink-400',
+  },
+  GENERAL: {
+    icon: Bell,
+    bgClass: 'bg-gray-100 dark:bg-gray-800',
+    iconColor: 'text-gray-600 dark:text-gray-400',
+  },
+};
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -61,6 +115,18 @@ export default function AppHeader() {
     { enabled: user?.role === 'ADMIN' }
   );
 
+  // Get job applications stats (admin only) - for badge count
+  const { data: jobApplicationsStats } = trpc.jobApplications.getStats.useQuery(
+    undefined,
+    { enabled: user?.role === 'ADMIN' }
+  );
+
+  // Get contact requests stats (admin only) - for badge count
+  const { data: contactRequestsStats } = trpc.contactRequests.getStats.useQuery(
+    undefined,
+    { enabled: user?.role === 'ADMIN' }
+  );
+
   // Mark notification as read
   const markAsReadMutation = trpc.contracts.markNotificationRead.useMutation({
     onSuccess: () => refetchNotifications(),
@@ -70,6 +136,9 @@ export default function AppHeader() {
   const isCollaborator = (user?.role as string) === 'COLLABORATOR';
   const isStaff = isAdmin || isCollaborator;
   const unreadCount = notifications?.length || 0;
+  const pendingApplicationsCount = jobApplicationsStats?.pending || 0;
+  const pendingContactRequestsCount = contactRequestsStats?.pending || 0;
+  const totalGestionePending = pendingApplicationsCount + pendingContactRequestsCount;
   
   // Collaborator can navigate only if:
   // 1. Account is active AND has signed contract
@@ -163,10 +232,12 @@ export default function AppHeader() {
     { value: 'system' as Theme, label: 'Sistema', icon: Monitor },
   ];
 
-  // Menu Gestione (dropdown) - Admin only: Utenti e Contratti (Studenti e Collaboratori sono dentro Utenti)
+  // Menu Gestione (dropdown) - Admin only: Utenti, Contratti, Candidature, Richieste
   const gestioneItems = [
-    { href: '/admin/utenti', label: 'Utenti', icon: UserCog },
-    { href: '/admin/contratti', label: 'Contratti', icon: FileText },
+    { href: '/admin/utenti', label: 'Utenti', icon: Users },
+    { href: '/admin/contratti', label: 'Contratti', icon: FileSignature },
+    { href: '/admin/candidature', label: 'Candidature', icon: Briefcase },
+    { href: '/admin/richieste', label: 'Richieste', icon: Mail },
   ];
 
   const adminNavItems = [
@@ -246,26 +317,42 @@ export default function AppHeader() {
                           : `${colors.text.primary} ${colors.effects.hover.bgSubtle}`
                       }`}
                     >
-                      <Briefcase className="w-4 h-4" />
+                      <ClipboardList className="w-4 h-4" />
                       Gestione
+                      {totalGestionePending > 0 && (
+                        <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold leading-none flex items-center justify-center ${colors.primary.gradient} text-white`}>
+                          {totalGestionePending > 99 ? '99+' : totalGestionePending}
+                        </span>
+                      )}
                       <ChevronDown className={`w-4 h-4 transition-transform ${gestioneMenuOpen ? 'rotate-180' : ''}`} />
                     </button>                  {gestioneMenuOpen && (
-                    <div className={`absolute left-0 top-full mt-1 w-48 ${colors.background.card} rounded-xl shadow-lg border ${colors.border.primary} py-1 z-50`}>
+                    <div className={`absolute left-0 top-full mt-1 w-56 ${colors.background.card} rounded-xl shadow-lg border ${colors.border.primary} py-1 z-50`}>
                       {gestioneItems.map((item) => {
                         const isItemActive = pathname.startsWith(item.href);
+                        // Show badge for Candidature and Richieste
+                        const badgeCount = 
+                          item.href === '/admin/candidature' ? pendingApplicationsCount :
+                          item.href === '/admin/richieste' ? pendingContactRequestsCount : 0;
                         return (
                           <Link
                             key={item.href}
                             href={item.href}
                             onClick={() => setGestioneMenuOpen(false)}
-                            className={`w-full px-4 py-2.5 flex items-center gap-3 text-sm transition-colors ${
+                            className={`w-full px-4 py-2.5 flex items-center justify-between text-sm transition-colors ${
                               isItemActive
                                 ? `${colors.primary.softBg} ${colors.primary.text}`
                                 : `${colors.text.primary} ${colors.effects.hover.bgSubtle}`
                             }`}
                           >
-                            <item.icon className="w-4 h-4" />
-                            {item.label}
+                            <span className="flex items-center gap-3">
+                              <item.icon className="w-4 h-4" />
+                              {item.label}
+                            </span>
+                            {badgeCount > 0 && (
+                              <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold leading-none flex items-center justify-center ${colors.primary.gradient} text-white`}>
+                                {badgeCount > 99 ? '99+' : badgeCount}
+                              </span>
+                            )}
                           </Link>
                         );
                       })}
@@ -343,7 +430,7 @@ export default function AppHeader() {
                 >
                   <Bell className="w-5 h-5" />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-medium">
+                    <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-red-500 text-white text-[11px] leading-none rounded-full flex items-center justify-center font-bold">
                       {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
                   )}
@@ -364,37 +451,47 @@ export default function AppHeader() {
                     
                     <div className="max-h-96 overflow-y-auto">
                       {notifications && notifications.length > 0 ? (
-                        notifications.map((notification) => (
-                          <div
-                            key={notification.id}
-                            className={`px-4 py-3 border-b ${colors.border.primary} ${colors.effects.hover.bg} transition-colors cursor-pointer`}
-                          >
-                            <div className="flex items-start gap-3">
-                              {notification.isUrgent && (
-                                <AlertTriangle className={`w-5 h-5 ${colors.status.warning.text} flex-shrink-0 mt-0.5`} />
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm truncate">{notification.title}</p>
-                                <p className={`text-sm ${colors.text.secondary} line-clamp-2`}>
-                                  {notification.message}
-                                </p>
-                                <p className={`text-xs ${colors.text.muted} mt-1`}>
-                                  {formatNotificationTime(notification.createdAt)}
-                                </p>
+                        notifications.map((notification) => {
+                          const config = notificationConfig[notification.type as NotificationTypeKey] || notificationConfig.GENERAL;
+                          const NotificationIcon = config.icon;
+                          
+                          return (
+                            <div
+                              key={notification.id}
+                              className={`px-4 py-3 border-b ${colors.border.primary} ${colors.effects.hover.bg} transition-colors cursor-pointer`}
+                            >
+                              <div className="flex items-start gap-3">
+                                {/* Icon based on notification type */}
+                                <div className={`w-9 h-9 rounded-lg ${config.bgClass} flex items-center justify-center flex-shrink-0`}>
+                                  {notification.isUrgent ? (
+                                    <AlertTriangle className={`w-5 h-5 ${colors.status.warning.text}`} />
+                                  ) : (
+                                    <NotificationIcon className={`w-5 h-5 ${config.iconColor}`} />
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-sm truncate">{notification.title}</p>
+                                  <p className={`text-sm ${colors.text.secondary} line-clamp-2`}>
+                                    {notification.message}
+                                  </p>
+                                  <p className={`text-xs ${colors.text.muted} mt-1`}>
+                                    {formatNotificationTime(notification.createdAt)}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleMarkAsRead(notification.id);
+                                  }}
+                                  className={`p-1 rounded ${colors.effects.hover.bgMuted} transition-colors`}
+                                  title="Segna come letta"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
                               </div>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleMarkAsRead(notification.id);
-                                }}
-                                className={`p-1 rounded ${colors.effects.hover.bgMuted} transition-colors`}
-                                title="Segna come letta"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
                             </div>
-                          </div>
-                        ))
+                          );
+                        })
                       ) : (
                         <div className="px-4 py-8 text-center">
                           <Bell className={`w-10 h-10 mx-auto ${colors.text.muted} mb-2`} />
@@ -413,7 +510,7 @@ export default function AppHeader() {
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg ${colors.effects.hover.bgSubtle} transition-colors`}
               >
-                <div className={`w-8 h-8 rounded-full ${colors.primary.bg} flex items-center justify-center text-white font-medium text-sm`}>
+                <div className={`w-8 h-8 rounded-full ${colors.primary.bg} flex items-center justify-center text-white font-semibold text-sm leading-none`}>
                   {user?.name?.charAt(0).toUpperCase() || 'U'}
                 </div>
                 <span className={`hidden sm:block text-sm font-medium max-w-[120px] truncate ${colors.text.primary}`}>
@@ -427,7 +524,7 @@ export default function AppHeader() {
                   {/* User info header */}
                   <div className={`px-4 py-4 ${colors.primary.gradient}`}>
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-lg">
+                      <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-lg leading-none">
                         {user?.name?.charAt(0).toUpperCase() || 'U'}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -511,6 +608,33 @@ export default function AppHeader() {
                 >
                   <item.icon className="w-4 h-4" />
                   <span className="hidden sm:inline">{item.label}</span>
+                </Link>
+              );
+            })}
+            {/* Gestione items for admin mobile */}
+            {isAdmin && gestioneItems.map((item) => {
+              const isActive = pathname.startsWith(item.href);
+              // Show badge for Candidature and Richieste
+              const badgeCount = 
+                item.href === '/admin/candidature' ? pendingApplicationsCount :
+                item.href === '/admin/richieste' ? pendingContactRequestsCount : 0;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
+                    isActive
+                      ? `${colors.primary.softBg} ${colors.primary.text}`
+                      : `${colors.text.secondary} ${colors.effects.hover.bgSubtle}`
+                  }`}
+                >
+                  <item.icon className="w-4 h-4" />
+                  <span className="hidden sm:inline">{item.label}</span>
+                  {badgeCount > 0 && (
+                    <span className={`min-w-5 h-5 px-1.5 rounded-full text-xs font-bold flex items-center justify-center ${colors.primary.gradient} text-white`}>
+                      {badgeCount > 99 ? '99+' : badgeCount}
+                    </span>
+                  )}
                 </Link>
               );
             })}

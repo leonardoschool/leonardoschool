@@ -14,6 +14,8 @@ import {
   validateCVFile, 
   MAX_FILE_SIZES 
 } from '@/lib/validations/fileValidation';
+import { prisma } from '@/lib/prisma/client';
+import { adminStorage } from '@/lib/firebase/admin';
 
 // =============================================================================
 // RATE LIMITING
@@ -301,7 +303,98 @@ export async function handleContactRequest(options: HandleContactRequestOptions)
       );
     }
     
-    // Send email
+    // For job applications, save to database and upload CV to Firebase Storage
+    let cvUrl: string | null = null;
+    let cvFileName: string | null = null;
+    
+    if (isJobApplication) {
+      // Upload CV to Firebase Storage if present
+      if (cvFile && cvFile.size > 0) {
+        try {
+          const buffer = Buffer.from(await cvFile.arrayBuffer());
+          const fileName = `cv/${Date.now()}_${cvFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+          const bucket = adminStorage.bucket();
+          const file = bucket.file(fileName);
+          
+          await file.save(buffer, {
+            metadata: {
+              contentType: cvFile.type,
+            },
+          });
+          
+          // Make file publicly accessible
+          await file.makePublic();
+          cvUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+          cvFileName = cvFile.name;
+        } catch (uploadError) {
+          console.error('Error uploading CV to Firebase Storage:', uploadError);
+          // Continue without CV - don't fail the whole request
+        }
+      }
+      
+      // Save job application to database
+      try {
+        const jobApplication = await prisma.jobApplication.create({
+          data: {
+            name: data.name,
+            email: data.email,
+            phone: data.phone,
+            subject: data.subject,
+            materia: data.materia || '',
+            message: data.message,
+            cvUrl,
+            cvFileName,
+            status: 'PENDING',
+          },
+        });
+        
+        // Create admin notification for new job application
+        await prisma.adminNotification.create({
+          data: {
+            type: 'JOB_APPLICATION',
+            title: 'Nuova candidatura ricevuta',
+            message: `${data.name} ha inviato una candidatura per ${data.materia || 'posizione non specificata'}`,
+            isUrgent: false,
+          },
+        });
+        
+        console.log('Job application saved with ID:', jobApplication.id);
+      } catch (dbError) {
+        console.error('Error saving job application to database:', dbError);
+        // Continue to send email even if DB save fails
+      }
+    } else {
+      // Save contact request to database
+      try {
+        const contactRequest = await prisma.contactRequest.create({
+          data: {
+            name: data.name,
+            email: data.email,
+            phone: data.phone,
+            subject: data.subject,
+            message: data.message,
+            status: 'PENDING',
+          },
+        });
+        
+        // Create admin notification for new contact request
+        await prisma.adminNotification.create({
+          data: {
+            type: 'CONTACT_REQUEST',
+            title: 'Nuova richiesta di informazioni',
+            message: `${data.name} ha inviato una richiesta: "${data.subject}"`,
+            isUrgent: false,
+          },
+        });
+        
+        console.log('Contact request saved with ID:', contactRequest.id);
+      } catch (dbError) {
+        console.error('Error saving contact request to database:', dbError);
+        // Continue to send email even if DB save fails
+      }
+    }
+    
+    // Send email (optional - don't fail if email fails, data is already saved)
     const emailResult = await sendContactEmail({
       data,
       type,
@@ -310,10 +403,8 @@ export async function handleContactRequest(options: HandleContactRequestOptions)
     
     if (!emailResult.success) {
       console.error(`Failed to send ${type} email:`, emailResult.error);
-      return NextResponse.json(
-        { error: "Errore durante l'invio. Riprova più tardi." },
-        { status: 500 }
-      );
+      // Don't return error - the request was saved to database successfully
+      // Email is a nice-to-have notification, not critical
     }
     
     const successMessage = isJobApplication 

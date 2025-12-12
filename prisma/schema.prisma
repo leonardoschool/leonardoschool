@@ -68,6 +68,8 @@ enum NotificationType {
   CONTRACT_CANCELLED   // Contratto revocato
   ACCOUNT_ACTIVATED    // Account attivato
   PROFILE_COMPLETED    // Studente ha completato profilo
+  JOB_APPLICATION      // Nuova candidatura lavoro
+  CONTACT_REQUEST      // Nuova richiesta informazioni
   GENERAL              // Notifica generica
 }
 
@@ -174,6 +176,7 @@ model Collaborator {
   
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   contracts       Contract[]  // Unified contract system
+  subjects        CollaboratorSubject[]  // Materie insegnate
   
   @@index([userId])
   @@map("collaborators")
@@ -572,7 +575,8 @@ model CustomSubject {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   
-  materials   Material[]
+  materials     Material[]
+  collaborators CollaboratorSubject[]  // Collaboratori che insegnano questa materia
   
   @@index([isActive])
   @@index([order])
@@ -658,4 +662,109 @@ model MaterialStudentAccess {
   @@index([materialId])
   @@index([studentId])
   @@map("material_student_access")
+}
+
+// ==================== JOB APPLICATIONS ====================
+
+enum JobApplicationStatus {
+  PENDING     // In attesa di revisione
+  REVIEWING   // In corso di valutazione
+  APPROVED    // Approvata (collaboratore creato)
+  REJECTED    // Rifiutata
+}
+
+model JobApplication {
+  id            String   @id @default(cuid())
+  
+  // Candidato info
+  name          String
+  email         String
+  phone         String
+  
+  // Candidatura
+  subject       String              // Oggetto della candidatura
+  materia       String              // Materia di competenza indicata
+  message       String   @db.Text   // Messaggio/presentazione
+  cvUrl         String?             // URL del CV su Firebase Storage
+  cvFileName    String?             // Nome originale del file CV
+  
+  // Status
+  status        JobApplicationStatus @default(PENDING)
+  
+  // Admin review
+  adminNotes    String?  @db.Text   // Note dell'admin
+  reviewedAt    DateTime?
+  reviewedBy    String?             // Admin userId che ha revisionato
+  
+  // Se approvata, link al collaboratore creato
+  collaboratorId String?  @unique
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([status])
+  @@index([createdAt])
+  @@index([email])
+  @@map("job_applications")
+}
+
+// ==================== CONTACT REQUESTS ====================
+
+enum ContactRequestStatus {
+  PENDING     // In attesa di risposta
+  READ        // Letta
+  REPLIED     // Risposta inviata
+  ARCHIVED    // Archiviata
+}
+
+model ContactRequest {
+  id            String   @id @default(cuid())
+  
+  // Richiedente info
+  name          String
+  email         String
+  phone         String
+  
+  // Richiesta
+  subject       String              // Oggetto della richiesta
+  message       String   @db.Text   // Messaggio
+  
+  // Status
+  status        ContactRequestStatus @default(PENDING)
+  
+  // Admin review
+  adminNotes    String?  @db.Text   // Note dell'admin
+  readAt        DateTime?
+  repliedAt     DateTime?
+  handledBy     String?             // Admin userId che ha gestito
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([status])
+  @@index([createdAt])
+  @@index([email])
+  @@map("contact_requests")
+}
+
+// ==================== COLLABORATOR SUBJECTS ====================
+
+// Many-to-many: un collaboratore può insegnare più materie
+model CollaboratorSubject {
+  id              String   @id @default(cuid())
+  collaboratorId  String
+  subjectId       String
+  
+  // Indica se è la materia principale
+  isPrimary       Boolean  @default(false)
+  
+  assignedAt      DateTime @default(now())
+  
+  collaborator    Collaborator  @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
+  subject         CustomSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  
+  @@unique([collaboratorId, subjectId])
+  @@index([collaboratorId])
+  @@index([subjectId])
+  @@map("collaborator_subjects")
 }

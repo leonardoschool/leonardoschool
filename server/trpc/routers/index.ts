@@ -6,6 +6,8 @@ import { contractsRouter } from './contracts';
 import { materialsRouter } from './materials';
 import { collaboratorsRouter } from './collaborators';
 import { usersRouter } from './users';
+import { jobApplicationsRouter } from './jobApplications';
+import { contactRequestsRouter } from './contactRequests';
 
 export const appRouter = router({
   auth: authRouter,
@@ -14,6 +16,8 @@ export const appRouter = router({
   materials: materialsRouter,
   collaborators: collaboratorsRouter,
   users: usersRouter,
+  jobApplications: jobApplicationsRouter,
+  contactRequests: contactRequestsRouter,
   // Add more routers here as you build them:
   // simulations: simulationsRouter,
   // questions: questionsRouter,
