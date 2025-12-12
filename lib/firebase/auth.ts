@@ -66,6 +66,15 @@ export const firebaseAuth = {
   },
 
   /**
+   * Send verification email to current user
+   */
+  sendVerificationEmail: async (): Promise<void> => {
+    const user = auth.currentUser;
+    if (!user) throw new Error('Nessun utente autenticato');
+    return await sendEmailVerification(user);
+  },
+
+  /**
    * Update user profile
    */
   updateUserProfile: async (user: FirebaseUser, data: { displayName?: string; photoURL?: string }): Promise<void> => {

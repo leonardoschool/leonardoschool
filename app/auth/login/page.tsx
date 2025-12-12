@@ -25,6 +25,14 @@ export default function LoginPage() {
   useEffect(() => {
     const unsubscribe = firebaseAuth.onAuthStateChanged(async (user) => {
       if (user) {
+        // Check if email is verified
+        if (!user.emailVerified) {
+          // User needs to verify email first
+          setCheckingAuth(false);
+          router.push('/auth/verifica-email');
+          return;
+        }
+        
         try {
           // User is logged in Firebase but arrived at login page
           // This means cookies might be out of sync - resync them
@@ -68,7 +76,16 @@ export default function LoginPage() {
       // 1. Login con Firebase
       const userCredential = await firebaseAuth.login(email, password);
       
-      // 2. Ottieni token
+      // 2. Verifica che l'email sia verificata
+      if (!userCredential.user.emailVerified) {
+        // Send a new verification email if needed
+        await firebaseAuth.sendVerificationEmail();
+        setLoading(false);
+        router.push('/auth/verifica-email');
+        return;
+      }
+      
+      // 3. Ottieni token
       const token = await userCredential.user.getIdToken();
       
       // 3. Recupera dati utente dal database

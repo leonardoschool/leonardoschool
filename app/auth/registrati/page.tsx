@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Script from 'next/script';
 import { firebaseAuth } from '@/lib/firebase/auth';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
@@ -10,6 +11,17 @@ import { isValidEmail, calculatePasswordStrength } from '@/lib/validations/authV
 import { normalizeName } from '@/lib/utils/stringUtils';
 import { Spinner } from '@/components/ui/loaders';
 import { useToast } from '@/components/ui/Toast';
+
+declare global {
+  interface Window {
+    grecaptcha: {
+      ready: (callback: () => void) => void;
+      execute: (siteKey: string, options: { action: string }) => Promise<string>;
+    };
+  }
+}
+
+const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || '';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -22,14 +34,94 @@ export default function RegisterPage() {
     confirmPassword: '',
     role: 'STUDENT' as 'STUDENT' | 'ADMIN',
   });
+  // Honeypot field - bots will fill this, humans won't see it
+  const [honeypot, setHoneypot] = useState('');
   const [error, setError] = useState('');
   const [emailTouched, setEmailTouched] = useState(false);
   const [passwordTouched, setPasswordTouched] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [recaptchaReady, setRecaptchaReady] = useState(false);
 
   const syncUserMutation = trpc.auth.syncUser.useMutation();
+
+  // Check if reCAPTCHA is ready
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.grecaptcha) {
+      window.grecaptcha.ready(() => {
+        setRecaptchaReady(true);
+      });
+    }
+  }, []);
+
+  // Get reCAPTCHA token
+  const getRecaptchaToken = useCallback(async (): Promise<string | null> => {
+    if (!RECAPTCHA_SITE_KEY) {
+      console.warn('reCAPTCHA site key not configured');
+      return null;
+    }
+    
+    if (!recaptchaReady || !window.grecaptcha) {
+      // Try waiting for it
+      return new Promise((resolve) => {
+        if (window.grecaptcha) {
+          window.grecaptcha.ready(() => {
+            window.grecaptcha.execute(RECAPTCHA_SITE_KEY, { action: 'register' })
+              .then(resolve)
+              .catch(() => resolve(null));
+          });
+        } else {
+          resolve(null);
+        }
+      });
+    }
+    
+    try {
+      return await window.grecaptcha.execute(RECAPTCHA_SITE_KEY, { action: 'register' });
+    } catch (err) {
+      console.error('reCAPTCHA error:', err);
+      return null;
+    }
+  }, [recaptchaReady]);
+
+  // Verify with server (reCAPTCHA + honeypot + rate limiting)
+  const verifySecurityChecks = async (token: string | null): Promise<boolean> => {
+    try {
+      const response = await fetch('/api/auth/verify-recaptcha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, honeypot }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        if (data.code === 'RATE_LIMIT_EXCEEDED') {
+          setError(data.error);
+          showError('Troppe richieste', data.error);
+          return false;
+        }
+        if (data.code === 'BOT_DETECTED' || data.code === 'LOW_SCORE') {
+          setError('Verifica di sicurezza fallita. Riprova.');
+          showError('Verifica fallita', 'Riprova tra qualche secondo.');
+          return false;
+        }
+        console.warn('reCAPTCHA verification failed:', data.error);
+        // In development, allow to continue if reCAPTCHA fails
+        if (process.env.NODE_ENV === 'development') {
+          return true;
+        }
+        return false;
+      }
+      
+      return data.success;
+    } catch (err) {
+      console.error('Security verification error:', err);
+      // In development, allow to continue
+      return process.env.NODE_ENV === 'development';
+    }
+  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,17 +141,30 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      // Normalize data before submission
+      // 1. Get reCAPTCHA token
+      const recaptchaToken = await getRecaptchaToken();
+      
+      // 2. Verify security checks (reCAPTCHA + honeypot + rate limiting)
+      const securityPassed = await verifySecurityChecks(recaptchaToken);
+      if (!securityPassed) {
+        setLoading(false);
+        return;
+      }
+
+      // 3. Normalize data before submission
       const normalizedName = normalizeName(formData.name);
       
-      // 1. Register with Firebase
+      // 4. Register with Firebase
       const userCredential = await firebaseAuth.register(
         formData.email,
         formData.password,
         normalizedName
       );
 
-      // 2. Sync user to database
+      // 5. Send email verification
+      await firebaseAuth.sendVerificationEmail();
+
+      // 6. Sync user to database
       await syncUserMutation.mutateAsync({
         firebaseUid: userCredential.user.uid,
         email: formData.email,
@@ -67,9 +172,9 @@ export default function RegisterPage() {
         role: formData.role,
       });
 
-      // 3. Redirect to complete profile page (keep loading true)
-      showSuccess('Registrazione completata', 'Ora completa il tuo profilo per continuare.');
-      router.push('/auth/complete-profile');
+      // 7. Redirect to email verification page
+      showSuccess('Registrazione completata', 'Controlla la tua email per verificare l\'account.');
+      router.push('/auth/verifica-email');
     } catch (err) {
       console.error('Registration error:', err);
       const firebaseError = err as { code?: string };
@@ -91,6 +196,19 @@ export default function RegisterPage() {
   };
 
   return (
+    <>
+      {/* reCAPTCHA v3 Script */}
+      {RECAPTCHA_SITE_KEY && (
+        <Script
+          src={`https://www.google.com/recaptcha/api.js?render=${RECAPTCHA_SITE_KEY}`}
+          onLoad={() => {
+            if (window.grecaptcha) {
+              window.grecaptcha.ready(() => setRecaptchaReady(true));
+            }
+          }}
+        />
+      )}
+      
     <div className="max-w-md mx-auto w-full">
       <div className={`relative ${colors.background.card} py-8 px-6 ${colors.effects.shadow.xl} rounded-lg ${colors.effects.transition}`}>
         {loading && (
@@ -112,6 +230,20 @@ export default function RegisterPage() {
             {error}
           </div>
         )}
+
+        {/* Honeypot field - hidden from humans, visible to bots */}
+        <div className="hidden" aria-hidden="true">
+          <label htmlFor="website">Website</label>
+          <input
+            type="text"
+            id="website"
+            name="website"
+            tabIndex={-1}
+            autoComplete="off"
+            value={honeypot}
+            onChange={(e) => setHoneypot(e.target.value)}
+          />
+        </div>
 
         <div>
           <label htmlFor="name" className={`block text-sm font-medium ${colors.text.secondary}`}>
@@ -265,5 +397,6 @@ export default function RegisterPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }
