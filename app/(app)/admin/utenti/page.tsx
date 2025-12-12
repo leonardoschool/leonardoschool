@@ -1177,16 +1177,16 @@ export default function UsersManagementPage() {
             </div>
 
             {/* Desktop Table View */}
-            <div className="hidden lg:block pb-16">
-              <table className="w-full min-w-[800px]">
+            <div className="hidden lg:block pb-16 overflow-x-auto">
+              <table className="w-full min-w-[900px]">
                 <thead className={`${colors.background.secondary} border-b ${colors.border.primary}`}>
                   <tr>
-                    <th className="text-left px-4 xl:px-6 py-4 font-semibold text-sm">Utente</th>
-                    <th className="text-left px-4 xl:px-6 py-4 font-semibold text-sm">Email</th>
-                    <th className="text-left px-4 xl:px-6 py-4 font-semibold text-sm">Ruolo</th>
-                    <th className="text-left px-4 xl:px-6 py-4 font-semibold text-sm whitespace-nowrap">Registrazione</th>
-                    <th className="text-left px-4 xl:px-6 py-4 font-semibold text-sm">Stato</th>
-                    <th className="text-right px-4 xl:px-6 py-4 font-semibold text-sm">Azioni</th>
+                    <th className="text-left px-4 py-4 font-semibold text-sm">Utente</th>
+                    <th className="text-left px-4 py-4 font-semibold text-sm">Email</th>
+                    <th className="text-left px-4 py-4 font-semibold text-sm">Ruolo</th>
+                    <th className="text-left px-4 py-4 font-semibold text-sm whitespace-nowrap">Registrazione</th>
+                    <th className="text-left px-4 py-4 font-semibold text-sm">Stato</th>
+                    <th className="text-right px-4 py-4 font-semibold text-sm">Azioni</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1213,15 +1213,15 @@ export default function UsersManagementPage() {
 
                     return (
                       <tr key={user.id} className={`border-b ${colors.border.primary} hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors`}>
-                        <td className="px-4 xl:px-6 py-4">
+                        <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             <div className={`w-10 h-10 rounded-full ${roleBadge.bg} flex items-center justify-center text-lg font-semibold ${roleBadge.color} flex-shrink-0`}>
                               {user.name.charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              <p className={`font-medium ${colors.text.primary} truncate max-w-[150px] xl:max-w-none`}>{user.name}</p>
+                              <p className={`font-medium ${colors.text.primary} truncate max-w-[140px]`}>{user.name}</p>
                               {(user.student?.fiscalCode || user.collaborator?.fiscalCode) && (
-                                <p className={`text-xs ${colors.text.muted} truncate`}>
+                                <p className={`text-xs ${colors.text.muted} truncate max-w-[140px]`}>
                                   {user.student?.fiscalCode || user.collaborator?.fiscalCode}
                                 </p>
                               )}
@@ -1229,13 +1229,13 @@ export default function UsersManagementPage() {
 
                           </div>
                         </td>
-                        <td className="px-4 xl:px-6 py-4">
+                        <td className="px-4 py-3">
                           <div className="flex items-center gap-2 text-sm">
                             <Mail className="w-4 h-4 flex-shrink-0" />
-                            <span className="truncate max-w-[180px] xl:max-w-none">{user.email}</span>
+                            <span className="truncate max-w-[160px]">{user.email}</span>
                           </div>
                         </td>
-                        <td className="px-4 xl:px-6 py-4">
+                        <td className="px-4 py-3">
                           {/* Role dropdown - disabled for self */}
                           {isSelf ? (
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${roleBadge.bg} ${roleBadge.color}`}>
@@ -1253,87 +1253,87 @@ export default function UsersManagementPage() {
                             />
                           )}
                         </td>
-                        <td className="px-4 xl:px-6 py-4">
+                        <td className="px-4 py-3">
                           <div className="flex items-center gap-2 text-sm whitespace-nowrap">
                             <Calendar className="w-4 h-4 flex-shrink-0" />
                             <span>{formatDate(user.createdAt)}</span>
                           </div>
                         </td>
-                        <td className="px-4 xl:px-6 py-4">
+                        <td className="px-4 py-3">
                           <span
-                            className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap"
+                            className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap"
                             style={{ backgroundColor: statusBadge.bg, color: statusBadge.color }}
                           >
                             {statusBadge.label}
                           </span>
                         </td>
-                        <td className="px-4 xl:px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
                             {/* View User Profile - Always show for students/collaborators */}
                             {isStudentOrCollab && (
                               <button
                                 onClick={() => setViewUserModal({ isOpen: true, user })}
-                                className={`p-2 rounded-lg ${colors.background.secondary} hover:opacity-80 transition-opacity`}
+                                className={`p-1.5 rounded-lg ${colors.background.secondary} hover:opacity-80 transition-opacity`}
                                 title="Visualizza profilo"
                               >
-                                <Eye className="w-4 h-4" />
+                                <Eye className="w-3.5 h-3.5" />
                               </button>
                             )}
                             {hasSignedContract && contractId && (
                               <button
                                 onClick={() => window.open(`/api/contracts/${contractId}/view`, '_blank')}
-                                className={`p-2 rounded-lg ${colors.status.success.softBg} ${colors.status.success.text} hover:opacity-80 transition-opacity`}
+                                className={`p-1.5 rounded-lg ${colors.status.success.softBg} ${colors.status.success.text} hover:opacity-80 transition-opacity`}
                                 title="Visualizza contratto firmato"
                               >
-                                <Eye className="w-4 h-4" />
+                                <FileText className="w-3.5 h-3.5" />
                               </button>
                             )}
                             {hasPendingContract && contractId && (
                               <>
                                 <button
                                   onClick={() => window.open(`/api/contracts/${contractId}/view`, '_blank')}
-                                  className={`p-2 rounded-lg ${colors.status.info.softBg} ${colors.status.info.text} hover:opacity-80 transition-opacity`}
+                                  className={`p-1.5 rounded-lg ${colors.status.info.softBg} ${colors.status.info.text} hover:opacity-80 transition-opacity`}
                                   title="Visualizza contratto in attesa"
                                 >
-                                  <Eye className="w-4 h-4" />
+                                  <FileText className="w-3.5 h-3.5" />
                                 </button>
                                 <button
                                   onClick={() => openRevokeContractModal(contractId, user.name)}
-                                  className={`p-2 rounded-lg ${colors.status.warning.softBg} ${colors.status.warning.text} hover:opacity-80 transition-opacity`}
+                                  className={`p-1.5 rounded-lg ${colors.status.warning.softBg} ${colors.status.warning.text} hover:opacity-80 transition-opacity`}
                                   title="Revoca contratto"
                                 >
-                                  <FileX className="w-4 h-4" />
+                                  <FileX className="w-3.5 h-3.5" />
                                 </button>
                               </>
                             )}
                             {canAssignContract && (
                               <button
                                 onClick={() => setContractModal({ isOpen: true, targetId: targetId!, targetType })}
-                                className={`p-2 rounded-lg ${colors.status.info.softBg} ${colors.status.info.text} hover:opacity-80 transition-opacity`}
+                                className={`p-1.5 rounded-lg ${colors.status.info.softBg} ${colors.status.info.text} hover:opacity-80 transition-opacity`}
                                 title="Assegna contratto"
                               >
-                                <Send className="w-4 h-4" />
+                                <Send className="w-3.5 h-3.5" />
                               </button>
                             )}
                             {user.profileCompleted && (
                               <button
                                 onClick={() => openToggleActiveModal(user.id, user.name, user.isActive, lastContract?.status === 'SIGNED', user.role)}
-                                className={`p-2 rounded-lg transition-opacity hover:opacity-80 ${
+                                className={`p-1.5 rounded-lg transition-opacity hover:opacity-80 ${
                                   user.isActive
                                     ? `${colors.status.warning.softBg} ${colors.status.warning.text}`
                                     : `${colors.status.success.softBg} ${colors.status.success.text}`
                                 }`}
                                 title={user.isActive ? 'Disattiva' : 'Attiva'}
                               >
-                                {user.isActive ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                                {user.isActive ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
                               </button>
                             )}
                             <button
                               onClick={() => openDeleteModal(user.id, user.name)}
-                              className={`p-2 rounded-lg ${colors.status.error.softBg} ${colors.status.error.text} hover:opacity-80 transition-opacity`}
+                              className={`p-1.5 rounded-lg ${colors.status.error.softBg} ${colors.status.error.text} hover:opacity-80 transition-opacity`}
                               title="Elimina account"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </td>
