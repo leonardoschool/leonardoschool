@@ -35,6 +35,8 @@ import {
   X,
   User,
   FileEdit,
+  BookOpen,
+  Plus,
 } from 'lucide-react';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
@@ -517,7 +519,7 @@ function AssignContractModal({
                   {/* Price and Duration */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-sm font-medium mb-2">
+                      <label className={`block text-sm font-medium mb-2 ${colors.text.primary}`}>
                         Prezzo (€)
                       </label>
                       <input
@@ -531,7 +533,7 @@ function AssignContractModal({
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-2">
+                      <label className={`block text-sm font-medium mb-2 ${colors.text.primary}`}>
                         Scadenza firma (giorni)
                       </label>
                       <select
@@ -546,7 +548,7 @@ function AssignContractModal({
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-2">
+                      <label className={`block text-sm font-medium mb-2 ${colors.text.primary}`}>
                         Durata (opzionale)
                       </label>
                       <input
@@ -561,7 +563,7 @@ function AssignContractModal({
 
                   {/* Admin Notes */}
                   <div>
-                    <label className="block text-sm font-medium mb-2">
+                    <label className={`block text-sm font-medium mb-2 ${colors.text.primary}`}>
                       Note Admin (non visibili all&apos;utente)
                     </label>
                     <textarea
@@ -620,6 +622,265 @@ function AssignContractModal({
   );
 }
 
+// Modal gestione materie collaboratore
+function ManageSubjectsModal({
+  isOpen,
+  onClose,
+  collaboratorId,
+  collaboratorName,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  collaboratorId: string;
+  collaboratorName: string;
+}) {
+  const utils = trpc.useUtils();
+  const { handleMutationError } = useApiError();
+  const { showSuccess } = useToast();
+
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [primarySubject, setPrimarySubject] = useState<string | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newSubject, setNewSubject] = useState({ name: '', code: '', color: '#6B7280' });
+
+  // Fetch all subjects
+  const { data: allSubjects, isLoading: loadingSubjects } = trpc.users.getSubjects.useQuery();
+
+  // Fetch current assignments
+  const { data: currentAssignments, isLoading: loadingAssignments } = trpc.users.getCollaboratorSubjects.useQuery(
+    { collaboratorId },
+    { enabled: isOpen }
+  );
+
+  // Mutations
+  const assignMutation = trpc.users.assignSubjects.useMutation({
+    onSuccess: () => {
+      utils.users.getAll.invalidate();
+      utils.users.getCollaboratorSubjects.invalidate();
+      showSuccess('Materie assegnate', 'Le materie sono state assegnate con successo.');
+      onClose();
+    },
+    onError: handleMutationError,
+  });
+
+  const createSubjectMutation = trpc.users.createSubject.useMutation({
+    onSuccess: (newSub) => {
+      utils.users.getSubjects.invalidate();
+      setSelectedSubjects([...selectedSubjects, newSub.id]);
+      setShowCreateForm(false);
+      setNewSubject({ name: '', code: '', color: '#6B7280' });
+      showSuccess('Materia creata', `La materia "${newSub.name}" è stata creata.`);
+    },
+    onError: handleMutationError,
+  });
+
+  // Initialize selected subjects from current assignments
+  useEffect(() => {
+    if (currentAssignments) {
+      setSelectedSubjects(currentAssignments.map(a => a.subjectId));
+      const primary = currentAssignments.find(a => a.isPrimary);
+      setPrimarySubject(primary?.subjectId || null);
+    }
+  }, [currentAssignments]);
+
+  const handleToggleSubject = (subjectId: string) => {
+    setSelectedSubjects(prev => {
+      if (prev.includes(subjectId)) {
+        // If removing the primary, clear it
+        if (primarySubject === subjectId) {
+          setPrimarySubject(null);
+        }
+        return prev.filter(id => id !== subjectId);
+      }
+      return [...prev, subjectId];
+    });
+  };
+
+  const handleSave = () => {
+    assignMutation.mutate({
+      collaboratorId,
+      subjectIds: selectedSubjects,
+      primarySubjectId: primarySubject || undefined,
+    });
+  };
+
+  const handleCreateSubject = () => {
+    if (!newSubject.name || !newSubject.code) return;
+    createSubjectMutation.mutate(newSubject);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <Portal>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+        <div className={`${colors.background.card} rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col`}>
+          {/* Header */}
+          <div className={`p-6 border-b ${colors.border.primary}`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className={`text-xl font-bold ${colors.text.primary}`}>Gestione Materie</h3>
+                <p className={`${colors.text.secondary} text-sm mt-1`}>{collaboratorName}</p>
+              </div>
+              <button onClick={onClose} className={`p-2 rounded-lg hover:${colors.background.secondary}`}>
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="p-6 overflow-y-auto flex-1">
+            {loadingSubjects || loadingAssignments ? (
+              <div className="flex items-center justify-center py-8">
+                <Spinner size="lg" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Subject list */}
+                <div className="space-y-2">
+                  {allSubjects?.map((subject) => {
+                    const isSelected = selectedSubjects.includes(subject.id);
+                    const isPrimary = primarySubject === subject.id;
+                    
+                    return (
+                      <div
+                        key={subject.id}
+                        className={`p-3 rounded-xl border-2 transition-all cursor-pointer ${
+                          isSelected 
+                            ? `border-green-500 ${colors.background.secondary}` 
+                            : `${colors.border.primary} hover:border-gray-400`
+                        }`}
+                        onClick={() => handleToggleSubject(subject.id)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div 
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold"
+                              style={{ backgroundColor: subject.color || '#6B7280' }}
+                            >
+                              {subject.code?.slice(0, 2)}
+                            </div>
+                            <div>
+                              <p className={`font-medium ${colors.text.primary}`}>{subject.name}</p>
+                              <p className={`text-xs ${colors.text.muted}`}>{subject.code}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {isSelected && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPrimarySubject(isPrimary ? null : subject.id);
+                                }}
+                                className={`text-xs px-2 py-1 rounded-full transition-colors ${
+                                  isPrimary 
+                                    ? 'bg-yellow-500 text-white' 
+                                    : `${colors.background.secondary} ${colors.text.muted} hover:bg-yellow-100 dark:hover:bg-yellow-900/30`
+                                }`}
+                              >
+                                {isPrimary ? '★ Principale' : 'Imposta principale'}
+                              </button>
+                            )}
+                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                              isSelected ? 'border-green-500 bg-green-500' : colors.border.primary
+                            }`}>
+                              {isSelected && <CheckCircle className="w-4 h-4 text-white" />}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Create new subject */}
+                {showCreateForm ? (
+                  <div className={`p-4 rounded-xl ${colors.background.secondary} space-y-3`}>
+                    <h4 className={`font-medium ${colors.text.primary}`}>Nuova Materia</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <input
+                        type="text"
+                        placeholder="Nome materia"
+                        value={newSubject.name}
+                        onChange={(e) => setNewSubject({ ...newSubject, name: e.target.value })}
+                        className={`px-3 py-2 rounded-lg border ${colors.border.primary} ${colors.background.input}`}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Codice (es. BIO)"
+                        value={newSubject.code}
+                        onChange={(e) => setNewSubject({ ...newSubject, code: e.target.value.toUpperCase() })}
+                        maxLength={10}
+                        className={`px-3 py-2 rounded-lg border ${colors.border.primary} ${colors.background.input}`}
+                      />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <label className={`text-sm ${colors.text.secondary}`}>Colore:</label>
+                      <input
+                        type="color"
+                        value={newSubject.color}
+                        onChange={(e) => setNewSubject({ ...newSubject, color: e.target.value })}
+                        className="w-10 h-10 rounded cursor-pointer"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowCreateForm(false)}
+                        className={`flex-1 px-4 py-2 rounded-lg ${colors.background.card} ${colors.text.secondary}`}
+                      >
+                        Annulla
+                      </button>
+                      <button
+                        onClick={handleCreateSubject}
+                        disabled={!newSubject.name || !newSubject.code || createSubjectMutation.isPending}
+                        className={`flex-1 px-4 py-2 rounded-lg ${colors.primary.gradient} text-white disabled:opacity-50`}
+                      >
+                        {createSubjectMutation.isPending ? <Spinner size="xs" variant="white" /> : 'Crea'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowCreateForm(true)}
+                    className={`w-full p-3 rounded-xl border-2 border-dashed ${colors.border.primary} ${colors.text.muted} hover:border-gray-400 transition-colors flex items-center justify-center gap-2`}
+                  >
+                    <Plus className="w-4 h-4" />
+                    Crea nuova materia
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className={`p-6 border-t ${colors.border.primary} flex gap-3`}>
+            <button
+              onClick={onClose}
+              className={`flex-1 px-4 py-3 rounded-xl ${colors.background.secondary} font-medium`}
+            >
+              Annulla
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={assignMutation.isPending}
+              className={`flex-1 px-4 py-3 rounded-xl ${colors.primary.gradient} text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2`}
+            >
+              {assignMutation.isPending ? (
+                <Spinner size="xs" variant="white" />
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4" />
+                  Salva ({selectedSubjects.length})
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
 export default function UsersManagementPage() {
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<RoleFilter>('ALL');
@@ -660,6 +921,16 @@ export default function UsersManagementPage() {
   }>({
     isOpen: false,
     user: null,
+  });
+
+  const [subjectsModal, setSubjectsModal] = useState<{
+    isOpen: boolean;
+    collaboratorId: string;
+    collaboratorName: string;
+  }>({
+    isOpen: false,
+    collaboratorId: '',
+    collaboratorName: '',
   });
 
   const utils = trpc.useUtils();
@@ -899,26 +1170,27 @@ export default function UsersManagementPage() {
   };
 
   const getStatusBadge = (user: any) => {
+    // Return hex colors for inline styles (both light and dark mode compatible)
     if (user.isActive) {
-      return { label: 'Attivo', color: colors.status.success.text, bg: colors.status.success.softBg };
+      return { label: 'Attivo', color: '#15803d', bg: '#dcfce7' }; // green-700, green-100
     }
     if (!user.profileCompleted) {
-      return { label: 'Profilo incompleto', color: colors.status.warning.text, bg: colors.status.warning.softBg };
+      return { label: 'Profilo incompleto', color: '#a16207', bg: '#fef9c3' }; // yellow-700, yellow-100
     }
     // Check contract status for students/collaborators
     const hasContract = user.student?.contracts?.length > 0 || user.collaborator?.contracts?.length > 0;
     const contract = user.student?.contracts?.[0] || user.collaborator?.contracts?.[0];
     
     if (!hasContract && user.role !== 'ADMIN') {
-      return { label: 'Attesa contratto', color: colors.status.info.text, bg: colors.status.info.softBg };
+      return { label: 'Attesa contratto', color: '#1d4ed8', bg: '#dbeafe' }; // blue-700, blue-100
     }
     if (contract?.status === 'PENDING') {
-      return { label: 'Attesa firma', color: colors.status.info.text, bg: colors.status.info.softBg };
+      return { label: 'Attesa firma', color: '#1d4ed8', bg: '#dbeafe' }; // blue-700, blue-100
     }
     if (contract?.status === 'SIGNED') {
-      return { label: 'Attesa attivazione', color: colors.status.warning.text, bg: colors.status.warning.softBg };
+      return { label: 'Attesa attivazione', color: '#a16207', bg: '#fef9c3' }; // yellow-700, yellow-100
     }
-    return { label: 'Disattivato', color: colors.status.error.text, bg: colors.status.error.softBg };
+    return { label: 'Disattivato', color: '#b91c1c', bg: '#fee2e2' }; // red-700, red-100
   };
 
   const formatDate = (date: Date | string | null) => {
@@ -958,12 +1230,12 @@ export default function UsersManagementPage() {
           }`}
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-              <Users className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            <div className="w-10 h-10 rounded-lg bg-gray-200 dark:bg-gray-800 flex items-center justify-center">
+              <Users className="w-5 h-5 text-gray-700 dark:text-gray-400" />
             </div>
             <div className="text-left">
               <p className={`text-xs ${colors.text.muted}`}>Totale</p>
-              <p className="text-xl font-bold">{globalStats?.total || 0}</p>
+              <p className={`text-xl font-bold ${colors.text.primary}`}>{globalStats?.total || 0}</p>
             </div>
           </div>
         </button>
@@ -1153,6 +1425,29 @@ export default function UsersManagementPage() {
                       <span className={`text-xs ${colors.text.muted}`}>
                         Reg. {formatDate(user.createdAt)}
                       </span>
+                      {/* Show collaborator subjects in mobile */}
+                      {user.role === 'COLLABORATOR' && user.collaborator?.subjects && user.collaborator.subjects.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {user.collaborator.subjects.slice(0, 3).map((cs: any) => (
+                            <span 
+                              key={cs.id} 
+                              className={`text-[10px] px-1.5 py-0.5 rounded-full ${cs.isPrimary ? 'ring-1 ring-purple-500' : ''}`}
+                              style={{ 
+                                backgroundColor: cs.subject.color + '20', 
+                                color: cs.subject.color 
+                              }}
+                              title={cs.isPrimary ? `${cs.subject.name} (Principale)` : cs.subject.name}
+                            >
+                              {cs.subject.code}
+                            </span>
+                          ))}
+                          {user.collaborator.subjects.length > 3 && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${colors.background.secondary} ${colors.text.muted}`}>
+                              +{user.collaborator.subjects.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="mt-3 flex items-center gap-2">
@@ -1204,6 +1499,20 @@ export default function UsersManagementPage() {
                           <Send className="w-4 h-4" />
                         </button>
                       )}
+                      {/* Manage subjects for collaborators */}
+                      {user.role === 'COLLABORATOR' && user.isActive && user.collaborator?.id && (
+                        <button
+                          onClick={() => setSubjectsModal({
+                            isOpen: true,
+                            collaboratorId: user.collaborator.id,
+                            collaboratorName: user.name,
+                          })}
+                          className={`p-2 rounded-lg bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400`}
+                          title="Gestisci materie"
+                        >
+                          <BookOpen className="w-4 h-4" />
+                        </button>
+                      )}
                       {user.profileCompleted && !isSelf && (
                         <button
                           onClick={() => openToggleActiveModal(user.id, user.name, user.isActive, lastContract?.status === 'SIGNED', user.role)}
@@ -1247,12 +1556,12 @@ export default function UsersManagementPage() {
               <table className="w-full min-w-[900px]">
                 <thead className={`${colors.background.secondary} border-b ${colors.border.primary}`}>
                   <tr>
-                    <th className="text-left px-4 py-4 font-semibold text-sm">Utente</th>
-                    <th className="text-left px-4 py-4 font-semibold text-sm">Email</th>
-                    <th className="text-left px-4 py-4 font-semibold text-sm" style={{ overflow: 'visible' }}>Ruolo</th>
-                    <th className="text-left px-4 py-4 font-semibold text-sm whitespace-nowrap">Registrazione</th>
-                    <th className="text-left px-4 py-4 font-semibold text-sm">Stato</th>
-                    <th className="text-right px-4 py-4 font-semibold text-sm">Azioni</th>
+                    <th className={`text-left px-4 py-4 font-semibold text-sm ${colors.text.primary}`}>Utente</th>
+                    <th className={`text-left px-4 py-4 font-semibold text-sm ${colors.text.primary}`}>Email</th>
+                    <th className={`text-left px-4 py-4 font-semibold text-sm ${colors.text.primary}`} style={{ overflow: 'visible' }}>Ruolo</th>
+                    <th className={`text-left px-4 py-4 font-semibold text-sm whitespace-nowrap ${colors.text.primary}`}>Registrazione</th>
+                    <th className={`text-left px-4 py-4 font-semibold text-sm ${colors.text.primary}`}>Stato</th>
+                    <th className={`text-right px-4 py-4 font-semibold text-sm ${colors.text.primary}`}>Azioni</th>
                   </tr>
                 </thead>
                 <tbody className="overflow-visible">
@@ -1291,12 +1600,35 @@ export default function UsersManagementPage() {
                                   {user.student?.fiscalCode || user.collaborator?.fiscalCode}
                                 </p>
                               )}
+                              {/* Show collaborator subjects */}
+                              {user.role === 'COLLABORATOR' && user.collaborator?.subjects && user.collaborator.subjects.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {user.collaborator.subjects.slice(0, 3).map((cs: any) => (
+                                    <span 
+                                      key={cs.id} 
+                                      className={`text-[10px] px-1.5 py-0.5 rounded-full ${cs.isPrimary ? 'ring-1 ring-purple-500' : ''}`}
+                                      style={{ 
+                                        backgroundColor: cs.subject.color + '20', 
+                                        color: cs.subject.color 
+                                      }}
+                                      title={cs.isPrimary ? `${cs.subject.name} (Principale)` : cs.subject.name}
+                                    >
+                                      {cs.subject.code}
+                                    </span>
+                                  ))}
+                                  {user.collaborator.subjects.length > 3 && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${colors.background.secondary} ${colors.text.muted}`}>
+                                      +{user.collaborator.subjects.length - 3}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
 
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-2 text-sm">
+                          <div className={`flex items-center gap-2 text-sm ${colors.text.secondary}`}>
                             <Mail className="w-4 h-4 flex-shrink-0" />
                             <span className="truncate max-w-[160px]">{user.email}</span>
                           </div>
@@ -1320,7 +1652,7 @@ export default function UsersManagementPage() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-2 text-sm whitespace-nowrap">
+                          <div className={`flex items-center gap-2 text-sm whitespace-nowrap ${colors.text.secondary}`}>
                             <Calendar className="w-4 h-4 flex-shrink-0" />
                             <span>{formatDate(user.createdAt)}</span>
                           </div>
@@ -1339,10 +1671,10 @@ export default function UsersManagementPage() {
                             {isStudentOrCollab && (
                               <button
                                 onClick={() => setViewUserModal({ isOpen: true, user })}
-                                className={`p-1.5 rounded-lg ${colors.background.secondary} hover:opacity-80 transition-opacity`}
+                                className={`p-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 hover:opacity-80 transition-opacity`}
                                 title="Visualizza profilo"
                               >
-                                <Eye className="w-3.5 h-3.5" />
+                                <Eye className="w-3.5 h-3.5 text-gray-700 dark:text-gray-300" />
                               </button>
                             )}
                             {hasSignedContract && contractId && (
@@ -1379,6 +1711,20 @@ export default function UsersManagementPage() {
                                 title="Assegna contratto"
                               >
                                 <Send className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {/* Manage subjects for collaborators */}
+                            {user.role === 'COLLABORATOR' && user.isActive && user.collaborator?.id && (
+                              <button
+                                onClick={() => setSubjectsModal({
+                                  isOpen: true,
+                                  collaboratorId: user.collaborator.id,
+                                  collaboratorName: user.name,
+                                })}
+                                className={`p-1.5 rounded-lg bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 hover:opacity-80 transition-opacity`}
+                                title="Gestisci materie"
+                              >
+                                <BookOpen className="w-3.5 h-3.5" />
                               </button>
                             )}
                             {user.profileCompleted && (
@@ -1620,6 +1966,16 @@ export default function UsersManagementPage() {
           </div>
         </div>
         </Portal>
+      )}
+
+      {/* Manage Subjects Modal */}
+      {subjectsModal.isOpen && (
+        <ManageSubjectsModal
+          isOpen={subjectsModal.isOpen}
+          onClose={() => setSubjectsModal({ isOpen: false, collaboratorId: '', collaboratorName: '' })}
+          collaboratorId={subjectsModal.collaboratorId}
+          collaboratorName={subjectsModal.collaboratorName}
+        />
       )}
     </div>
   );

@@ -512,7 +512,7 @@ export default function AppHeader() {
                 {notificationsOpen && (
                   <div className={`absolute right-0 mt-2 w-80 sm:w-96 ${colors.background.card} rounded-xl shadow-xl border ${colors.border.primary} z-50 overflow-hidden`}>
                     <div className={`px-4 py-3 border-b ${colors.border.primary} flex items-center justify-between`}>
-                      <h3 className="font-semibold">Notifiche</h3>
+                      <h3 className={`font-semibold ${colors.text.primary}`}>Notifiche</h3>
                       <Link 
                         href="/admin/notifiche" 
                         className={`text-sm ${colors.primary.text} hover:underline`}
@@ -544,7 +544,7 @@ export default function AppHeader() {
                                   )}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="font-medium text-sm truncate">{notification.title}</p>
+                                  <p className={`font-medium text-sm truncate ${colors.text.primary}`}>{notification.title}</p>
                                   <p className={`text-sm ${colors.text.secondary} line-clamp-2`}>
                                     {notification.message}
                                   </p>
@@ -568,7 +568,7 @@ export default function AppHeader() {
                         })
                       ) : (
                         <div className="px-4 py-8 text-center">
-                          <Bell className={`w-10 h-10 mx-auto ${colors.text.muted} mb-2`} />
+                          <Bell className={`w-10 h-10 mx-auto ${colors.icon.secondary} mb-2`} />
                           <p className={colors.text.secondary}>Nessuna nuova notifica</p>
                         </div>
                       )}

@@ -208,6 +208,19 @@ export const usersRouter = router({
                 canManageMaterials: true,
                 canViewStats: true,
                 canViewStudents: true,
+                subjects: {
+                  include: {
+                    subject: {
+                      select: {
+                        id: true,
+                        name: true,
+                        code: true,
+                        color: true,
+                      },
+                    },
+                  },
+                  orderBy: { isPrimary: 'desc' },
+                },
                 contracts: {
                   orderBy: { assignedAt: 'desc' },
                   take: 1,
@@ -586,5 +599,116 @@ export const usersRouter = router({
       });
 
       return { success: true, message: 'Utente eliminato con successo' };
+    }),
+
+  /**
+   * Get all available subjects for assignment
+   */
+  getSubjects: adminProcedure.query(async ({ ctx }) => {
+    return ctx.prisma.customSubject.findMany({
+      where: { isActive: true },
+      orderBy: { order: 'asc' },
+    });
+  }),
+
+  /**
+   * Create a new subject
+   */
+  createSubject: adminProcedure
+    .input(z.object({
+      name: z.string().min(2),
+      code: z.string().min(2).max(10),
+      description: z.string().optional(),
+      color: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.prisma.customSubject.create({
+        data: {
+          name: input.name,
+          code: input.code.toUpperCase(),
+          description: input.description,
+          color: input.color || '#6B7280',
+        },
+      });
+    }),
+
+  /**
+   * Get subjects assigned to a collaborator
+   */
+  getCollaboratorSubjects: adminProcedure
+    .input(z.object({
+      collaboratorId: z.string(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const assignments = await ctx.prisma.collaboratorSubject.findMany({
+        where: { collaboratorId: input.collaboratorId },
+        include: { subject: true },
+        orderBy: { assignedAt: 'asc' },
+      });
+      return assignments;
+    }),
+
+  /**
+   * Assign subjects to a collaborator
+   */
+  assignSubjects: adminProcedure
+    .input(z.object({
+      collaboratorId: z.string(),
+      subjectIds: z.array(z.string()),
+      primarySubjectId: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { collaboratorId, subjectIds, primarySubjectId } = input;
+
+      // Verify collaborator exists
+      const collaborator = await ctx.prisma.collaborator.findUnique({
+        where: { id: collaboratorId },
+      });
+
+      if (!collaborator) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Collaboratore non trovato',
+        });
+      }
+
+      // Remove existing assignments and add new ones in a transaction
+      await ctx.prisma.$transaction(async (tx) => {
+        // Remove all current assignments
+        await tx.collaboratorSubject.deleteMany({
+          where: { collaboratorId },
+        });
+
+        // Add new assignments
+        if (subjectIds.length > 0) {
+          await tx.collaboratorSubject.createMany({
+            data: subjectIds.map(subjectId => ({
+              collaboratorId,
+              subjectId,
+              isPrimary: subjectId === primarySubjectId,
+            })),
+          });
+        }
+      });
+
+      return { success: true };
+    }),
+
+  /**
+   * Remove a subject from a collaborator
+   */
+  removeSubject: adminProcedure
+    .input(z.object({
+      collaboratorId: z.string(),
+      subjectId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.prisma.collaboratorSubject.deleteMany({
+        where: {
+          collaboratorId: input.collaboratorId,
+          subjectId: input.subjectId,
+        },
+      });
+      return { success: true };
     }),
 });
