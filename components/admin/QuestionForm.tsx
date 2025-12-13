@@ -180,9 +180,9 @@ export default function QuestionForm({ questionId, basePath = '/admin/domande', 
   });
 
   // Computed values
-  const topics = topicsData ?? [];
-  const selectedTopic = topics.find((t) => t.id === topicId);
-  const subTopics = selectedTopic?.subTopics ?? [];
+  const topics = useMemo(() => topicsData ?? [], [topicsData]);
+  const selectedTopic = useMemo(() => topics.find((t) => t.id === topicId), [topics, topicId]);
+  const subTopics = useMemo(() => selectedTopic?.subTopics ?? [], [selectedTopic?.subTopics]);
 
   const subjectOptions = useMemo(
     () => [

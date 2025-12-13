@@ -50,7 +50,7 @@ export const questionsRouter = router({
         andConditions.push({
           OR: [
             { text: { contains: search, mode: 'insensitive' } },
-            { tags: { has: search } },
+            { legacyTags: { has: search } },
             { source: { contains: search, mode: 'insensitive' } },
           ],
         });
@@ -253,7 +253,7 @@ export const questionsRouter = router({
             openPartialMatch: questionData.openPartialMatch,
             shuffleAnswers: questionData.shuffleAnswers,
             showExplanation: questionData.showExplanation,
-            tags: questionData.tags,
+            legacyTags: questionData.tags,
             year: questionData.year,
             source: questionData.source,
             externalId: questionData.externalId,
@@ -777,7 +777,7 @@ export const questionsRouter = router({
           wrongExplanation: q.wrongExplanation ?? '',
           points: q.points,
           negativePoints: q.negativePoints,
-          tags: q.tags.join(','),
+          tags: q.legacyTags.join(','),
           year: q.year ?? '',
           source: q.source ?? '',
           keywords: q.keywords.map(k => k.keyword).join(','),
@@ -890,7 +890,7 @@ export const questionsRouter = router({
                 negativePoints: row.negativePoints ?? 0,
                 correctExplanation: row.correctExplanation ?? null,
                 wrongExplanation: row.wrongExplanation ?? null,
-                tags: row.tags ? row.tags.split(',').map(t => t.trim()) : [],
+                legacyTags: row.tags ? row.tags.split(',').map(t => t.trim()) : [],
                 year: row.year ?? null,
                 source: row.source ?? null,
                 externalId: row.externalId ?? null,
@@ -1301,16 +1301,16 @@ export const questionsRouter = router({
     };
   }),
 
-  // Get available tags
+  // Get available tags (legacy - returns tags from legacyTags field)
   getAvailableTags: staffProcedure.query(async ({ ctx }) => {
     const questions = await ctx.prisma.question.findMany({
-      where: { tags: { isEmpty: false } },
-      select: { tags: true },
+      where: { legacyTags: { isEmpty: false } },
+      select: { legacyTags: true },
     });
 
     const tagCounts = new Map<string, number>();
     questions.forEach(q => {
-      q.tags.forEach(tag => {
+      q.legacyTags.forEach(tag => {
         tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
       });
     });

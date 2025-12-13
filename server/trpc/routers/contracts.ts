@@ -4,7 +4,7 @@
 import { router, protectedProcedure, adminProcedure, studentProcedure, collaboratorProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { emailService } from '../../services/emailService';
+import * as notificationService from '../../services/notificationService';
 import { sanitizeText } from '@/lib/utils/escapeHtml';
 import { sanitizeHtml, validateContentLength } from '@/lib/utils/sanitizeHtml';
 
@@ -468,24 +468,17 @@ export const contractsRouter = router({
         },
       });
 
-      // Create admin notification
-      await ctx.prisma.adminNotification.create({
-        data: {
-          type: 'CONTRACT_ASSIGNED',
-          title: 'Contratto assegnato',
-          message: `Contratto "${template.name}" assegnato a ${targetUser.user.name}`,
-          studentId: targetType === 'STUDENT' ? targetId : undefined,
-          contractId: contract.id,
-        },
-      });
-
-      // Send email with sign link
+      // Send notifications using the unified notification service
       const signLink = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}/contratto/${contract.signToken}`;
-      await emailService.sendContractAssignedEmail({
-        studentName: targetUser.user.name,
-        studentEmail: targetUser.user.email,
+      await notificationService.notifyContractAssigned(ctx.prisma, {
+        contractId: contract.id,
+        templateName: template.name,
+        recipientUserId: targetUser.user.id,
+        recipientName: targetUser.user.name,
+        recipientEmail: targetUser.user.email,
+        recipientType: targetType,
+        recipientProfileId: targetId,
         signLink,
-        contractName: template.name,
         price: template.price || 0,
         expiresAt,
       });
@@ -543,21 +536,13 @@ export const contractsRouter = router({
         data: { isActive: true },
       });
 
-      // Create notification
-      await ctx.prisma.adminNotification.create({
-        data: {
-          type: 'ACCOUNT_ACTIVATED',
-          title: 'Account attivato',
-          message: `Account di ${student.user.name} è stato attivato`,
-          studentId: student.id,
-        },
-      });
-
-      // Send account activated email to student
+      // Send notifications using the unified notification service
       const loginUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}/auth/login`;
-      await emailService.sendAccountActivatedEmail({
-        studentName: student.user.name,
-        studentEmail: student.user.email,
+      await notificationService.notifyAccountActivated(ctx.prisma, {
+        userId: student.user.id,
+        userName: student.user.name,
+        userEmail: student.user.email,
+        profileId: student.id,
         loginUrl,
       });
 
@@ -889,22 +874,24 @@ export const contractsRouter = router({
 
       // Get user info for notification before deleting
       const userName = contract.student?.user?.name || contract.collaborator?.user?.name || 'Utente';
+      const userUserId = contract.student?.user?.id || contract.collaborator?.user?.id;
       const templateName = contract.template.name;
       const studentId = contract.studentId;
+      const collaboratorId = contract.collaboratorId;
 
       // Delete the contract from DB to save space
       await ctx.prisma.contract.delete({
         where: { id: input.contractId },
       });
 
-      // Create notification
-      await ctx.prisma.adminNotification.create({
-        data: {
-          type: 'CONTRACT_CANCELLED',
-          title: 'Contratto revocato',
-          message: `Contratto "${templateName}" per ${userName} è stato revocato ed eliminato`,
-          studentId: studentId || undefined,
-        },
+      // Send notifications using the unified notification service
+      await notificationService.notifyContractCancelled(ctx.prisma, {
+        contractId: input.contractId,
+        templateName,
+        recipientUserId: userUserId,
+        recipientName: userName,
+        recipientProfileId: studentId || collaboratorId || undefined,
+        recipientType: studentId ? 'STUDENT' : collaboratorId ? 'COLLABORATOR' : undefined,
       });
 
       return { success: true, message: 'Contratto revocato ed eliminato' };
@@ -1261,34 +1248,17 @@ export const contractsRouter = router({
         },
       });
 
-      // Create admin notification
-      await ctx.prisma.adminNotification.create({
-        data: {
-          type: 'CONTRACT_SIGNED',
-          title: 'Contratto firmato',
-          message: `${signerName} ha firmato il contratto "${contract.template.name}"`,
-          studentId: isStudentContract ? signerId : null,
-          collaboratorId: isCollaboratorContract ? signerId : null,
-          contractId: contract.id,
-          isUrgent: true,
-        },
-      });
-
-      // Send confirmation email to signer
-      await emailService.sendContractSignedConfirmationEmail({
-        studentName: signerName,
-        studentEmail: signerEmail,
-        contractName: contract.template.name,
+      // Send notifications using the unified notification service
+      await notificationService.notifyContractSigned(ctx.prisma, {
+        contractId: contract.id,
+        templateName: contract.template.name,
+        signerUserId: ctx.user.id,
+        signerName: signerName,
+        signerEmail: signerEmail,
+        signerType: isStudentContract ? 'STUDENT' : 'COLLABORATOR',
+        signerProfileId: signerId,
         signedAt,
         price: contract.template.price || 0,
-      });
-
-      // Send notification email to admin
-      await emailService.sendContractSignedAdminNotification({
-        studentName: signerName,
-        studentEmail: signerEmail,
-        contractName: contract.template.name,
-        signedAt,
       });
 
       return signedContract;

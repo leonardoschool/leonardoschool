@@ -8,6 +8,7 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   ArrowLeft,
   Edit2,
@@ -281,11 +282,14 @@ export default function DettaglioDomandaCollaboratorePage() {
               </div>
             )}
             {question.imageUrl && (
-              <div className="mt-4">
-                <img
+              <div className="mt-4 relative">
+                <Image
                   src={question.imageUrl}
                   alt="Immagine domanda"
-                  className="max-w-full h-auto rounded-lg"
+                  width={800}
+                  height={600}
+                  className="max-w-full h-auto rounded-lg object-contain"
+                  unoptimized
                 />
               </div>
             )}
@@ -459,14 +463,14 @@ export default function DettaglioDomandaCollaboratorePage() {
           </div>
 
           {/* Tags */}
-          {question.tags && question.tags.length > 0 && (
+          {question.legacyTags && question.legacyTags.length > 0 && (
             <div className={`${colors.background.card} rounded-xl p-6 ${colors.effects.shadow.sm}`}>
               <h3 className={`font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
                 <Tag className="w-4 h-4" />
                 Tags
               </h3>
               <div className="flex flex-wrap gap-2">
-                {question.tags.map((tag, idx) => (
+                {question.legacyTags.map((tag, idx) => (
                   <span
                     key={idx}
                     className={`px-3 py-1 rounded-full text-sm ${colors.background.tertiary} ${colors.text.secondary}`}

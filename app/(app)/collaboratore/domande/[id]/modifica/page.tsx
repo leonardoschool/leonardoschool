@@ -104,7 +104,7 @@ export default function ModificaDomandaCollaboratorePage() {
     openValidationType: question.openValidationType as 'MANUAL' | 'KEYWORDS' | 'BOTH' | null,
     openMinLength: question.openMinLength,
     openMaxLength: question.openMaxLength,
-    tags: question.tags,
+    tags: question.legacyTags,
     year: question.year,
     source: question.source,
     answers: question.answers.map((a) => ({

@@ -177,7 +177,7 @@ export default function QuestionsPage() {
   });
 
   // Helpers
-  const questions = questionsData?.questions ?? [];
+  const questions = useMemo(() => questionsData?.questions ?? [], [questionsData?.questions]);
   const pagination = questionsData?.pagination ?? { page: 1, pageSize: 20, total: 0, totalPages: 0 };
 
   const allSelected = useMemo(
@@ -557,9 +557,9 @@ export default function QuestionsPage() {
                         <p className={`font-medium ${colors.text.primary} line-clamp-2`}>
                           {question.text}
                         </p>
-                        {question.tags.length > 0 && (
+                        {question.legacyTags.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
-                            {question.tags.slice(0, 3).map((tag) => (
+                            {question.legacyTags.slice(0, 3).map((tag) => (
                               <span
                                 key={tag}
                                 className={`text-xs px-1.5 py-0.5 rounded ${colors.background.secondary} ${colors.text.muted}`}
@@ -567,9 +567,9 @@ export default function QuestionsPage() {
                                 {tag}
                               </span>
                             ))}
-                            {question.tags.length > 3 && (
+                            {question.legacyTags.length > 3 && (
                               <span className={`text-xs ${colors.text.muted}`}>
-                                +{question.tags.length - 3}
+                                +{question.legacyTags.length - 3}
                               </span>
                             )}
                           </div>
