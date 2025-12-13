@@ -2,9 +2,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/firebase/admin';
 import { prisma } from '@/lib/prisma/client';
+import { checkRateLimit, getClientIp, rateLimitExceededResponse } from '@/lib/middleware/rateLimit';
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting
+    const clientIp = getClientIp(request.headers);
+    const rateLimit = checkRateLimit(clientIp, 'auth');
+    
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        rateLimitExceededResponse(rateLimit.retryAfterMs!),
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const { token } = body;
 
@@ -60,12 +72,15 @@ export async function POST(request: NextRequest) {
       emailVerified: user.emailVerified,
     });
 
+    // Cookie duration: 7 days (refresh happens on each /api/auth/me call)
+    const cookieMaxAge = 60 * 60 * 24 * 7; // 7 giorni
+
     // Setta cookie HttpOnly e Secure con il token (non accessibile da JS)
     response.cookies.set('auth-token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60, // 1 ora
+      maxAge: cookieMaxAge,
       path: '/',
     });
 
@@ -75,7 +90,7 @@ export async function POST(request: NextRequest) {
       httpOnly: false, // Middleware Next.js può leggerlo
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60,
+      maxAge: cookieMaxAge,
       path: '/',
     });
 
@@ -83,7 +98,7 @@ export async function POST(request: NextRequest) {
       httpOnly: false,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60,
+      maxAge: cookieMaxAge,
       path: '/',
     });
 

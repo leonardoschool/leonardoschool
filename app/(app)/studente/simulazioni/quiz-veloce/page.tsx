@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors, getSubjectColor } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
-import { PageLoader, Spinner, ButtonLoader } from '@/components/ui/loaders';
+import { PageLoader, ButtonLoader } from '@/components/ui/loaders';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -13,7 +13,6 @@ import {
   Zap,
   Clock,
   Target,
-  ChevronRight,
   Check,
   Settings,
   BookOpen,
@@ -68,16 +67,14 @@ export default function QuickQuizPage() {
     onError: handleMutationError,
   });
 
-  // Reset topics when subjects change
-  useEffect(() => {
-    setSelectedTopics([]);
-  }, [selectedSubjects]);
-
   // Toggle subject selection
   const toggleSubject = (id: string) => {
-    setSelectedSubjects(prev =>
-      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
-    );
+    setSelectedSubjects(prev => {
+      const newSubjects = prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id];
+      // Reset topics when subjects change
+      setSelectedTopics([]);
+      return newSubjects;
+    });
   };
 
   // Toggle topic selection

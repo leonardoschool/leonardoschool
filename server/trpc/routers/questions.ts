@@ -8,8 +8,6 @@ import {
   questionFilterSchema,
   createQuestionFeedbackSchema,
   updateQuestionFeedbackSchema,
-  questionAnswerSchema,
-  questionKeywordSchema,
   validateQuestionAnswers,
   validateQuestionKeywords,
   importQuestionRowSchema,
@@ -606,9 +604,9 @@ export const questionsRouter = router({
 
       // Create duplicate
       const duplicate = await ctx.prisma.$transaction(async (tx) => {
-        const { id, createdAt, updatedAt, publishedAt, archivedAt, version, 
-                timesUsed, timesAnswered, timesCorrect, timesWrong, timesSkipped,
-                avgTimeSeconds, avgCorrectRate, answers, keywords, ...questionData } = original;
+        const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publishedAt: _publishedAt, archivedAt: _archivedAt, version: _version, 
+                timesUsed: _timesUsed, timesAnswered: _timesAnswered, timesCorrect: _timesCorrect, timesWrong: _timesWrong, timesSkipped: _timesSkipped,
+                avgTimeSeconds: _avgTimeSeconds, avgCorrectRate: _avgCorrectRate, answers, keywords, ...questionData } = original;
 
         const newQuestion = await tx.question.create({
           data: {

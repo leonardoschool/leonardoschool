@@ -12,7 +12,6 @@ import {
   Flame,
   BookOpen,
   CheckCircle,
-  XCircle,
   Calendar,
   Activity,
 } from 'lucide-react';
@@ -244,19 +243,15 @@ export default function StudentStatsPage() {
                 <div className="flex items-center gap-4">
                   <div
                     className={`p-2 rounded-lg ${
-                      result.status === 'COMPLETED'
+                      result.completedAt
                         ? 'bg-green-100 dark:bg-green-900/30'
-                        : result.status === 'IN_PROGRESS'
-                        ? 'bg-blue-100 dark:bg-blue-900/30'
-                        : 'bg-gray-100 dark:bg-gray-700'
+                        : 'bg-blue-100 dark:bg-blue-900/30'
                     }`}
                   >
-                    {result.status === 'COMPLETED' ? (
+                    {result.completedAt ? (
                       <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-                    ) : result.status === 'IN_PROGRESS' ? (
-                      <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                     ) : (
-                      <XCircle className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                      <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                     )}
                   </div>
                   <div>
@@ -268,25 +263,25 @@ export default function StudentStatsPage() {
                   </div>
                 </div>
                 <div className="text-right">
-                  {result.status === 'COMPLETED' && result.percentageScore !== null && (
+                  {result.completedAt && result.percentageScore !== null && (
                     <>
                       <p
                         className={`text-lg font-bold ${
-                          result.percentageScore >= 70
+                          (result.percentageScore ?? 0) >= 70
                             ? 'text-green-600 dark:text-green-400'
-                            : result.percentageScore >= 50
+                            : (result.percentageScore ?? 0) >= 50
                             ? 'text-yellow-600 dark:text-yellow-400'
                             : 'text-red-600 dark:text-red-400'
                         }`}
                       >
-                        {result.percentageScore.toFixed(1)}%
+                        {result.percentageScore?.toFixed(1)}%
                       </p>
                       <p className={`text-sm ${colors.text.muted}`}>
-                        Punteggio: {result.score?.toFixed(1)}
+                        Punteggio: {result.totalScore?.toFixed(1)}
                       </p>
                     </>
                   )}
-                  {result.status === 'IN_PROGRESS' && (
+                  {!result.completedAt && (
                     <span className="text-blue-600 dark:text-blue-400 text-sm font-medium">
                       In corso...
                     </span>

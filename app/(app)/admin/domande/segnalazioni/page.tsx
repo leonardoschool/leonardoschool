@@ -73,7 +73,7 @@ export default function FeedbacksPage() {
   const [page, setPage] = useState(1);
   const [selectedFeedback, setSelectedFeedback] = useState<string | null>(null);
   const [adminResponse, setAdminResponse] = useState('');
-  const [newStatus, setNewStatus] = useState<FeedbackStatus | ''>('');
+  const [_newStatus, setNewStatus] = useState<FeedbackStatus | ''>('');
 
   // Fetch feedbacks
   const { data, isLoading } = trpc.questions.getPendingFeedbacks.useQuery({

@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
-import { Spinner, PageLoader } from '@/components/ui/loaders';
+import { PageLoader } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import { Portal } from '@/components/ui/Portal';
@@ -18,24 +18,19 @@ import {
   Edit2,
   Trash2,
   Copy,
-  Eye,
   Archive,
   Check,
   X,
   Upload,
-  Download,
   CheckSquare,
   Square,
   ChevronLeft,
   ChevronRight,
-  FileText,
   MessageSquare,
   Star,
-  Clock,
-  BarChart3,
-  AlertCircle,
-  BookOpen,
   Layers,
+  FileText,
+  Eye,
 } from 'lucide-react';
 import {
   questionTypeLabels,

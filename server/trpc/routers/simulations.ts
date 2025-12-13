@@ -1,5 +1,5 @@
 // Simulations Router - Manage tests and simulations
-import { router, adminProcedure, staffProcedure, protectedProcedure, studentProcedure } from '../init';
+import { router, staffProcedure, studentProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import {
@@ -12,10 +12,6 @@ import {
   submitSimulationSchema,
   quickQuizConfigSchema,
   bulkAssignmentSchema,
-  assignmentTargetSchema,
-  SimulationTypeEnum,
-  SimulationStatusEnum,
-  SimulationVisibilityEnum,
 } from '@/lib/validations/simulationValidation';
 import type { Prisma, PrismaClient } from '@prisma/client';
 
@@ -1179,7 +1175,7 @@ export const simulationsRouter = router({
 
       if (!result) {
         // Create new result for direct submission
-        const completedCount = await ctx.prisma.simulationResult.count({
+        const _completedCount = await ctx.prisma.simulationResult.count({
           where: { simulationId, studentId, completedAt: { not: null } },
         });
 

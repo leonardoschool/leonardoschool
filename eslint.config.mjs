@@ -24,6 +24,13 @@ const eslintConfig = defineConfig([
         varsIgnorePattern: "^_",
         caughtErrorsIgnorePattern: "^_"
       }],
+      // Standard React hooks rules
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
+      // Disable React compiler rules that flag valid patterns
+      // setState in useEffect for data initialization is a valid and common React pattern
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/purity": "off",
     },
   },
 ]);

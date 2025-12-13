@@ -7,6 +7,7 @@ import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
 import { Portal } from '@/components/ui/Portal';
+import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import {
   Users,
   Search,
@@ -500,7 +501,7 @@ function AssignContractModal({
                     {showPreview ? (
                       <div 
                         className={`p-4 rounded-xl border ${colors.border.primary} prose prose-sm max-w-none dark:prose-invert overflow-auto max-h-64`}
-                        dangerouslySetInnerHTML={{ __html: customContent }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(customContent) }}
                       />
                     ) : (
                       <textarea

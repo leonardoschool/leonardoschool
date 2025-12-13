@@ -18,7 +18,6 @@ import {
   Home,
   Users,
   UsersRound,
-  UserCog,
   FileText,
   BookOpen,
   BarChart3,
@@ -195,7 +194,7 @@ export default function AppHeader() {
   // Theme handling - load saved preference on mount
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') as Theme || 'system';
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     setCurrentTheme(savedTheme);
     applyTheme(savedTheme);
   }, []);

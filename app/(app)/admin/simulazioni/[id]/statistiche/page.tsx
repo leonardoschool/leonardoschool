@@ -8,7 +8,6 @@ import Link from 'next/link';
 import {
   ArrowLeft,
   Users,
-  Target,
   Clock,
   Award,
   TrendingUp,
@@ -54,7 +53,7 @@ export default function SimulationStatsPage({ params }: { params: Promise<{ id: 
     ? Math.max(...completedResults.map(r => r.percentageScore ?? 0))
     : 0;
 
-  const worstScore = completedResults.length > 0
+  const _worstScore = completedResults.length > 0
     ? Math.min(...completedResults.map(r => r.percentageScore ?? 0))
     : 0;
 

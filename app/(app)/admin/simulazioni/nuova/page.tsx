@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
@@ -15,21 +15,18 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
-  Clock,
   Target,
   Settings,
   Users,
   Search,
   Plus,
   X,
-  GripVertical,
   Award,
   FileText,
   Zap,
   BookOpen,
   ChevronDown,
   ChevronUp,
-  Calendar,
   Save,
   Eye,
   Send,
@@ -74,8 +71,8 @@ const typeOptions: { value: SimulationType; label: string; description: string; 
   },
 ];
 
-// Visibility options
-const visibilityOptions = [
+// Visibility options (kept for future visibility dropdown feature)
+const _visibilityOptions = [
   { value: 'PRIVATE', label: 'Privata', description: 'Solo studenti assegnati' },
   { value: 'CLASS', label: 'Classe', description: 'Tutti gli studenti della classe selezionata' },
   { value: 'GROUP', label: 'Gruppo', description: 'Tutti gli studenti dei gruppi assegnati' },
@@ -109,7 +106,7 @@ export default function NewSimulationPage() {
   const router = useRouter();
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
-  const utils = trpc.useUtils();
+  const _utils = trpc.useUtils();
 
   // Step state
   const [currentStep, setCurrentStep] = useState(0);
@@ -119,7 +116,7 @@ export default function NewSimulationPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [isOfficial, setIsOfficial] = useState(false);
-  const [visibility, setVisibility] = useState<SimulationVisibility>('PRIVATE');
+  const [visibility, _setVisibility] = useState<SimulationVisibility>('PRIVATE');
   
   // Timing
   const [startDate, setStartDate] = useState('');
@@ -134,7 +131,7 @@ export default function NewSimulationPage() {
   const [randomizeAnswers, setRandomizeAnswers] = useState(false);
   
   // Scoring
-  const [useQuestionPoints, setUseQuestionPoints] = useState(false);
+  const [useQuestionPoints, _setUseQuestionPoints] = useState(false);
   const [correctPoints, setCorrectPoints] = useState(1.5);
   const [wrongPoints, setWrongPoints] = useState(-0.4);
   const [blankPoints, setBlankPoints] = useState(0);
@@ -311,7 +308,7 @@ export default function NewSimulationPage() {
   };
 
   // Submit
-  const handleSubmit = async (publishImmediately: boolean) => {
+  const handleSubmit = async (_publishImmediately: boolean) => {
     setIsSaving(true);
     try {
       // Convert datetime-local format to ISO string or undefined

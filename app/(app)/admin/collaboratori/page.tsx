@@ -20,7 +20,6 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
-  Plus,
   Trash2,
   AlertTriangle,
 } from 'lucide-react';
@@ -139,14 +138,6 @@ export default function AdminCollaboratorsPage() {
     onError: handleMutationError,
   });
 
-  const createContractMutation = trpc.collaborators.createContract.useMutation({
-    onSuccess: () => {
-      refetch();
-      showSuccess('Contratto creato');
-    },
-    onError: handleMutationError,
-  });
-
   const deleteUserMutation = trpc.users.deleteUser.useMutation({
     onSuccess: () => {
       refetch();
@@ -158,17 +149,13 @@ export default function AdminCollaboratorsPage() {
     onError: handleMutationError,
   });
 
-  const filteredCollaborators = collaborators?.filter(c => 
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.email.toLowerCase().includes(search.toLowerCase())
+  const filteredCollaborators = collaborators?.filter((c: any) => 
+    c.name?.toLowerCase().includes(search.toLowerCase()) ||
+    c.email?.toLowerCase().includes(search.toLowerCase())
   ) || [];
 
   const handleToggleActive = (userId: string, currentStatus: boolean) => {
     toggleActiveMutation.mutate({ userId, isActive: !currentStatus });
-  };
-
-  const handleCreateContract = (collaboratorId: string) => {
-    createContractMutation.mutate({ collaboratorId });
   };
 
   const openDeleteModal = (userId: string, userName: string) => {
@@ -395,16 +382,7 @@ export default function AdminCollaboratorsPage() {
                             )}
                           </button>
 
-                          {!latestContract && collaborator && (
-                            <button
-                              onClick={() => handleCreateContract(collaborator.id)}
-                              disabled={createContractMutation.isPending}
-                              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium ${colors.primary.bg} text-white hover:opacity-90 transition-opacity`}
-                            >
-                              <Plus className="w-4 h-4" />
-                              Genera Contratto
-                            </button>
-                          )}
+                          {/* TODO: Implementare UI per selezione template contratto */}
 
                           <button
                             onClick={(e) => {

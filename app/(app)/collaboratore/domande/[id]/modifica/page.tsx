@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { PageLoader } from '@/components/ui/loaders';
 import QuestionForm from '@/components/admin/QuestionForm';
@@ -11,7 +11,6 @@ import type { QuestionAnswerInput, QuestionKeywordInput } from '@/lib/validation
 
 export default function ModificaDomandaCollaboratorePage() {
   const params = useParams();
-  const router = useRouter();
   const questionId = params.id as string;
 
   // Get current user to check ownership

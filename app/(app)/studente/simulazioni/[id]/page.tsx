@@ -9,23 +9,19 @@ import { PageLoader, Spinner } from '@/components/ui/loaders';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import {
   ArrowLeft,
-  ArrowRight,
   Clock,
   Target,
   Flag,
   CheckCircle,
-  Circle,
   AlertCircle,
   Play,
   Send,
-  RotateCcw,
-  Pause,
   ChevronLeft,
   ChevronRight,
   Grid3X3,
-  List,
   Award,
 } from 'lucide-react';
 
@@ -53,7 +49,7 @@ export default function SimulationExecutionPage({ params }: { params: Promise<{ 
   const [submitConfirm, setSubmitConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const questionStartTimeRef = useRef<number>(Date.now());
+  const questionStartTimeRef = useRef<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch simulation
@@ -106,6 +102,9 @@ export default function SimulationExecutionPage({ params }: { params: Promise<{ 
   useEffect(() => {
     if (!hasStarted || !simulation) return;
 
+    // Initialize question start time when simulation starts
+    questionStartTimeRef.current = Date.now();
+
     timerRef.current = setInterval(() => {
       setTimeSpent((prev) => prev + 1);
     }, 1000);
@@ -147,6 +146,7 @@ export default function SimulationExecutionPage({ params }: { params: Promise<{ 
     }, 30000); // Save every 30 seconds
 
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasStarted, answers, timeSpent, questionTimes]);
 
   // Handle answer selection
@@ -240,6 +240,7 @@ export default function SimulationExecutionPage({ params }: { params: Promise<{ 
       showError('Tempo scaduto', 'La simulazione verrà inviata automaticamente');
       handleSubmit();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeRemaining, hasStarted, isSubmitting]);
 
   // Loading state
@@ -320,7 +321,7 @@ export default function SimulationExecutionPage({ params }: { params: Promise<{ 
           {simulation.hasInProgressAttempt && (
             <div className="mb-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
               <p className="text-sm text-blue-700 dark:text-blue-300">
-                Hai un tentativo in corso. Cliccando "Inizia" riprenderai da dove ti eri fermato.
+                Hai un tentativo in corso. Cliccando &quot;Inizia&quot; riprenderai da dove ti eri fermato.
               </p>
             </div>
           )}
@@ -426,7 +427,7 @@ export default function SimulationExecutionPage({ params }: { params: Promise<{ 
             <div className={`p-6 rounded-xl ${colors.background.card} border ${colors.border.light} mb-6`}>
               <div
                 className={`prose prose-sm max-w-none ${colors.text.primary}`}
-                dangerouslySetInnerHTML={{ __html: currentQuestion?.question.text || '' }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentQuestion?.question.text || '') }}
               />
             </div>
 
@@ -457,7 +458,7 @@ export default function SimulationExecutionPage({ params }: { params: Promise<{ 
                     </span>
                     <div
                       className={`flex-1 ${colors.text.primary}`}
-                      dangerouslySetInnerHTML={{ __html: answer.text }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.text) }}
                     />
                   </button>
                 );

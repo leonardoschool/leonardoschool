@@ -6,7 +6,6 @@ import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { PageLoader, Spinner } from '@/components/ui/loaders';
-import CustomSelect from '@/components/ui/CustomSelect';
 import Checkbox from '@/components/ui/Checkbox';
 import DateTimePicker from '@/components/ui/DateTimePicker';
 import { useRouter } from 'next/navigation';
@@ -14,10 +13,10 @@ import Link from 'next/link';
 import {
   ArrowLeft,
   Save,
-  Clock,
   Target,
-  Settings,
   Award,
+  Clock,
+  Settings,
 } from 'lucide-react';
 
 export default function EditSimulationPage({ params }: { params: Promise<{ id: string }> }) {

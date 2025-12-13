@@ -15,8 +15,6 @@ import {
   Copy,
   Archive,
   Send,
-  Eye,
-  CheckCircle,
   XCircle,
   Clock,
   Star,
@@ -26,7 +24,7 @@ import {
   MoreHorizontal,
   FileText,
   Calendar,
-  User,
+  CheckCircle,
 } from 'lucide-react';
 import {
   questionTypeLabels,

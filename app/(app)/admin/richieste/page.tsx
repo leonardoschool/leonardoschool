@@ -13,7 +13,6 @@ import {
   Eye,
   Trash2,
   Clock,
-  CheckCircle,
   MailCheck,
   Archive,
   Mail,

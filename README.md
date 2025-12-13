@@ -1,36 +1,570 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎓 Leonardo School - Web Application
 
-## Getting Started
+Piattaforma web completa per la preparazione ai test d'ammissione universitari (Medicina, Odontoiatria, Veterinaria, Professioni Sanitarie, Architettura, TOLC).
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## 📋 Indice
+
+- [Architettura](#-architettura)
+- [Requisiti](#-requisiti)
+- [Installazione](#-installazione)
+- [Comandi Disponibili](#-comandi-disponibili)
+- [Struttura Progetto](#-struttura-progetto)
+- [Autenticazione](#-autenticazione)
+- [Database](#-database)
+- [API (tRPC)](#-api-trpc)
+- [Sicurezza](#-sicurezza)
+- [Sistema Colori](#-sistema-colori)
+- [Seeding Dati di Test](#-seeding-dati-di-test)
+- [Email & SMTP](#-email--smtp)
+- [SEO](#-seo)
+- [Deployment](#-deployment)
+- [Troubleshooting](#-troubleshooting)
+
+---
+
+## 🏗️ Architettura
+
+**Stack Tecnologico:**
+- **Frontend**: Next.js 16 (App Router) + React 19 + Tailwind CSS
+- **Backend**: tRPC + Next.js API Routes
+- **Database**: PostgreSQL + Prisma ORM
+- **Autenticazione**: Firebase Auth (client) + Firebase Admin SDK (server)
+- **Storage**: Firebase Storage (per CV, documenti)
+- **State Management**: Zustand + TanStack Query
+
+**Architettura Monolite Modulare** (non microservizi):
+- ✅ Deployment singolo
+- ✅ Type-safety end-to-end
+- ✅ Nessun overhead di network tra servizi
+- ✅ Perfect fit per team piccoli/medi
+
+### Route Groups
+
+```
+app/
+├── (marketing)/      → Pagine pubbliche SEO (Header/Footer)
+│   ├── page.tsx      → Homepage
+│   ├── chi-siamo/    → About
+│   ├── contattaci/   → Contact
+│   ├── didattica/    → Courses
+│   └── ...
+├── (app)/            → Dashboard protette
+│   ├── admin/        → Pannello amministratore
+│   ├── studente/     → Pannello studente
+│   └── collaboratore/→ Pannello tutor
+├── auth/             → Pagine autenticazione
+│   ├── login/
+│   ├── registrati/
+│   └── complete-profile/
+└── api/              → API Routes
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 📦 Requisiti
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Node.js** >= 18.17
+- **pnpm** >= 8.0 (raccomandato) o npm
+- **PostgreSQL** >= 14
+- **Docker** (opzionale, per database locale)
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## 🚀 Installazione
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 1. Clona il repository
+```bash
+git clone https://github.com/marcimastro98/leonardoschool.git
+cd leonardoschool
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 2. Installa dipendenze
+```bash
+pnpm install
+```
 
-## Deploy on Vercel
+### 3. Configura environment variables
+```bash
+cp .env.example .env.local
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Compila `.env.local` con:
+```env
+# Database
+DATABASE_URL="postgresql://user:password@localhost:5433/leonardoschool"
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Firebase Client (pubbliche)
+NEXT_PUBLIC_FIREBASE_API_KEY="..."
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="..."
+NEXT_PUBLIC_FIREBASE_PROJECT_ID="..."
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="..."
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="..."
+NEXT_PUBLIC_FIREBASE_APP_ID="..."
+
+# Firebase Admin (privata - JSON string)
+FIREBASE_SERVICE_ACCOUNT_KEY='{"type":"service_account",...}'
+
+# reCAPTCHA
+NEXT_PUBLIC_RECAPTCHA_SITE_KEY="..."
+RECAPTCHA_SECRET_KEY="..."
+
+# Email SMTP
+SMTP_HOST="smtp.example.com"
+SMTP_PORT="465"
+SMTP_SECURE="true"
+SMTP_USER="noreply@example.com"
+SMTP_PASSWORD="..."
+EMAIL_FROM="noreply@leonardoschool.it"
+EMAIL_TO="info@leonardoschool.it"
+
+# App URL
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
+```
+
+### 4. Avvia database PostgreSQL
+```bash
+# Con Docker
+docker-compose up -d
+
+# Oppure usa PostgreSQL locale (porta 5433)
+```
+
+### 5. Genera Prisma client e migra database
+```bash
+pnpm prisma:generate
+pnpm prisma:migrate
+```
+
+### 6. (Opzionale) Popola con dati di test
+```bash
+pnpm seed
+```
+
+### 7. Avvia server di sviluppo
+```bash
+pnpm dev
+```
+
+Apri [http://localhost:3000](http://localhost:3000)
+
+---
+
+## 🛠️ Comandi Disponibili
+
+| Comando | Descrizione |
+|---------|-------------|
+| `pnpm dev` | Avvia server di sviluppo (localhost:3000) |
+| `pnpm build` | Build per produzione |
+| `pnpm start` | Avvia server produzione |
+| `pnpm lint` | Esegue ESLint |
+| `pnpm prisma:generate` | Genera Prisma client (⚠️ dopo ogni modifica schema) |
+| `pnpm prisma:migrate` | Applica migrazioni database |
+| `pnpm prisma:studio` | Apre GUI database (localhost:5555) |
+| `pnpm seed` | Popola database con dati di test (dev only) |
+| `pnpm seed:firebase` | Crea utenti in Firebase Auth (dev only) |
+
+---
+
+## 📁 Struttura Progetto
+
+```
+leonardoschool/
+├── app/                    # Next.js App Router
+│   ├── (marketing)/        # Pagine pubbliche
+│   ├── (app)/              # Dashboard protette
+│   ├── api/                # API Routes
+│   └── auth/               # Pagine auth
+├── components/             # Componenti React
+│   ├── admin/              # Componenti admin
+│   ├── layout/             # Header, Footer
+│   ├── marketing/          # Homepage sections
+│   └── ui/                 # UI components riutilizzabili
+├── lib/                    # Utilities e configurazioni
+│   ├── firebase/           # Firebase client & admin SDK
+│   ├── hooks/              # Custom React hooks
+│   ├── middleware/         # Rate limiting, etc
+│   ├── prisma/             # Prisma client
+│   ├── theme/              # Sistema colori
+│   ├── trpc/               # tRPC client
+│   ├── utils/              # Utility functions
+│   └── validations/        # Zod schemas
+├── server/                 # Backend logic
+│   ├── services/           # Email, etc
+│   └── trpc/               # tRPC routers
+├── prisma/                 # Database schema
+│   ├── schema.prisma       # Schema Prisma
+│   └── seed.ts             # Script seeding
+├── scripts/                # Script utility
+│   └── seed-complete.ts    # Seed Firebase + PostgreSQL
+├── public/                 # Static assets
+└── types/                  # TypeScript types
+```
+
+---
+
+## 🔐 Autenticazione
+
+### Flusso Completo
+
+```
+1. Client: firebaseAuth.login() / register()
+           ↓
+2. Client: POST /api/auth/me (con Firebase token)
+           ↓
+3. Server: Verifica token Firebase
+           ↓
+4. Server: Sincronizza utente in PostgreSQL
+           ↓
+5. Server: Setta cookies:
+           - auth-token (HttpOnly, 7 giorni)
+           - user-role (per routing)
+           - profile-completed (per redirect)
+           ↓
+6. Client: Redirect in base a ruolo/profilo
+```
+
+### Ruoli Utente
+
+| Ruolo | Descrizione | Dashboard |
+|-------|-------------|-----------|
+| `ADMIN` | Amministratore | `/admin` |
+| `COLLABORATOR` | Tutor/Collaboratore | `/collaboratore` |
+| `STUDENT` | Studente | `/studente` |
+
+### Stati Utente
+
+- **profileCompleted = false**: Redirect a `/auth/complete-profile`
+- **isActive = false**: Account non attivo (richiede approvazione admin)
+- **emailVerified = false**: Email non verificata
+
+### File Chiave
+
+- `lib/firebase/auth.ts` - Client auth functions
+- `lib/firebase/admin.ts` - Server Firebase Admin
+- `app/api/auth/me/route.ts` - Sync endpoint
+- `proxy.ts` - Middleware protezione route
+- `server/trpc/context.ts` - Context tRPC con user
+
+---
+
+## 🗄️ Database
+
+### Schema Prisma
+
+```prisma
+// Ruoli
+enum UserRole { ADMIN, COLLABORATOR, STUDENT }
+
+// Materie
+enum Subject { BIOLOGIA, CHIMICA, FISICA, MATEMATICA, LOGICA, CULTURA_GENERALE }
+
+// Modelli principali
+model User { ... }          // Utente base
+model Student { ... }       // Profilo studente
+model Collaborator { ... }  // Profilo collaboratore
+model Admin { ... }         // Profilo admin
+
+// Simulazioni
+model Simulation { ... }    // Test/simulazione
+model Question { ... }      // Domanda
+model Answer { ... }        // Risposta
+
+// Contratti
+model ContractTemplate { ... }
+model Contract { ... }
+
+// Gruppi e materiali
+model Group { ... }
+model Material { ... }
+```
+
+### Comandi Utili
+
+```bash
+# Visualizza database
+pnpm prisma:studio
+
+# Reset database
+pnpm prisma:migrate reset
+
+# Push schema senza migration
+pnpm prisma:push
+```
+
+---
+
+## 🔌 API (tRPC)
+
+### Procedures Disponibili
+
+```typescript
+// server/trpc/init.ts
+publicProcedure      // Nessuna auth richiesta
+protectedProcedure   // Richiede autenticazione
+adminProcedure       // Solo ADMIN
+staffProcedure       // ADMIN o COLLABORATOR
+collaboratorProcedure// Solo COLLABORATOR
+studentProcedure     // Solo STUDENT
+```
+
+### Routers
+
+| Router | Descrizione |
+|--------|-------------|
+| `auth` | Registrazione, sync utente |
+| `users` | Gestione utenti (admin) |
+| `students` | Profili studenti |
+| `collaborators` | Profili collaboratori |
+| `questions` | Gestione domande |
+| `simulations` | Simulazioni e test |
+| `contracts` | Template e contratti |
+| `groups` | Gruppi studenti |
+| `materials` | Materiale didattico |
+| `contactRequests` | Richieste contatto |
+| `jobApplications` | Candidature lavoro |
+
+### Esempio Utilizzo
+
+```typescript
+// Client component
+const { data, isLoading } = trpc.users.getAll.useQuery();
+
+// Mutation
+const mutation = trpc.users.create.useMutation({
+  onSuccess: () => showSuccess('Utente creato'),
+  onError: handleMutationError,
+});
+```
+
+---
+
+## 🔒 Sicurezza
+
+### Misure Implementate
+
+| Categoria | Implementazione |
+|-----------|-----------------|
+| **Autenticazione** | Firebase Auth + token verification server-side |
+| **Cookies** | HttpOnly, Secure, SameSite=lax, 7 giorni |
+| **XSS Protection** | `sanitizeHtml()` su tutti i contenuti HTML |
+| **SQL Injection** | Prisma ORM (query parametrizzate) |
+| **Rate Limiting** | Limiti su auth, contact form, reCAPTCHA |
+| **Security Headers** | HSTS, X-Frame-Options, CSP headers |
+| **Input Validation** | Zod schemas su tutti gli input |
+| **CSRF** | reCAPTCHA v3 su registrazione |
+
+### Rate Limiting
+
+```typescript
+// lib/middleware/rateLimit.ts
+checkRateLimit(ip, 'auth')    // 5 req/min per auth
+checkRateLimit(ip, 'contact') // 3 req/min per form
+checkRateLimit(ip, 'api')     // 100 req/min generale
+```
+
+### Security Headers (next.config.ts)
+
+```
+Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+X-Frame-Options: SAMEORIGIN
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 1; mode=block
+Referrer-Policy: strict-origin-when-cross-origin
+Permissions-Policy: camera=(), microphone=(), geolocation=()
+```
+
+---
+
+## 🎨 Sistema Colori
+
+**⚠️ MAI usare hex hardcoded.** Usa sempre `lib/theme/colors.ts`:
+
+```typescript
+import { colors, getSubjectColor } from '@/lib/theme/colors';
+
+// ✅ Corretto
+<div className={colors.primary.gradient} />
+<div className={getSubjectColor('BIOLOGIA', 'bg')} />
+
+// ❌ Sbagliato
+<div className="bg-[#D54F8A]" />
+```
+
+### Categorie Colori
+
+- `colors.primary.*` - Rosso brand
+- `colors.subjects.*` - Colori per materia
+- `colors.background.*` - Sfondi (supporta dark mode)
+- `colors.status.*` - Success, warning, error
+- `colors.text.*` - Colori testo
+- `colors.border.*` - Bordi
+
+---
+
+## 🌱 Seeding Dati di Test
+
+### Quick Start
+
+```bash
+# Seed completo (Firebase + PostgreSQL)
+pnpm seed
+```
+
+### Dati Creati
+
+| Ruolo | Quantità | Email Pattern |
+|-------|----------|---------------|
+| Admin | 3 | admin1-3@leonardoschool.test |
+| Collaboratori | 10 | collab1-10@leonardoschool.test |
+| Studenti | 20 | studente1-20@leonardoschool.test |
+
+**Password:** `TestPassword123!` per tutti
+
+### Note
+
+- ⚠️ Funziona solo in development (`NODE_ENV !== 'production'`)
+- 🗑️ Pulisce automaticamente dati precedenti `@leonardoschool.test`
+- ✅ Tutti gli utenti sono verificati e attivi
+
+### Workflow Reset Database
+
+```bash
+pnpm prisma:migrate reset  # Reset schema
+pnpm prisma:generate       # Rigenera client
+pnpm seed                  # Popola dati test
+```
+
+---
+
+## 📧 Email & SMTP
+
+### Configurazione
+
+```env
+SMTP_HOST="smtp.example.com"
+SMTP_PORT="465"
+SMTP_SECURE="true"
+SMTP_USER="noreply@leonardoschool.it"
+SMTP_PASSWORD="your-password"
+EMAIL_FROM="noreply@leonardoschool.it"
+EMAIL_TO="info@leonardoschool.it"
+```
+
+### Email Inviate
+
+- ✉️ Conferma registrazione
+- ✉️ Reset password (via Firebase)
+- ✉️ Assegnazione contratto
+- ✉️ Conferma firma contratto
+- ✉️ Notifiche admin (nuova richiesta, candidatura)
+
+### Provider Raccomandati
+
+- **Development**: Mailtrap, Ethereal
+- **Production**: SendGrid, Mailgun, Amazon SES
+
+---
+
+## 🔍 SEO
+
+### Implementazioni
+
+- ✅ Metadata dinamici per ogni pagina
+- ✅ `sitemap.ts` generato automaticamente
+- ✅ `robots.txt` configurato
+- ✅ Structured data (JSON-LD)
+- ✅ Open Graph e Twitter Cards
+- ✅ Performance ottimizzata (Lighthouse 95+)
+
+### Keywords Target
+
+```
+preparazione test medicina catania
+corsi test ammissione
+simulazioni test medicina
+```
+
+### File SEO
+
+- `app/sitemap.ts` - Sitemap dinamica
+- `public/robots.txt` - Configurazione crawler
+- `lib/constants.ts` - Meta comuni
+
+---
+
+## 🚀 Deployment
+
+### Vercel (Raccomandato)
+
+1. Connetti repository GitHub
+2. Configura environment variables
+3. Deploy automatico su push
+
+```bash
+# Build command (auto-detected)
+pnpm build
+
+# Output directory
+.next
+```
+
+### Docker
+
+```bash
+docker build -t leonardoschool .
+docker run -p 3000:3000 leonardoschool
+```
+
+### Environment Production
+
+```env
+NODE_ENV=production
+NEXT_PUBLIC_APP_URL=https://leonardoschool.it
+```
+
+---
+
+## ❓ Troubleshooting
+
+### "Cannot find module '@prisma/client'"
+```bash
+pnpm prisma:generate
+```
+
+### "Firebase user not found"
+Usa `pnpm seed` per creare utenti in Firebase + PostgreSQL
+
+### Database connection error
+Verifica che PostgreSQL sia in esecuzione (porta 5433)
+```bash
+docker-compose up -d
+```
+
+### Cookie non settati
+Verifica che `NEXT_PUBLIC_APP_URL` corrisponda all'URL effettivo
+
+### Errori TypeScript dopo modifica schema
+```bash
+pnpm prisma:generate
+# Riavvia VS Code/IDE
+```
+
+### ESLint errors
+```bash
+pnpm lint
+```
+
+---
+
+## 📄 License
+
+Private - All rights reserved © Leonardo School
+
+---
+
+## 👥 Contatti
+
+- **Email**: info@leonardoschool.it
+- **Repository**: github.com/marcimastro98/leonardoschool

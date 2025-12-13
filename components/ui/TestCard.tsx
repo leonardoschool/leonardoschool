@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { TestCard as TestCardType } from '@/types';
 import { useState } from 'react';
+import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 
 interface TestCardProps {
   test: TestCardType;
@@ -33,7 +34,7 @@ export default function TestCard({ test, expandable = false }: TestCardProps) {
         <h5 className="text-lg font-semibold text-gray-900 mb-3 text-center">
           {test.title}
         </h5>
-        <p className="text-gray-600 mb-4 text-center text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: test.description.replace(' / ', '<br/>') }}></p>
+        <p className="text-gray-600 mb-4 text-center text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: sanitizeHtml(test.description.replace(' / ', '<br/>')) }}></p>
         
         {isExpanded && (test.details || test.dates || test.documents) && (
           <div className="mt-4 pt-4 border-t border-gray-200">

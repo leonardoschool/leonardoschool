@@ -11,12 +11,10 @@ import Link from 'next/link';
 import {
   ArrowLeft,
   Upload,
-  FileText,
   Download,
   CheckCircle,
   XCircle,
   AlertTriangle,
-  Table,
   HelpCircle,
 } from 'lucide-react';
 import {
@@ -62,7 +60,7 @@ export default function ImportaDomandePage() {
   const utils = trpc.useUtils();
 
   const [file, setFile] = useState<File | null>(null);
-  const [parsedData, setParsedData] = useState<ImportRow[]>([]);
+  const [_parsedData, setParsedData] = useState<ImportRow[]>([]);
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
   const [isValidating, setIsValidating] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -210,7 +208,7 @@ export default function ImportaDomandePage() {
       
       const results = validateData(data);
       setValidationResults(results);
-    } catch (err) {
+    } catch (_err) {
       showError('Errore', 'Impossibile leggere il file. Assicurati che sia un file CSV valido.');
     } finally {
       setIsValidating(false);

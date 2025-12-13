@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
@@ -16,12 +16,30 @@ import {
   ChevronDown,
   ChevronRight,
   BookOpen,
-  GripVertical,
   Save,
-  AlertCircle,
 } from 'lucide-react';
 
 type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD';
+
+// Type for Topic from tRPC query
+interface TopicData {
+  id: string;
+  name: string;
+  description: string | null;
+  difficulty: DifficultyLevel;
+  subTopics?: SubTopicData[];
+  _count?: {
+    subTopics: number;
+  };
+}
+
+// Type for SubTopic from tRPC query
+interface SubTopicData {
+  id: string;
+  name: string;
+  description: string | null;
+  difficulty: DifficultyLevel;
+}
 
 const difficultyLabels: Record<DifficultyLevel, string> = {
   EASY: 'Facile',
@@ -162,7 +180,7 @@ export default function TopicsManager({
     });
   };
 
-  const handleEditTopic = (topic: any) => {
+  const handleEditTopic = (topic: TopicData) => {
     setEditingTopicId(topic.id);
     setTopicForm({
       name: topic.name,
@@ -171,7 +189,7 @@ export default function TopicsManager({
     });
   };
 
-  const handleEditSubTopic = (subTopic: any) => {
+  const handleEditSubTopic = (subTopic: SubTopicData) => {
     setEditingSubTopicId(subTopic.id);
     setSubTopicForm({
       name: subTopic.name,
@@ -413,7 +431,7 @@ export default function TopicsManager({
                         </div>
                         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                           <button
-                            onClick={() => handleEditTopic(topic)}
+                            onClick={() => handleEditTopic(topic as TopicData)}
                             className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700`}
                             title="Modifica"
                           >
@@ -439,7 +457,7 @@ export default function TopicsManager({
                       <div className={`border-t ${colors.border.primary} ${colors.background.secondary}`}>
                         <div className="p-3 space-y-2">
                           {/* Existing SubTopics */}
-                          {topic.subTopics?.map((subTopic: any) => (
+                          {topic.subTopics?.map((subTopic: SubTopicData) => (
                             <div key={subTopic.id}>
                               {editingSubTopicId === subTopic.id ? (
                                 <div className={`p-3 rounded-lg ${colors.background.card} border ${colors.border.primary} space-y-2`}>

@@ -18,7 +18,6 @@ import {
   Edit2,
   Trash2,
   Eye,
-  Archive,
   Users,
   Clock,
   Target,
@@ -26,10 +25,9 @@ import {
   FileText,
   ChevronLeft,
   ChevronRight,
-  BarChart3,
   Send,
 } from 'lucide-react';
-import type { SimulationType, SimulationStatus, SimulationVisibility } from '@/lib/validations/simulationValidation';
+import type { SimulationType, SimulationStatus } from '@/lib/validations/simulationValidation';
 
 // Labels
 const typeLabels: Record<SimulationType, string> = {
@@ -129,7 +127,7 @@ export default function CollaboratorSimulationsPage() {
     setOpenMenuId(openMenuId === id ? null : id);
   };
 
-  const formatDate = (date: Date | string | null | undefined) => {
+  const _formatDate = (date: Date | string | null | undefined) => {
     if (!date) return '-';
     return new Date(date).toLocaleDateString('it-IT', {
       day: '2-digit',

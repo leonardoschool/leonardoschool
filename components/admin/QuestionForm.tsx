@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
@@ -14,19 +14,15 @@ import {
   X,
   Plus,
   Trash2,
-  GripVertical,
   Check,
-  AlertCircle,
-  Image as ImageIcon,
-  HelpCircle,
   Lightbulb,
   Sparkles,
   ChevronDown,
   ChevronUp,
+  AlertCircle,
 } from 'lucide-react';
 import {
   questionTypeLabels,
-  questionStatusLabels,
   difficultyLabels,
   openValidationTypeLabels,
   validateQuestionAnswers,
@@ -97,7 +93,7 @@ export default function QuestionForm({ questionId, basePath = '/admin/domande', 
 
   // Form state
   const [type, setType] = useState<QuestionType>(initialData?.type ?? 'SINGLE_CHOICE');
-  const [status, setStatus] = useState<QuestionStatus>(initialData?.status ?? 'DRAFT');
+  const [_status, _setStatus] = useState<QuestionStatus>(initialData?.status ?? 'DRAFT');
   const [text, setText] = useState(initialData?.text ?? '');
   const [description, setDescription] = useState(initialData?.description ?? '');
   const [imageUrl, setImageUrl] = useState(initialData?.imageUrl ?? '');

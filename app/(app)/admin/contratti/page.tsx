@@ -8,6 +8,7 @@ import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
+import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import { 
   FileText, 
   Plus, 
@@ -852,7 +853,7 @@ Email: {{EMAIL}}</p>
             <div className="p-6 lg:p-8 overflow-y-auto max-h-[calc(90vh-80px)]">
               <div 
                 className="contract-preview"
-                dangerouslySetInnerHTML={{ __html: previewContent }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewContent) }}
               />
             </div>
           </div>

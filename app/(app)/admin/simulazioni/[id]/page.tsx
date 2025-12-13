@@ -16,19 +16,14 @@ import {
   Trash2,
   Archive,
   Send,
-  Clock,
   Target,
   Users,
-  Calendar,
   Award,
   BarChart3,
-  Eye,
   CheckCircle,
   XCircle,
   AlertCircle,
-  Plus,
-  Settings,
-  FileText,
+  Clock,
 } from 'lucide-react';
 import type { SimulationType, SimulationStatus } from '@/lib/validations/simulationValidation';
 

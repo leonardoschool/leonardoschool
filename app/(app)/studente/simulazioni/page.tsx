@@ -7,7 +7,6 @@ import { PageLoader } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import Link from 'next/link';
 import {
-  Search,
   Filter,
   Clock,
   Target,
@@ -20,9 +19,7 @@ import {
   AlertCircle,
   Calendar,
   Zap,
-  BookOpen,
   BarChart3,
-  TrendingUp,
 } from 'lucide-react';
 import type { SimulationType } from '@/lib/validations/simulationValidation';
 

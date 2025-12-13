@@ -646,7 +646,7 @@ export const materialsRouter = router({
     .input(z.object({
       type: z.enum(['PDF', 'VIDEO', 'LINK', 'DOCUMENT']).optional(),
       categoryId: z.string().optional(),
-      visibility: z.enum(['ALL_STUDENTS', 'COURSE_BASED', 'SELECTED_STUDENTS']).optional(),
+      visibility: z.enum(['ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).optional(),
       isActive: z.boolean().optional(),
       subjectId: z.string().optional(),
     }).optional())

@@ -6,16 +6,15 @@ import { colors, getSubjectColor } from '@/lib/theme/colors';
 import { PageLoader } from '@/components/ui/loaders';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import {
   ArrowLeft,
   Trophy,
-  Target,
   Clock,
   CheckCircle,
   XCircle,
   MinusCircle,
   Award,
-  TrendingUp,
   ChevronDown,
   ChevronUp,
   Eye,
@@ -108,7 +107,7 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
   }
 
   const { simulation, score, totalScore, correctAnswers, wrongAnswers, blankAnswers, timeSpent, passed } = result;
-  const scorePercentage = totalScore > 0 ? Math.round((score / totalScore) * 100) : 0;
+  const _scorePercentage = totalScore > 0 ? Math.round((score / totalScore) * 100) : 0;
 
   // Format time
   const formatTime = (seconds: number) => {
@@ -323,7 +322,7 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
               timeSpent: number;
             }, index: number) => {
               const isExpanded = showAllQuestions || expandedQuestion === answer.id;
-              const correctAnswer = answer.question.answers.find((a: { isCorrect: boolean }) => a.isCorrect);
+              const _correctAnswer = answer.question.answers.find((a: { isCorrect: boolean }) => a.isCorrect);
 
               return (
                 <div key={answer.id} className="p-4">
@@ -363,7 +362,7 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
                         </div>
                         <div
                           className={`text-sm ${colors.text.secondary} line-clamp-1 mt-1`}
-                          dangerouslySetInnerHTML={{ __html: answer.question.text }}
+                          dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.question.text) }}
                         />
                       </div>
                     </div>
@@ -374,7 +373,7 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
                       {/* Full question */}
                       <div
                         className={`p-3 rounded-lg ${colors.background.secondary} ${colors.text.primary}`}
-                        dangerouslySetInnerHTML={{ __html: answer.question.text }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.question.text) }}
                       />
 
                       {/* Answers */}
@@ -413,7 +412,7 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
                               </span>
                               <div 
                                 className="flex-1"
-                                dangerouslySetInnerHTML={{ __html: a.text }}
+                                dangerouslySetInnerHTML={{ __html: sanitizeHtml(a.text) }}
                               />
                               {isSelected && (
                                 <span className="text-xs">La tua risposta</span>
@@ -432,7 +431,7 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
                           <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">Spiegazione:</p>
                           <div 
                             className="text-sm text-blue-700 dark:text-blue-300"
-                            dangerouslySetInnerHTML={{ __html: answer.question.explanation }}
+                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.question.explanation) }}
                           />
                         </div>
                       )}
