@@ -35,53 +35,68 @@ import {
   ClipboardList,
   ClipboardCheck,
   Mail,
+  Calendar,
+  GraduationCap,
+  Tag,
   type LucideIcon,
 } from 'lucide-react';
 
-// Notification type config with icons and colors
-type NotificationTypeKey = 'CONTRACT_ASSIGNED' | 'CONTRACT_SIGNED' | 'CONTRACT_CANCELLED' | 'ACCOUNT_ACTIVATED' | 'PROFILE_COMPLETED' | 'JOB_APPLICATION' | 'CONTACT_REQUEST' | 'GENERAL';
+// Notification type config with icons and colors - Extended for all notification types
+type NotificationTypeKey = 
+  | 'ACCOUNT_ACTIVATED' | 'NEW_REGISTRATION' | 'PROFILE_COMPLETED'
+  | 'CONTRACT_ASSIGNED' | 'CONTRACT_SIGNED' | 'CONTRACT_REMINDER' | 'CONTRACT_EXPIRED' | 'CONTRACT_CANCELLED'
+  | 'EVENT_INVITATION' | 'EVENT_REMINDER' | 'EVENT_UPDATED' | 'EVENT_CANCELLED'
+  | 'SIMULATION_ASSIGNED' | 'SIMULATION_REMINDER' | 'SIMULATION_READY' | 'SIMULATION_STARTED' | 'SIMULATION_RESULTS' | 'SIMULATION_COMPLETED'
+  | 'STAFF_ABSENCE' | 'ABSENCE_REQUEST' | 'ABSENCE_CONFIRMED' | 'ABSENCE_REJECTED' | 'SUBSTITUTION_ASSIGNED'
+  | 'QUESTION_FEEDBACK' | 'OPEN_ANSWER_TO_REVIEW'
+  | 'MATERIAL_AVAILABLE' | 'MESSAGE_RECEIVED'
+  | 'JOB_APPLICATION' | 'CONTACT_REQUEST'
+  | 'ATTENDANCE_RECORDED' | 'SYSTEM_ALERT' | 'GENERAL';
 
 const notificationConfig: Record<NotificationTypeKey, { icon: LucideIcon; bgClass: string; iconColor: string }> = {
-  CONTRACT_ASSIGNED: {
-    icon: FileText,
-    bgClass: 'bg-blue-100 dark:bg-blue-900/30',
-    iconColor: 'text-blue-600 dark:text-blue-400',
-  },
-  CONTRACT_SIGNED: {
-    icon: FileSignature,
-    bgClass: 'bg-green-100 dark:bg-green-900/30',
-    iconColor: 'text-green-600 dark:text-green-400',
-  },
-  CONTRACT_CANCELLED: {
-    icon: XCircle,
-    bgClass: 'bg-red-100 dark:bg-red-900/30',
-    iconColor: 'text-red-600 dark:text-red-400',
-  },
-  ACCOUNT_ACTIVATED: {
-    icon: UserCheck,
-    bgClass: 'bg-emerald-100 dark:bg-emerald-900/30',
-    iconColor: 'text-emerald-600 dark:text-emerald-400',
-  },
-  PROFILE_COMPLETED: {
-    icon: UserPlus,
-    bgClass: 'bg-purple-100 dark:bg-purple-900/30',
-    iconColor: 'text-purple-600 dark:text-purple-400',
-  },
-  JOB_APPLICATION: {
-    icon: Briefcase,
-    bgClass: 'bg-amber-100 dark:bg-amber-900/30',
-    iconColor: 'text-amber-600 dark:text-amber-400',
-  },
-  CONTACT_REQUEST: {
-    icon: MessageSquare,
-    bgClass: 'bg-pink-100 dark:bg-pink-900/30',
-    iconColor: 'text-pink-600 dark:text-pink-400',
-  },
-  GENERAL: {
-    icon: Bell,
-    bgClass: 'bg-gray-100 dark:bg-gray-800',
-    iconColor: 'text-gray-600 dark:text-gray-400',
-  },
+  // Account & Auth
+  ACCOUNT_ACTIVATED: { icon: UserCheck, bgClass: 'bg-emerald-100 dark:bg-emerald-900/30', iconColor: 'text-emerald-600 dark:text-emerald-400' },
+  NEW_REGISTRATION: { icon: UserPlus, bgClass: 'bg-blue-100 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400' },
+  PROFILE_COMPLETED: { icon: UserPlus, bgClass: 'bg-purple-100 dark:bg-purple-900/30', iconColor: 'text-purple-600 dark:text-purple-400' },
+  // Contracts
+  CONTRACT_ASSIGNED: { icon: FileText, bgClass: 'bg-blue-100 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400' },
+  CONTRACT_SIGNED: { icon: FileSignature, bgClass: 'bg-green-100 dark:bg-green-900/30', iconColor: 'text-green-600 dark:text-green-400' },
+  CONTRACT_REMINDER: { icon: FileText, bgClass: 'bg-amber-100 dark:bg-amber-900/30', iconColor: 'text-amber-600 dark:text-amber-400' },
+  CONTRACT_EXPIRED: { icon: XCircle, bgClass: 'bg-red-100 dark:bg-red-900/30', iconColor: 'text-red-600 dark:text-red-400' },
+  CONTRACT_CANCELLED: { icon: XCircle, bgClass: 'bg-red-100 dark:bg-red-900/30', iconColor: 'text-red-600 dark:text-red-400' },
+  // Events & Calendar
+  EVENT_INVITATION: { icon: Calendar, bgClass: 'bg-indigo-100 dark:bg-indigo-900/30', iconColor: 'text-indigo-600 dark:text-indigo-400' },
+  EVENT_REMINDER: { icon: Calendar, bgClass: 'bg-amber-100 dark:bg-amber-900/30', iconColor: 'text-amber-600 dark:text-amber-400' },
+  EVENT_UPDATED: { icon: Calendar, bgClass: 'bg-blue-100 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400' },
+  EVENT_CANCELLED: { icon: Calendar, bgClass: 'bg-red-100 dark:bg-red-900/30', iconColor: 'text-red-600 dark:text-red-400' },
+  // Simulations
+  SIMULATION_ASSIGNED: { icon: ClipboardCheck, bgClass: 'bg-cyan-100 dark:bg-cyan-900/30', iconColor: 'text-cyan-600 dark:text-cyan-400' },
+  SIMULATION_REMINDER: { icon: ClipboardCheck, bgClass: 'bg-amber-100 dark:bg-amber-900/30', iconColor: 'text-amber-600 dark:text-amber-400' },
+  SIMULATION_READY: { icon: ClipboardCheck, bgClass: 'bg-green-100 dark:bg-green-900/30', iconColor: 'text-green-600 dark:text-green-400' },
+  SIMULATION_STARTED: { icon: ClipboardCheck, bgClass: 'bg-blue-100 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400' },
+  SIMULATION_RESULTS: { icon: ClipboardCheck, bgClass: 'bg-purple-100 dark:bg-purple-900/30', iconColor: 'text-purple-600 dark:text-purple-400' },
+  SIMULATION_COMPLETED: { icon: ClipboardCheck, bgClass: 'bg-green-100 dark:bg-green-900/30', iconColor: 'text-green-600 dark:text-green-400' },
+  // Staff Absences
+  STAFF_ABSENCE: { icon: UserCheck, bgClass: 'bg-orange-100 dark:bg-orange-900/30', iconColor: 'text-orange-600 dark:text-orange-400' },
+  ABSENCE_REQUEST: { icon: UserCheck, bgClass: 'bg-amber-100 dark:bg-amber-900/30', iconColor: 'text-amber-600 dark:text-amber-400' },
+  ABSENCE_CONFIRMED: { icon: Check, bgClass: 'bg-green-100 dark:bg-green-900/30', iconColor: 'text-green-600 dark:text-green-400' },
+  ABSENCE_REJECTED: { icon: X, bgClass: 'bg-red-100 dark:bg-red-900/30', iconColor: 'text-red-600 dark:text-red-400' },
+  SUBSTITUTION_ASSIGNED: { icon: Users, bgClass: 'bg-blue-100 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400' },
+  // Questions
+  QUESTION_FEEDBACK: { icon: MessageSquare, bgClass: 'bg-yellow-100 dark:bg-yellow-900/30', iconColor: 'text-yellow-600 dark:text-yellow-400' },
+  OPEN_ANSWER_TO_REVIEW: { icon: BookOpen, bgClass: 'bg-purple-100 dark:bg-purple-900/30', iconColor: 'text-purple-600 dark:text-purple-400' },
+  // Materials
+  MATERIAL_AVAILABLE: { icon: FolderOpen, bgClass: 'bg-teal-100 dark:bg-teal-900/30', iconColor: 'text-teal-600 dark:text-teal-400' },
+  // Messages
+  MESSAGE_RECEIVED: { icon: MessageSquare, bgClass: 'bg-blue-100 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400' },
+  // Applications
+  JOB_APPLICATION: { icon: Briefcase, bgClass: 'bg-amber-100 dark:bg-amber-900/30', iconColor: 'text-amber-600 dark:text-amber-400' },
+  CONTACT_REQUEST: { icon: Mail, bgClass: 'bg-pink-100 dark:bg-pink-900/30', iconColor: 'text-pink-600 dark:text-pink-400' },
+  // Attendance
+  ATTENDANCE_RECORDED: { icon: GraduationCap, bgClass: 'bg-green-100 dark:bg-green-900/30', iconColor: 'text-green-600 dark:text-green-400' },
+  // System
+  SYSTEM_ALERT: { icon: AlertTriangle, bgClass: 'bg-red-100 dark:bg-red-900/30', iconColor: 'text-red-600 dark:text-red-400' },
+  GENERAL: { icon: Bell, bgClass: 'bg-gray-100 dark:bg-gray-800', iconColor: 'text-gray-600 dark:text-gray-400' },
 };
 
 type Theme = 'light' | 'dark' | 'system';
@@ -93,6 +108,7 @@ export default function AppHeader() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [gestioneMenuOpen, setGestioneMenuOpen] = useState(false);
+  const [domandeMenuOpen, setDomandeMenuOpen] = useState(false);
   const [currentTheme, setCurrentTheme] = useState<Theme>('system');
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -100,6 +116,7 @@ export default function AppHeader() {
   const notificationsRef = useRef<HTMLDivElement>(null);
   const themeMenuRef = useRef<HTMLDivElement>(null);
   const gestioneMenuRef = useRef<HTMLDivElement>(null);
+  const domandeMenuRef = useRef<HTMLDivElement>(null);
 
   // Polling interval for real-time updates (30 seconds)
   const POLLING_INTERVAL = 30 * 1000;
@@ -117,14 +134,18 @@ export default function AppHeader() {
     }
   );
   
-  // Get notifications (admin only) - auto-refresh every 30 seconds
-  const { data: notifications, refetch: refetchNotifications } = trpc.contracts.getAdminNotifications.useQuery(
-    { unreadOnly: true, limit: 10 },
+  // Get unified notifications (all roles) - auto-refresh every 30 seconds
+  const { data: notificationsData, refetch: refetchNotifications } = trpc.notifications.getNotifications.useQuery(
+    { unreadOnly: true, pageSize: 10 },
     { 
-      enabled: user?.role === 'ADMIN',
+      enabled: !!user,
       refetchInterval: POLLING_INTERVAL,
     }
   );
+  
+  // Extract notifications from response
+  const notifications = notificationsData?.notifications || [];
+  const unreadCount = notificationsData?.unreadCount || 0;
 
   // Get job applications stats (admin only) - for badge count
   const { data: jobApplicationsStats } = trpc.jobApplications.getStats.useQuery(
@@ -153,15 +174,15 @@ export default function AppHeader() {
     }
   );
 
-  // Mark notification as read
-  const markAsReadMutation = trpc.contracts.markNotificationRead.useMutation({
+  // Mark notification as read (unified system)
+  const markAsReadMutation = trpc.notifications.markAsRead.useMutation({
     onSuccess: () => refetchNotifications(),
   });
 
   const isAdmin = user?.role === 'ADMIN';
   const isCollaborator = (user?.role as string) === 'COLLABORATOR';
+  const isStudent = user?.role === 'STUDENT';
   const isStaff = isAdmin || isCollaborator;
-  const unreadCount = notifications?.length || 0;
   const pendingApplicationsCount = jobApplicationsStats?.pending || 0;
   const pendingContactRequestsCount = contactRequestsStats?.pending || 0;
   const pendingContractUsersCount = studentsPendingContract?.length || 0;
@@ -233,6 +254,9 @@ export default function AppHeader() {
       if (gestioneMenuRef.current && !gestioneMenuRef.current.contains(e.target as Node)) {
         setGestioneMenuOpen(false);
       }
+      if (domandeMenuRef.current && !domandeMenuRef.current.contains(e.target as Node)) {
+        setDomandeMenuOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -268,10 +292,16 @@ export default function AppHeader() {
     { href: '/admin/richieste', label: 'Richieste', icon: Mail },
   ];
 
+  // Menu Domande (dropdown) - Admin & Collaborator: Domande, Tag
+  const domandeItems = [
+    { href: isAdmin ? '/admin/domande' : '/collaboratore/domande', label: 'Gestione Domande', icon: BookOpen },
+    { href: isAdmin ? '/admin/tags' : '/collaboratore/tags', label: 'Gestione Tag', icon: Tag },
+  ];
+
   const adminNavItems = [
     { href: '/admin', label: 'Dashboard', icon: Home },
     { href: '/admin/materiali', label: 'Materiali', icon: FolderOpen },
-    { href: '/admin/domande', label: 'Domande', icon: BookOpen },
+    // Domande is now a dropdown
     { href: '/admin/simulazioni', label: 'Simulazioni', icon: ClipboardCheck },
     { href: '/admin/statistiche', label: 'Statistiche', icon: BarChart3 },
   ];
@@ -281,7 +311,7 @@ export default function AppHeader() {
     { href: '/collaboratore', label: 'Dashboard', icon: Home },
     { href: '/collaboratore/studenti', label: 'Studenti', icon: Users },
     { href: '/collaboratore/materiali', label: 'Materiali', icon: FolderOpen },
-    { href: '/collaboratore/domande', label: 'Domande', icon: BookOpen },
+    // Domande is now a dropdown
     { href: '/collaboratore/statistiche', label: 'Statistiche', icon: BarChart3 },
   ];
 
@@ -294,11 +324,13 @@ export default function AppHeader() {
     { href: '/studente/gruppo', label: 'Il Mio Gruppo', icon: UsersRound },
   ];
 
-  const isStudent = user?.role === 'STUDENT';
   const navItems = isAdmin ? adminNavItems : isCollaborator ? collaboratorNavItems : isStudent ? studentNavItems : [];
 
   // Check if current path is in Gestione
   const isGestioneActive = gestioneItems.some(item => pathname.startsWith(item.href));
+  
+  // Check if current path is in Domande section
+  const isDomandeActive = domandeItems.some(item => pathname.startsWith(item.href));
 
   const formatNotificationTime = (date: Date | string) => {
     const now = new Date();
@@ -313,49 +345,75 @@ export default function AppHeader() {
     return `${days}g fa`;
   };
 
-  // Handle notification click - navigate to relevant section
+  // Get notification page URL based on user role
+  const getNotificationsPageUrl = () => {
+    if (isAdmin) return '/admin/notifiche';
+    if (isCollaborator) return '/collaboratore/notifiche';
+    return '/studente/notifiche';
+  };
+
+  // Handle notification click - navigate to relevant section or linkUrl
   const handleNotificationClick = (notification: {
     id: string;
     type: string;
-    studentId?: string | null;
-    collaboratorId?: string | null;
-    contractId?: string | null;
+    linkUrl?: string | null;
+    linkType?: string | null;
+    linkEntityId?: string | null;
   }) => {
     // Mark as read first
     handleMarkAsRead(notification.id);
     setNotificationsOpen(false);
 
-    // Navigate based on notification type
+    // If linkUrl is provided, navigate there
+    if (notification.linkUrl) {
+      router.push(notification.linkUrl);
+      return;
+    }
+
+    // Fallback navigation based on notification type and user role
+    const basePath = isAdmin ? '/admin' : isCollaborator ? '/collaboratore' : '/studente';
+    
     switch (notification.type) {
       case 'JOB_APPLICATION':
-        router.push('/admin/candidature');
+        if (isAdmin) router.push('/admin/candidature');
         break;
       case 'CONTACT_REQUEST':
-        router.push('/admin/richieste');
+        if (isAdmin) router.push('/admin/richieste');
         break;
       case 'CONTRACT_ASSIGNED':
       case 'CONTRACT_SIGNED':
+      case 'CONTRACT_REMINDER':
+      case 'CONTRACT_EXPIRED':
       case 'CONTRACT_CANCELLED':
-        // Navigate to contracts, with specific contract if available
-        if (notification.contractId) {
-          router.push(`/admin/contratti?contratto=${notification.contractId}`);
-        } else {
-          router.push('/admin/contratti');
-        }
+        if (isAdmin) router.push('/admin/contratti');
+        break;
+      case 'SIMULATION_ASSIGNED':
+      case 'SIMULATION_REMINDER':
+      case 'SIMULATION_READY':
+      case 'SIMULATION_STARTED':
+      case 'SIMULATION_RESULTS':
+      case 'SIMULATION_COMPLETED':
+        router.push(`${basePath}/simulazioni`);
+        break;
+      case 'MATERIAL_AVAILABLE':
+        router.push(`${basePath}/materiali`);
+        break;
+      case 'EVENT_INVITATION':
+      case 'EVENT_REMINDER':
+      case 'EVENT_UPDATED':
+      case 'EVENT_CANCELLED':
+        router.push(`${basePath}/calendario`);
+        break;
+      case 'MESSAGE_RECEIVED':
+        router.push(`${basePath}/messaggi`);
         break;
       case 'ACCOUNT_ACTIVATED':
       case 'PROFILE_COMPLETED':
-        // Navigate to users, with specific user if available
-        if (notification.studentId) {
-          router.push(`/admin/utenti?utente=${notification.studentId}&tipo=studente`);
-        } else if (notification.collaboratorId) {
-          router.push(`/admin/utenti?utente=${notification.collaboratorId}&tipo=collaboratore`);
-        } else {
-          router.push('/admin/utenti');
-        }
+      case 'NEW_REGISTRATION':
+        if (isAdmin) router.push('/admin/utenti');
         break;
       default:
-        router.push('/admin');
+        router.push(basePath);
     }
   };
 
@@ -439,6 +497,46 @@ export default function AppHeader() {
                                 {badgeCount > 99 ? '99+' : badgeCount}
                               </span>
                             )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Domande Dropdown (Admin & Collaborator) */}
+              {isStaff && (
+                <div ref={domandeMenuRef} className="relative">
+                  <button
+                    onClick={() => setDomandeMenuOpen(!domandeMenuOpen)}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                      isDomandeActive
+                        ? `${colors.primary.softBg} ${colors.primary.text}`
+                        : `${colors.text.primary} ${colors.effects.hover.bgSubtle}`
+                    }`}
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    Domande
+                    <ChevronDown className={`w-4 h-4 transition-transform ${domandeMenuOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {domandeMenuOpen && (
+                    <div className={`absolute left-0 top-full mt-1 w-56 ${colors.background.card} rounded-xl shadow-lg border ${colors.border.primary} py-1 z-50`}>
+                      {domandeItems.map((item) => {
+                        const isItemActive = pathname.startsWith(item.href);
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={() => setDomandeMenuOpen(false)}
+                            className={`w-full px-4 py-2.5 flex items-center gap-3 text-sm transition-colors ${
+                              isItemActive
+                                ? `${colors.primary.softBg} ${colors.primary.text}`
+                                : `${colors.text.primary} ${colors.effects.hover.bgSubtle}`
+                            }`}
+                          >
+                            <item.icon className="w-4 h-4" />
+                            {item.label}
                           </Link>
                         );
                       })}
@@ -531,8 +629,8 @@ export default function AppHeader() {
               )}
             </div>
 
-            {/* Notifications Bell (Admin only) */}
-            {isAdmin && (
+            {/* Notifications Bell (All authenticated users) */}
+            {user && (
               <div ref={notificationsRef} className="relative">
                 <button
                   onClick={() => setNotificationsOpen(!notificationsOpen)}
@@ -551,7 +649,7 @@ export default function AppHeader() {
                     <div className={`px-4 py-3 border-b ${colors.border.primary} flex items-center justify-between`}>
                       <h3 className={`font-semibold ${colors.text.primary}`}>Notifiche</h3>
                       <Link 
-                        href="/admin/notifiche" 
+                        href={getNotificationsPageUrl()} 
                         className={`text-sm ${colors.primary.text} hover:underline`}
                         onClick={() => setNotificationsOpen(false)}
                       >
@@ -570,11 +668,11 @@ export default function AppHeader() {
                             <div
                               key={notification.id}
                               onClick={() => handleNotificationClick({
-                                id: notification.id!,
-                                type: notification.type!,
-                                studentId: notification.studentId,
-                                collaboratorId: notification.collaboratorId,
-                                contractId: notification.contractId,
+                                id: notification.id,
+                                type: notification.type,
+                                linkUrl: notification.linkUrl,
+                                linkType: notification.linkType,
+                                linkEntityId: notification.linkEntityId,
                               })}
                               className={`px-4 py-3 border-b ${colors.border.primary} ${colors.effects.hover.bg} transition-colors cursor-pointer`}
                             >

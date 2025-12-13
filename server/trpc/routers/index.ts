@@ -11,6 +11,8 @@ import { contactRequestsRouter } from './contactRequests';
 import { groupsRouter } from './groups';
 import { questionsRouter } from './questions';
 import { simulationsRouter } from './simulations';
+import { notificationsRouter } from './notifications';
+import { questionTagsRouter } from './questionTags';
 
 export const appRouter = router({
   auth: authRouter,
@@ -24,7 +26,8 @@ export const appRouter = router({
   groups: groupsRouter,
   questions: questionsRouter,
   simulations: simulationsRouter,
-  // Add more routers here as you build them:
+  notifications: notificationsRouter,
+  questionTags: questionTagsRouter,
 });
 
 // Export type definition of API

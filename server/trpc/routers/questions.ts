@@ -31,6 +31,7 @@ export const questionsRouter = router({
         status,
         difficulty,
         tags,
+        tagIds,
         year,
         source,
         createdById,
@@ -65,7 +66,18 @@ export const questionsRouter = router({
       if (year) where.year = year;
       if (source) where.source = { contains: source, mode: 'insensitive' };
       if (createdById) where.createdById = createdById;
-      if (tags && tags.length > 0) where.tags = { hasEvery: tags };
+      if (tags && tags.length > 0) where.legacyTags = { hasEvery: tags };
+      
+      // Filter by new QuestionTag IDs
+      if (tagIds && tagIds.length > 0) {
+        andConditions.push({
+          questionTags: {
+            some: {
+              tagId: { in: tagIds },
+            },
+          },
+        });
+      }
 
       // Status filter
       if (status) {
@@ -77,16 +89,8 @@ export const questionsRouter = router({
         where.status = { in: statusIn };
       }
 
-      // Collaborator can only see their own questions + published ones
-      // BUT admin can see all questions
-      if (ctx.user.role === 'COLLABORATOR') {
-        andConditions.push({
-          OR: [
-            { createdById: ctx.user.id },
-            { status: 'PUBLISHED' },
-          ],
-        });
-      }
+      // Collaborators can see all questions but can only edit/delete their own
+      // This is enforced in the update/delete mutations, not here in the list query
 
       // Combine AND conditions if any
       if (andConditions.length > 0) {
@@ -118,6 +122,13 @@ export const questionsRouter = router({
           answers: includeAnswers ? {
             orderBy: { order: 'asc' },
           } : false,
+          questionTags: {
+            include: {
+              tag: {
+                select: { id: true, name: true, color: true, category: { select: { id: true, name: true, color: true } } },
+              },
+            },
+          },
           _count: {
             select: {
               answers: true,
@@ -154,6 +165,16 @@ export const questionsRouter = router({
           subTopic: true,
           answers: { orderBy: { order: 'asc' } },
           keywords: { orderBy: { weight: 'desc' } },
+          questionTags: {
+            include: {
+              tag: {
+                include: {
+                  category: { select: { id: true, name: true, color: true } },
+                },
+              },
+            },
+            orderBy: { assignedAt: 'asc' },
+          },
           feedbacks: {
             include: { student: { include: { user: { select: { name: true, email: true } } } } },
             orderBy: { createdAt: 'desc' },
@@ -381,17 +402,40 @@ export const questionsRouter = router({
           },
         });
 
+        // Extract relation IDs and legacy tags from questionData
+        const { subjectId, topicId, subTopicId, tags, ...restData } = questionData;
+
         // Update question
         const updated = await tx.question.update({
           where: { id },
           data: {
-            ...questionData,
+            ...restData,
+            // Handle subject relation
+            subject: subjectId === undefined 
+              ? undefined 
+              : subjectId === null 
+                ? { disconnect: true } 
+                : { connect: { id: subjectId } },
+            // Handle topic relation  
+            topic: topicId === undefined 
+              ? undefined 
+              : topicId === null 
+                ? { disconnect: true } 
+                : { connect: { id: topicId } },
+            // Handle subTopic relation
+            subTopic: subTopicId === undefined 
+              ? undefined 
+              : subTopicId === null 
+                ? { disconnect: true } 
+                : { connect: { id: subTopicId } },
+            // Handle legacy tags
+            legacyTags: tags !== undefined ? tags : undefined,
             updatedById: ctx.user.id,
             version: { increment: 1 },
-            publishedAt: questionData.status === 'PUBLISHED' && !currentQuestion.publishedAt
+            publishedAt: restData.status === 'PUBLISHED' && !currentQuestion.publishedAt
               ? new Date()
               : currentQuestion.publishedAt,
-            archivedAt: questionData.status === 'ARCHIVED' ? new Date() : null,
+            archivedAt: restData.status === 'ARCHIVED' ? new Date() : null,
           },
         });
 

@@ -145,7 +145,8 @@ export const questionFilterSchema = z.object({
   type: QuestionTypeEnum.optional(),
   status: QuestionStatusEnum.optional(),
   difficulty: DifficultyLevelEnum.optional(),
-  tags: z.array(z.string()).optional(),
+  tags: z.array(z.string()).optional(), // Legacy tags filter
+  tagIds: z.array(z.string()).optional(), // New QuestionTag IDs filter
   year: z.number().optional(),
   source: z.string().optional(),
   createdById: z.string().optional(),

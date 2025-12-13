@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
@@ -21,6 +21,7 @@ import {
   ChevronUp,
   AlertCircle,
 } from 'lucide-react';
+import TagSelector from '@/components/admin/TagSelector';
 import {
   questionTypeLabels,
   difficultyLabels,
@@ -60,7 +61,7 @@ interface QuestionFormProps {
     openValidationType?: OpenAnswerValidationType | null;
     openMinLength?: number | null;
     openMaxLength?: number | null;
-    tags: string[];
+    tagIds?: string[]; // Tag IDs
     year?: number | null;
     source?: string | null;
     answers: QuestionAnswerInput[];
@@ -115,7 +116,14 @@ export default function QuestionForm({ questionId, basePath = '/admin/domande', 
   );
   const [openMinLength, setOpenMinLength] = useState<number | ''>(initialData?.openMinLength ?? '');
   const [openMaxLength, setOpenMaxLength] = useState<number | ''>(initialData?.openMaxLength ?? '');
-  const [tagsInput, setTagsInput] = useState((initialData?.tags ?? []).join(', '));
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>(initialData?.tagIds ?? []);
+  const selectedTagIdsRef = useRef<string[]>(initialData?.tagIds ?? []);
+  
+  // Keep ref in sync with state using useEffect
+  useEffect(() => {
+    selectedTagIdsRef.current = selectedTagIds;
+  }, [selectedTagIds]);
+  
   const [year, setYear] = useState<number | ''>(initialData?.year ?? '');
   const [source, setSource] = useState(initialData?.source ?? '');
 
@@ -159,8 +167,26 @@ export default function QuestionForm({ questionId, basePath = '/admin/domande', 
     );
 
   // Mutations
+  // Tag assignment mutation - replaces all tags atomically
+  const replaceTagsMutation = trpc.questionTags.replaceQuestionTags.useMutation({
+    onError: handleMutationError,
+  });
+
   const createMutation = trpc.questions.createQuestion.useMutation({
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
+      // Assign tags to the newly created question using ref for current value
+      const currentTagIds = selectedTagIdsRef.current;
+      if (data?.id && currentTagIds.length > 0) {
+        try {
+          await replaceTagsMutation.mutateAsync({
+            questionId: data.id,
+            tagIds: currentTagIds,
+          });
+        } catch (error) {
+          console.error('Failed to assign tags:', error);
+          // Don't block - question was created successfully
+        }
+      }
       showSuccess('Domanda creata', 'La domanda è stata salvata con successo.');
       utils.questions.getQuestions.invalidate();
       utils.questions.getQuestionStats.invalidate();
@@ -170,7 +196,20 @@ export default function QuestionForm({ questionId, basePath = '/admin/domande', 
   });
 
   const updateMutation = trpc.questions.updateQuestion.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Update tag assignments using ref for current value
+      const currentTagIds = selectedTagIdsRef.current;
+      if (questionId) {
+        try {
+          await replaceTagsMutation.mutateAsync({
+            questionId,
+            tagIds: currentTagIds,
+          });
+        } catch (error) {
+          console.error('Failed to update tags:', error);
+          // Don't block - question was updated successfully
+        }
+      }
       showSuccess('Domanda aggiornata', 'Le modifiche sono state salvate.');
       utils.questions.getQuestions.invalidate();
       utils.questions.getQuestion.invalidate({ id: questionId });
@@ -320,11 +359,6 @@ export default function QuestionForm({ questionId, basePath = '/admin/domande', 
         return;
       }
 
-      const tags = tagsInput
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean);
-
       const data = {
         type,
         status: saveStatus,
@@ -349,7 +383,7 @@ export default function QuestionForm({ questionId, basePath = '/admin/domande', 
         openCaseSensitive: false,
         openPartialMatch: true,
         showExplanation: true,
-        tags,
+        tags: [], // Legacy tags removed - using new tag system
         year: year ? Number(year) : null,
         source: source || null,
         answers: type !== 'OPEN_TEXT' ? answers : [],
@@ -383,7 +417,6 @@ export default function QuestionForm({ questionId, basePath = '/admin/domande', 
       openValidationType,
       openMinLength,
       openMaxLength,
-      tagsInput,
       year,
       source,
       answers,
@@ -910,15 +943,16 @@ export default function QuestionForm({ questionId, basePath = '/admin/domande', 
             {/* Tags */}
             <div>
               <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                Tags (separati da virgola)
+                Tag
               </label>
-              <input
-                type="text"
-                value={tagsInput}
-                onChange={(e) => setTagsInput(e.target.value)}
-                placeholder="anatomia, cellula, membrana..."
-                className={`w-full px-4 py-2 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-[#a8012b]/20 focus:border-[#a8012b] transition-colors`}
+              <TagSelector
+                selectedTagIds={selectedTagIds}
+                onChange={setSelectedTagIds}
+                placeholder="Seleziona tag per categorizzare la domanda..."
               />
+              <p className={`text-xs ${colors.text.muted} mt-1`}>
+                Usa i tag per organizzare le domande per fonte, anno o categoria
+              </p>
             </div>
 
             {/* Year and Source */}

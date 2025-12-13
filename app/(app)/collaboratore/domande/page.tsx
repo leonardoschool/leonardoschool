@@ -29,6 +29,7 @@ import {
   Layers,
   User,
   Upload,
+  Tag,
 } from 'lucide-react';
 import {
   questionTypeLabels,
@@ -72,6 +73,7 @@ export default function CollaboratorQuestionsPage() {
   const [type, setType] = useState<QuestionType | ''>('');
   const [status, setStatus] = useState<QuestionStatus | ''>('');
   const [difficulty, setDifficulty] = useState<DifficultyLevel | ''>('');
+  const [selectedTagId, setSelectedTagId] = useState<string>('');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
 
@@ -96,6 +98,7 @@ export default function CollaboratorQuestionsPage() {
     type: type || undefined,
     status: status || undefined,
     difficulty: difficulty || undefined,
+    tagIds: selectedTagId ? [selectedTagId] : undefined,
     includeAnswers: false,
     includeDrafts: true,
     includeArchived: true,
@@ -109,6 +112,12 @@ export default function CollaboratorQuestionsPage() {
     { subjectId: subjectId, includeInactive: true },
     { enabled: !!subjectId }
   );
+
+  // Fetch tags for filter
+  const { data: tagsData } = trpc.questionTags.getTags.useQuery({
+    includeInactive: false,
+    pageSize: 200,
+  });
 
   // Fetch stats
   const { data: stats } = trpc.questions.getQuestionStats.useQuery();
@@ -162,10 +171,11 @@ export default function CollaboratorQuestionsPage() {
     setType('');
     setStatus('');
     setDifficulty('');
+    setSelectedTagId('');
     setPage(1);
   };
 
-  const hasActiveFilters = search || subjectId || topicId || type || status || difficulty;
+  const hasActiveFilters = search || subjectId || topicId || type || status || difficulty || selectedTagId;
 
   // Subject options for select
   const subjectOptions = useMemo(
@@ -183,6 +193,15 @@ export default function CollaboratorQuestionsPage() {
       ...(topics?.map((t) => ({ value: t.id, label: t.name })) ?? []),
     ],
     [topics]
+  );
+
+  // Tag options for select
+  const tagOptions = useMemo(
+    () => [
+      { value: '', label: 'Tutti i tag' },
+      ...(tagsData?.tags?.map((t) => ({ value: t.id, label: t.category ? `${t.category.name}: ${t.name}` : t.name })) ?? []),
+    ],
+    [tagsData?.tags]
   );
 
   // Check if user can edit/delete a question (only own questions)
@@ -376,6 +395,15 @@ export default function CollaboratorQuestionsPage() {
                   setPage(1);
                 }}
               />
+              <CustomSelect
+                label="Tag"
+                options={tagOptions}
+                value={selectedTagId}
+                onChange={(val) => {
+                  setSelectedTagId(val);
+                  setPage(1);
+                }}
+              />
             </div>
             {hasActiveFilters && (
               <div className="mt-4 flex justify-end">
@@ -415,6 +443,9 @@ export default function CollaboratorQuestionsPage() {
                 <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden xl:table-cell`}>
                   Difficoltà
                 </th>
+                <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden lg:table-cell`}>
+                  Tag
+                </th>
                 <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden xl:table-cell`}>
                   Uso
                 </th>
@@ -426,7 +457,7 @@ export default function CollaboratorQuestionsPage() {
             <tbody>
               {questions.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center">
+                  <td colSpan={9} className="px-4 py-12 text-center">
                     <div className="flex flex-col items-center">
                       <FileText className={`w-12 h-12 ${colors.text.muted} mb-3`} />
                       <p className={`font-medium ${colors.text.primary}`}>Nessuna domanda trovata</p>
@@ -480,26 +511,35 @@ export default function CollaboratorQuestionsPage() {
                     <td className="px-4 py-3">
                       {question.createdBy ? (
                         <div className="flex items-center gap-2">
-                          <div className={`w-7 h-7 rounded-full ${
-                            question.createdById === currentUser?.id 
-                              ? 'bg-purple-100 dark:bg-purple-900/30' 
-                              : 'bg-gray-100 dark:bg-gray-700'
-                          } flex items-center justify-center`}>
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center ${
+                            question.createdBy.role === 'ADMIN' 
+                              ? colors.roles.admin.softBg
+                              : colors.roles.collaborator.softBg
+                          }`}>
                             <span className={`text-xs font-medium ${
-                              question.createdById === currentUser?.id
-                                ? 'text-purple-600 dark:text-purple-400'
-                                : colors.text.muted
+                              question.createdBy.role === 'ADMIN'
+                                ? colors.roles.admin.text
+                                : colors.roles.collaborator.text
                             }`}>
                               {question.createdBy.name.charAt(0).toUpperCase()}
                             </span>
                           </div>
-                          <span className={`text-sm ${
-                            question.createdById === currentUser?.id 
-                              ? 'text-purple-600 dark:text-purple-400 font-medium' 
-                              : colors.text.secondary
-                          }`}>
-                            {question.createdById === currentUser?.id ? 'Tu' : question.createdBy.name}
-                          </span>
+                          <div className="flex flex-col">
+                            <span className={`text-sm ${
+                              question.createdById === currentUser?.id 
+                                ? 'font-medium ' + colors.roles.collaborator.text
+                                : colors.text.secondary
+                            }`}>
+                              {question.createdById === currentUser?.id ? 'Tu' : question.createdBy.name}
+                            </span>
+                            <span className={`text-xs ${
+                              question.createdBy.role === 'ADMIN'
+                                ? colors.roles.admin.text
+                                : colors.roles.collaborator.text
+                            }`}>
+                              {question.createdBy.role === 'ADMIN' ? 'Admin' : 'Collaboratore'}
+                            </span>
+                          </div>
                         </div>
                       ) : (
                         <span className={`text-sm ${colors.text.muted}`}>-</span>
@@ -534,6 +574,35 @@ export default function CollaboratorQuestionsPage() {
                       <span className={`text-xs px-2 py-1 rounded-full ${difficultyColors[question.difficulty as DifficultyLevel]}`}>
                         {difficultyLabels[question.difficulty as DifficultyLevel]}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      {question.questionTags && question.questionTags.length > 0 ? (
+                        <div className="flex flex-wrap gap-1 max-w-[200px]">
+                          {question.questionTags.slice(0, 2).map((qt: { tag: { id: string; name: string; color: string | null; category: { id: string; name: string; color: string } | null } }) => (
+                            <span
+                              key={qt.tag.id}
+                              className="text-xs px-2 py-0.5 rounded-full font-medium"
+                              style={{
+                                backgroundColor: qt.tag.color ? `${qt.tag.color}20` : (qt.tag.category?.color ? `${qt.tag.category.color}20` : '#6366f120'),
+                                color: qt.tag.color || qt.tag.category?.color || '#6366f1',
+                              }}
+                              title={qt.tag.category ? `${qt.tag.category.name}: ${qt.tag.name}` : qt.tag.name}
+                            >
+                              {qt.tag.name}
+                            </span>
+                          ))}
+                          {question.questionTags.length > 2 && (
+                            <span className={`text-xs ${colors.text.muted}`}>
+                              +{question.questionTags.length - 2}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className={`text-xs ${colors.text.muted} flex items-center gap-1`}>
+                          <Tag className="w-3 h-3" />
+                          -
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 hidden xl:table-cell">
                       <div className="flex items-center gap-3 text-sm">

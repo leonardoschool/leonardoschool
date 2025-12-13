@@ -31,6 +31,7 @@ import {
   Layers,
   FileText,
   Eye,
+  Tag,
 } from 'lucide-react';
 import {
   questionTypeLabels,
@@ -74,6 +75,7 @@ export default function QuestionsPage() {
   const [type, setType] = useState<QuestionType | ''>('');
   const [status, setStatus] = useState<QuestionStatus | ''>('');
   const [difficulty, setDifficulty] = useState<DifficultyLevel | ''>('');
+  const [selectedTagId, setSelectedTagId] = useState<string>('');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
 
@@ -97,6 +99,7 @@ export default function QuestionsPage() {
     type: type || undefined,
     status: status || undefined,
     difficulty: difficulty || undefined,
+    tagIds: selectedTagId ? [selectedTagId] : undefined,
     includeAnswers: false,
     includeDrafts: true,
     includeArchived: true,
@@ -110,6 +113,12 @@ export default function QuestionsPage() {
     { subjectId: subjectId, includeInactive: true },
     { enabled: !!subjectId }
   );
+
+  // Fetch tags for filter
+  const { data: tagsData } = trpc.questionTags.getTags.useQuery({
+    includeInactive: false,
+    pageSize: 200,
+  });
 
   // Fetch stats
   const { data: stats } = trpc.questions.getQuestionStats.useQuery();
@@ -210,10 +219,11 @@ export default function QuestionsPage() {
     setType('');
     setStatus('');
     setDifficulty('');
+    setSelectedTagId('');
     setPage(1);
   };
 
-  const hasActiveFilters = search || subjectId || topicId || type || status || difficulty;
+  const hasActiveFilters = search || subjectId || topicId || type || status || difficulty || selectedTagId;
 
   // Subject options for select
   const subjectOptions = useMemo(
@@ -231,6 +241,18 @@ export default function QuestionsPage() {
       ...(topics?.map((t) => ({ value: t.id, label: t.name })) ?? []),
     ],
     [topics]
+  );
+
+  // Tag options for select
+  const tagOptions = useMemo(
+    () => [
+      { value: '', label: 'Tutti i tag' },
+      ...(tagsData?.tags?.map((t) => ({
+        value: t.id || '',
+        label: t.category?.name ? `${t.category.name} > ${t.name}` : t.name || '',
+      })) ?? []),
+    ],
+    [tagsData]
   );
 
   if (isLoading && !questionsData) {
@@ -350,7 +372,7 @@ export default function QuestionsPage() {
             Filtri
             {hasActiveFilters && (
               <span className={`w-5 h-5 rounded-full ${colors.primary.bg} text-white text-xs flex items-center justify-center`}>
-                {[subjectId, topicId, type, status, difficulty].filter(Boolean).length}
+                {[subjectId, topicId, type, status, difficulty, selectedTagId].filter(Boolean).length}
               </span>
             )}
           </button>
@@ -359,7 +381,7 @@ export default function QuestionsPage() {
         {/* Expanded Filters */}
         {showFilters && (
           <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
               <CustomSelect
                 label="Materia"
                 options={subjectOptions}
@@ -419,6 +441,15 @@ export default function QuestionsPage() {
                 value={difficulty}
                 onChange={(val) => {
                   setDifficulty(val as DifficultyLevel | '');
+                  setPage(1);
+                }}
+              />
+              <CustomSelect
+                label="Tag"
+                options={tagOptions}
+                value={selectedTagId}
+                onChange={(val) => {
+                  setSelectedTagId(val);
                   setPage(1);
                 }}
               />
@@ -505,6 +536,9 @@ export default function QuestionsPage() {
                 <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden xl:table-cell`}>
                   Difficoltà
                 </th>
+                <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden lg:table-cell`}>
+                  Tag
+                </th>
                 <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden xl:table-cell`}>
                   Uso
                 </th>
@@ -516,7 +550,7 @@ export default function QuestionsPage() {
             <tbody>
               {questions.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center">
+                  <td colSpan={10} className="px-4 py-12 text-center">
                     <div className="flex flex-col items-center">
                       <FileText className={`w-12 h-12 ${colors.text.muted} mb-3`} />
                       <p className={`font-medium ${colors.text.primary}`}>Nessuna domanda trovata</p>
@@ -579,8 +613,16 @@ export default function QuestionsPage() {
                     <td className="px-4 py-3 hidden lg:table-cell">
                       {question.createdBy ? (
                         <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                            <span className={`text-xs font-medium ${colors.text.muted}`}>
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center ${
+                            question.createdBy.role === 'ADMIN' 
+                              ? colors.roles.admin.softBg
+                              : colors.roles.collaborator.softBg
+                          }`}>
+                            <span className={`text-xs font-medium ${
+                              question.createdBy.role === 'ADMIN'
+                                ? colors.roles.admin.text
+                                : colors.roles.collaborator.text
+                            }`}>
                               {question.createdBy.name.charAt(0).toUpperCase()}
                             </span>
                           </div>
@@ -588,7 +630,11 @@ export default function QuestionsPage() {
                             <span className={`text-sm ${colors.text.primary}`}>
                               {question.createdBy.name}
                             </span>
-                            <span className={`text-xs ${colors.text.muted}`}>
+                            <span className={`text-xs ${
+                              question.createdBy.role === 'ADMIN'
+                                ? colors.roles.admin.text
+                                : colors.roles.collaborator.text
+                            }`}>
                               {question.createdBy.role === 'ADMIN' ? 'Admin' : 'Collaboratore'}
                             </span>
                           </div>
@@ -626,6 +672,35 @@ export default function QuestionsPage() {
                       <span className={`text-xs px-2 py-1 rounded-full ${difficultyColors[question.difficulty as DifficultyLevel]}`}>
                         {difficultyLabels[question.difficulty as DifficultyLevel]}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      {question.questionTags && question.questionTags.length > 0 ? (
+                        <div className="flex flex-wrap gap-1 max-w-[200px]">
+                          {question.questionTags.slice(0, 2).map((qt: { tag: { id: string; name: string; color: string | null; category: { id: string; name: string; color: string } | null } }) => (
+                            <span
+                              key={qt.tag.id}
+                              className="text-xs px-2 py-0.5 rounded-full font-medium"
+                              style={{
+                                backgroundColor: qt.tag.color ? `${qt.tag.color}20` : (qt.tag.category?.color ? `${qt.tag.category.color}20` : '#6366f120'),
+                                color: qt.tag.color || qt.tag.category?.color || '#6366f1',
+                              }}
+                              title={qt.tag.category ? `${qt.tag.category.name}: ${qt.tag.name}` : qt.tag.name}
+                            >
+                              {qt.tag.name}
+                            </span>
+                          ))}
+                          {question.questionTags.length > 2 && (
+                            <span className={`text-xs ${colors.text.muted}`}>
+                              +{question.questionTags.length - 2}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className={`text-xs ${colors.text.muted} flex items-center gap-1`}>
+                          <Tag className="w-3 h-3" />
+                          -
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 hidden xl:table-cell">
                       <div className="flex items-center gap-3 text-sm">

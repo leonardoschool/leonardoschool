@@ -437,21 +437,80 @@ export default function DettaglioDomandaPage() {
           </div>
 
           {/* Tags */}
-          {question.legacyTags && question.legacyTags.length > 0 && (
+          {(question.questionTags && question.questionTags.length > 0) && (
             <div className={`${colors.background.card} rounded-xl p-6 ${colors.effects.shadow.sm}`}>
               <h3 className={`font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
                 <Tag className="w-4 h-4" />
-                Tags
+                Tag
               </h3>
-              <div className="flex flex-wrap gap-2">
-                {question.legacyTags.map((tag, idx) => (
-                  <span
-                    key={idx}
-                    className={`px-3 py-1 rounded-full text-sm ${colors.background.tertiary} ${colors.text.secondary}`}
-                  >
-                    {tag}
-                  </span>
-                ))}
+              <div className="space-y-3">
+                {/* Group tags by category */}
+                {(() => {
+                  const categorized = new Map<string, { category: { id: string; name: string; color: string } | null; tags: { id: string; name: string; color: string | null }[] }>();
+                  const uncategorized: { id: string; name: string; color: string | null }[] = [];
+                  
+                  question.questionTags.forEach((qt: { tag: { id: string; name: string; color: string | null; category: { id: string; name: string; color: string } | null } }) => {
+                    if (qt.tag.category) {
+                      const key = qt.tag.category.id;
+                      if (!categorized.has(key)) {
+                        categorized.set(key, { category: qt.tag.category, tags: [] });
+                      }
+                      categorized.get(key)!.tags.push(qt.tag);
+                    } else {
+                      uncategorized.push(qt.tag);
+                    }
+                  });
+
+                  return (
+                    <>
+                      {Array.from(categorized.values()).map(({ category, tags }) => (
+                        <div key={category!.id}>
+                          <p 
+                            className="text-xs font-medium mb-1.5"
+                            style={{ color: category!.color }}
+                          >
+                            {category!.name}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {tags.map((tag) => (
+                              <span
+                                key={tag.id}
+                                className="px-2.5 py-1 rounded-full text-xs font-medium"
+                                style={{
+                                  backgroundColor: `${tag.color || category!.color}20`,
+                                  color: tag.color || category!.color,
+                                }}
+                              >
+                                {tag.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      {uncategorized.length > 0 && (
+                        <div>
+                          <p className={`text-xs font-medium mb-1.5 ${colors.text.muted}`}>
+                            Senza categoria
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {uncategorized.map((tag) => (
+                              <span
+                                key={tag.id}
+                                className={`px-2.5 py-1 rounded-full text-xs font-medium ${colors.background.tertiary} ${colors.text.secondary}`}
+                                style={tag.color ? {
+                                  backgroundColor: `${tag.color}20`,
+                                  color: tag.color,
+                                } : {}}
+                              >
+                                {tag.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           )}

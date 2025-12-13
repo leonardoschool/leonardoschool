@@ -2,11 +2,11 @@
 
 import NotificationsPageContent from '@/components/notifications/NotificationsPageContent';
 
-export default function AdminNotifichePage() {
+export default function StudenteNotifichePage() {
   return (
     <NotificationsPageContent 
-      basePath="/admin" 
-      userRole="ADMIN" 
+      basePath="/studente" 
+      userRole="STUDENT" 
     />
   );
 }

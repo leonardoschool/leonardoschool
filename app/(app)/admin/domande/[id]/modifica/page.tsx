@@ -68,6 +68,7 @@ export default function ModificaDomandaPage() {
     openMinLength: question.openMinLength,
     openMaxLength: question.openMaxLength,
     tags: question.legacyTags,
+    tagIds: (question as { questionTags?: { tagId: string }[] }).questionTags?.map((a) => a.tagId) ?? [],
     year: question.year,
     source: question.source,
     answers: question.answers.map((a) => ({

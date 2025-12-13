@@ -313,6 +313,33 @@ export const colors = {
   },
 
   /**
+   * Colori per ruoli utente
+   * Admin: rosso bordeaux (colore brand)
+   * Collaboratore: viola/purple
+   * Studente: verde
+   */
+  roles: {
+    admin: {
+      bg: 'bg-[#a8012b]',
+      softBg: 'bg-red-100 dark:bg-red-900/30',
+      text: 'text-[#a8012b] dark:text-red-400',
+      border: 'border-[#a8012b]',
+    },
+    collaborator: {
+      bg: 'bg-purple-600',
+      softBg: 'bg-purple-100 dark:bg-purple-900/30',
+      text: 'text-purple-600 dark:text-purple-400',
+      border: 'border-purple-600',
+    },
+    student: {
+      bg: 'bg-emerald-600',
+      softBg: 'bg-emerald-100 dark:bg-emerald-900/30',
+      text: 'text-emerald-600 dark:text-emerald-400',
+      border: 'border-emerald-600',
+    },
+  },
+
+  /**
    * Colori per validazione form
    * Utilizzati per feedback visivo su email, password, etc.
    */
