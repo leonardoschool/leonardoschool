@@ -5,28 +5,41 @@
  * Usage: pnpm seed
  */
 
-// MUST be first - Load environment variables from .env.local BEFORE any other imports
+// MUST be first - Load environment variables from .env BEFORE any other imports
 import { config } from 'dotenv';
-config({ path: '.env.local' });
+config({ path: '.env' });
 
 // Now we can import Firebase (which reads env vars on init)
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { PrismaClient, UserRole } from '@prisma/client';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 
-// Initialize Firebase Admin manually here (after env is loaded)
-const serviceAccount = JSON.parse(
-  process.env.FIREBASE_SERVICE_ACCOUNT_KEY || '{}'
-);
+// Initialize Firebase Admin - try file first, then env var
+let serviceAccount: Record<string, unknown>;
+
+// Try to load from local JSON file
+const serviceAccountPath = join(process.cwd(), 'leonardo-school-1cd72-firebase-adminsdk-fbsvc-6c031d9728.json');
+if (existsSync(serviceAccountPath)) {
+  console.log('📄 Loading Firebase credentials from local JSON file...');
+  serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf8'));
+} else if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+  console.log('🔑 Loading Firebase credentials from environment variable...');
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+} else {
+  serviceAccount = {};
+}
 
 if (!serviceAccount.project_id) {
-  console.error('❌ FIREBASE_SERVICE_ACCOUNT_KEY non configurata correttamente in .env.local');
-  console.error('   Assicurati che il JSON sia valido e contenga "project_id"');
+  console.error('❌ Firebase credentials not found!');
+  console.error('   Option 1: Place the service account JSON file at: leonardo-school-1cd72-firebase-adminsdk-fbsvc-6c031d9728.json');
+  console.error('   Option 2: Set FIREBASE_SERVICE_ACCOUNT_KEY in .env');
   process.exit(1);
 }
 
 const adminApp = getApps().length === 0
-  ? initializeApp({ credential: cert(serviceAccount) })
+  ? initializeApp({ credential: cert(serviceAccount as Parameters<typeof cert>[0]) })
   : getApps()[0];
 
 const adminAuth = getAuth(adminApp);

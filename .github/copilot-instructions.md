@@ -78,7 +78,7 @@ Categories: `colors.primary.*`, `colors.subjects.*`, `colors.background.*`, `col
 5. **Narrow layouts on desktop**: Use `w-full max-w-6xl` with responsive padding
 
 ## Environment Variables
-Required in `.env.local`:
+Required in `.env`:
 - `DATABASE_URL` (PostgreSQL, port 5433)
 - `NEXT_PUBLIC_FIREBASE_*` (client config)
 - `FIREBASE_SERVICE_ACCOUNT_KEY` (JSON string for admin SDK)

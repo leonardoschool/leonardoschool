@@ -87,10 +87,10 @@ pnpm install
 
 ### 3. Configura environment variables
 ```bash
-cp .env.example .env.local
+cp .env.example .env
 ```
 
-Compila `.env.local` con:
+Compila `.env` con:
 ```env
 # Database
 DATABASE_URL="postgresql://user:password@localhost:5433/leonardoschool"
