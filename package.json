@@ -13,7 +13,10 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:push": "npx prisma db push",
     "seed": "tsx scripts/seed-complete.ts",
-    "seed:firebase": "tsx scripts/seed-firebase-users.ts"
+    "seed:firebase": "tsx scripts/seed-firebase-users.ts",
+    "cleanup": "tsx scripts/cleanup.ts",
+    "cleanup:dry": "tsx scripts/cleanup.ts --dry-run",
+    "cleanup:stats": "tsx scripts/cleanup.ts --stats"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

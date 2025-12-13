@@ -760,4 +760,66 @@ export async function notifyMessageReceived(
   });
 }
 
+// ==================== USER UTILITY FUNCTIONS ====================
+
+/**
+ * Archive all read notifications for a user
+ * Archived notifications are hidden from the main view but kept for reference
+ */
+export async function archiveReadNotifications(
+  prisma: PrismaClient,
+  userId: string
+): Promise<{ archived: number }> {
+  const result = await prisma.notification.updateMany({
+    where: {
+      userId,
+      isRead: true,
+      isArchived: false,
+    },
+    data: {
+      isArchived: true,
+    },
+  });
+
+  return { archived: result.count };
+}
+
+/**
+ * Bulk delete notifications for a specific entity
+ * Useful when an entity is deleted (e.g., contract, event, simulation)
+ */
+export async function deleteNotificationsForEntity(
+  prisma: PrismaClient,
+  entityType: string,
+  entityId: string
+): Promise<{ deleted: number }> {
+  const result = await prisma.notification.deleteMany({
+    where: {
+      linkEntityType: entityType,
+      linkEntityId: entityId,
+    },
+  });
+
+  return { deleted: result.count };
+}
+
+/**
+ * Get user notification count (for badges)
+ * Optimized query that only counts, doesn't fetch data
+ */
+export async function getUserUnreadCount(
+  prisma: PrismaClient,
+  userId: string
+): Promise<number> {
+  return prisma.notification.count({
+    where: {
+      userId,
+      isRead: false,
+      isArchived: false,
+    },
+  });
+}
+
+// NOTE: For batch cleanup of old notifications, use cleanupService.ts
+// which handles all database cleanup tasks including notifications.
 // Export all functions as named exports (default export removed to comply with lint rules)

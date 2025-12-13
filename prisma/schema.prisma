@@ -1519,9 +1519,10 @@ model Notification {
   iconUrl String? // Icona personalizzata (opzionale)
 
   // Link to related entity (click action)
-  linkUrl      String? // URL per navigazione al click
-  linkType     String? // Tipo di entità collegata (event, simulation, contract, etc.)
-  linkEntityId String? // ID dell'entità collegata
+  linkUrl        String? // URL per navigazione al click
+  linkType       String? // Tipo di link (event, simulation, contract, etc.)
+  linkEntityType String? // Tipo di entità collegata per cleanup
+  linkEntityId   String? // ID dell'entità collegata
 
   // Channel & Delivery
   channel     NotificationChannel @default(IN_APP)
@@ -1530,9 +1531,10 @@ model Notification {
   emailError  String?
 
   // Status
-  isRead   Boolean   @default(false)
-  readAt   DateTime?
-  isUrgent Boolean   @default(false)
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  isUrgent   Boolean   @default(false)
+  isArchived Boolean   @default(false) // Archived notifications hidden from main view
 
   // Grouping (per raggruppare notifiche simili)
   groupKey String? // es. "simulation_123" per raggruppare notifiche della stessa simulazione
@@ -1548,6 +1550,7 @@ model Notification {
   @@index([isRead])
   @@index([createdAt])
   @@index([isUrgent])
+  @@index([isArchived])
   @@index([groupKey])
   @@map("notifications")
 }
