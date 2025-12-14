@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
@@ -88,6 +88,19 @@ export default function QuestionsPage() {
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; text: string } | null>(null);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+
+  // Close menu on scroll
+  useEffect(() => {
+    if (!openMenuId) return;
+    
+    const handleScroll = () => {
+      setOpenMenuId(null);
+      setMenuPosition(null);
+    };
+    
+    window.addEventListener('scroll', handleScroll, true);
+    return () => window.removeEventListener('scroll', handleScroll, true);
+  }, [openMenuId]);
 
   // Fetch questions
   const { data: questionsData, isLoading } = trpc.questions.getQuestions.useQuery({
@@ -542,7 +555,7 @@ export default function QuestionsPage() {
                 <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden xl:table-cell`}>
                   Uso
                 </th>
-                <th className="px-4 py-3 text-right text-sm font-medium ${colors.text.secondary}">
+                <th className={`px-4 py-3 text-right text-sm font-medium ${colors.text.secondary}`}>
                   Azioni
                 </th>
               </tr>
@@ -587,16 +600,16 @@ export default function QuestionsPage() {
                       </button>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="max-w-md">
+                      <div className="max-w-xs lg:max-w-sm xl:max-w-md">
                         <p className={`font-medium ${colors.text.primary} line-clamp-2`}>
                           {question.text}
                         </p>
                         {question.legacyTags.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
+                          <div className="flex flex-wrap gap-1 mt-1 max-w-full">
                             {question.legacyTags.slice(0, 3).map((tag) => (
                               <span
                                 key={tag}
-                                className={`text-xs px-1.5 py-0.5 rounded ${colors.background.secondary} ${colors.text.muted}`}
+                                className={`text-xs px-1.5 py-0.5 rounded truncate max-w-[100px] ${colors.background.secondary} ${colors.text.muted}`}
                               >
                                 {tag}
                               </span>
@@ -643,11 +656,11 @@ export default function QuestionsPage() {
                         <span className={`text-sm ${colors.text.muted}`}>-</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 hidden md:table-cell">
+                    <td className="px-4 py-3 hidden md:table-cell whitespace-nowrap">
                       {question.subject ? (
                         <div className="flex items-center gap-2">
                           <div
-                            className="w-3 h-3 rounded-full"
+                            className="w-3 h-3 rounded-full flex-shrink-0"
                             style={{ backgroundColor: question.subject.color ?? '#6366f1' }}
                           />
                           <span className={`text-sm ${colors.text.primary}`}>
@@ -658,17 +671,17 @@ export default function QuestionsPage() {
                         <span className={`text-sm ${colors.text.muted}`}>-</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 hidden lg:table-cell">
+                    <td className="px-4 py-3 hidden lg:table-cell whitespace-nowrap">
                       <span className={`text-xs px-2 py-1 rounded-full ${typeColors[question.type as QuestionType]}`}>
                         {questionTypeLabels[question.type as QuestionType]}
                       </span>
                     </td>
-                    <td className="px-4 py-3 hidden sm:table-cell">
+                    <td className="px-4 py-3 hidden sm:table-cell whitespace-nowrap">
                       <span className={`text-xs px-2 py-1 rounded-full ${statusColors[question.status as QuestionStatus]}`}>
                         {questionStatusLabels[question.status as QuestionStatus]}
                       </span>
                     </td>
-                    <td className="px-4 py-3 hidden xl:table-cell">
+                    <td className="px-4 py-3 hidden xl:table-cell whitespace-nowrap">
                       <span className={`text-xs px-2 py-1 rounded-full ${difficultyColors[question.difficulty as DifficultyLevel]}`}>
                         {difficultyLabels[question.difficulty as DifficultyLevel]}
                       </span>
@@ -718,7 +731,16 @@ export default function QuestionsPage() {
                       <button
                         onClick={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect();
-                          setMenuPosition({ top: rect.bottom + 4, left: rect.right - 192 });
+                          const menuHeight = 260; // Approximate menu height
+                          const spaceBelow = window.innerHeight - rect.bottom;
+                          const spaceAbove = rect.top;
+                          
+                          // Position above if not enough space below, otherwise below
+                          const top = spaceBelow < menuHeight && spaceAbove > menuHeight
+                            ? rect.top - menuHeight
+                            : rect.bottom + 4;
+                          
+                          setMenuPosition({ top, left: rect.right - 192 });
                           setOpenMenuId(openMenuId === question.id ? null : question.id);
                         }}
                         className={`p-2 rounded-lg ${colors.background.tertiary} hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors`}

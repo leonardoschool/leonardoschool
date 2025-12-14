@@ -187,6 +187,25 @@ export const usersRouter = router({
                     },
                   },
                 },
+                // Groups the student belongs to
+                groupMemberships: {
+                  select: {
+                    group: {
+                      select: {
+                        id: true,
+                        name: true,
+                        color: true,
+                      },
+                    },
+                  },
+                },
+                // Class the student belongs to (single class relation)
+                class: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
               },
             },
             admin: {
@@ -231,6 +250,26 @@ export const usersRouter = router({
                     template: {
                       select: { name: true },
                     },
+                  },
+                },
+                // Groups the collaborator is member of
+                groupMemberships: {
+                  select: {
+                    group: {
+                      select: {
+                        id: true,
+                        name: true,
+                        color: true,
+                      },
+                    },
+                  },
+                },
+                // Groups where the collaborator is the referent
+                referenceGroups: {
+                  select: {
+                    id: true,
+                    name: true,
+                    color: true,
                   },
                 },
               },

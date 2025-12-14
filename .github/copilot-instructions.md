@@ -96,6 +96,7 @@ Required in `.env`:
 - Pay attention to performance implications of your code
 - Pay attention to eslint and prettier rules
 - If you use a color check in the file if the color exists in 'lib/theme/colors' if not add it there following the existing patterns
+- Pay attention to the colors in both light and dark mode
 
 ### Loader Components
 - Use loader components from `components/ui/loaders` - never use generic "Loading..." texts or custom spinners

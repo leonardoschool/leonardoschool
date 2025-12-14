@@ -301,7 +301,7 @@ export default function TagsManagementPage() {
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => { resetCategoryForm(); setEditingCategory(null); setShowCategoryModal(true); }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${colors.background.secondary} hover:${colors.background.tertiary}`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${colors.background.secondary} ${colors.text.primary} hover:opacity-80`}
           >
             <FolderOpen className="w-4 h-4" />
             Nuova Categoria
@@ -381,7 +381,7 @@ export default function TagsManagementPage() {
         <button
           onClick={() => setShowInactive(!showInactive)}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-            showInactive ? colors.primary.bg + ' text-white' : colors.background.secondary
+            showInactive ? colors.primary.bg + ' text-white' : colors.background.secondary + ' ' + colors.text.primary
           }`}
         >
           {showInactive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
@@ -420,9 +420,9 @@ export default function TagsManagementPage() {
                 >
                   <button className="p-1">
                     {expandedCategories.has(category.id) ? (
-                      <ChevronDown className="w-5 h-5" />
+                      <ChevronDown className={`w-5 h-5 ${colors.text.primary}`} />
                     ) : (
-                      <ChevronRight className="w-5 h-5" />
+                      <ChevronRight className={`w-5 h-5 ${colors.text.primary}`} />
                     )}
                   </button>
                   

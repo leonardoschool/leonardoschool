@@ -189,7 +189,7 @@ export default function JobApplicationsPage() {
               className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 statusFilter === 'all'
                   ? `${colors.primary.gradient} text-white`
-                  : `${colors.background.secondary} hover:opacity-80`
+                  : `${colors.background.secondary} ${colors.text.primary} hover:opacity-80`
               }`}
             >
               Tutte
@@ -203,7 +203,7 @@ export default function JobApplicationsPage() {
                   className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     statusFilter === status
                       ? `${colors.primary.gradient} text-white`
-                      : `${colors.background.secondary} hover:opacity-80`
+                      : `${colors.background.secondary} ${colors.text.primary} hover:opacity-80`
                   }`}
                 >
                   {config.label}
@@ -373,7 +373,7 @@ export default function JobApplicationsPage() {
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
                           isActive
                             ? `${config.bgClass} ${config.textClass} ring-2 ring-current`
-                            : `${colors.background.card} hover:opacity-80`
+                            : `${colors.background.card} ${colors.text.primary} hover:opacity-80`
                         }`}
                       >
                         <config.icon className="w-4 h-4" />
@@ -458,7 +458,7 @@ export default function JobApplicationsPage() {
               </button>
               <button
                 onClick={() => setSelectedApplication(null)}
-                className={`px-4 py-2 rounded-lg ${colors.background.secondary} hover:opacity-80`}
+                className={`px-4 py-2 rounded-lg ${colors.background.secondary} ${colors.text.primary} hover:opacity-80`}
               >
                 Chiudi
               </button>

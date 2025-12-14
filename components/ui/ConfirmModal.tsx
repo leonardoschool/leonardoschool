@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { colors } from '@/lib/theme/colors';
 import { AlertTriangle, Info, AlertCircle } from 'lucide-react';
 
@@ -44,6 +46,7 @@ const variantConfig = {
 /**
  * Reusable confirmation modal component
  * Used for delete confirmations, dangerous actions, etc.
+ * Uses createPortal to render at document.body level for proper overlay
  */
 export function ConfirmModal({
   isOpen,
@@ -59,7 +62,14 @@ export function ConfirmModal({
   variant = 'danger',
   isLoading = false,
 }: ConfirmModalProps) {
-  if (!isOpen) return null;
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!isOpen || !mounted) return null;
 
   const config = variantConfig[variant];
   const Icon = config.icon;
@@ -67,9 +77,12 @@ export function ConfirmModal({
   const confirmButtonText = confirmText || confirmLabel || 'Conferma';
   const cancelButtonText = cancelText || cancelLabel || 'Annulla';
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className={`${colors.background.card} rounded-2xl max-w-md w-full p-6 shadow-2xl`}>
+  const modalContent = (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div 
+        className={`${colors.background.card} rounded-2xl max-w-md w-full p-6 shadow-2xl`}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-start gap-4">
           <div className={`w-12 h-12 rounded-xl ${config.iconBg} flex items-center justify-center flex-shrink-0`}>
             <Icon className={`w-6 h-6 ${config.iconColor}`} />
@@ -83,7 +96,7 @@ export function ConfirmModal({
           <button
             onClick={handleClose}
             disabled={isLoading}
-            className={`flex-1 px-4 py-3 rounded-xl ${colors.background.secondary} font-medium hover:opacity-80 transition-opacity disabled:opacity-50`}
+            className="flex-1 px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
           >
             {cancelButtonText}
           </button>
@@ -105,6 +118,8 @@ export function ConfirmModal({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 
 export default ConfirmModal;

@@ -1912,12 +1912,119 @@ export default function UsersManagementPage() {
                   </div>
                   <div className={`flex-1 p-3 rounded-lg ${colors.background.secondary}`}>
                     <p className={`text-xs ${colors.text.muted} mb-1`}>Registrato il</p>
-                    <p className="text-sm font-medium">
+                    <p className={`text-sm font-medium ${colors.text.primary}`}>
                       {new Date(viewUserModal.user.createdAt).toLocaleDateString('it-IT')}
                     </p>
                   </div>
                 </div>
               </div>
+
+              {/* Groups & Classes Info */}
+              {(() => {
+                const user = viewUserModal.user;
+                
+                // For students: show groups and class they belong to
+                if (user.role === 'STUDENT' && user.student) {
+                  const groups = user.student.groupMemberships?.map((g: { group: { id: string; name: string; color: string | null } }) => g.group) || [];
+                  const studentClass = user.student.class;
+                  
+                  if (groups.length === 0 && !studentClass) {
+                    return (
+                      <div className="space-y-3">
+                        <h4 className={`font-semibold ${colors.text.primary}`}>Gruppi e Classe</h4>
+                        <div className={`p-4 rounded-xl ${colors.background.secondary}`}>
+                          <p className={`text-sm ${colors.text.muted}`}>Non assegnato a nessun gruppo o classe</p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <div className="space-y-3">
+                      <h4 className={`font-semibold ${colors.text.primary}`}>Gruppi e Classe</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {studentClass && (
+                          <span
+                            className="px-3 py-1.5 rounded-full text-sm font-medium bg-purple-600 text-white"
+                          >
+                            📚 {studentClass.name}
+                          </span>
+                        )}
+                        {groups.map((group: { id: string; name: string; color: string | null }) => (
+                          <span
+                            key={group.id}
+                            className="px-3 py-1.5 rounded-full text-sm font-medium text-white"
+                            style={{ backgroundColor: group.color || '#6366f1' }}
+                          >
+                            {group.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+                
+                // For collaborators: show groups membership and referent groups
+                if (user.role === 'COLLABORATOR' && user.collaborator) {
+                  const memberOfGroups = user.collaborator.groupMemberships?.map((g: { group: { id: string; name: string; color: string | null } }) => g.group) || [];
+                  const referenceGroups = user.collaborator.referenceGroups || [];
+                  
+                  const hasAnyAssignment = memberOfGroups.length > 0 || referenceGroups.length > 0;
+                  
+                  if (!hasAnyAssignment) {
+                    return (
+                      <div className="space-y-3">
+                        <h4 className={`font-semibold ${colors.text.primary}`}>Gruppi</h4>
+                        <div className={`p-4 rounded-xl ${colors.background.secondary}`}>
+                          <p className={`text-sm ${colors.text.muted}`}>Non assegnato a nessun gruppo</p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <div className="space-y-3">
+                      <h4 className={`font-semibold ${colors.text.primary}`}>Gruppi</h4>
+                      <div className="space-y-2">
+                        {referenceGroups.length > 0 && (
+                          <div>
+                            <p className={`text-xs ${colors.text.muted} mb-1`}>Referente di:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {referenceGroups.map((group: { id: string; name: string; color: string | null }) => (
+                                <span
+                                  key={group.id}
+                                  className="px-3 py-1.5 rounded-full text-sm font-medium text-white flex items-center gap-1"
+                                  style={{ backgroundColor: group.color || '#6366f1' }}
+                                >
+                                  ⭐ {group.name}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {memberOfGroups.length > 0 && (
+                          <div>
+                            <p className={`text-xs ${colors.text.muted} mb-1`}>Membro di:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {memberOfGroups.map((group: { id: string; name: string; color: string | null }) => (
+                                <span
+                                  key={group.id}
+                                  className="px-3 py-1.5 rounded-full text-sm font-medium text-white"
+                                  style={{ backgroundColor: group.color || '#6366f1' }}
+                                >
+                                  {group.name}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+                
+                return null;
+              })()}
 
               {/* Contract Info */}
               {(() => {
@@ -1935,7 +2042,7 @@ export default function UsersManagementPage() {
                     <h4 className={`font-semibold ${colors.text.primary}`}>Ultimo Contratto</h4>
                     <div className={`p-4 rounded-xl ${colors.background.secondary}`}>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium">{contract.template?.name || 'Contratto'}</span>
+                        <span className={`font-medium ${colors.text.primary}`}>{contract.template?.name || 'Contratto'}</span>
                         <span className={`px-2 py-1 rounded text-xs font-medium ${
                           contract.status === 'SIGNED' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
                           contract.status === 'PENDING' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
@@ -1959,7 +2066,7 @@ export default function UsersManagementPage() {
             <div className={`p-6 border-t ${colors.border.primary}`}>
               <button
                 onClick={() => setViewUserModal({ isOpen: false, user: null })}
-                className={`w-full py-3 rounded-lg ${colors.background.secondary} font-medium hover:opacity-80 transition-opacity`}
+                className={`w-full py-3 rounded-lg ${colors.background.secondary} ${colors.text.primary} font-medium hover:opacity-80 transition-opacity`}
               >
                 Chiudi
               </button>

@@ -259,8 +259,9 @@ export default function CollaboratoreCalendarPage() {
         }> | undefined;
 
         const isCreatedByMe = e.createdBy?.id === currentUserId;
-        const isInvitedToMe = invitations?.some(inv => inv.user?.id === currentUserId);
-        const isMine = isCreatedByMe || isInvitedToMe;
+        // Per il collaboratore, isMine indica solo gli eventi CREATI da lui
+        // (la stellina appare solo per eventi che può modificare/eliminare)
+        const isMine = isCreatedByMe;
 
         return {
           id: e.id,
@@ -546,8 +547,9 @@ export default function CollaboratoreCalendarPage() {
         <EventDetail
           event={selectedEvent}
           onClose={() => setSelectedEvent(null)}
-          onEdit={() => openEditEvent(selectedEvent)}
-          onDelete={() => setDeleteConfirm({ id: selectedEvent.id, title: selectedEvent.title })}
+          // Only allow edit/delete for events created by the current user
+          onEdit={selectedEvent.isMine ? () => openEditEvent(selectedEvent) : undefined}
+          onDelete={selectedEvent.isMine ? () => setDeleteConfirm({ id: selectedEvent.id, title: selectedEvent.title }) : undefined}
           onUserClick={(userId, userType) => setSelectedUserInfo({ userId, userType })}
           onGroupClick={(groupId) => setSelectedGroupInfo(groupId)}
         />

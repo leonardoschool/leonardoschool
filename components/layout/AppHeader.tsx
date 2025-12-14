@@ -109,8 +109,8 @@ export default function AppHeader() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [gestioneMenuOpen, setGestioneMenuOpen] = useState(false);
+  const [registroMenuOpen, setRegistroMenuOpen] = useState(false);
   const [didatticaMenuOpen, setDidatticaMenuOpen] = useState(false);
-  const [staffMenuOpen, setStaffMenuOpen] = useState(false);
   const [currentTheme, setCurrentTheme] = useState<Theme>('system');
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -118,8 +118,8 @@ export default function AppHeader() {
   const notificationsRef = useRef<HTMLDivElement>(null);
   const themeMenuRef = useRef<HTMLDivElement>(null);
   const gestioneMenuRef = useRef<HTMLDivElement>(null);
+  const registroMenuRef = useRef<HTMLDivElement>(null);
   const didatticaMenuRef = useRef<HTMLDivElement>(null);
-  const staffMenuRef = useRef<HTMLDivElement>(null);
 
   // Polling interval for real-time updates (30 seconds)
   const POLLING_INTERVAL = 30 * 1000;
@@ -257,11 +257,11 @@ export default function AppHeader() {
       if (gestioneMenuRef.current && !gestioneMenuRef.current.contains(e.target as Node)) {
         setGestioneMenuOpen(false);
       }
+      if (registroMenuRef.current && !registroMenuRef.current.contains(e.target as Node)) {
+        setRegistroMenuOpen(false);
+      }
       if (didatticaMenuRef.current && !didatticaMenuRef.current.contains(e.target as Node)) {
         setDidatticaMenuOpen(false);
-      }
-      if (staffMenuRef.current && !staffMenuRef.current.contains(e.target as Node)) {
-        setStaffMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -298,48 +298,51 @@ export default function AppHeader() {
     { href: '/admin/richieste', label: 'Richieste', icon: Mail },
   ];
 
-  // Menu Didattica (dropdown) - Admin & Collaborator: Calendario, Presenze, Domande, Tags, Materiali, Simulazioni
+  // Menu Registro (dropdown) - Admin: Registro Elettronico, Assenze Staff
+  const registroItemsAdmin = [
+    { href: '/admin/presenze', label: 'Registro Elettronico', icon: ClipboardCheck },
+    { href: '/admin/assenze', label: 'Assenze Staff', icon: UserMinus },
+  ];
+
+  // Menu Registro (dropdown) - Collaboratore: Registro Elettronico, Le Mie Assenze
+  const registroItemsCollaborator = [
+    { href: '/collaboratore/presenze', label: 'Registro Elettronico', icon: ClipboardCheck },
+    { href: '/collaboratore/le-mie-assenze', label: 'Le Mie Assenze', icon: UserMinus },
+  ];
+
+  // Menu Didattica (dropdown) - Admin: Domande, Tags, Materiali, Simulazioni
   const didatticaItemsAdmin = [
-    { href: '/admin/calendario', label: 'Calendario', icon: Calendar },
-    { href: '/admin/presenze', label: 'Presenze', icon: ClipboardCheck },
     { href: '/admin/domande', label: 'Domande', icon: BookOpen },
     { href: '/admin/tags', label: 'Tag', icon: Tag },
     { href: '/admin/materiali', label: 'Materiali', icon: FolderOpen },
     { href: '/admin/simulazioni', label: 'Simulazioni', icon: ClipboardList },
   ];
 
+  // Menu Didattica (dropdown) - Collaboratore: Domande, Tags, Materiali
   const didatticaItemsCollaborator = [
-    { href: '/collaboratore/calendario', label: 'Calendario', icon: Calendar },
-    { href: '/collaboratore/presenze', label: 'Presenze', icon: ClipboardCheck },
     { href: '/collaboratore/domande', label: 'Domande', icon: BookOpen },
     { href: '/collaboratore/tags', label: 'Tag', icon: Tag },
     { href: '/collaboratore/materiali', label: 'Materiali', icon: FolderOpen },
   ];
 
-  // Menu Staff (dropdown) - Admin only: Assenze, Studenti per collaboratore
-  const staffItemsAdmin = [
-    { href: '/admin/assenze', label: 'Assenze Staff', icon: UserMinus },
-  ];
-
-  const staffItemsCollaborator = [
-    { href: '/collaboratore/studenti', label: 'Studenti', icon: Users },
-  ];
+  // Get registro items based on role
+  const registroItems = isAdmin ? registroItemsAdmin : registroItemsCollaborator;
 
   // Get didattica items based on role
   const didatticaItems = isAdmin ? didatticaItemsAdmin : didatticaItemsCollaborator;
-  
-  // Get staff items based on role
-  const staffItems = isAdmin ? staffItemsAdmin : staffItemsCollaborator;
 
-  // Simplified nav items - only Dashboard and Statistiche as single items
+  // Simplified nav items - Dashboard, Calendario (standalone), Statistiche
   const adminNavItems = [
     { href: '/admin', label: 'Dashboard', icon: Home },
+    { href: '/admin/calendario', label: 'Calendario', icon: Calendar },
     { href: '/admin/statistiche', label: 'Statistiche', icon: BarChart3 },
   ];
 
-  // Collaborator: simplified
+  // Collaborator: Dashboard, Calendario (standalone), Studenti (standalone), Statistiche
   const collaboratorNavItems = [
     { href: '/collaboratore', label: 'Dashboard', icon: Home },
+    { href: '/collaboratore/calendario', label: 'Calendario', icon: Calendar },
+    { href: '/collaboratore/studenti', label: 'Studenti', icon: Users },
     { href: '/collaboratore/statistiche', label: 'Statistiche', icon: BarChart3 },
   ];
 
@@ -358,11 +361,11 @@ export default function AppHeader() {
   // Check if current path is in Gestione
   const isGestioneActive = gestioneItems.some(item => pathname.startsWith(item.href));
   
+  // Check if current path is in Registro section
+  const isRegistroActive = registroItems.some(item => pathname.startsWith(item.href));
+  
   // Check if current path is in Didattica section
   const isDidatticaActive = didatticaItems.some(item => pathname.startsWith(item.href));
-  
-  // Check if current path is in Staff section
-  const isStaffActive = staffItems.some(item => pathname.startsWith(item.href));
 
   const formatNotificationTime = (date: Date | string) => {
     const now = new Date();
@@ -577,30 +580,30 @@ export default function AppHeader() {
                 </div>
               )}
 
-              {/* Staff Dropdown (Admin & Collaborator - different items) */}
+              {/* Registro Dropdown (Admin & Collaborator - different items) */}
               {isStaff && (
-                <div ref={staffMenuRef} className="relative">
+                <div ref={registroMenuRef} className="relative">
                   <button
-                    onClick={() => setStaffMenuOpen(!staffMenuOpen)}
+                    onClick={() => setRegistroMenuOpen(!registroMenuOpen)}
                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-                      isStaffActive
+                      isRegistroActive
                         ? `${colors.primary.softBg} ${colors.primary.text}`
                         : `${colors.text.primary} ${colors.effects.hover.bgSubtle}`
                     }`}
                   >
-                    <Users className="w-4 h-4" />
-                    Staff
-                    <ChevronDown className={`w-4 h-4 transition-transform ${staffMenuOpen ? 'rotate-180' : ''}`} />
+                    <ClipboardCheck className="w-4 h-4" />
+                    Registro
+                    <ChevronDown className={`w-4 h-4 transition-transform ${registroMenuOpen ? 'rotate-180' : ''}`} />
                   </button>
-                  {staffMenuOpen && (
+                  {registroMenuOpen && (
                     <div className={`absolute left-0 top-full mt-1 w-56 ${colors.background.card} rounded-xl shadow-lg border ${colors.border.primary} py-1 z-50`}>
-                      {staffItems.map((item) => {
+                      {registroItems.map((item) => {
                         const isItemActive = pathname.startsWith(item.href);
                         return (
                           <Link
                             key={item.href}
                             href={item.href}
-                            onClick={() => setStaffMenuOpen(false)}
+                            onClick={() => setRegistroMenuOpen(false)}
                             className={`w-full px-4 py-2.5 flex items-center gap-3 text-sm transition-colors ${
                               isItemActive
                                 ? `${colors.primary.softBg} ${colors.primary.text}`
@@ -946,8 +949,8 @@ export default function AppHeader() {
               );
             })}
             
-            {/* Staff items for mobile */}
-            {staffItems.map((item) => {
+            {/* Registro items for mobile */}
+            {registroItems.map((item) => {
               const isActive = pathname.startsWith(item.href);
               return (
                 <Link

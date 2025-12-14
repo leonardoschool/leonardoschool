@@ -1,5 +1,5 @@
 // Materials Router - Manage learning materials (PDF, Video, Links)
-import { router, adminProcedure, protectedProcedure, studentProcedure } from '../init';
+import { router, adminProcedure, protectedProcedure, studentProcedure, staffProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 
@@ -104,8 +104,8 @@ export const materialsRouter = router({
     });
   }),
 
-  // Get all subjects including inactive (admin only)
-  getAllSubjects: adminProcedure.query(async ({ ctx }) => {
+  // Get all subjects including inactive (admin and collaborators)
+  getAllSubjects: staffProcedure.query(async ({ ctx }) => {
     return ctx.prisma.customSubject.findMany({
       orderBy: { order: 'asc' },
       include: {

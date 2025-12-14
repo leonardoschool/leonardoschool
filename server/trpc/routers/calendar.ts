@@ -904,10 +904,52 @@ export const calendarRouter = router({
         where: { id: input.eventId },
         include: {
           invitations: {
-            where: { userId: { not: null } },
             include: {
               user: {
-                select: { id: true, name: true, email: true },
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  role: true,
+                  student: {
+                    select: { id: true },
+                  },
+                },
+              },
+              group: {
+                select: {
+                  id: true,
+                  name: true,
+                  members: {
+                    where: {
+                      studentId: { not: null }, // Only include student members
+                    },
+                    include: {
+                      student: {
+                        select: {
+                          id: true,
+                          user: {
+                            select: { id: true, name: true, email: true },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              class: {
+                select: {
+                  id: true,
+                  name: true,
+                  students: {
+                    select: {
+                      id: true,
+                      user: {
+                        select: { id: true, name: true, email: true },
+                      },
+                    },
+                  },
+                },
               },
             },
           },
@@ -921,11 +963,24 @@ export const calendarRouter = router({
         });
       }
 
+      // Check if collaborator can access this event (must be creator)
+      if (ctx.user.role === 'COLLABORATOR' && event.createdById !== ctx.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Non hai i permessi per gestire le presenze di questo evento',
+        });
+      }
+
       const attendances = await ctx.prisma.attendance.findMany({
         where: { eventId: input.eventId },
         include: {
           student: {
-            select: { id: true, name: true, email: true },
+            select: {
+              id: true,
+              user: {
+                select: { id: true, name: true, email: true },
+              },
+            },
           },
           recordedBy: {
             select: { id: true, name: true },
@@ -934,14 +989,55 @@ export const calendarRouter = router({
         },
       });
 
-      // Get list of invited students
-      const invitedStudents = event.invitations
-        .filter((inv) => inv.user)
-        .map((inv) => inv.user!);
+      // Collect all invited students from different sources
+      const studentsMap = new Map<string, { id: string; name: string; email: string }>();
+
+      event.invitations.forEach((inv) => {
+        // Direct user invitation (if student)
+        if (inv.user && inv.user.role === 'STUDENT' && inv.user.student) {
+          studentsMap.set(inv.user.student.id, {
+            id: inv.user.student.id,
+            name: inv.user.name,
+            email: inv.user.email,
+          });
+        }
+
+        // Group invitation - expand all student members
+        if (inv.group?.members) {
+          inv.group.members.forEach((member) => {
+            if (member.student?.user) {
+              studentsMap.set(member.student.id, {
+                id: member.student.id,
+                name: member.student.user.name,
+                email: member.student.user.email,
+              });
+            }
+          });
+        }
+
+        // Class invitation - expand all students in class
+        if (inv.class?.students) {
+          inv.class.students.forEach((student) => {
+            if (student.user) {
+              studentsMap.set(student.id, {
+                id: student.id,
+                name: student.user.name,
+                email: student.user.email,
+              });
+            }
+          });
+        }
+      });
+
+      const invitedStudents = Array.from(studentsMap.values());
 
       return {
         attendances,
         invitedStudents,
+        event: {
+          id: event.id,
+          createdById: event.createdById,
+        },
       };
     }),
 
@@ -973,6 +1069,14 @@ export const calendarRouter = router({
         });
       }
 
+      // Check if collaborator can access this event (must be creator)
+      if (ctx.user.role === 'COLLABORATOR' && event.createdById !== ctx.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Non hai i permessi per gestire le presenze di questo evento',
+        });
+      }
+
       // Upsert attendance
       const attendance = await ctx.prisma.attendance.upsert({
         where: {
@@ -990,7 +1094,14 @@ export const calendarRouter = router({
           lastEditedAt: new Date(),
         },
         include: {
-          student: { select: { id: true, name: true } },
+          student: {
+            select: {
+              id: true,
+              user: {
+                select: { id: true, name: true },
+              },
+            },
+          },
         },
       });
 
@@ -1023,6 +1134,14 @@ export const calendarRouter = router({
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Evento non trovato',
+        });
+      }
+
+      // Check if collaborator can access this event (must be creator)
+      if (ctx.user.role === 'COLLABORATOR' && event.createdById !== ctx.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Non hai i permessi per gestire le presenze di questo evento',
         });
       }
 
@@ -1270,6 +1389,22 @@ export const calendarRouter = router({
     .mutation(async ({ ctx, input }) => {
       const existing = await ctx.prisma.staffAbsence.findUnique({
         where: { id: input.id },
+        include: {
+          requester: { select: { name: true } },
+          affectedEvent: {
+            select: {
+              id: true,
+              title: true,
+              invitations: {
+                select: {
+                  userId: true,
+                  groupId: true,
+                  classId: true,
+                },
+              },
+            },
+          },
+        },
       });
 
       if (!existing) {
@@ -1287,11 +1422,11 @@ export const calendarRouter = router({
         });
       }
 
-      // Can only cancel pending requests
-      if (existing.status !== 'PENDING' && ctx.user.role !== 'ADMIN') {
+      // Can only cancel pending or confirmed requests
+      if (existing.status === 'CANCELLED') {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'Puoi annullare solo richieste in attesa',
+          message: 'Questa richiesta è già stata annullata',
         });
       }
 
@@ -1301,6 +1436,64 @@ export const calendarRouter = router({
           status: 'CANCELLED',
         },
       });
+
+      // Notify invitees if there was an affected event
+      if (existing.affectedEvent) {
+        const event = existing.affectedEvent;
+        const requesterName = existing.requester?.name || 'Un collaboratore';
+        
+        // Collect all user IDs to notify
+        const userIdsToNotify = new Set<string>();
+        const studentIdsToNotify = new Set<string>();
+        
+        for (const inv of event.invitations) {
+          // Direct user invitation
+          if (inv.userId) userIdsToNotify.add(inv.userId);
+          
+          // Expand group members
+          if (inv.groupId) {
+            const groupMembers = await ctx.prisma.groupMember.findMany({
+              where: { groupId: inv.groupId, studentId: { not: null } },
+              select: { studentId: true },
+            });
+            groupMembers.forEach((m) => m.studentId && studentIdsToNotify.add(m.studentId));
+          }
+          
+          // Expand class students
+          if (inv.classId) {
+            const classStudents = await ctx.prisma.student.findMany({
+              where: { classId: inv.classId },
+              select: { id: true },
+            });
+            classStudents.forEach((s) => studentIdsToNotify.add(s.id));
+          }
+        }
+        
+        // Get user IDs for students
+        if (studentIdsToNotify.size > 0) {
+          const students = await ctx.prisma.student.findMany({
+            where: { id: { in: Array.from(studentIdsToNotify) } },
+            select: { userId: true },
+          });
+          students.forEach((s) => s.userId && userIdsToNotify.add(s.userId));
+        }
+        
+        // Remove the requester from notifications
+        userIdsToNotify.delete(existing.requesterId);
+        
+        // Create notifications
+        if (userIdsToNotify.size > 0) {
+          await ctx.prisma.notification.createMany({
+            data: Array.from(userIdsToNotify).map((userId) => ({
+              userId,
+              type: 'EVENT_UPDATED' as const,
+              title: 'Assenza ritirata',
+              message: `${requesterName} ha ritirato la comunicazione di assenza per l'evento "${event.title}". L'evento si svolgerà regolarmente.`,
+              metadata: { eventId: event.id, absenceId: absence.id },
+            })),
+          });
+        }
+      }
 
       return absence;
     }),
