@@ -1,0 +1,1357 @@
+/**
+ * Calendar Router
+ * Gestione eventi calendario, presenze e assenze staff
+ */
+
+import { z } from 'zod';
+import { router, protectedProcedure, adminProcedure, staffProcedure } from '../init';
+import { TRPCError } from '@trpc/server';
+import {
+  EventType,
+  EventLocationType,
+  RecurrenceFrequency,
+  EventInviteStatus,
+  AttendanceStatus,
+  StaffAbsenceStatus,
+} from '@prisma/client';
+import {
+  sendEventInvitationEmail,
+  sendEventModificationEmail,
+  sendEventCancellationEmail,
+  sendAbsenceStatusEmail,
+  type EventEmailData,
+  type InviteeData,
+} from '@/lib/email/eventEmails';
+import { createBulkNotifications, createNotification } from '@/server/services/notificationService';
+
+// ==================== CALENDAR EVENTS ====================
+
+export const calendarRouter = router({
+  // Get events with filters
+  getEvents: protectedProcedure
+    .input(
+      z.object({
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+        type: z.nativeEnum(EventType).optional(),
+        createdById: z.string().optional(),
+        includeInvitations: z.boolean().optional().default(false),
+        includeCancelled: z.boolean().optional().default(false),
+        onlyMyEvents: z.boolean().optional().default(false),
+        page: z.number().min(1).optional().default(1),
+        pageSize: z.number().min(1).max(100).optional().default(50),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { startDate, endDate, type, createdById, includeInvitations, includeCancelled, onlyMyEvents, page, pageSize } = input;
+
+      const where: Parameters<typeof ctx.prisma.calendarEvent.findMany>[0]['where'] = {};
+
+      // Date filters
+      if (startDate) {
+        where.startDate = { gte: startDate };
+      }
+      if (endDate) {
+        where.endDate = { lte: endDate };
+      }
+
+      // Type filter
+      if (type) {
+        where.type = type;
+      }
+
+      // Creator filter
+      if (createdById) {
+        where.createdById = createdById;
+      }
+
+      // Only my events (created by me or invited)
+      if (onlyMyEvents && ctx.user) {
+        where.OR = [
+          { createdById: ctx.user.id },
+          { invitations: { some: { userId: ctx.user.id } } },
+        ];
+      }
+
+      // Cancelled filter
+      if (!includeCancelled) {
+        where.isCancelled = false;
+      }
+
+      // Public events or user-specific
+      if (ctx.user?.role === 'STUDENT') {
+        // Students see only public events or events they're invited to
+        where.OR = [
+          { isPublic: true },
+          { invitations: { some: { userId: ctx.user.id } } },
+        ];
+      }
+
+      const [events, total] = await Promise.all([
+        ctx.prisma.calendarEvent.findMany({
+          where,
+          include: {
+            createdBy: {
+              select: { id: true, name: true, email: true, role: true },
+            },
+            invitations: includeInvitations
+              ? {
+                  include: {
+                    user: { select: { id: true, name: true, email: true } },
+                    group: { select: { id: true, name: true } },
+                    class: { select: { id: true, name: true } },
+                  },
+                }
+              : false,
+            _count: {
+              select: {
+                invitations: true,
+                attendances: true,
+              },
+            },
+          },
+          orderBy: { startDate: 'asc' },
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+        ctx.prisma.calendarEvent.count({ where }),
+      ]);
+
+      return {
+        events,
+        pagination: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize),
+        },
+      };
+    }),
+
+  // Get single event with details
+  getEvent: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const event = await ctx.prisma.calendarEvent.findUnique({
+        where: { id: input.id },
+        include: {
+          createdBy: {
+            select: { id: true, name: true, email: true, role: true },
+          },
+          invitations: {
+            include: {
+              user: { select: { id: true, name: true, email: true } },
+              group: { select: { id: true, name: true } },
+              class: { select: { id: true, name: true } },
+            },
+          },
+          attendances: {
+            include: {
+              student: {
+                select: { id: true, name: true, email: true },
+              },
+              recordedBy: {
+                select: { id: true, name: true },
+              },
+            },
+          },
+          staffAbsences: {
+            include: {
+              requester: { select: { id: true, name: true } },
+              substitute: { select: { id: true, name: true } },
+            },
+          },
+          simulation: {
+            select: { id: true, title: true, status: true },
+          },
+        },
+      });
+
+      if (!event) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Evento non trovato',
+        });
+      }
+
+      // Check access
+      if (ctx.user?.role === 'STUDENT' && !event.isPublic) {
+        const isInvited = event.invitations.some(
+          (inv) => inv.userId === ctx.user?.id
+        );
+        if (!isInvited) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Non hai accesso a questo evento',
+          });
+        }
+      }
+
+      return event;
+    }),
+
+  // Create event (staff only)
+  createEvent: staffProcedure
+    .input(
+      z.object({
+        title: z.string().min(1).max(200),
+        description: z.string().optional(),
+        type: z.nativeEnum(EventType).default('OTHER'),
+        startDate: z.date(),
+        endDate: z.date(),
+        isAllDay: z.boolean().optional().default(false),
+        locationType: z.nativeEnum(EventLocationType).default('IN_PERSON'),
+        locationDetails: z.string().optional(),
+        onlineLink: z.string().url().optional().or(z.literal('')),
+        isPublic: z.boolean().optional().default(false),
+        sendEmailInvites: z.boolean().optional().default(false),
+        sendEmailReminders: z.boolean().optional().default(false),
+        reminderMinutes: z.number().min(5).max(10080).optional(), // max 1 week
+        isRecurring: z.boolean().optional().default(false),
+        recurrenceFrequency: z.nativeEnum(RecurrenceFrequency).optional(),
+        recurrenceEndDate: z.date().optional(),
+        // Invitations
+        inviteUserIds: z.array(z.string()).optional(),
+        inviteGroupIds: z.array(z.string()).optional(),
+        inviteClassIds: z.array(z.string()).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const {
+        inviteUserIds,
+        inviteGroupIds,
+        inviteClassIds,
+        onlineLink,
+        ...eventData
+      } = input;
+
+      // Validate dates
+      if (eventData.endDate < eventData.startDate) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'La data di fine deve essere successiva alla data di inizio',
+        });
+      }
+
+      // Create event with invitations
+      const event = await ctx.prisma.calendarEvent.create({
+        data: {
+          title: eventData.title,
+          description: eventData.description,
+          type: eventData.type,
+          startDate: eventData.startDate,
+          endDate: eventData.endDate,
+          isAllDay: eventData.isAllDay,
+          locationType: eventData.locationType,
+          locationDetails: eventData.locationDetails,
+          onlineLink: onlineLink || null,
+          isPublic: eventData.isPublic,
+          sendEmailInvites: eventData.sendEmailInvites,
+          sendEmailReminders: eventData.sendEmailReminders,
+          reminderMinutes: eventData.reminderMinutes,
+          isRecurring: eventData.isRecurring,
+          recurrenceFrequency: eventData.recurrenceFrequency,
+          recurrenceEndDate: eventData.recurrenceEndDate,
+          createdBy: { connect: { id: ctx.user.id } },
+          invitations: {
+            create: [
+              ...(inviteUserIds?.map((userId) => ({ user: { connect: { id: userId } } })) || []),
+              ...(inviteGroupIds?.map((groupId) => ({ group: { connect: { id: groupId } } })) || []),
+              ...(inviteClassIds?.map((classId) => ({ class: { connect: { id: classId } } })) || []),
+            ],
+          },
+        },
+        include: {
+          createdBy: { select: { id: true, name: true } },
+          invitations: {
+            include: {
+              user: { select: { id: true, email: true, name: true } },
+              group: { 
+                include: { 
+                  members: { 
+                    include: { 
+                      student: { 
+                        include: { 
+                          user: { select: { id: true, email: true, name: true } } 
+                        } 
+                      },
+                      collaborator: { 
+                        include: { 
+                          user: { select: { id: true, email: true, name: true } } 
+                        } 
+                      },
+                    } 
+                  } 
+                } 
+              },
+              class: { 
+                include: { 
+                  students: { 
+                    include: { 
+                      user: { select: { id: true, email: true, name: true } } 
+                    } 
+                  } 
+                } 
+              },
+            },
+          },
+        },
+      });
+
+      // Send email invites and in-app notifications if there are invitations
+      if (event.invitations.length > 0) {
+        // Collect all invitees with their IDs and emails
+        const invitees: (InviteeData & { id: string })[] = [];
+        const seenIds = new Set<string>();
+
+        for (const invitation of event.invitations) {
+          // Direct user invite
+          if (invitation.user?.id && !seenIds.has(invitation.user.id)) {
+            invitees.push({
+              id: invitation.user.id,
+              email: invitation.user.email || '',
+              name: invitation.user.name || 'Utente',
+            });
+            seenIds.add(invitation.user.id);
+          }
+
+          // Group members (students and collaborators)
+          if (invitation.group?.members) {
+            for (const member of invitation.group.members) {
+              // Check student user
+              if (member.student?.user?.id && !seenIds.has(member.student.user.id)) {
+                invitees.push({
+                  id: member.student.user.id,
+                  email: member.student.user.email || '',
+                  name: member.student.user.name || 'Utente',
+                });
+                seenIds.add(member.student.user.id);
+              }
+              // Check collaborator user
+              if (member.collaborator?.user?.id && !seenIds.has(member.collaborator.user.id)) {
+                invitees.push({
+                  id: member.collaborator.user.id,
+                  email: member.collaborator.user.email || '',
+                  name: member.collaborator.user.name || 'Utente',
+                });
+                seenIds.add(member.collaborator.user.id);
+              }
+            }
+          }
+
+          // Class students
+          if (invitation.class?.students) {
+            for (const student of invitation.class.students) {
+              if (student.user?.id && !seenIds.has(student.user.id)) {
+                invitees.push({
+                  id: student.user.id,
+                  email: student.user.email || '',
+                  name: student.user.name || 'Utente',
+                });
+                seenIds.add(student.user.id);
+              }
+            }
+          }
+        }
+
+        if (invitees.length > 0) {
+          const eventEmailData: EventEmailData = {
+            id: event.id,
+            title: event.title,
+            description: event.description,
+            type: event.type,
+            startDate: event.startDate!,
+            endDate: event.endDate!,
+            isAllDay: event.isAllDay,
+            locationType: event.locationType,
+            locationDetails: event.locationDetails,
+            onlineLink: event.onlineLink,
+            createdByName: event.createdBy?.name || 'Staff',
+          };
+
+          // Send emails asynchronously if enabled (don't block the response)
+          if (eventData.sendEmailInvites) {
+            const emailInvitees = invitees.filter(i => i.email);
+            sendEventInvitationEmail(eventEmailData, emailInvitees).catch((error) => {
+              console.error('Error sending event invitation emails:', error);
+            });
+          }
+
+          // Create in-app notifications for all invitees
+          const userIds = invitees.map(i => i.id);
+          createBulkNotifications(ctx.prisma, {
+            userIds,
+            type: 'EVENT_INVITATION',
+            title: '📅 Nuovo invito evento',
+            message: `Sei stato invitato all'evento "${event.title}"`,
+            linkType: 'event',
+            linkEntityId: event.id,
+          }).catch((error) => {
+            console.error('Error creating event invitation notifications:', error);
+          });
+        }
+      }
+
+      return event;
+    }),
+
+  // Update event
+  updateEvent: staffProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        title: z.string().min(1).max(200).optional(),
+        description: z.string().optional(),
+        type: z.nativeEnum(EventType).optional(),
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+        isAllDay: z.boolean().optional(),
+        locationType: z.nativeEnum(EventLocationType).optional(),
+        locationDetails: z.string().optional(),
+        onlineLink: z.string().url().optional().or(z.literal('')),
+        isPublic: z.boolean().optional(),
+        sendEmailReminders: z.boolean().optional(),
+        reminderMinutes: z.number().min(5).max(10080).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id, onlineLink, ...updateData } = input;
+
+      // Check event exists
+      const existing = await ctx.prisma.calendarEvent.findUnique({
+        where: { id },
+      });
+
+      if (!existing) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Evento non trovato',
+        });
+      }
+
+      // Collaborators can only edit their own events
+      if (ctx.user.role === 'COLLABORATOR' && existing.createdById !== ctx.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Puoi modificare solo i tuoi eventi',
+        });
+      }
+
+      // Validate dates if both provided
+      if (updateData.startDate && updateData.endDate && updateData.endDate < updateData.startDate) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'La data di fine deve essere successiva alla data di inizio',
+        });
+      }
+
+      const event = await ctx.prisma.calendarEvent.update({
+        where: { id },
+        data: {
+          ...updateData,
+          onlineLink: onlineLink === '' ? null : onlineLink,
+        },
+        include: {
+          createdBy: { select: { id: true, name: true } },
+          invitations: {
+            include: {
+              user: { select: { id: true, email: true, name: true } },
+              group: {
+                include: {
+                  members: {
+                    include: {
+                      student: {
+                        include: {
+                          user: { select: { id: true, email: true, name: true } }
+                        }
+                      },
+                      collaborator: {
+                        include: {
+                          user: { select: { id: true, email: true, name: true } }
+                        }
+                      },
+                    }
+                  }
+                }
+              },
+              class: {
+                include: {
+                  students: {
+                    include: {
+                      user: { select: { id: true, email: true, name: true } }
+                    }
+                  }
+                }
+              },
+            },
+          },
+        },
+      });
+
+      // Send modification notifications to invited users
+      if (event.invitations.length > 0) {
+        const invitees: (InviteeData & { id: string })[] = [];
+        const seenIds = new Set<string>();
+
+        for (const invitation of event.invitations) {
+          if (invitation.user?.id && !seenIds.has(invitation.user.id)) {
+            invitees.push({
+              id: invitation.user.id,
+              email: invitation.user.email || '',
+              name: invitation.user.name || 'Utente',
+            });
+            seenIds.add(invitation.user.id);
+          }
+
+          if (invitation.group?.members) {
+            for (const member of invitation.group.members) {
+              if (member.student?.user?.id && !seenIds.has(member.student.user.id)) {
+                invitees.push({
+                  id: member.student.user.id,
+                  email: member.student.user.email || '',
+                  name: member.student.user.name || 'Utente',
+                });
+                seenIds.add(member.student.user.id);
+              }
+              if (member.collaborator?.user?.id && !seenIds.has(member.collaborator.user.id)) {
+                invitees.push({
+                  id: member.collaborator.user.id,
+                  email: member.collaborator.user.email || '',
+                  name: member.collaborator.user.name || 'Utente',
+                });
+                seenIds.add(member.collaborator.user.id);
+              }
+            }
+          }
+
+          if (invitation.class?.students) {
+            for (const student of invitation.class.students) {
+              if (student.user?.id && !seenIds.has(student.user.id)) {
+                invitees.push({
+                  id: student.user.id,
+                  email: student.user.email || '',
+                  name: student.user.name || 'Utente',
+                });
+                seenIds.add(student.user.id);
+              }
+            }
+          }
+        }
+
+        if (invitees.length > 0) {
+          const eventEmailData: EventEmailData = {
+            id: event.id,
+            title: event.title,
+            description: event.description,
+            type: event.type,
+            startDate: event.startDate!,
+            endDate: event.endDate!,
+            isAllDay: event.isAllDay,
+            locationType: event.locationType,
+            locationDetails: event.locationDetails,
+            onlineLink: event.onlineLink,
+            createdByName: event.createdBy?.name || 'Staff',
+          };
+
+          // Send modification emails
+          const emailInvitees = invitees.filter(i => i.email);
+          sendEventModificationEmail(eventEmailData, emailInvitees).catch((error) => {
+            console.error('Error sending event modification emails:', error);
+          });
+
+          // Create in-app notifications
+          const userIds = invitees.map(i => i.id);
+          createBulkNotifications(ctx.prisma, {
+            userIds,
+            type: 'EVENT_UPDATED',
+            title: '🔄 Evento modificato',
+            message: `L'evento "${event.title}" è stato modificato`,
+            linkType: 'event',
+            linkEntityId: event.id,
+          }).catch((error) => {
+            console.error('Error creating event update notifications:', error);
+          });
+        }
+      }
+
+      return event;
+    }),
+
+  // Cancel event
+  cancelEvent: staffProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        reason: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.prisma.calendarEvent.findUnique({
+        where: { id: input.id },
+      });
+
+      if (!existing) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Evento non trovato',
+        });
+      }
+
+      // Collaborators can only cancel their own events
+      if (ctx.user.role === 'COLLABORATOR' && existing.createdById !== ctx.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Puoi annullare solo i tuoi eventi',
+        });
+      }
+
+      // Get event with invitations for email notifications
+      const eventWithInvitations = await ctx.prisma.calendarEvent.findUnique({
+        where: { id: input.id },
+        include: {
+          createdBy: { select: { name: true } },
+          invitations: {
+            include: {
+              user: { select: { id: true, email: true, name: true } },
+              group: {
+                include: {
+                  members: {
+                    include: {
+                      student: {
+                        include: {
+                          user: { select: { id: true, email: true, name: true } }
+                        }
+                      },
+                      collaborator: {
+                        include: {
+                          user: { select: { id: true, email: true, name: true } }
+                        }
+                      },
+                    }
+                  }
+                }
+              },
+              class: {
+                include: {
+                  students: {
+                    include: {
+                      user: { select: { id: true, email: true, name: true } }
+                    }
+                  }
+                }
+              },
+            },
+          },
+        },
+      });
+
+      const event = await ctx.prisma.calendarEvent.update({
+        where: { id: input.id },
+        data: {
+          isCancelled: true,
+          cancelledAt: new Date(),
+          cancelledById: ctx.user.id,
+          cancelReason: input.reason,
+        },
+      });
+
+      // Send cancellation notifications to invited users
+      if (eventWithInvitations && eventWithInvitations.invitations.length > 0) {
+        const invitees: (InviteeData & { id: string })[] = [];
+        const seenIds = new Set<string>();
+
+        for (const invitation of eventWithInvitations.invitations) {
+          if (invitation.user?.id && !seenIds.has(invitation.user.id)) {
+            invitees.push({
+              id: invitation.user.id,
+              email: invitation.user.email || '',
+              name: invitation.user.name || 'Utente',
+            });
+            seenIds.add(invitation.user.id);
+          }
+
+          if (invitation.group?.members) {
+            for (const member of invitation.group.members) {
+              if (member.student?.user?.id && !seenIds.has(member.student.user.id)) {
+                invitees.push({
+                  id: member.student.user.id,
+                  email: member.student.user.email || '',
+                  name: member.student.user.name || 'Utente',
+                });
+                seenIds.add(member.student.user.id);
+              }
+              if (member.collaborator?.user?.id && !seenIds.has(member.collaborator.user.id)) {
+                invitees.push({
+                  id: member.collaborator.user.id,
+                  email: member.collaborator.user.email || '',
+                  name: member.collaborator.user.name || 'Utente',
+                });
+                seenIds.add(member.collaborator.user.id);
+              }
+            }
+          }
+
+          if (invitation.class?.students) {
+            for (const student of invitation.class.students) {
+              if (student.user?.id && !seenIds.has(student.user.id)) {
+                invitees.push({
+                  id: student.user.id,
+                  email: student.user.email || '',
+                  name: student.user.name || 'Utente',
+                });
+                seenIds.add(student.user.id);
+              }
+            }
+          }
+        }
+
+        if (invitees.length > 0) {
+          const eventEmailData: EventEmailData = {
+            id: eventWithInvitations.id,
+            title: eventWithInvitations.title,
+            description: eventWithInvitations.description,
+            type: eventWithInvitations.type,
+            startDate: eventWithInvitations.startDate!,
+            endDate: eventWithInvitations.endDate!,
+            isAllDay: eventWithInvitations.isAllDay,
+            locationType: eventWithInvitations.locationType,
+            locationDetails: eventWithInvitations.locationDetails,
+            onlineLink: eventWithInvitations.onlineLink,
+            createdByName: eventWithInvitations.createdBy?.name || 'Staff',
+          };
+
+          // Send cancellation emails
+          const emailInvitees = invitees.filter(i => i.email);
+          sendEventCancellationEmail(eventEmailData, emailInvitees, input.reason).catch((error) => {
+            console.error('Error sending event cancellation emails:', error);
+          });
+
+          // Create in-app notifications
+          const userIds = invitees.map(i => i.id);
+          createBulkNotifications(ctx.prisma, {
+            userIds,
+            type: 'EVENT_CANCELLED',
+            title: '❌ Evento annullato',
+            message: `L'evento "${eventWithInvitations.title}" è stato annullato${input.reason ? `: ${input.reason}` : ''}`,
+            linkType: 'event',
+            linkEntityId: eventWithInvitations.id,
+          }).catch((error) => {
+            console.error('Error creating event cancellation notifications:', error);
+          });
+        }
+      }
+
+      return event;
+    }),
+
+  // Delete event (admin only, hard delete)
+  deleteEvent: adminProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.prisma.calendarEvent.findUnique({
+        where: { id: input.id },
+      });
+
+      if (!existing) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Evento non trovato',
+        });
+      }
+
+      await ctx.prisma.calendarEvent.delete({
+        where: { id: input.id },
+      });
+
+      return { success: true };
+    }),
+
+  // ==================== INVITATIONS ====================
+
+  // Add invitations to event
+  addInvitations: staffProcedure
+    .input(
+      z.object({
+        eventId: z.string(),
+        userIds: z.array(z.string()).optional(),
+        groupIds: z.array(z.string()).optional(),
+        classIds: z.array(z.string()).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { eventId, userIds, groupIds, classIds } = input;
+
+      const event = await ctx.prisma.calendarEvent.findUnique({
+        where: { id: eventId },
+      });
+
+      if (!event) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Evento non trovato',
+        });
+      }
+
+      // Collaborators can only manage their own events
+      if (ctx.user.role === 'COLLABORATOR' && event.createdById !== ctx.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Puoi gestire solo i tuoi eventi',
+        });
+      }
+
+      const invitations = await ctx.prisma.$transaction([
+        ...(userIds?.map((userId) =>
+          ctx.prisma.eventInvitation.upsert({
+            where: { eventId_userId: { eventId, userId } },
+            create: { eventId, userId },
+            update: {},
+          })
+        ) || []),
+        ...(groupIds?.map((groupId) =>
+          ctx.prisma.eventInvitation.upsert({
+            where: { eventId_groupId: { eventId, groupId } },
+            create: { eventId, groupId },
+            update: {},
+          })
+        ) || []),
+        ...(classIds?.map((classId) =>
+          ctx.prisma.eventInvitation.upsert({
+            where: { eventId_classId: { eventId, classId } },
+            create: { eventId, classId },
+            update: {},
+          })
+        ) || []),
+      ]);
+
+      return { added: invitations.length };
+    }),
+
+  // Remove invitation
+  removeInvitation: staffProcedure
+    .input(z.object({ invitationId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const invitation = await ctx.prisma.eventInvitation.findUnique({
+        where: { id: input.invitationId },
+        include: { event: true },
+      });
+
+      if (!invitation) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Invito non trovato',
+        });
+      }
+
+      // Collaborators can only manage their own events
+      if (ctx.user.role === 'COLLABORATOR' && invitation.event.createdById !== ctx.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Puoi gestire solo i tuoi eventi',
+        });
+      }
+
+      await ctx.prisma.eventInvitation.delete({
+        where: { id: input.invitationId },
+      });
+
+      return { success: true };
+    }),
+
+  // Respond to invitation (for invited users)
+  respondToInvitation: protectedProcedure
+    .input(
+      z.object({
+        eventId: z.string(),
+        status: z.enum(['ACCEPTED', 'DECLINED', 'TENTATIVE']),
+        note: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const invitation = await ctx.prisma.eventInvitation.findFirst({
+        where: {
+          eventId: input.eventId,
+          userId: ctx.user.id,
+        },
+      });
+
+      if (!invitation) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Non sei stato invitato a questo evento',
+        });
+      }
+
+      const updated = await ctx.prisma.eventInvitation.update({
+        where: { id: invitation.id },
+        data: {
+          status: input.status as EventInviteStatus,
+          respondedAt: new Date(),
+          responseNote: input.note,
+        },
+      });
+
+      return updated;
+    }),
+
+  // ==================== ATTENDANCE ====================
+
+  // Get attendances for an event
+  getEventAttendances: staffProcedure
+    .input(z.object({ eventId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const event = await ctx.prisma.calendarEvent.findUnique({
+        where: { id: input.eventId },
+        include: {
+          invitations: {
+            where: { userId: { not: null } },
+            include: {
+              user: {
+                select: { id: true, name: true, email: true },
+              },
+            },
+          },
+        },
+      });
+
+      if (!event) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Evento non trovato',
+        });
+      }
+
+      const attendances = await ctx.prisma.attendance.findMany({
+        where: { eventId: input.eventId },
+        include: {
+          student: {
+            select: { id: true, name: true, email: true },
+          },
+          recordedBy: {
+            select: { id: true, name: true },
+          },
+          customStatus: true,
+        },
+      });
+
+      // Get list of invited students
+      const invitedStudents = event.invitations
+        .filter((inv) => inv.user)
+        .map((inv) => inv.user!);
+
+      return {
+        attendances,
+        invitedStudents,
+      };
+    }),
+
+  // Record attendance
+  recordAttendance: staffProcedure
+    .input(
+      z.object({
+        eventId: z.string(),
+        studentId: z.string(),
+        status: z.nativeEnum(AttendanceStatus),
+        customStatusId: z.string().optional(),
+        notes: z.string().optional(),
+        arrivalTime: z.date().optional(),
+        leaveTime: z.date().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { eventId, studentId, ...attendanceData } = input;
+
+      // Check event exists
+      const event = await ctx.prisma.calendarEvent.findUnique({
+        where: { id: eventId },
+      });
+
+      if (!event) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Evento non trovato',
+        });
+      }
+
+      // Upsert attendance
+      const attendance = await ctx.prisma.attendance.upsert({
+        where: {
+          eventId_studentId: { eventId, studentId },
+        },
+        create: {
+          eventId,
+          studentId,
+          ...attendanceData,
+          recordedById: ctx.user.id,
+        },
+        update: {
+          ...attendanceData,
+          lastEditedById: ctx.user.id,
+          lastEditedAt: new Date(),
+        },
+        include: {
+          student: { select: { id: true, name: true } },
+        },
+      });
+
+      return attendance;
+    }),
+
+  // Bulk record attendance
+  bulkRecordAttendance: staffProcedure
+    .input(
+      z.object({
+        eventId: z.string(),
+        attendances: z.array(
+          z.object({
+            studentId: z.string(),
+            status: z.nativeEnum(AttendanceStatus),
+            notes: z.string().optional(),
+          })
+        ),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { eventId, attendances } = input;
+
+      // Check event exists
+      const event = await ctx.prisma.calendarEvent.findUnique({
+        where: { id: eventId },
+      });
+
+      if (!event) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Evento non trovato',
+        });
+      }
+
+      const results = await ctx.prisma.$transaction(
+        attendances.map((att) =>
+          ctx.prisma.attendance.upsert({
+            where: {
+              eventId_studentId: { eventId, studentId: att.studentId },
+            },
+            create: {
+              eventId,
+              studentId: att.studentId,
+              status: att.status,
+              notes: att.notes,
+              recordedById: ctx.user.id,
+            },
+            update: {
+              status: att.status,
+              notes: att.notes,
+              lastEditedById: ctx.user.id,
+              lastEditedAt: new Date(),
+            },
+          })
+        )
+      );
+
+      return { recorded: results.length };
+    }),
+
+  // ==================== STAFF ABSENCES ====================
+
+  // Get staff absences
+  getStaffAbsences: staffProcedure
+    .input(
+      z.object({
+        status: z.nativeEnum(StaffAbsenceStatus).optional(),
+        requesterId: z.string().optional(),
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+        onlyMine: z.boolean().optional().default(false),
+        page: z.number().min(1).optional().default(1),
+        pageSize: z.number().min(1).max(50).optional().default(20),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { status, requesterId, startDate, endDate, onlyMine, page, pageSize } = input;
+
+      const where: Parameters<typeof ctx.prisma.staffAbsence.findMany>[0]['where'] = {};
+
+      if (status) {
+        where.status = status;
+      }
+
+      if (requesterId) {
+        where.requesterId = requesterId;
+      }
+
+      if (onlyMine || ctx.user.role === 'COLLABORATOR') {
+        // Collaborators only see their own absences
+        where.requesterId = ctx.user.id;
+      }
+
+      if (startDate) {
+        where.startDate = { gte: startDate };
+      }
+
+      if (endDate) {
+        where.endDate = { lte: endDate };
+      }
+
+      const [absences, total] = await Promise.all([
+        ctx.prisma.staffAbsence.findMany({
+          where,
+          include: {
+            requester: {
+              select: { id: true, name: true, email: true },
+            },
+            confirmedBy: {
+              select: { id: true, name: true },
+            },
+            substitute: {
+              select: { id: true, name: true, email: true },
+            },
+            affectedEvent: {
+              select: { id: true, title: true, startDate: true },
+            },
+          },
+          orderBy: { startDate: 'desc' },
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+        ctx.prisma.staffAbsence.count({ where }),
+      ]);
+
+      return {
+        absences,
+        pagination: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize),
+        },
+      };
+    }),
+
+  // Request staff absence
+  requestAbsence: staffProcedure
+    .input(
+      z.object({
+        startDate: z.date(),
+        endDate: z.date(),
+        isAllDay: z.boolean().optional().default(true),
+        reason: z.string().min(5),
+        isUrgent: z.boolean().optional().default(false),
+        affectedEventId: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Validate dates
+      if (input.endDate < input.startDate) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'La data di fine deve essere successiva alla data di inizio',
+        });
+      }
+
+      const absence = await ctx.prisma.staffAbsence.create({
+        data: {
+          startDate: input.startDate,
+          endDate: input.endDate,
+          isAllDay: input.isAllDay,
+          reason: input.reason,
+          isUrgent: input.isUrgent,
+          requester: { connect: { id: ctx.user.id } },
+          ...(input.affectedEventId && {
+            affectedEvent: { connect: { id: input.affectedEventId } },
+          }),
+        },
+        include: {
+          requester: { select: { id: true, name: true } },
+        },
+      });
+
+      // Create notification for all admins about new absence request
+      const admins = await ctx.prisma.user.findMany({
+        where: { role: 'ADMIN', isActive: true },
+        select: { id: true },
+      });
+
+      if (admins.length > 0) {
+        const requesterName = absence.requester?.name || 'Un collaboratore';
+        createBulkNotifications(ctx.prisma, {
+          userIds: admins.map(a => a.id),
+          type: 'ABSENCE_REQUEST',
+          title: input.isUrgent ? '🚨 Nuova richiesta assenza urgente' : '📋 Nuova richiesta assenza',
+          message: `${requesterName} ha richiesto un'assenza dal ${input.startDate.toLocaleDateString('it-IT')} al ${input.endDate.toLocaleDateString('it-IT')}`,
+          linkUrl: '/admin/assenze',
+          linkType: 'absence',
+          linkEntityId: absence.id,
+          isUrgent: input.isUrgent,
+        }).catch((error) => {
+          console.error('Error creating absence request notifications for admins:', error);
+        });
+      }
+
+      return absence;
+    }),
+
+  // Confirm/reject absence (admin only)
+  updateAbsenceStatus: adminProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        status: z.enum(['CONFIRMED', 'REJECTED']),
+        adminNotes: z.string().optional(),
+        substituteId: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.prisma.staffAbsence.findUnique({
+        where: { id: input.id },
+      });
+
+      if (!existing) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Richiesta assenza non trovata',
+        });
+      }
+
+      const absence = await ctx.prisma.staffAbsence.update({
+        where: { id: input.id },
+        data: {
+          status: input.status as StaffAbsenceStatus,
+          confirmedById: ctx.user.id,
+          confirmedAt: new Date(),
+          adminNotes: input.adminNotes,
+          substituteId: input.substituteId,
+        },
+        include: {
+          requester: { select: { id: true, name: true, email: true } },
+          substitute: { select: { id: true, name: true } },
+        },
+      });
+
+      // Send email notification to requester
+      if (absence.requester?.email) {
+        sendAbsenceStatusEmail({
+          requesterName: absence.requester.name || 'Collaboratore',
+          requesterEmail: absence.requester.email,
+          startDate: absence.startDate,
+          endDate: absence.endDate,
+          reason: absence.reason,
+          status: absence.status,
+          adminNotes: absence.adminNotes,
+        }).catch((error) => {
+          console.error('Error sending absence status email:', error);
+        });
+      }
+
+      // Create in-app notification for requester
+      if (absence.requester?.id) {
+        const isConfirmed = input.status === 'CONFIRMED';
+        createNotification(ctx.prisma, {
+          userId: absence.requester.id,
+          type: isConfirmed ? 'ABSENCE_CONFIRMED' : 'ABSENCE_REJECTED',
+          title: isConfirmed ? '✅ Assenza confermata' : '❌ Assenza rifiutata',
+          message: isConfirmed 
+            ? `La tua richiesta di assenza dal ${absence.startDate.toLocaleDateString('it-IT')} al ${absence.endDate.toLocaleDateString('it-IT')} è stata confermata.`
+            : `La tua richiesta di assenza dal ${absence.startDate.toLocaleDateString('it-IT')} al ${absence.endDate.toLocaleDateString('it-IT')} è stata rifiutata.${input.adminNotes ? ` Motivo: ${input.adminNotes}` : ''}`,
+          linkUrl: '/collaboratore/assenze',
+          linkType: 'absence',
+          linkEntityId: absence.id,
+        }).catch((error) => {
+          console.error('Error creating absence status notification:', error);
+        });
+      }
+
+      return absence;
+    }),
+
+  // Cancel absence request (by requester)
+  cancelAbsenceRequest: staffProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.prisma.staffAbsence.findUnique({
+        where: { id: input.id },
+      });
+
+      if (!existing) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Richiesta assenza non trovata',
+        });
+      }
+
+      // Only requester or admin can cancel
+      if (existing.requesterId !== ctx.user.id && ctx.user.role !== 'ADMIN') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Non puoi annullare questa richiesta',
+        });
+      }
+
+      // Can only cancel pending requests
+      if (existing.status !== 'PENDING' && ctx.user.role !== 'ADMIN') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Puoi annullare solo richieste in attesa',
+        });
+      }
+
+      const absence = await ctx.prisma.staffAbsence.update({
+        where: { id: input.id },
+        data: {
+          status: 'CANCELLED',
+        },
+      });
+
+      return absence;
+    }),
+
+  // ==================== STATS ====================
+
+  // Get calendar stats
+  getStats: staffProcedure.query(async ({ ctx }) => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    const [
+      totalEvents,
+      eventsThisMonth,
+      upcomingEvents,
+      pendingAbsences,
+      myEventsCount,
+    ] = await Promise.all([
+      ctx.prisma.calendarEvent.count({
+        where: { isCancelled: false },
+      }),
+      ctx.prisma.calendarEvent.count({
+        where: {
+          isCancelled: false,
+          startDate: { gte: startOfMonth, lte: endOfMonth },
+        },
+      }),
+      ctx.prisma.calendarEvent.count({
+        where: {
+          isCancelled: false,
+          startDate: { gte: now },
+        },
+      }),
+      ctx.prisma.staffAbsence.count({
+        where: { status: 'PENDING' },
+      }),
+      ctx.prisma.calendarEvent.count({
+        where: {
+          createdById: ctx.user.id,
+          isCancelled: false,
+        },
+      }),
+    ]);
+
+    return {
+      totalEvents,
+      eventsThisMonth,
+      upcomingEvents,
+      pendingAbsences,
+      myEventsCount,
+    };
+  }),
+});

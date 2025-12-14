@@ -37,9 +37,58 @@ export const collaboratorsRouter = router({
               orderBy: { assignedAt: 'desc' },
               take: 1,
             },
+            subjects: {
+              include: {
+                subject: {
+                  select: {
+                    id: true,
+                    name: true,
+                    code: true,
+                    color: true,
+                  },
+                },
+              },
+            },
           },
         },
       } as any,
+      orderBy: { name: 'asc' },
+    });
+  }),
+
+  /**
+   * Get collaborators list for calendar invites (accessible by staff)
+   * Returns limited info suitable for calendar invite lists
+   */
+  getListForCalendar: staffProcedure.query(async ({ ctx }) => {
+    return ctx.prisma.user.findMany({
+      where: { 
+        role: 'COLLABORATOR' as any,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isActive: true,
+        collaborator: {
+          select: {
+            specialization: true,
+            subjects: {
+              include: {
+                subject: {
+                  select: {
+                    id: true,
+                    name: true,
+                    code: true,
+                    color: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
       orderBy: { name: 'asc' },
     });
   }),
@@ -58,12 +107,94 @@ export const collaboratorsRouter = router({
               contracts: {
                 orderBy: { assignedAt: 'desc' },
               },
+              groupMemberships: {
+                include: {
+                  group: {
+                    select: {
+                      id: true,
+                      name: true,
+                      color: true,
+                    },
+                  },
+                },
+              },
+              subjects: {
+                include: {
+                  subject: {
+                    select: {
+                      id: true,
+                      name: true,
+                      code: true,
+                      color: true,
+                    },
+                  },
+                },
+              },
+              referenceGroups: {
+                select: {
+                  id: true,
+                  name: true,
+                  color: true,
+                },
+              },
             },
           },
         } as any,
       });
 
       if (!user || (user.role as string) !== 'COLLABORATOR') {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Collaboratore non trovato',
+        });
+      }
+
+      return user;
+    }),
+
+  /**
+   * Get public collaborator info (accessible by all authenticated users)
+   * Returns limited info suitable for displaying in modals/cards
+   */
+  getPublicInfo: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findUnique({
+        where: { id: input.id },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          isActive: true,
+          collaborator: {
+            select: {
+              specialization: true,
+              phone: true,
+              subjects: {
+                include: {
+                  subject: {
+                    select: {
+                      id: true,
+                      name: true,
+                      code: true,
+                      color: true,
+                    },
+                  },
+                },
+              },
+              referenceGroups: {
+                select: {
+                  id: true,
+                  name: true,
+                  color: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!user?.collaborator) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Collaboratore non trovato',

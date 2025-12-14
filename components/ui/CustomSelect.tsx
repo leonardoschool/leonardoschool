@@ -43,7 +43,7 @@ export default function CustomSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0, openUpward: false });
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -70,10 +70,18 @@ export default function CustomSelect({
   const updateDropdownPosition = useCallback(() => {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
+      const dropdownHeight = 280; // Approximate max height of dropdown (max-h-60 = 240px + search ~40px)
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      
+      // Open upward if not enough space below but enough above
+      const openUpward = spaceBelow < dropdownHeight && spaceAbove > spaceBelow;
+      
       setDropdownPosition({
-        top: rect.bottom + 8, // 8px gap
+        top: openUpward ? rect.top - 8 : rect.bottom + 8, // 8px gap
         left: rect.left,
         width: rect.width,
+        openUpward,
       });
     }
   }, []);
@@ -248,6 +256,7 @@ export default function CustomSelect({
             top: dropdownPosition.top,
             left: dropdownPosition.left,
             width: dropdownPosition.width,
+            ...(dropdownPosition.openUpward && { transform: 'translateY(-100%)' }),
           }}
           onMouseDown={(e) => e.preventDefault()} // Prevent blur on click
         >

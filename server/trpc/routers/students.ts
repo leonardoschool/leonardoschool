@@ -208,6 +208,94 @@ export const studentsRouter = router({
   }),
 
   /**
+   * Get student details by ID (admin/staff only)
+   */
+  getById: staffProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findUnique({
+        where: { id: input.id },
+        include: {
+          student: {
+            include: {
+              class: true,
+              groupMemberships: {
+                include: {
+                  group: {
+                    select: {
+                      id: true,
+                      name: true,
+                      color: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!user || user.role !== 'STUDENT') {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Studente non trovato',
+        });
+      }
+
+      return user;
+    }),
+
+  /**
+   * Get public student info (accessible by all authenticated users)
+   * Returns limited info suitable for displaying in modals/cards
+   */
+  getPublicInfo: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findUnique({
+        where: { id: input.id },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          isActive: true,
+          student: {
+            select: {
+              phone: true,
+              enrollmentDate: true,
+              class: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+              groupMemberships: {
+                include: {
+                  group: {
+                    select: {
+                      id: true,
+                      name: true,
+                      color: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!user || !user.student) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Studente non trovato',
+        });
+      }
+
+      return user;
+    }),
+
+  /**
    * Get all students for admin (used in materials assignment)
    */
   getAllForAdmin: adminProcedure.query(async ({ ctx }) => {

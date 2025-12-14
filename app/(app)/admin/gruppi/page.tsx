@@ -5,6 +5,7 @@ import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { Spinner, PageLoader } from '@/components/ui/loaders';
 import { Portal } from '@/components/ui/Portal';
+import { UserInfoModal } from '@/components/ui/UserInfoModal';
 import {
   Users,
   Plus,
@@ -15,7 +16,6 @@ import {
   GraduationCap,
   UserCog,
   X,
-  Check,
   AlertTriangle,
   Eye,
   UsersRound,
@@ -89,19 +89,31 @@ export default function GroupsPage() {
   // State
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<GroupType | ''>('');
+  const [referenceFilter, setReferenceFilter] = useState<string>(''); // "collab:ID" or "admin:ID"
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Parse reference filter
+  const isAdminFilter = referenceFilter.startsWith('admin:');
+  const referenceCollaboratorId = !isAdminFilter && referenceFilter ? referenceFilter : undefined;
+  const referenceAdminId = isAdminFilter ? referenceFilter.replace('admin:', '') : undefined;
 
   // Queries
   const { data: groups, isLoading } = trpc.groups.getAll.useQuery({
     search: search || undefined,
     type: typeFilter || undefined,
     includeInactive: true,
+    referenceCollaboratorId,
+    referenceAdminId,
   });
 
   const { data: stats } = trpc.groups.getStats.useQuery();
+  
+  // Query per popolare il filtro collaboratori
+  const { data: collaboratorsForFilter } = trpc.collaborators.getAll.useQuery();
+  const { data: adminsForFilter } = trpc.users.getAll.useQuery({ role: 'ADMIN' });
 
   const { data: selectedGroup, isLoading: loadingGroup } = trpc.groups.getById.useQuery(
     { id: selectedGroupId! },
@@ -180,53 +192,120 @@ export default function GroupsPage() {
         </button>
       </div>
 
-      {/* Stats */}
+      {/* Quick Filters - Filtri rapidi cliccabili per tipo */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className={`${colors.background.card} p-4 rounded-xl border ${colors.border.primary}`}>
+          {/* Tutti i gruppi */}
+          <button
+            onClick={() => setTypeFilter('')}
+            className={`${colors.background.card} p-4 rounded-xl border transition-all duration-200 ${
+              typeFilter === '' 
+                ? 'border-red-500 ring-2 ring-red-500/20' 
+                : `${colors.border.primary} hover:border-gray-400 dark:hover:border-gray-500`
+            }`}
+          >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                <UsersRound className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                typeFilter === '' 
+                  ? 'bg-red-100 dark:bg-red-900/30' 
+                  : 'bg-gray-100 dark:bg-gray-800'
+              }`}>
+                <UsersRound className={`w-5 h-5 ${
+                  typeFilter === '' 
+                    ? 'text-red-600 dark:text-red-400' 
+                    : 'text-gray-600 dark:text-gray-400'
+                }`} />
               </div>
-              <div>
+              <div className="text-left">
                 <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.total}</p>
-                <p className={`text-sm ${colors.text.muted}`}>Gruppi totali</p>
+                <p className={`text-sm ${colors.text.muted}`}>Tutti</p>
               </div>
             </div>
-          </div>
-          <div className={`${colors.background.card} p-4 rounded-xl border ${colors.border.primary}`}>
+          </button>
+
+          {/* Gruppi Misti */}
+          <button
+            onClick={() => setTypeFilter(typeFilter === 'MIXED' ? '' : 'MIXED')}
+            className={`${colors.background.card} p-4 rounded-xl border transition-all duration-200 ${
+              typeFilter === 'MIXED' 
+                ? 'border-green-500 ring-2 ring-green-500/20' 
+                : `${colors.border.primary} hover:border-gray-400 dark:hover:border-gray-500`
+            }`}
+          >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                typeFilter === 'MIXED' 
+                  ? 'bg-green-100 dark:bg-green-900/30' 
+                  : 'bg-gray-100 dark:bg-gray-800'
+              }`}>
+                <Users className={`w-5 h-5 ${
+                  typeFilter === 'MIXED' 
+                    ? 'text-green-600 dark:text-green-400' 
+                    : 'text-gray-600 dark:text-gray-400'
+                }`} />
               </div>
-              <div>
-                <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.active}</p>
-                <p className={`text-sm ${colors.text.muted}`}>Attivi</p>
+              <div className="text-left">
+                <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.byType.MIXED || 0}</p>
+                <p className={`text-sm ${colors.text.muted}`}>Misti</p>
               </div>
             </div>
-          </div>
-          <div className={`${colors.background.card} p-4 rounded-xl border ${colors.border.primary}`}>
+          </button>
+
+          {/* Gruppi Solo Studenti */}
+          <button
+            onClick={() => setTypeFilter(typeFilter === 'STUDENTS' ? '' : 'STUDENTS')}
+            className={`${colors.background.card} p-4 rounded-xl border transition-all duration-200 ${
+              typeFilter === 'STUDENTS' 
+                ? 'border-blue-500 ring-2 ring-blue-500/20' 
+                : `${colors.border.primary} hover:border-gray-400 dark:hover:border-gray-500`
+            }`}
+          >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                <Users className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                typeFilter === 'STUDENTS' 
+                  ? 'bg-blue-100 dark:bg-blue-900/30' 
+                  : 'bg-gray-100 dark:bg-gray-800'
+              }`}>
+                <GraduationCap className={`w-5 h-5 ${
+                  typeFilter === 'STUDENTS' 
+                    ? 'text-blue-600 dark:text-blue-400' 
+                    : 'text-gray-600 dark:text-gray-400'
+                }`} />
               </div>
-              <div>
-                <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.totalMembers}</p>
-                <p className={`text-sm ${colors.text.muted}`}>Membri totali</p>
-              </div>
-            </div>
-          </div>
-          <div className={`${colors.background.card} p-4 rounded-xl border ${colors.border.primary}`}>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                <GraduationCap className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
+              <div className="text-left">
                 <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.byType.STUDENTS || 0}</p>
-                <p className={`text-sm ${colors.text.muted}`}>Gruppi studenti</p>
+                <p className={`text-sm ${colors.text.muted}`}>Studenti</p>
               </div>
             </div>
-          </div>
+          </button>
+
+          {/* Gruppi Solo Collaboratori */}
+          <button
+            onClick={() => setTypeFilter(typeFilter === 'COLLABORATORS' ? '' : 'COLLABORATORS')}
+            className={`${colors.background.card} p-4 rounded-xl border transition-all duration-200 ${
+              typeFilter === 'COLLABORATORS' 
+                ? 'border-purple-500 ring-2 ring-purple-500/20' 
+                : `${colors.border.primary} hover:border-gray-400 dark:hover:border-gray-500`
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                typeFilter === 'COLLABORATORS' 
+                  ? 'bg-purple-100 dark:bg-purple-900/30' 
+                  : 'bg-gray-100 dark:bg-gray-800'
+              }`}>
+                <UserCog className={`w-5 h-5 ${
+                  typeFilter === 'COLLABORATORS' 
+                    ? 'text-purple-600 dark:text-purple-400' 
+                    : 'text-gray-600 dark:text-gray-400'
+                }`} />
+              </div>
+              <div className="text-left">
+                <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.byType.COLLABORATORS || 0}</p>
+                <p className={`text-sm ${colors.text.muted}`}>Collaboratori</p>
+              </div>
+            </div>
+          </button>
         </div>
       )}
 
@@ -253,6 +332,31 @@ export default function GroupsPage() {
                 { value: 'STUDENTS', label: 'Solo Studenti' },
                 { value: 'COLLABORATORS', label: 'Solo Collaboratori' },
                 { value: 'MIXED', label: 'Misti' },
+              ]}
+            />
+          </div>
+          <div className="w-full md:w-56">
+            <CustomSelect
+              value={referenceFilter}
+              onChange={(v) => setReferenceFilter(v)}
+              placeholder="Tutti i responsabili"
+              searchable
+              options={[
+                { value: '', label: 'Tutti i responsabili' },
+                // Collaboratori
+                ...((collaboratorsForFilter as unknown as Array<{name: string; collaborator?: {id: string}}>)
+                  ?.filter((c) => c.collaborator?.id)
+                  .map((c) => ({
+                    value: c.collaborator!.id,
+                    label: c.name || 'N/A',
+                  })) || []),
+                // Admin
+                ...((adminsForFilter?.users as unknown as Array<{name: string; admin?: {id: string}}>)
+                  ?.filter((a) => a.admin?.id)
+                  .map((a) => ({
+                    value: `admin:${a.admin!.id}`,
+                    label: `${a.name || 'N/A'} — 👑 Admin`,
+                  })) || []),
               ]}
             />
           </div>
@@ -311,19 +415,19 @@ export default function GroupsPage() {
                   {group.referenceCollaborator && (
                     <div className="flex items-center gap-1.5">
                       <UserCog className="w-3.5 h-3.5" />
-                      <span>Rif: {group.referenceCollaborator.user.name}</span>
+                      <b>Collaboratore:</b> <span> {group.referenceCollaborator.user.name}</span>
                     </div>
                   )}
                   {group.referenceAdmin && (
                     <div className="flex items-center gap-1.5">
                       <UserCog className="w-3.5 h-3.5" />
-                      <span>Rif: {group.referenceAdmin.user.name} (Admin)</span>
+                      <b>Collaboratore:</b> <span> {group.referenceAdmin.user.name}</span>
                     </div>
                   )}
                   {group.referenceStudent && (
                     <div className="flex items-center gap-1.5">
                       <GraduationCap className="w-3.5 h-3.5" />
-                      <span>Rif: {group.referenceStudent.user.name}</span>
+                      <b>Riferimento studenti:</b> <span> {group.referenceStudent.user.name}</span>
                     </div>
                   )}
                 </div>
@@ -527,7 +631,19 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
 
   // Type definitions for the user lists
   type UserWithStudent = { id: string; name: string; student?: { id: string } };
-  type UserWithCollaborator = { id: string; name: string; role?: string; collaborator?: { id: string }; admin?: { id: string } };
+  type UserWithCollaborator = { 
+    id: string; 
+    name: string; 
+    role?: string; 
+    collaborator?: { 
+      id: string;
+      subjects?: Array<{ 
+        id: string;
+        subject: { id: string; name: string; code: string; color: string | null };
+      }>;
+    }; 
+    admin?: { id: string } 
+  };
 
   const studentOptions = [
     { value: '', label: 'Nessuno' },
@@ -542,23 +658,27 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
   // Combina collaboratori e admin per il riferimento
   const collaboratorOptionsList: { value: string; label: string }[] = [];
   
-  // Aggiungi collaboratori
+  // Aggiungi collaboratori con materie
   (collaborators as unknown as UserWithCollaborator[] | undefined)
     ?.filter((c) => c.collaborator?.id)
     .forEach((c) => {
+      const subjects = c.collaborator?.subjects || [];
+      const subjectStr = subjects.length > 0 
+        ? ` — ${subjects.map(s => s.subject.code || s.subject.name).join(', ')}`
+        : '';
       collaboratorOptionsList.push({
         value: c.collaborator!.id,
-        label: c.name || 'N/A',
+        label: `${c.name || 'N/A'}${subjectStr}`,
       });
     });
 
-  // Aggiungi admin (evidenziati)
+  // Aggiungi admin (stilizzati meglio)
   (admins?.users as unknown as UserWithCollaborator[] | undefined)
     ?.filter((a) => a.admin?.id)
     .forEach((a) => {
       collaboratorOptionsList.push({
         value: `admin:${a.admin!.id}`, // Prefisso per distinguere
-        label: `${a.name || 'N/A'} (Admin)`,
+        label: `${a.name || 'N/A'} — 👑 Admin`,
       });
     });
 
@@ -570,8 +690,9 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
   return (
     <Portal>
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className={`${colors.background.card} rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl`}>
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+        <div className={`${colors.background.card} rounded-xl w-full max-w-lg max-h-[90vh] overflow-visible shadow-xl`}>
+          <div className="max-h-[90vh] overflow-y-auto rounded-xl">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-inherit z-10">
             <h2 className={`text-xl font-semibold ${colors.text.primary}`}>
               {groupId ? 'Modifica Gruppo' : 'Nuovo Gruppo'}
             </h2>
@@ -709,6 +830,7 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
               </button>
             </div>
           </form>
+          </div>
         </div>
       </div>
     </Portal>
@@ -728,6 +850,10 @@ function GroupDetailsModal({ group, isLoading, onClose, onRemoveMember, isRemovi
   const [showAddMember, setShowAddMember] = useState(false);
   const [memberType, setMemberType] = useState<'STUDENT' | 'COLLABORATOR'>('STUDENT');
   const [searchMember, setSearchMember] = useState('');
+  const [selectedUserInfo, setSelectedUserInfo] = useState<{
+    id: string;
+    type: 'STUDENT' | 'COLLABORATOR';
+  } | null>(null);
 
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
@@ -849,24 +975,67 @@ function GroupDetailsModal({ group, isLoading, onClose, onRemoveMember, isRemovi
 
                 <div className="max-h-40 overflow-y-auto space-y-1">
                   {availableUsers?.map((user) => (
-                    <button
+                    <div
                       key={user.id}
-                      onClick={() =>
-                        addMemberMutation.mutate({
-                          groupId: group.id,
-                          studentId: memberType === 'STUDENT' ? user.id : undefined,
-                          collaboratorId: memberType === 'COLLABORATOR' ? user.id : undefined,
-                        })
-                      }
-                      disabled={addMemberMutation.isPending}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-left`}
+                      className={`flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700`}
                     >
-                      <div>
-                        <p className={`font-medium ${colors.text.primary}`}>{user.name}</p>
-                        <p className={`text-xs ${colors.text.muted}`}>{user.email}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className={`font-medium ${colors.text.primary} truncate`}>{user.name}</p>
+                          {user.groups && user.groups.length > 0 && (
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {user.groups.slice(0, 2).map((g) => (
+                                <span
+                                  key={g.id}
+                                  className="text-xs px-1.5 py-0.5 rounded"
+                                  style={{
+                                    backgroundColor: g.color ? `${g.color}20` : 'rgba(100,100,100,0.1)',
+                                    color: g.color || undefined,
+                                  }}
+                                  title={g.name}
+                                >
+                                  {g.name.length > 10 ? g.name.slice(0, 10) + '...' : g.name}
+                                </span>
+                              ))}
+                              {user.groups.length > 2 && (
+                                <span className={`text-xs ${colors.text.muted}`}>
+                                  +{user.groups.length - 2}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <p className={`text-xs ${colors.text.muted} truncate`}>{user.email}</p>
                       </div>
-                      <Plus className="w-4 h-4 text-green-500" />
-                    </button>
+                      <div className="flex items-center gap-1 ml-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedUserInfo({
+                            id: user.userId,
+                            type: user.type,
+                          })}
+                          className={`p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 ${colors.text.secondary}`}
+                          title="Info utente"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            addMemberMutation.mutate({
+                              groupId: group.id,
+                              studentId: memberType === 'STUDENT' ? user.id : undefined,
+                              collaboratorId: memberType === 'COLLABORATOR' ? user.id : undefined,
+                            })
+                          }
+                          disabled={addMemberMutation.isPending}
+                          className="p-1.5 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 text-green-600"
+                          title="Aggiungi al gruppo"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
                   ))}
                   {availableUsers?.length === 0 && (
                     <p className={`text-center py-4 ${colors.text.muted} text-sm`}>
@@ -882,6 +1051,7 @@ function GroupDetailsModal({ group, isLoading, onClose, onRemoveMember, isRemovi
               {group.members.map((member) => {
                 const user = member.student?.user || member.collaborator?.user;
                 const isStudent = !!member.student;
+                const userId = (member.student?.user as { id?: string })?.id || (member.collaborator?.user as { id?: string })?.id;
 
                 return (
                   <div
@@ -907,13 +1077,27 @@ function GroupDetailsModal({ group, isLoading, onClose, onRemoveMember, isRemovi
                         <p className={`text-sm ${colors.text.muted}`}>{user?.email}</p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => onRemoveMember(member.id)}
-                      disabled={isRemovingMember}
-                      className="p-2 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {userId && (
+                        <button
+                          onClick={() => setSelectedUserInfo({
+                            id: userId,
+                            type: isStudent ? 'STUDENT' : 'COLLABORATOR',
+                          })}
+                          className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 ${colors.text.secondary}`}
+                          title="Info utente"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => onRemoveMember(member.id)}
+                        disabled={isRemovingMember}
+                        className="p-2 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -937,6 +1121,16 @@ function GroupDetailsModal({ group, isLoading, onClose, onRemoveMember, isRemovi
           </div>
         </div>
       </div>
+
+      {/* User Info Modal - Usando il componente riutilizzabile */}
+      {selectedUserInfo && (
+        <UserInfoModal
+          userId={selectedUserInfo.id}
+          userType={selectedUserInfo.type}
+          isOpen={!!selectedUserInfo}
+          onClose={() => setSelectedUserInfo(null)}
+        />
+      )}
     </Portal>
   );
 }

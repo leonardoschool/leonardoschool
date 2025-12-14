@@ -49,7 +49,9 @@ export default function DateTimePicker({
   // Parse current value
   const selectedDate = value ? new Date(value) : null;
   const selectedHour = selectedDate ? selectedDate.getHours() : 9;
-  const selectedMinute = selectedDate ? selectedDate.getMinutes() : 0;
+  // Round to nearest 5 minutes for display in select
+  const rawMinute = selectedDate ? selectedDate.getMinutes() : 0;
+  const selectedMinute = Math.round(rawMinute / 5) * 5;
   
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -241,13 +243,15 @@ export default function DateTimePicker({
           {value ? formatDisplayValue() : placeholder}
         </span>
         {value && !disabled && (
-          <button
-            type="button"
+          <span
+            role="button"
+            tabIndex={0}
             onClick={handleClear}
-            className={`p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 ${colors.text.muted}`}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleClear(e as unknown as React.MouseEvent); }}
+            className={`p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 ${colors.text.muted} cursor-pointer`}
           >
             <X className="w-4 h-4" />
-          </button>
+          </span>
         )}
       </button>
 

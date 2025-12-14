@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { adminProcedure, router, staffProcedure } from '../init';
+import { adminProcedure, protectedProcedure, router, staffProcedure } from '../init';
 
 // Group Types
 const GroupTypeEnum = z.enum(['STUDENTS', 'COLLABORATORS', 'MIXED']);
@@ -71,6 +71,8 @@ export const groupsRouter = router({
         type: GroupTypeEnum.optional(),
         search: z.string().optional(),
         includeInactive: z.boolean().optional().default(false),
+        referenceCollaboratorId: z.string().optional(), // Filtro per collaboratore di riferimento
+        referenceAdminId: z.string().optional(), // Filtro per admin di riferimento
       }).optional()
     )
     .query(async ({ ctx, input }) => {
@@ -84,6 +86,8 @@ export const groupsRouter = router({
             ],
           }),
           ...(!input?.includeInactive && { isActive: true }),
+          ...(input?.referenceCollaboratorId && { referenceCollaboratorId: input.referenceCollaboratorId }),
+          ...(input?.referenceAdminId && { referenceAdminId: input.referenceAdminId }),
         },
         include: {
           referenceStudent: {
@@ -146,6 +150,57 @@ export const groupsRouter = router({
               collaborator: {
                 include: {
                   user: { select: { id: true, name: true, email: true } },
+                },
+              },
+            },
+            orderBy: { joinedAt: 'asc' },
+          },
+        },
+      });
+
+      if (!group) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Gruppo non trovato',
+        });
+      }
+
+      return group;
+    }),
+
+  // Get public group info (accessible by all authenticated users)
+  // Returns limited info suitable for displaying in modals/cards
+  getPublicInfo: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const group = await ctx.prisma.group.findUnique({
+        where: { id: input.id },
+        include: {
+          referenceStudent: {
+            include: {
+              user: { select: { id: true, name: true } },
+            },
+          },
+          referenceCollaborator: {
+            include: {
+              user: { select: { id: true, name: true } },
+            },
+          },
+          referenceAdmin: {
+            include: {
+              user: { select: { id: true, name: true } },
+            },
+          },
+          members: {
+            include: {
+              student: {
+                include: {
+                  user: { select: { id: true, name: true } },
+                },
+              },
+              collaborator: {
+                include: {
+                  user: { select: { id: true, name: true } },
                 },
               },
             },
@@ -701,6 +756,11 @@ export const groupsRouter = router({
           },
           include: {
             user: { select: { id: true, name: true, email: true } },
+            groupMemberships: {
+              include: {
+                group: { select: { id: true, name: true, color: true } },
+              },
+            },
           },
           take: 50,
         });
@@ -711,6 +771,11 @@ export const groupsRouter = router({
           name: s.user.name,
           email: s.user.email,
           type: 'STUDENT' as const,
+          groups: s.groupMemberships.map((gm) => ({
+            id: gm.group.id,
+            name: gm.group.name,
+            color: gm.group.color,
+          })),
         }));
       } else {
         const existingIds = currentMembers
@@ -732,6 +797,11 @@ export const groupsRouter = router({
           },
           include: {
             user: { select: { id: true, name: true, email: true } },
+            groupMemberships: {
+              include: {
+                group: { select: { id: true, name: true, color: true } },
+              },
+            },
           },
           take: 50,
         });
@@ -742,6 +812,11 @@ export const groupsRouter = router({
           name: c.user.name,
           email: c.user.email,
           type: 'COLLABORATOR' as const,
+          groups: c.groupMemberships.map((gm) => ({
+            id: gm.group.id,
+            name: gm.group.name,
+            color: gm.group.color,
+          })),
         }));
       }
     }),
