@@ -38,7 +38,9 @@ import {
   FileEdit,
   BookOpen,
   Plus,
+  MessageSquare,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 
@@ -883,6 +885,7 @@ function ManageSubjectsModal({
 }
 
 export default function UsersManagementPage() {
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<RoleFilter>('ALL');
   const [status, setStatus] = useState<StatusFilter>('all');
@@ -1514,6 +1517,16 @@ export default function UsersManagementPage() {
                           <BookOpen className="w-4 h-4" />
                         </button>
                       )}
+                      {/* Contact user - available for all active users except self and admins */}
+                      {!isSelf && user.isActive && user.role !== 'ADMIN' && (
+                        <button
+                          onClick={() => router.push(`/admin/messaggi?nuovo=${user.id}`)}
+                          className={`p-2 rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400`}
+                          title="Contatta utente"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                        </button>
+                      )}
                       {user.profileCompleted && !isSelf && (
                         <button
                           onClick={() => openToggleActiveModal(user.id, user.name, user.isActive, lastContract?.status === 'SIGNED', user.role)}
@@ -1726,6 +1739,16 @@ export default function UsersManagementPage() {
                                 title="Gestisci materie"
                               >
                                 <BookOpen className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {/* Contact user - available for all active users except admins */}
+                            {user.isActive && user.role !== 'ADMIN' && (
+                              <button
+                                onClick={() => router.push(`/admin/messaggi?nuovo=${user.id}`)}
+                                className={`p-1.5 rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:opacity-80 transition-opacity`}
+                                title="Contatta utente"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
                               </button>
                             )}
                             {user.profileCompleted && (

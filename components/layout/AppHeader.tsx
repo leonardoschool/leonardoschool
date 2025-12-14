@@ -177,6 +177,16 @@ export default function AppHeader() {
     }
   );
 
+  // Get unread messages count (all roles) - for badge in navigation
+  const { data: unreadMessagesData } = trpc.messages.getUnreadCount.useQuery(
+    undefined,
+    { 
+      enabled: !!user,
+      refetchInterval: POLLING_INTERVAL,
+    }
+  );
+  const unreadMessagesCount = unreadMessagesData?.unreadCount || 0;
+
   // Mark notification as read (unified system)
   const markAsReadMutation = trpc.notifications.markAsRead.useMutation({
     onSuccess: () => refetchNotifications(),
@@ -703,6 +713,22 @@ export default function AppHeader() {
                 </div>
               )}
             </div>
+
+            {/* Messages Icon (All authenticated users) */}
+            {user && (
+              <Link
+                href={isAdmin ? '/admin/messaggi' : isCollaborator ? '/collaboratore/messaggi' : '/studente/messaggi'}
+                className={`p-2 rounded-lg ${colors.effects.hover.bgSubtle} ${colors.icon.interactive} transition-colors relative`}
+                title="Messaggi"
+              >
+                <MessageSquare className="w-5 h-5" />
+                {unreadMessagesCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-red-500 text-white text-[11px] leading-none rounded-full flex items-center justify-center font-bold">
+                    {unreadMessagesCount > 9 ? '9+' : unreadMessagesCount}
+                  </span>
+                )}
+              </Link>
+            )}
 
             {/* Notifications Bell (All authenticated users) */}
             {user && (

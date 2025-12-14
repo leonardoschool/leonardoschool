@@ -14,6 +14,7 @@ import { simulationsRouter } from './simulations';
 import { notificationsRouter } from './notifications';
 import { questionTagsRouter } from './questionTags';
 import { calendarRouter } from './calendar';
+import { messagesRouter } from './messages';
 
 export const appRouter = router({
   auth: authRouter,
@@ -30,6 +31,7 @@ export const appRouter = router({
   notifications: notificationsRouter,
   questionTags: questionTagsRouter,
   calendar: calendarRouter,
+  messages: messagesRouter,
 });
 
 // Export type definition of API

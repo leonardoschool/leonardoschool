@@ -49,6 +49,10 @@ export interface CleanupOptions {
   // Question Versions (keep last N per question)
   questionVersionsToKeep?: number;      // Default: 10 - Keep last N versions per question
   
+  // Messages
+  messagesArchivedDays?: number;        // Default: 90 - Delete archived conversations older than X days
+  messagesOldDays?: number;             // Default: 365 - Delete all conversations older than X days
+  
   // Dry run mode (log but don't delete)
   dryRun?: boolean;
 }
@@ -65,6 +69,8 @@ const DEFAULT_OPTIONS: Required<CleanupOptions> = {
   jobApplicationsRejectedDays: 365,
   feedbackResolvedDays: 90,
   questionVersionsToKeep: 10,
+  messagesArchivedDays: 90,
+  messagesOldDays: 365,
   dryRun: false,
 };
 
@@ -161,6 +167,17 @@ export async function runCleanup(
     const msg = `QuestionVersions cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
     errors.push(msg);
     results.questionVersions = { deleted: 0, error: msg };
+  }
+
+  // 8. Clean up Messages (archived and old conversations)
+  try {
+    const count = await cleanupMessages(prisma, opts);
+    results.messages = { deleted: count };
+    totalDeleted += count;
+  } catch (error) {
+    const msg = `Messages cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    errors.push(msg);
+    results.messages = { deleted: 0, error: msg };
   }
 
   const duration = Date.now() - startTime;
@@ -418,6 +435,82 @@ async function cleanupQuestionVersions(
 
   console.log(`[Cleanup] Deleted ${totalDeleted} question versions`);
   return totalDeleted;
+}
+
+/**
+ * Clean up old messages and conversations
+ * - Archived conversations older than X days
+ * - All conversations older than Y days (regardless of archive status)
+ */
+async function cleanupMessages(
+  prisma: PrismaClient,
+  opts: Required<CleanupOptions>
+): Promise<number> {
+  const now = new Date();
+  const archivedCutoff = new Date(now.getTime() - opts.messagesArchivedDays * 24 * 60 * 60 * 1000);
+  const oldCutoff = new Date(now.getTime() - opts.messagesOldDays * 24 * 60 * 60 * 1000);
+
+  // Find conversations to delete:
+  // 1. Archived conversations older than messagesArchivedDays
+  // 2. Any conversations older than messagesOldDays
+  const conversationsToDelete = await prisma.conversation.findMany({
+    where: {
+      OR: [
+        // Archived and old enough
+        {
+          participants: {
+            every: {
+              isArchived: true,
+            },
+          },
+          updatedAt: { lt: archivedCutoff },
+        },
+        // Very old (regardless of archive status) - based on last activity
+        {
+          updatedAt: { lt: oldCutoff },
+        },
+      ],
+    },
+    select: { id: true },
+  });
+
+  if (conversationsToDelete.length === 0) {
+    console.log('[Cleanup] No messages/conversations to clean up');
+    return 0;
+  }
+
+  const conversationIds = conversationsToDelete.map(c => c.id);
+
+  if (opts.dryRun) {
+    const messageCount = await prisma.message.count({
+      where: { conversationId: { in: conversationIds } },
+    });
+    console.log(`[Cleanup] Would delete ${conversationIds.length} conversations with ${messageCount} messages`);
+    return 0;
+  }
+
+  // Delete in transaction: messages first, then participants, then conversations
+  const result = await prisma.$transaction(async (tx) => {
+    // Delete messages
+    const deletedMessages = await tx.message.deleteMany({
+      where: { conversationId: { in: conversationIds } },
+    });
+
+    // Delete conversation participants
+    await tx.conversationParticipant.deleteMany({
+      where: { conversationId: { in: conversationIds } },
+    });
+
+    // Delete conversations
+    await tx.conversation.deleteMany({
+      where: { id: { in: conversationIds } },
+    });
+
+    return deletedMessages.count;
+  });
+
+  console.log(`[Cleanup] Deleted ${conversationIds.length} conversations with ${result} messages`);
+  return result;
 }
 
 // ==================== Utility Functions ====================
