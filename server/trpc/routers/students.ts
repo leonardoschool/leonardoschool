@@ -338,6 +338,17 @@ export const studentsRouter = router({
                 avgScore: true,
               }
             },
+            groupMemberships: {
+              select: {
+                group: {
+                  select: {
+                    id: true,
+                    name: true,
+                    color: true,
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -354,6 +365,7 @@ export const studentsRouter = router({
       enrollmentDate: s.student?.enrollmentDate,
       className: s.student?.class?.name,
       stats: s.student?.stats,
+      groups: s.student?.groupMemberships?.map(gm => gm.group) || [],
     }));
   }),
 
@@ -623,4 +635,132 @@ export const studentsRouter = router({
       totalMembers: group.members.length,
     };
   }),
+
+  /**
+   * Get detailed student info for collaborator view
+   * Includes groups, assigned simulations, and materials (no sensitive personal data)
+   */
+  getStudentDetailForCollaborator: staffProcedure
+    .input(z.object({ studentId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findUnique({
+        where: { id: input.studentId },
+        include: {
+          student: {
+            include: {
+              class: true,
+              stats: true,
+              groupMemberships: {
+                include: {
+                  group: {
+                    include: {
+                      // Include materials assigned to this group
+                      materialAccess: {
+                        include: {
+                          material: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              simulationAssignments: {
+                include: {
+                  simulation: true,
+                },
+                orderBy: { assignedAt: 'desc' },
+                take: 10,
+              },
+              // Direct material access for this student
+              materialAccess: {
+                include: {
+                  material: true,
+                },
+                orderBy: { grantedAt: 'desc' },
+                take: 10,
+              },
+            },
+          },
+        },
+      });
+
+      if (!user || !user.student) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Studente non trovato',
+        });
+      }
+
+      // Collect all materials (direct + from groups)
+      // Define material type
+      type MaterialItem = {
+        id: string;
+        title: string;
+        type: string;
+        grantedAt: Date;
+        accessType: 'DIRECT' | 'GROUP';
+        groupName: string | null;
+      };
+
+      const directMaterials: MaterialItem[] = user.student.materialAccess.map(ma => ({
+        id: ma.material.id,
+        title: ma.material.title,
+        type: ma.material.type,
+        grantedAt: ma.grantedAt,
+        accessType: 'DIRECT' as const,
+        groupName: null,
+      }));
+
+      // Materials from group memberships
+      const groupMaterials: MaterialItem[] = [];
+      for (const gm of user.student.groupMemberships) {
+        for (const mga of gm.group.materialAccess) {
+          // Avoid duplicates if already in direct access
+          if (!directMaterials.some(dm => dm.id === mga.material.id)) {
+            groupMaterials.push({
+              id: mga.material.id,
+              title: mga.material.title,
+              type: mga.material.type,
+              grantedAt: gm.joinedAt, // Use join date as access date
+              accessType: 'GROUP' as const,
+              groupName: gm.group.name,
+            });
+          }
+        }
+      }
+
+      // Combine and deduplicate
+      const allMaterials = [...directMaterials, ...groupMaterials];
+      const uniqueMaterials = allMaterials.filter((m, index, self) => 
+        index === self.findIndex(t => t.id === m.id)
+      );
+
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        isActive: user.isActive,
+        createdAt: user.createdAt,
+        studentId: user.student.id,
+        enrollmentDate: user.student.enrollmentDate,
+        graduationYear: user.student.graduationYear,
+        className: user.student.class?.name ?? null,
+        stats: user.student.stats,
+        groups: user.student.groupMemberships.map(gm => ({
+          id: gm.group.id,
+          name: gm.group.name,
+          color: gm.group.color,
+          description: gm.group.description,
+          joinedAt: gm.joinedAt,
+          materialsCount: gm.group.materialAccess.length,
+        })),
+        simulations: user.student.simulationAssignments.map(sa => ({
+          id: sa.id,
+          title: sa.simulation?.title,
+          type: sa.simulation?.type,
+          assignedAt: sa.assignedAt,
+        })),
+        materials: uniqueMaterials,
+      };
+    }),
 });

@@ -24,7 +24,6 @@ import {
   X,
   Eye,
   Users,
-  User,
   BookOpen,
   Download,
   Search,
@@ -49,7 +48,6 @@ import {
   Stethoscope,
   Heart,
   Activity,
-  AlertCircle,
   Sigma,
   Pi,
   Binary,
@@ -1594,146 +1592,143 @@ function MaterialRow({
   const TypeIcon = typeIcons[material.type as MaterialType] || File;
   const VisIcon = visibilityIcons[material.visibility as MaterialVisibility] || Globe;
 
-  // Extract assigned groups and students
+  // Debug: log material data
+  console.log('Material data:', { 
+    id: material.id, 
+    title: material.title,
+    groupAccess: material.groupAccess, 
+    studentAccess: material.studentAccess 
+  });
+
+  // Extract groups and students info
   const groups = material.groupAccess?.map((ga: any) => ({
-    id: ga.group?.id,
-    name: ga.group?.name,
-    color: ga.group?.color,
-    memberCount: ga.group?._count?.members || 0
-  })).filter((g: any) => g.id) || [];
+    id: ga.group.id,
+    name: ga.group.name,
+    color: ga.group.color,
+    membersCount: ga.group._count?.members || 0,
+  })) || [];
 
   const students = material.studentAccess?.map((sa: any) => ({
-    id: sa.student?.id,
-    name: sa.student?.user?.name
-  })).filter((s: any) => s.id) || [];
+    id: sa.student.id,
+    name: sa.student.user.name,
+    email: sa.student.user.email,
+  })) || [];
 
-  const hasAssignments = groups.length > 0 || students.length > 0;
+  console.log('Extracted groups:', groups);
+  console.log('Extracted students:', students);
 
   return (
-    <div className="px-5 py-4 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-        material.type === 'PDF' ? 'bg-red-100 dark:bg-red-900/30' :
-        material.type === 'VIDEO' ? 'bg-blue-100 dark:bg-blue-900/30' :
-        material.type === 'LINK' ? 'bg-purple-100 dark:bg-purple-900/30' :
-        'bg-gray-100 dark:bg-gray-700'
-      }`}>
-        <TypeIcon className={`w-5 h-5 ${
-          material.type === 'PDF' ? 'text-red-600' :
-          material.type === 'VIDEO' ? 'text-blue-600' :
-          material.type === 'LINK' ? 'text-purple-600' :
-          'text-gray-600'
-        }`} />
-      </div>
+    <div className="px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+      <div className="flex items-center gap-4">
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+          material.type === 'PDF' ? 'bg-red-100 dark:bg-red-900/30' :
+          material.type === 'VIDEO' ? 'bg-blue-100 dark:bg-blue-900/30' :
+          material.type === 'LINK' ? 'bg-purple-100 dark:bg-purple-900/30' :
+          'bg-gray-100 dark:bg-gray-700'
+        }`}>
+          <TypeIcon className={`w-5 h-5 ${
+            material.type === 'PDF' ? 'text-red-600' :
+            material.type === 'VIDEO' ? 'text-blue-600' :
+            material.type === 'LINK' ? 'text-purple-600' :
+            'text-gray-600'
+          }`} />
+        </div>
 
-      <div className="flex-1 min-w-0">
-        <p className={`font-medium ${colors.text.primary} truncate`}>{material.title}</p>
-        <div className={`flex items-center flex-wrap gap-2 text-sm ${colors.text.muted} mt-1`}>
-          {/* Visibility */}
-          <span className="flex items-center gap-1">
-            <VisIcon className="w-3.5 h-3.5" />
-            {visibilityLabels[material.visibility as MaterialVisibility]}
-          </span>
+        <div className="flex-1 min-w-0">
+          <p className={`font-medium ${colors.text.primary} truncate`}>{material.title}</p>
+          <div className={`flex items-center gap-3 text-sm ${colors.text.muted}`}>
+            <span className="flex items-center gap-1">
+              <VisIcon className="w-3.5 h-3.5" />
+              {visibilityLabels[material.visibility as MaterialVisibility]}
+            </span>
+            {material.subject && (
+              <span 
+                className="px-2 py-0.5 rounded-full text-xs"
+                style={{
+                  backgroundColor: material.subject.color ? `${material.subject.color}20` : '#e5e7eb',
+                  color: material.subject.color || '#6b7280'
+                }}
+              >
+                {material.subject.name}
+              </span>
+            )}
+            <span className="flex items-center gap-1">
+              <Eye className="w-3.5 h-3.5" />
+              {material.viewCount}
+            </span>
+            <span className="flex items-center gap-1">
+              <Download className="w-3.5 h-3.5" />
+              {material.downloadCount}
+            </span>
+          </div>
+        </div>
 
-          {/* Subject */}
-          {material.subject && (
-            <span 
-              className="px-2 py-0.5 rounded-full text-xs"
-              style={{
-                backgroundColor: material.subject.color ? `${material.subject.color}20` : '#e5e7eb',
-                color: material.subject.color || '#6b7280'
-              }}
+        <div className="flex items-center gap-1">
+          {(material.fileUrl || material.externalUrl) && (
+            <a
+              href={material.fileUrl || material.externalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              title="Apri"
             >
-              {material.subject.name}
-            </span>
+              <ExternalLink className="w-4 h-4 text-gray-500" />
+            </a>
           )}
-
-          {/* Assigned Groups */}
-          {groups.length > 0 && (
-            <div className="flex items-center gap-1 flex-wrap">
-              <Users className="w-3.5 h-3.5 text-indigo-500" />
-              {groups.map((group: any) => (
-                <span
-                  key={group.id}
-                  className="px-2 py-0.5 rounded-full text-xs font-medium"
-                  style={{
-                    backgroundColor: group.color ? `${group.color}20` : '#e5e7eb',
-                    color: group.color || '#6b7280'
-                  }}
-                  title={`${group.memberCount} membri`}
-                >
-                  {group.name} ({group.memberCount})
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Assigned Students */}
-          {students.length > 0 && (
-            <div className="flex items-center gap-1 flex-wrap">
-              <User className="w-3.5 h-3.5 text-emerald-500" />
-              {students.slice(0, 3).map((student: any) => (
-                <span
-                  key={student.id}
-                  className="px-2 py-0.5 rounded-full text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
-                >
-                  {student.name}
-                </span>
-              ))}
-              {students.length > 3 && (
-                <span className="text-xs text-gray-500">
-                  +{students.length - 3} altri
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* No assignments warning for GROUP_BASED or SELECTED_STUDENTS */}
-          {!hasAssignments && (material.visibility === 'GROUP_BASED' || material.visibility === 'SELECTED_STUDENTS') && (
-            <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
-              <AlertCircle className="w-3.5 h-3.5" />
-              Nessun assegnatario
-            </span>
-          )}
-
-          {/* View/Download counts */}
-          <span className="flex items-center gap-1 ml-auto">
-            <Eye className="w-3.5 h-3.5" />
-            {material.viewCount}
-          </span>
-          <span className="flex items-center gap-1">
-            <Download className="w-3.5 h-3.5" />
-            {material.downloadCount}
-          </span>
+          <button
+            onClick={() => onEdit(material)}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+            title="Modifica"
+          >
+            <Edit2 className="w-4 h-4 text-gray-500" />
+          </button>
+          <button
+            onClick={() => onDelete(material.id)}
+            className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+            title="Elimina"
+          >
+            <Trash2 className="w-4 h-4 text-red-500" />
+          </button>
         </div>
       </div>
 
-      <div className="flex items-center gap-1">
-        {(material.fileUrl || material.externalUrl) && (
-          <a
-            href={material.fileUrl || material.externalUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-            title="Apri"
-          >
-            <ExternalLink className="w-4 h-4 text-gray-500" />
-          </a>
-        )}
-        <button
-          onClick={() => onEdit(material)}
-          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-          title="Modifica"
-        >
-          <Edit2 className="w-4 h-4 text-gray-500" />
-        </button>
-        <button
-          onClick={() => onDelete(material.id)}
-          className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
-          title="Elimina"
-        >
-          <Trash2 className="w-4 h-4 text-red-500" />
-        </button>
-      </div>
+      {/* Assignment details */}
+      {(groups.length > 0 || students.length > 0) && (
+        <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+          <p className={`text-xs font-medium ${colors.text.muted} mb-2`}>Assegnato a:</p>
+          <div className="flex flex-wrap gap-2">
+            {/* Groups */}
+            {groups.map((group: any) => (
+              <span
+                key={group.id}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+              >
+                {group.color && (
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: group.color }} />
+                )}
+                <Users className="w-3 h-3" />
+                {group.name}
+                <span className="text-blue-500 dark:text-blue-300">({group.membersCount})</span>
+              </span>
+            ))}
+            {/* Students */}
+            {students.slice(0, 5).map((student: any) => (
+              <span
+                key={student.id}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+              >
+                <UserCheck className="w-3 h-3" />
+                {student.name}
+              </span>
+            ))}
+            {students.length > 5 && (
+              <span className={`text-xs ${colors.text.muted} self-center`}>
+                +{students.length - 5} altri studenti
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

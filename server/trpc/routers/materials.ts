@@ -1,5 +1,5 @@
 // Materials Router - Manage learning materials (PDF, Video, Links)
-import { router, adminProcedure, protectedProcedure, studentProcedure, staffProcedure } from '../init';
+import { router, protectedProcedure, studentProcedure, staffProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 
@@ -19,8 +19,8 @@ export const materialsRouter = router({
     });
   }),
 
-  // Get all categories including inactive (admin only)
-  getAllCategories: adminProcedure.query(async ({ ctx }) => {
+  // Get all categories including inactive (staff only - admin and collaborator)
+  getAllCategories: staffProcedure.query(async ({ ctx }) => {
     return ctx.prisma.materialCategory.findMany({
       orderBy: { order: 'asc' },
       include: {
@@ -31,8 +31,8 @@ export const materialsRouter = router({
     });
   }),
 
-  // Create category (admin only)
-  createCategory: adminProcedure
+  // Create category (staff only)
+  createCategory: staffProcedure
     .input(z.object({
       name: z.string().min(1).max(100),
       description: z.string().optional(),
@@ -50,8 +50,8 @@ export const materialsRouter = router({
       });
     }),
 
-  // Update category (admin only)
-  updateCategory: adminProcedure
+  // Update category (staff only)
+  updateCategory: staffProcedure
     .input(z.object({
       id: z.string(),
       name: z.string().min(1).max(100).optional(),
@@ -68,8 +68,8 @@ export const materialsRouter = router({
       });
     }),
 
-  // Delete category (admin only)
-  deleteCategory: adminProcedure
+  // Delete category (staff only)
+  deleteCategory: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       // Check if category has materials
@@ -116,8 +116,8 @@ export const materialsRouter = router({
     });
   }),
 
-  // Create subject (admin only)
-  createSubject: adminProcedure
+  // Create subject (staff: admin + collaborator)
+  createSubject: staffProcedure
     .input(z.object({
       name: z.string().min(1).max(100),
       code: z.string().min(1).max(10).transform(val => val.toUpperCase()),
@@ -139,8 +139,8 @@ export const materialsRouter = router({
       });
     }),
 
-  // Update subject (admin only)
-  updateSubject: adminProcedure
+  // Update subject (staff: admin + collaborator)
+  updateSubject: staffProcedure
     .input(z.object({
       id: z.string(),
       name: z.string().min(1).max(100).optional(),
@@ -159,8 +159,8 @@ export const materialsRouter = router({
       });
     }),
 
-  // Delete subject (admin only)
-  deleteSubject: adminProcedure
+  // Delete subject (staff: admin + collaborator)
+  deleteSubject: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       // Check if subject has materials
@@ -641,8 +641,8 @@ export const materialsRouter = router({
 
   // ==================== MATERIALS ====================
 
-  // Get all materials (admin only)
-  getAll: adminProcedure
+  // Get all materials (staff: admin + collaborator)
+  getAll: staffProcedure
     .input(z.object({
       type: z.enum(['PDF', 'VIDEO', 'LINK', 'DOCUMENT']).optional(),
       categoryId: z.string().optional(),
@@ -667,6 +667,31 @@ export const materialsRouter = router({
         include: {
           category: true,
           subject: true,
+          groupAccess: {
+            include: {
+              group: {
+                select: {
+                  id: true,
+                  name: true,
+                  color: true,
+                  _count: {
+                    select: { members: true },
+                  },
+                },
+              },
+            },
+          },
+          studentAccess: {
+            include: {
+              student: {
+                include: {
+                  user: {
+                    select: { id: true, name: true, email: true },
+                  },
+                },
+              },
+            },
+          },
           _count: {
             select: {
               groupAccess: true,
@@ -677,8 +702,8 @@ export const materialsRouter = router({
       });
     }),
 
-  // Get material by ID (admin only for now)
-  getById: adminProcedure
+  // Get material by ID (staff: admin + collaborator)
+  getById: staffProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
       const material = await ctx.prisma.material.findUnique({
@@ -715,8 +740,8 @@ export const materialsRouter = router({
       return material;
     }),
 
-  // Create material (admin only)
-  create: adminProcedure
+  // Create material (staff: admin + collaborator)
+  create: staffProcedure
     .input(z.object({
       title: z.string().min(1).max(255),
       description: z.string().optional(),
@@ -787,8 +812,8 @@ export const materialsRouter = router({
       });
     }),
 
-  // Update material (admin only)
-  update: adminProcedure
+  // Update material (staff: admin + collaborator)
+  update: staffProcedure
     .input(z.object({
       id: z.string(),
       title: z.string().min(1).max(255).optional(),
@@ -871,8 +896,8 @@ export const materialsRouter = router({
       });
     }),
 
-  // Delete material (admin only)
-  delete: adminProcedure
+  // Delete material (staff: admin + collaborator)
+  delete: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       // Material will cascade delete course/student access
@@ -908,7 +933,7 @@ export const materialsRouter = router({
   // ==================== ACCESS MANAGEMENT ====================
 
   // Add student access to a material
-  addStudentAccess: adminProcedure
+  addStudentAccess: staffProcedure
     .input(z.object({
       materialId: z.string(),
       studentIds: z.array(z.string()),
@@ -925,7 +950,7 @@ export const materialsRouter = router({
     }),
 
   // Remove student access from a material
-  removeStudentAccess: adminProcedure
+  removeStudentAccess: staffProcedure
     .input(z.object({
       materialId: z.string(),
       studentId: z.string(),
@@ -942,7 +967,7 @@ export const materialsRouter = router({
     }),
 
   // Add group access to a material
-  addGroupAccess: adminProcedure
+  addGroupAccess: staffProcedure
     .input(z.object({
       materialId: z.string(),
       groupIds: z.array(z.string()),
@@ -958,7 +983,7 @@ export const materialsRouter = router({
     }),
 
   // Remove group access from a material
-  removeGroupAccess: adminProcedure
+  removeGroupAccess: staffProcedure
     .input(z.object({
       materialId: z.string(),
       groupId: z.string(),
@@ -1112,8 +1137,8 @@ export const materialsRouter = router({
 
   // ==================== STATS ====================
 
-  // Get material statistics (admin only)
-  getStats: adminProcedure.query(async ({ ctx }) => {
+  // Get material statistics (staff: admin + collaborator)
+  getStats: staffProcedure.query(async ({ ctx }) => {
     const [
       totalMaterials,
       totalByType,

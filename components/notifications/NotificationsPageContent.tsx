@@ -289,7 +289,7 @@ export default function NotificationsPageContent({ basePath, userRole }: Notific
             <button
               onClick={() => markAllAsReadMutation.mutate()}
               disabled={markAllAsReadMutation.isPending}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${colors.background.secondary} hover:${colors.background.tertiary}`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${colors.background.secondary} ${colors.text.primary} hover:opacity-80`}
             >
               <CheckCheck className="w-4 h-4" />
               Segna tutte come lette
@@ -298,7 +298,7 @@ export default function NotificationsPageContent({ basePath, userRole }: Notific
           {filter === 'all' && notifications.some(n => n.isRead) && (
             <button
               onClick={() => setShowArchiveAllModal(true)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${colors.background.secondary} hover:${colors.background.tertiary}`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${colors.background.secondary} ${colors.text.primary} hover:opacity-80`}
             >
               <Archive className="w-4 h-4" />
               Archivia lette
@@ -431,10 +431,10 @@ export default function NotificationsPageContent({ basePath, userRole }: Notific
                                 markAsReadMutation.mutate({ notificationId: notification.id });
                               }}
                               disabled={markAsReadMutation.isPending}
-                              className={`p-2 rounded-lg ${colors.background.secondary} hover:${colors.background.tertiary} transition-colors`}
+                              className={`p-2 rounded-lg ${colors.background.secondary} hover:opacity-80 transition-colors`}
                               title="Segna come letta"
                             >
-                              <Check className="w-4 h-4" />
+                              <Check className={`w-4 h-4 ${colors.text.primary}`} />
                             </button>
                           )}
                           {!isArchived ? (
@@ -444,10 +444,10 @@ export default function NotificationsPageContent({ basePath, userRole }: Notific
                                 archiveMutation.mutate({ notificationIds: [notification.id] });
                               }}
                               disabled={archiveMutation.isPending}
-                              className={`p-2 rounded-lg ${colors.background.secondary} hover:${colors.background.tertiary} transition-colors`}
+                              className={`p-2 rounded-lg ${colors.background.secondary} hover:opacity-80 transition-colors`}
                               title="Archivia"
                             >
-                              <Archive className="w-4 h-4" />
+                              <Archive className={`w-4 h-4 ${colors.text.primary}`} />
                             </button>
                           ) : (
                             <>
@@ -457,10 +457,10 @@ export default function NotificationsPageContent({ basePath, userRole }: Notific
                                   unarchiveMutation.mutate({ notificationIds: [notification.id] });
                                 }}
                                 disabled={unarchiveMutation.isPending}
-                                className={`p-2 rounded-lg ${colors.background.secondary} hover:${colors.background.tertiary} transition-colors`}
+                                className={`p-2 rounded-lg ${colors.background.secondary} hover:opacity-80 transition-colors`}
                                 title="Ripristina"
                               >
-                                <ArchiveRestore className="w-4 h-4" />
+                                <ArchiveRestore className={`w-4 h-4 ${colors.text.primary}`} />
                               </button>
                               <button
                                 onClick={(e) => {

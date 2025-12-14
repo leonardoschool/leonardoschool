@@ -39,6 +39,7 @@ import {
   BookOpen,
   Plus,
   MessageSquare,
+  FolderOpen,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useApiError } from '@/lib/hooks/useApiError';
@@ -1834,7 +1835,7 @@ export default function UsersManagementPage() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
             <div className={`${colors.background.card} rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto`}>
             <div className={`flex items-center justify-between p-6 border-b ${colors.border.primary}`}>
-              <h2 className="text-xl font-bold">Profilo Utente</h2>
+              <h2 className={`text-xl font-bold ${colors.text.primary}`}>Profilo Utente</h2>
               <button
                 onClick={() => setViewUserModal({ isOpen: false, user: null })}
                 className={`p-2 rounded-lg ${colors.background.secondary} hover:opacity-80 text-gray-600 dark:text-gray-400`}
@@ -1850,7 +1851,7 @@ export default function UsersManagementPage() {
                   {viewUserModal.user.name.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold">{viewUserModal.user.name}</h3>
+                  <h3 className={`text-lg font-semibold ${colors.text.primary}`}>{viewUserModal.user.name}</h3>
                   <p className={`text-sm ${colors.text.secondary}`}>{viewUserModal.user.email}</p>
                   <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-medium ${
                     viewUserModal.user.role === 'STUDENT' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
@@ -2049,6 +2050,71 @@ export default function UsersManagementPage() {
                 return null;
               })()}
 
+              {/* Simulazioni e Materiali Assegnati (solo studenti) */}
+              {viewUserModal.user.role === 'STUDENT' && viewUserModal.user.student && (
+                <div className="space-y-6">
+                  {/* Simulazioni */}
+                  <div>
+                    <h4 className={`font-semibold ${colors.text.primary}`}>Simulazioni Assegnate</h4>
+                    {viewUserModal.user.student.simulationAssignments && viewUserModal.user.student.simulationAssignments.length > 0 ? (
+                      <div className="space-y-2">
+                        {viewUserModal.user.student.simulationAssignments.slice(0, 5).map((sim: any) => (
+                          <div key={sim.id} className={`flex items-center justify-between p-3 rounded-lg ${colors.background.secondary}`}>
+                            <div className="flex items-center gap-3">
+                              <BookOpen className={`w-4 h-4 ${colors.text.muted}`} />
+                              <div>
+                                <p className={`font-medium ${colors.text.primary} text-sm`}>{sim.simulation?.title || 'Simulazione'}</p>
+                                <p className={`text-xs ${colors.text.muted}`}>Assegnata il {sim.assignedAt ? new Date(sim.assignedAt).toLocaleDateString('it-IT') : '-'}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {sim.completedAt ? (
+                                <span className={`text-sm font-semibold ${sim.score && sim.score >= 60 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                  {sim.score?.toFixed(0)}%
+                                </span>
+                              ) : sim.startedAt ? (
+                                <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                  In corso
+                                </span>
+                              ) : (
+                                <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                                  Non iniziata
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className={`p-3 rounded-lg ${colors.background.secondary}`}>
+                        <p className={`text-sm ${colors.text.muted}`}>Nessuna simulazione assegnata</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Materiali */}
+                  <div>
+                    <h4 className={`font-semibold ${colors.text.primary}`}>Materiali Assegnati</h4>
+                    {viewUserModal.user.student.materialAccess && viewUserModal.user.student.materialAccess.length > 0 ? (
+                      <div className="space-y-2">
+                        {viewUserModal.user.student.materialAccess.slice(0, 5).map((mat: any) => (
+                          <div key={mat.id} className={`flex items-center p-3 rounded-lg ${colors.background.secondary}`}>
+                            <FolderOpen className={`w-4 h-4 mr-2 ${colors.text.muted}`} />
+                            <div>
+                              <p className={`font-medium ${colors.text.primary} text-sm`}>{mat.material?.title || 'Materiale'}</p>
+                              <p className={`text-xs ${colors.text.muted}`}>{mat.material?.type || ''} • Assegnato il {mat.grantedAt ? new Date(mat.grantedAt).toLocaleDateString('it-IT') : '-'}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className={`p-3 rounded-lg ${colors.background.secondary}`}>
+                        <p className={`text-sm ${colors.text.muted}`}>Nessun materiale assegnato</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               {/* Contract Info */}
               {(() => {
                 const contract = viewUserModal.user.student?.contracts?.[0] || viewUserModal.user.collaborator?.contracts?.[0];
