@@ -114,16 +114,18 @@ export default function CollaboratoreCalendarPage() {
 
   const { data: stats } = trpc.calendar.getStats.useQuery();
 
-  // Data for invites - get all active users
+  // Data for invites - collaborators only see their assigned groups/students
   const { data: studentsData } = trpc.students.getStudents.useQuery({ 
     page: 1, 
     pageSize: 500, 
-    isActive: true 
+    isActive: true,
+    onlyMyGroups: true,
   });
   const { data: collaboratorsData } = trpc.collaborators.getListForCalendar.useQuery();
   const { data: groupsData } = trpc.groups.getGroups.useQuery({ 
     page: 1, 
-    pageSize: 100 
+    pageSize: 100,
+    onlyMyGroups: true,
   });
 
   // Search and filter state for invites

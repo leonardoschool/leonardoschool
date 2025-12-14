@@ -16,10 +16,11 @@ export const groupsRouter = router({
         type: GroupTypeEnum.optional(),
         search: z.string().optional(),
         includeInactive: z.boolean().optional().default(false),
+        onlyMyGroups: z.boolean().optional().default(false), // For collaborators: only groups they're assigned to
       })
     )
     .query(async ({ ctx, input }) => {
-      const { page, pageSize, type, search, includeInactive } = input;
+      const { page, pageSize, type, search, includeInactive, onlyMyGroups } = input;
 
       const where: Record<string, unknown> = {};
       if (type) where.type = type;
@@ -29,6 +30,11 @@ export const groupsRouter = router({
           { name: { contains: search, mode: 'insensitive' } },
           { description: { contains: search, mode: 'insensitive' } },
         ];
+      }
+      
+      // For collaborators: filter by groups they're assigned to
+      if (onlyMyGroups && ctx.user?.role === 'COLLABORATOR' && ctx.user?.collaborator?.id) {
+        where.referenceCollaboratorId = ctx.user.collaborator.id;
       }
 
       const total = await ctx.prisma.group.count({ where });

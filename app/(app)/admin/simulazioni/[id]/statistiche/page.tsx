@@ -92,14 +92,24 @@ export default function SimulationStatsPage({ params }: { params: Promise<{ id: 
           <ArrowLeft className="w-4 h-4" />
           Torna alla simulazione
         </Link>
-        <div className="flex items-center gap-3">
-          <div className={`p-3 rounded-xl ${colors.primary.gradient}`}>
-            <BarChart3 className="w-6 h-6 text-white" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`p-3 rounded-xl ${colors.primary.gradient}`}>
+              <BarChart3 className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className={`text-2xl font-bold ${colors.text.primary}`}>Statistiche</h1>
+              <p className={colors.text.muted}>{simulation.title}</p>
+            </div>
           </div>
-          <div>
-            <h1 className={`text-2xl font-bold ${colors.text.primary}`}>Statistiche</h1>
-            <p className={colors.text.muted}>{simulation.title}</p>
-          </div>
+          {/* Leaderboard Link */}
+          <Link
+            href={`/admin/simulazioni/${id}/classifica`}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-br from-yellow-400 to-amber-600 text-white font-medium hover:opacity-90 shadow-lg`}
+          >
+            <Award className="w-4 h-4" />
+            Classifica
+          </Link>
         </div>
       </div>
 

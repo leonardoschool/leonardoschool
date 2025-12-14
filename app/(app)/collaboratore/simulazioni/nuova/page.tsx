@@ -5,7 +5,6 @@ import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
-import { useAuth } from '@/lib/hooks/useAuth';
 import { Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import Checkbox from '@/components/ui/Checkbox';
@@ -23,26 +22,25 @@ import {
   Search,
   Plus,
   X,
-  Award,
   FileText,
-  Zap,
   BookOpen,
   ChevronDown,
   ChevronUp,
   Save,
   Eye,
-  Send,
   Calendar,
   MapPin,
   Printer,
-  Shield,
   Clock,
+  Award,
+  Zap,
+  Shield,
   Layers,
 } from 'lucide-react';
-import type { SimulationType, SimulationVisibility, LocationType } from '@/lib/validations/simulationValidation';
+import type { SimulationType, LocationType } from '@/lib/validations/simulationValidation';
 import { SIMULATION_PRESETS } from '@/lib/validations/simulationValidation';
 
-// Step definitions
+// Step definitions - full wizard for collaborators
 const STEPS = [
   { id: 'type', title: 'Tipo', icon: FileText },
   { id: 'config', title: 'Configurazione', icon: Settings },
@@ -52,7 +50,7 @@ const STEPS = [
   { id: 'review', title: 'Riepilogo', icon: Eye },
 ];
 
-// Type options
+// Type options - collaborators can create all types
 const typeOptions: { value: SimulationType; label: string; description: string; icon: React.ReactNode; badge?: string }[] = [
   {
     value: 'OFFICIAL',
@@ -81,21 +79,6 @@ const typeOptions: { value: SimulationType; label: string; description: string; 
   },
 ];
 
-// Paper-based option shown separately
-const paperBasedOption = {
-  label: 'Modalità Cartacea',
-  description: 'Stampa il test per somministrazione in aula. I risultati vanno inseriti manualmente.',
-  icon: <Printer className="w-6 h-6" />,
-};
-
-// Visibility options (kept for future visibility dropdown feature)
-const _visibilityOptions = [
-  { value: 'PRIVATE', label: 'Privata', description: 'Solo studenti assegnati' },
-  { value: 'CLASS', label: 'Classe', description: 'Tutti gli studenti della classe selezionata' },
-  { value: 'GROUP', label: 'Gruppo', description: 'Tutti gli studenti dei gruppi assegnati' },
-  { value: 'PUBLIC', label: 'Pubblica', description: 'Tutti gli studenti attivi' },
-];
-
 interface SelectedQuestion {
   questionId: string;
   order: number;
@@ -119,15 +102,10 @@ interface AssignmentTarget {
   notes?: string | null;
 }
 
-export default function NewSimulationPage() {
+export default function CollaboratorNewSimulationPage() {
   const router = useRouter();
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
-  const { user } = useAuth();
-  const _utils = trpc.useUtils();
-  
-  // Check if user is a collaborator (for filtering groups/students)
-  const isCollaborator = user?.role === 'COLLABORATOR';
 
   // Step state
   const [currentStep, setCurrentStep] = useState(0);
@@ -136,8 +114,6 @@ export default function NewSimulationPage() {
   const [simulationType, setSimulationType] = useState<SimulationType>('PRACTICE');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [isOfficial, setIsOfficial] = useState(false);
-  const [visibility, _setVisibility] = useState<SimulationVisibility>('PRIVATE');
   
   // Timing
   const [startDate, setStartDate] = useState('');
@@ -152,15 +128,13 @@ export default function NewSimulationPage() {
   const [randomizeAnswers, setRandomizeAnswers] = useState(false);
   
   // Scoring
-  const [useQuestionPoints, _setUseQuestionPoints] = useState(false);
-  const [correctPoints, setCorrectPoints] = useState(1.5);
-  const [wrongPoints, setWrongPoints] = useState(-0.4);
+  const [correctPoints, setCorrectPoints] = useState(1);
+  const [wrongPoints, setWrongPoints] = useState(0);
   const [blankPoints, setBlankPoints] = useState(0);
-  const [maxScore, setMaxScore] = useState<number | null>(null);
   const [passingScore, setPassingScore] = useState<number | null>(null);
   
   // Attempts
-  const [isRepeatable, setIsRepeatable] = useState(false);
+  const [isRepeatable, setIsRepeatable] = useState(true);
   const [maxAttempts, setMaxAttempts] = useState<number | null>(null);
   
   // Paper-based mode
@@ -175,15 +149,22 @@ export default function NewSimulationPage() {
   // Calendar integration
   const [isScheduled, setIsScheduled] = useState(false);
   
-  // Anti-cheat settings
+  // Anti-cheat settings (for OFFICIAL simulations)
   const [enableAntiCheat, setEnableAntiCheat] = useState(false);
   const [forceFullscreen, setForceFullscreen] = useState(false);
   const [blockTabChange, setBlockTabChange] = useState(false);
   const [blockCopyPaste, setBlockCopyPaste] = useState(false);
   const [logSuspiciousEvents, setLogSuspiciousEvents] = useState(false);
   
-  // Sections (for TOLC-style)
+  // Sections (for OFFICIAL simulations)
   const [hasSections, setHasSections] = useState(false);
+  const [sections, setSections] = useState<Array<{
+    name: string;
+    subject: string;
+    questionCount: number;
+    durationMinutes: number;
+    order: number;
+  }>>([]);
   
   // Questions
   const [selectedQuestions, setSelectedQuestions] = useState<SelectedQuestion[]>([]);
@@ -202,19 +183,19 @@ export default function NewSimulationPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isPdfLoading, setIsPdfLoading] = useState(false);
 
-  // Fetch data - filter by collaborator's groups if applicable
+  // Fetch data - collaborators only see their assigned groups and students
   const { data: subjectsData } = trpc.questions.getSubjects.useQuery();
   const { data: tagCategoriesData } = trpc.questionTags.getCategories.useQuery({});
   const { data: groupsData } = trpc.groups.getGroups.useQuery({ 
     page: 1, 
     pageSize: 100,
-    onlyMyGroups: isCollaborator, // Collaborators only see their assigned groups
+    onlyMyGroups: true,
   });
   const { data: studentsData } = trpc.students.getStudents.useQuery({ 
     page: 1, 
     pageSize: 500, 
     isActive: true,
-    onlyMyGroups: isCollaborator, // Collaborators only see students in their groups
+    onlyMyGroups: true,
   });
 
   // Questions query - include tag filter
@@ -223,165 +204,73 @@ export default function NewSimulationPage() {
     pageSize: 100,
     search: questionSearchTerm || undefined,
     subjectId: questionSubjectFilter || undefined,
-    difficulty: questionDifficultyFilter as 'EASY' | 'MEDIUM' | 'HARD' | undefined || undefined,
-    status: 'PUBLISHED',
+    difficulty: questionDifficultyFilter as 'EASY' | 'MEDIUM' | 'HARD' | undefined,
     tagIds: questionTagFilter.length > 0 ? questionTagFilter : undefined,
   });
 
-  // Mutations
-  const createWithQuestionsMutation = trpc.simulations.createWithQuestions.useMutation({
-    onSuccess: (simulation) => {
+  // Create mutation
+  const createMutation = trpc.simulations.createWithQuestions.useMutation({
+    onSuccess: () => {
       showSuccess('Creata!', 'Simulazione creata con successo');
-      router.push(`/admin/simulazioni/${simulation.id}`);
+      router.push(`/collaboratore/simulazioni`);
     },
     onError: handleMutationError,
   });
 
-  // Apply preset
+  // Apply preset configuration
   const applyPreset = (type: SimulationType) => {
     setSimulationType(type);
-    
-    // Reset paper-based mode when changing type
-    setIsPaperBased(false);
-    setPaperInstructions('');
-    
-    if (type === 'OFFICIAL') {
-      const preset = SIMULATION_PRESETS.OFFICIAL_TOLC_MED;
-      setIsOfficial(true);
+    const preset = SIMULATION_PRESETS[type];
+    if (preset) {
       setDurationMinutes(preset.durationMinutes);
       setCorrectPoints(preset.correctPoints);
       setWrongPoints(preset.wrongPoints);
       setBlankPoints(preset.blankPoints);
-      setRandomizeOrder(preset.randomizeOrder);
-      setRandomizeAnswers(preset.randomizeAnswers);
       setShowResults(preset.showResults);
       setShowCorrectAnswers(preset.showCorrectAnswers);
       setAllowReview(preset.allowReview);
-      setIsRepeatable(preset.isRepeatable);
-      // Anti-cheat settings for official
-      setEnableAntiCheat(preset.enableAntiCheat);
-      setForceFullscreen(preset.forceFullscreen);
-      setBlockTabChange(preset.blockTabChange);
-      setBlockCopyPaste(preset.blockCopyPaste);
-      setLogSuspiciousEvents(preset.logSuspiciousEvents);
-      setHasSections(preset.hasSections);
-    } else if (type === 'PRACTICE') {
-      const preset = SIMULATION_PRESETS.PRACTICE_TEST;
-      setIsOfficial(false);
-      setDurationMinutes(preset.durationMinutes);
-      setCorrectPoints(preset.correctPoints);
-      setWrongPoints(preset.wrongPoints);
-      setBlankPoints(preset.blankPoints);
       setRandomizeOrder(preset.randomizeOrder);
       setRandomizeAnswers(preset.randomizeAnswers);
-      setShowResults(preset.showResults);
-      setShowCorrectAnswers(preset.showCorrectAnswers);
-      setAllowReview(preset.allowReview);
       setIsRepeatable(preset.isRepeatable);
-      setMaxAttempts(preset.maxAttempts);
-      // Disable anti-cheat for practice
-      setEnableAntiCheat(false);
-      setForceFullscreen(false);
-      setBlockTabChange(false);
-      setBlockCopyPaste(false);
-      setLogSuspiciousEvents(false);
-      setHasSections(false);
-    } else if (type === 'QUICK_QUIZ') {
-      const preset = SIMULATION_PRESETS.QUICK_QUIZ;
-      setIsOfficial(false);
-      setDurationMinutes(preset.durationMinutes);
-      setCorrectPoints(preset.correctPoints);
-      setWrongPoints(preset.wrongPoints);
-      setBlankPoints(preset.blankPoints);
-      setRandomizeOrder(preset.randomizeOrder);
-      setRandomizeAnswers(preset.randomizeAnswers);
-      setShowResults(preset.showResults);
-      setShowCorrectAnswers(preset.showCorrectAnswers);
-      setAllowReview(preset.allowReview);
-      setIsRepeatable(preset.isRepeatable);
-      // Disable anti-cheat for quick quiz
-      setEnableAntiCheat(false);
-      setForceFullscreen(false);
-      setBlockTabChange(false);
-      setBlockCopyPaste(false);
-      setLogSuspiciousEvents(false);
-      setHasSections(false);
-    } else if (type === 'CUSTOM') {
-      // Custom: reset to reasonable defaults
-      setIsOfficial(false);
-      setDurationMinutes(60);
-      setCorrectPoints(1.0);
-      setWrongPoints(0);
-      setBlankPoints(0);
-      setRandomizeOrder(false);
-      setRandomizeAnswers(false);
-      setShowResults(true);
-      setShowCorrectAnswers(true);
-      setAllowReview(true);
-      setIsRepeatable(true);
-      setMaxAttempts(null);
-      setEnableAntiCheat(false);
-      setForceFullscreen(false);
-      setBlockTabChange(false);
-      setBlockCopyPaste(false);
-      setLogSuspiciousEvents(false);
-      setHasSections(false);
-    }
-  };
-  
-  // Toggle paper-based mode
-  const togglePaperBased = () => {
-    const newValue = !isPaperBased;
-    setIsPaperBased(newValue);
-    if (newValue) {
-      // Paper-based: disable anti-cheat, enable attendance tracking
-      setEnableAntiCheat(false);
-      setForceFullscreen(false);
-      setBlockTabChange(false);
-      setBlockCopyPaste(false);
-      setLogSuspiciousEvents(false);
-      setTrackAttendance(true);
-      setLocationType('IN_PERSON');
     }
   };
 
-  // Add question
-  const addQuestion = (question: typeof questionsData.questions[0]) => {
+  // Question management
+  const addQuestion = (question: NonNullable<typeof questionsData>['questions'][0]) => {
     if (selectedQuestions.some(q => q.questionId === question.id)) return;
-    
     setSelectedQuestions([
       ...selectedQuestions,
       {
         questionId: question.id,
-        order: selectedQuestions.length,
+        order: selectedQuestions.length + 1,
         question: {
           id: question.id,
           text: question.text,
           type: question.type,
           difficulty: question.difficulty,
-          subject: question.subject,
-          topic: question.topic,
+          subject: question.subject ? { name: question.subject.name, color: question.subject.color } : undefined,
+          topic: question.topic ? { name: question.topic.name } : undefined,
         },
       },
     ]);
   };
 
-  // Remove question
   const removeQuestion = (questionId: string) => {
-    setSelectedQuestions(prev => 
-      prev.filter(q => q.questionId !== questionId).map((q, i) => ({ ...q, order: i }))
+    setSelectedQuestions(
+      selectedQuestions
+        .filter(q => q.questionId !== questionId)
+        .map((q, i) => ({ ...q, order: i + 1 }))
     );
   };
 
-  // Move question
   const moveQuestion = (index: number, direction: 'up' | 'down') => {
+    if (direction === 'up' && index === 0) return;
+    if (direction === 'down' && index === selectedQuestions.length - 1) return;
+
     const newQuestions = [...selectedQuestions];
-    const newIndex = direction === 'up' ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= newQuestions.length) return;
-    
-    [newQuestions[index], newQuestions[newIndex]] = [newQuestions[newIndex], newQuestions[index]];
-    newQuestions.forEach((q, i) => q.order = i);
-    setSelectedQuestions(newQuestions);
+    const swapIndex = direction === 'up' ? index - 1 : index + 1;
+    [newQuestions[index], newQuestions[swapIndex]] = [newQuestions[swapIndex], newQuestions[index]];
+    setSelectedQuestions(newQuestions.map((q, i) => ({ ...q, order: i + 1 })));
   };
 
   // Add random questions from filtered results
@@ -399,7 +288,7 @@ export default function NewSimulationPage() {
     
     const newQuestions = toAdd.map((question, idx) => ({
       questionId: question.id,
-      order: selectedQuestions.length + idx,
+      order: selectedQuestions.length + idx + 1,
       question: {
         id: question.id,
         text: question.text,
@@ -472,26 +361,17 @@ export default function NewSimulationPage() {
     }
   };
 
-  // Add assignment
-  const addAssignment = (type: 'student' | 'group' | 'class', id: string) => {
-    const existing = assignments.find(a => 
-      (type === 'student' && a.studentId === id) ||
-      (type === 'group' && a.groupId === id) ||
-      (type === 'class' && a.classId === id)
-    );
-    if (existing) return;
-
-    setAssignments([
-      ...assignments,
-      {
-        studentId: type === 'student' ? id : null,
-        groupId: type === 'group' ? id : null,
-        classId: type === 'class' ? id : null,
-      },
-    ]);
+  // Assignment management
+  const addAssignment = (type: 'student' | 'group', id: string) => {
+    if (type === 'student') {
+      if (assignments.some(a => a.studentId === id)) return;
+      setAssignments([...assignments, { studentId: id }]);
+    } else {
+      if (assignments.some(a => a.groupId === id)) return;
+      setAssignments([...assignments, { groupId: id }]);
+    }
   };
 
-  // Remove assignment
   const removeAssignment = (index: number) => {
     setAssignments(assignments.filter((_, i) => i !== index));
   };
@@ -499,74 +379,50 @@ export default function NewSimulationPage() {
   // Validation
   const isStepValid = (step: number): boolean => {
     switch (step) {
-      case 0: // Type
-        return !!simulationType;
-      case 1: // Config
-        return !!title && durationMinutes >= 0;
-      case 2: // Questions
-        return selectedQuestions.length > 0;
-      case 3: // Scheduling (calendar, attendance, location)
-        // Scheduling step is optional but if scheduled, needs dates
-        if (isScheduled && (!startDate || !endDate)) return false;
-        // If tracking attendance and in-person, need location details
-        if (trackAttendance && locationType === 'IN_PERSON' && !locationDetails) return false;
-        return true;
-      case 4: // Assignments
-        return isPublic || assignments.length > 0;
-      case 5: // Review
-        return true;
-      default:
-        return false;
+      case 0: return !!simulationType;
+      case 1: return !!title.trim();
+      case 2: return selectedQuestions.length > 0;
+      case 3: return true; // Scheduling is optional
+      case 4: return isPublic || assignments.length > 0;
+      case 5: return true;
+      default: return true;
     }
   };
 
   // Submit
-  const handleSubmit = async (_publishImmediately: boolean) => {
+  const handleSubmit = async () => {
+    if (!isStepValid(currentStep)) return;
+    
     setIsSaving(true);
     try {
-      // Convert datetime-local format to ISO string or undefined
-      const formatDate = (dateStr: string): string | undefined => {
-        if (!dateStr) return undefined;
-        try {
-          const date = new Date(dateStr);
-          return date.toISOString();
-        } catch {
-          return undefined;
-        }
-      };
-
-      await createWithQuestionsMutation.mutateAsync({
+      await createMutation.mutateAsync({
         title,
         description: description || undefined,
         type: simulationType,
-        visibility,
-        isOfficial,
-        startDate: formatDate(startDate),
-        endDate: formatDate(endDate),
+        isOfficial: simulationType === 'OFFICIAL',
+        visibility: isPublic ? 'PUBLIC' : 'PRIVATE',
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
         durationMinutes,
-        totalQuestions: selectedQuestions.length,
         showResults,
         showCorrectAnswers,
         allowReview,
         randomizeOrder,
         randomizeAnswers,
-        useQuestionPoints,
+        useQuestionPoints: false,
         correctPoints,
         wrongPoints,
         blankPoints,
-        maxScore,
-        passingScore,
+        passingScore: passingScore ?? undefined,
         isRepeatable,
-        maxAttempts,
-        isPublic,
-        // New fields
+        maxAttempts: maxAttempts ?? undefined,
         isPaperBased,
-        paperInstructions: paperInstructions || undefined,
+        paperInstructions: isPaperBased ? paperInstructions : undefined,
         trackAttendance,
         locationType: locationType || undefined,
         locationDetails: locationDetails || undefined,
-        isScheduled,
         hasSections,
+        sections: hasSections ? sections : undefined,
         enableAntiCheat,
         forceFullscreen,
         blockTabChange,
@@ -578,16 +434,18 @@ export default function NewSimulationPage() {
           customPoints: q.customPoints,
           customNegativePoints: q.customNegativePoints,
         })),
-        assignments: assignments.filter(a => a.studentId || a.groupId || a.classId).map(a => ({
-          studentId: a.studentId || undefined,
-          groupId: a.groupId || undefined,
-          classId: a.classId || undefined,
-          dueDate: a.dueDate ? new Date(a.dueDate).toISOString() : undefined,
-          notes: a.notes || undefined,
-        })),
+        assignments: isPublic ? [] : assignments,
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const togglePaperBased = () => {
+    setIsPaperBased(!isPaperBased);
+    if (!isPaperBased) {
+      setTrackAttendance(true);
+      setLocationType('IN_PERSON');
     }
   };
 
@@ -600,6 +458,7 @@ export default function NewSimulationPage() {
             <h2 className={`text-xl font-semibold ${colors.text.primary}`}>
               Seleziona il tipo di simulazione
             </h2>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {typeOptions.map((option) => (
                 <button
@@ -612,7 +471,7 @@ export default function NewSimulationPage() {
                   }`}
                 >
                   {option.badge && (
-                    <span className="absolute top-3 right-3 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-full">
+                    <span className="absolute top-3 right-3 px-2 py-1 text-xs font-medium bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-full">
                       {option.badge}
                     </span>
                   )}
@@ -648,14 +507,16 @@ export default function NewSimulationPage() {
                 </button>
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <h3 className={`font-semibold ${colors.text.primary}`}>{paperBasedOption.label}</h3>
+                    <h3 className={`font-semibold ${colors.text.primary}`}>Modalità Cartacea</h3>
                     <Checkbox
                       id="isPaperBased"
                       checked={isPaperBased}
                       onChange={togglePaperBased}
                     />
                   </div>
-                  <p className={`mt-1 text-sm ${colors.text.muted}`}>{paperBasedOption.description}</p>
+                  <p className={`mt-1 text-sm ${colors.text.muted}`}>
+                    Stampa il test per somministrazione in aula. I risultati vanno inseriti manualmente.
+                  </p>
                 </div>
               </div>
               {isPaperBased && (
@@ -673,22 +534,6 @@ export default function NewSimulationPage() {
                 </div>
               )}
             </div>
-            
-            {/* Anti-cheat info for official simulations */}
-            {simulationType === 'OFFICIAL' && !isPaperBased && (
-              <div className={`p-4 rounded-xl ${colors.background.secondary} border ${colors.border.light}`}>
-                <div className="flex items-start gap-3">
-                  <Shield className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5" />
-                  <div>
-                    <h4 className={`font-medium ${colors.text.primary}`}>Protezione anti-cheat attiva</h4>
-                    <p className={`text-sm ${colors.text.muted} mt-1`}>
-                      Modalità fullscreen forzata, blocco cambio tab, blocco copia/incolla. 
-                      Gli eventi sospetti vengono registrati.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         );
 
@@ -711,7 +556,7 @@ export default function NewSimulationPage() {
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Es: Simulazione TOLC-MED Gennaio 2025"
+                    placeholder="Es: Esercitazione Biologia - Cellula"
                     className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
                   />
                 </div>
@@ -777,7 +622,7 @@ export default function NewSimulationPage() {
             {/* Scoring */}
             <div className="space-y-4">
               <h3 className={`text-lg font-medium ${colors.text.primary}`}>Punteggi</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
                     Risposta corretta
@@ -815,24 +660,9 @@ export default function NewSimulationPage() {
                     className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
                   />
                 </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                    Punteggio massimo (opzionale)
-                  </label>
-                  <input
-                    type="number"
-                    value={maxScore ?? ''}
-                    onChange={(e) => setMaxScore(e.target.value ? parseFloat(e.target.value) : null)}
-                    step={0.1}
-                    placeholder="Calcolato automaticamente"
-                    className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
-                  />
-                </div>
-                <div>
-                  <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                    Punteggio minimo per passare
+                    Soglia superamento
                   </label>
                   <input
                     type="number"
@@ -884,91 +714,137 @@ export default function NewSimulationPage() {
               )}
             </div>
 
-            {/* Anti-cheat settings (only for online simulations) */}
-            {!isPaperBased && (
+            {/* Anti-cheat settings (only for OFFICIAL) */}
+            {simulationType === 'OFFICIAL' && (
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-green-600 dark:text-green-400" />
-                  <h3 className={`text-lg font-medium ${colors.text.primary}`}>Protezione Anti-Cheat</h3>
+                  <Shield className="w-5 h-5 text-red-500" />
+                  <h3 className={`text-lg font-medium ${colors.text.primary}`}>Anti-Cheat</h3>
                 </div>
                 <div className={`p-4 rounded-xl ${colors.background.secondary} border ${colors.border.light}`}>
-                  <div className="flex items-start gap-3 mb-4">
+                  <div className="space-y-3">
                     <Checkbox
                       id="enableAntiCheat"
+                      label="Abilita sistema anti-cheat"
                       checked={enableAntiCheat}
                       onChange={(e) => setEnableAntiCheat(e.target.checked)}
                     />
-                    <div className="flex-1">
-                      <label htmlFor="enableAntiCheat" className={`font-medium ${colors.text.primary} cursor-pointer`}>
-                        Abilita protezione anti-cheat
-                      </label>
-                      <p className={`text-sm ${colors.text.muted} mt-1`}>
-                        Attiva le misure di sicurezza per prevenire comportamenti scorretti durante la simulazione
-                      </p>
-                    </div>
+                    {enableAntiCheat && (
+                      <div className="ml-6 space-y-3">
+                        <Checkbox
+                          id="forceFullscreen"
+                          label="Forza schermo intero"
+                          checked={forceFullscreen}
+                          onChange={(e) => setForceFullscreen(e.target.checked)}
+                        />
+                        <Checkbox
+                          id="blockTabChange"
+                          label="Blocca cambio tab/finestra"
+                          checked={blockTabChange}
+                          onChange={(e) => setBlockTabChange(e.target.checked)}
+                        />
+                        <Checkbox
+                          id="blockCopyPaste"
+                          label="Blocca copia/incolla"
+                          checked={blockCopyPaste}
+                          onChange={(e) => setBlockCopyPaste(e.target.checked)}
+                        />
+                        <Checkbox
+                          id="logSuspiciousEvents"
+                          label="Registra eventi sospetti"
+                          checked={logSuspiciousEvents}
+                          onChange={(e) => setLogSuspiciousEvents(e.target.checked)}
+                        />
+                      </div>
+                    )}
                   </div>
-                  
-                  {enableAntiCheat && (
-                    <div className="ml-6 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
-                      <Checkbox
-                        id="forceFullscreen"
-                        label="Forza modalità fullscreen"
-                        checked={forceFullscreen}
-                        onChange={(e) => setForceFullscreen(e.target.checked)}
-                      />
-                      <Checkbox
-                        id="blockTabChange"
-                        label="Blocca cambio scheda"
-                        checked={blockTabChange}
-                        onChange={(e) => setBlockTabChange(e.target.checked)}
-                      />
-                      <Checkbox
-                        id="blockCopyPaste"
-                        label="Blocca copia/incolla"
-                        checked={blockCopyPaste}
-                        onChange={(e) => setBlockCopyPaste(e.target.checked)}
-                      />
-                      <Checkbox
-                        id="logSuspiciousEvents"
-                        label="Registra eventi sospetti"
-                        checked={logSuspiciousEvents}
-                        onChange={(e) => setLogSuspiciousEvents(e.target.checked)}
-                      />
+                </div>
+              </div>
+            )}
+
+            {/* Sections (only for OFFICIAL) */}
+            {simulationType === 'OFFICIAL' && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-blue-500" />
+                  <h3 className={`text-lg font-medium ${colors.text.primary}`}>Sezioni TOLC</h3>
+                </div>
+                <div className={`p-4 rounded-xl ${colors.background.secondary} border ${colors.border.light}`}>
+                  <Checkbox
+                    id="hasSections"
+                    label="Dividi in sezioni con timer separati"
+                    checked={hasSections}
+                    onChange={(e) => setHasSections(e.target.checked)}
+                  />
+                  {hasSections && (
+                    <div className="mt-4 space-y-3">
+                      <p className={`text-sm ${colors.text.muted}`}>
+                        Configura le sezioni nella selezione domande (Step 3)
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSections([
+                            ...sections,
+                            { name: `Sezione ${sections.length + 1}`, subject: '', questionCount: 10, durationMinutes: 15, order: sections.length + 1 }
+                          ])}
+                          className="px-3 py-1.5 text-sm bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                        >
+                          <Plus className="w-4 h-4 inline mr-1" />
+                          Aggiungi sezione
+                        </button>
+                      </div>
+                      {sections.map((section, idx) => (
+                        <div key={idx} className={`p-3 rounded-lg ${colors.background.card} border ${colors.border.light} flex items-center gap-3`}>
+                          <input
+                            type="text"
+                            value={section.name}
+                            onChange={(e) => {
+                              const newSections = [...sections];
+                              newSections[idx].name = e.target.value;
+                              setSections(newSections);
+                            }}
+                            placeholder="Nome sezione"
+                            className={`flex-1 px-3 py-1.5 rounded border ${colors.border.light} ${colors.background.input} ${colors.text.primary} text-sm`}
+                          />
+                          <input
+                            type="number"
+                            value={section.questionCount}
+                            onChange={(e) => {
+                              const newSections = [...sections];
+                              newSections[idx].questionCount = parseInt(e.target.value) || 0;
+                              setSections(newSections);
+                            }}
+                            placeholder="N. domande"
+                            className={`w-20 px-3 py-1.5 rounded border ${colors.border.light} ${colors.background.input} ${colors.text.primary} text-sm`}
+                          />
+                          <span className={`text-sm ${colors.text.muted}`}>domande</span>
+                          <input
+                            type="number"
+                            value={section.durationMinutes}
+                            onChange={(e) => {
+                              const newSections = [...sections];
+                              newSections[idx].durationMinutes = parseInt(e.target.value) || 0;
+                              setSections(newSections);
+                            }}
+                            placeholder="Minuti"
+                            className={`w-20 px-3 py-1.5 rounded border ${colors.border.light} ${colors.background.input} ${colors.text.primary} text-sm`}
+                          />
+                          <span className={`text-sm ${colors.text.muted}`}>min</span>
+                          <button
+                            type="button"
+                            onClick={() => setSections(sections.filter((_, i) => i !== idx))}
+                            className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
               </div>
             )}
-
-            {/* Sections toggle */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Layers className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                <h3 className={`text-lg font-medium ${colors.text.primary}`}>Sezioni (TOLC-style)</h3>
-              </div>
-              <div className={`p-4 rounded-xl ${colors.background.secondary} border ${colors.border.light}`}>
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    id="hasSections"
-                    checked={hasSections}
-                    onChange={(e) => setHasSections(e.target.checked)}
-                  />
-                  <div className="flex-1">
-                    <label htmlFor="hasSections" className={`font-medium ${colors.text.primary} cursor-pointer`}>
-                      Organizza in sezioni separate
-                    </label>
-                    <p className={`text-sm ${colors.text.muted} mt-1`}>
-                      Dividi la simulazione in sezioni con tempi e domande specifiche (es. Comprensione del testo, Biologia, Chimica...)
-                    </p>
-                    {hasSections && (
-                      <p className={`text-xs ${colors.text.muted} mt-2 italic`}>
-                        Le sezioni verranno configurate nel passo successivo insieme alle domande.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         );
 
@@ -1246,7 +1122,7 @@ export default function NewSimulationPage() {
           </div>
         );
 
-      case 3: // Scheduling step
+      case 3:
         return (
           <div className="space-y-8">
             <h2 className={`text-xl font-semibold ${colors.text.primary}`}>
@@ -1277,7 +1153,7 @@ export default function NewSimulationPage() {
               </div>
             </div>
 
-            {/* Location settings (visible when scheduled or paper-based) */}
+            {/* Location settings */}
             {(isScheduled || isPaperBased) && (
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
@@ -1371,18 +1247,23 @@ export default function NewSimulationPage() {
               Assegna la simulazione
             </h2>
 
+            {/* Info about group restrictions */}
+            <div className={`p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800`}>
+              <p className="text-sm text-blue-700 dark:text-blue-300">
+                Puoi assegnare simulazioni solo agli studenti e gruppi a te assegnati.
+              </p>
+            </div>
+
             {/* Visibility */}
             <div className={`p-6 rounded-xl ${colors.background.secondary}`}>
               <h3 className={`font-medium ${colors.text.primary} mb-4`}>Visibilità</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Checkbox
-                  id="isPublic"
-                  label="Pubblica per tutti"
-                  description="Tutti gli studenti attivi possono accedere"
-                  checked={isPublic}
-                  onChange={(e) => setIsPublic(e.target.checked)}
-                />
-              </div>
+              <Checkbox
+                id="isPublic"
+                label="Pubblica per tutti i miei studenti"
+                description="Tutti gli studenti nei tuoi gruppi possono accedere"
+                checked={isPublic}
+                onChange={(e) => setIsPublic(e.target.checked)}
+              />
             </div>
 
             {/* Individual assignments */}
@@ -1392,8 +1273,17 @@ export default function NewSimulationPage() {
                   Assegnazioni individuali ({assignments.length})
                 </h3>
 
+                {/* Show message if no groups */}
+                {(!groupsData?.groups || groupsData.groups.length === 0) && (
+                  <div className={`p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 mb-4`}>
+                    <p className="text-sm text-amber-700 dark:text-amber-300">
+                      Non hai gruppi assegnati. Contatta un amministratore per farti assegnare dei gruppi.
+                    </p>
+                  </div>
+                )}
+
                 {/* Add assignment */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
                       Aggiungi studente
@@ -1436,11 +1326,10 @@ export default function NewSimulationPage() {
                   <div className={`rounded-lg border ${colors.border.light} divide-y ${colors.border.light}`}>
                     {assignments.map((assignment, index) => {
                       let label = '';
-                      let icon = <Users className="w-4 h-4" />;
+                      const icon = <Users className="w-4 h-4" />;
                       if (assignment.studentId) {
                         const student = studentsData?.students?.find(s => s.studentId === assignment.studentId);
                         label = student?.name || 'Studente';
-                        icon = <Users className="w-4 h-4" />;
                       } else if (assignment.groupId) {
                         const group = groupsData?.groups?.find(g => g.id === assignment.groupId);
                         label = `Gruppo: ${group?.name || ''}`;
@@ -1468,7 +1357,7 @@ export default function NewSimulationPage() {
           </div>
         );
 
-      case 5: // Review step
+      case 5:
         return (
           <div className="space-y-6">
             <h2 className={`text-xl font-semibold ${colors.text.primary}`}>
@@ -1501,12 +1390,6 @@ export default function NewSimulationPage() {
                       {durationMinutes > 0 ? `${durationMinutes} minuti` : 'Illimitata'}
                     </dd>
                   </div>
-                  {hasSections && (
-                    <div className="flex justify-between">
-                      <dt className={colors.text.muted}>Sezioni</dt>
-                      <dd className={`font-medium text-blue-600 dark:text-blue-400`}>Attive</dd>
-                    </div>
-                  )}
                 </dl>
               </div>
 
@@ -1535,39 +1418,23 @@ export default function NewSimulationPage() {
                 </dl>
               </div>
 
-              {/* Security & Mode */}
+              {/* Mode */}
               <div className={`p-6 rounded-xl ${colors.background.secondary}`}>
-                <h3 className={`font-medium ${colors.text.primary} mb-4`}>Modalità e Sicurezza</h3>
+                <h3 className={`font-medium ${colors.text.primary} mb-4`}>Modalità</h3>
                 <dl className="space-y-3">
                   <div className="flex justify-between">
-                    <dt className={colors.text.muted}>Modalità</dt>
+                    <dt className={colors.text.muted}>Formato</dt>
                     <dd className={`font-medium ${colors.text.primary}`}>
                       {isPaperBased ? (
                         <span className="flex items-center gap-1">
                           <Printer className="w-4 h-4" /> Cartacea
                         </span>
-                      ) : (
-                        <span className="flex items-center gap-1">
-                          💻 Online
-                        </span>
-                      )}
+                      ) : '💻 Online'}
                     </dd>
                   </div>
-                  {!isPaperBased && (
-                    <div className="flex justify-between">
-                      <dt className={colors.text.muted}>Anti-cheat</dt>
-                      <dd className={`font-medium ${enableAntiCheat ? 'text-green-600 dark:text-green-400' : colors.text.muted}`}>
-                        {enableAntiCheat ? (
-                          <span className="flex items-center gap-1">
-                            <Shield className="w-4 h-4" /> Attivo
-                          </span>
-                        ) : 'Disattivato'}
-                      </dd>
-                    </div>
-                  )}
                   {isScheduled && (
                     <div className="flex justify-between">
-                      <dt className={colors.text.muted}>Evento calendario</dt>
+                      <dt className={colors.text.muted}>Evento</dt>
                       <dd className={`font-medium text-blue-600 dark:text-blue-400`}>
                         <span className="flex items-center gap-1">
                           <Calendar className="w-4 h-4" /> Programmato
@@ -1581,15 +1448,6 @@ export default function NewSimulationPage() {
                       <dd className={`font-medium text-green-600 dark:text-green-400`}>Tracciate</dd>
                     </div>
                   )}
-                  {locationType && (
-                    <div className="flex justify-between">
-                      <dt className={colors.text.muted}>Luogo</dt>
-                      <dd className={`font-medium ${colors.text.primary}`}>
-                        {locationType === 'IN_PERSON' ? '🏢 In presenza' : locationType === 'ONLINE' ? '💻 Online' : '🔄 Ibrida'}
-                        {locationDetails && ` - ${locationDetails}`}
-                      </dd>
-                    </div>
-                  )}
                 </dl>
               </div>
 
@@ -1597,7 +1455,7 @@ export default function NewSimulationPage() {
               <div className={`p-6 rounded-xl ${colors.background.secondary}`}>
                 <h3 className={`font-medium ${colors.text.primary} mb-4`}>Destinatari</h3>
                 {isPublic ? (
-                  <p className={colors.text.secondary}>Pubblica per tutti gli studenti attivi</p>
+                  <p className={colors.text.secondary}>Pubblica per tutti i tuoi studenti</p>
                 ) : assignments.length > 0 ? (
                   <p className={colors.text.secondary}>
                     {assignments.length} assegnazioni individuali
@@ -1649,48 +1507,47 @@ export default function NewSimulationPage() {
       {/* Header */}
       <div className="mb-8">
         <Link
-          href="/admin/simulazioni"
+          href="/collaboratore/simulazioni"
           className={`inline-flex items-center gap-2 text-sm ${colors.text.muted} hover:${colors.text.primary} mb-4`}
         >
           <ArrowLeft className="w-4 h-4" />
           Torna alle simulazioni
         </Link>
         <h1 className={`text-2xl font-bold ${colors.text.primary}`}>Nuova Simulazione</h1>
+        <p className={`mt-1 text-sm ${colors.text.muted}`}>
+          Crea una nuova esercitazione o test personalizzato
+        </p>
       </div>
 
       {/* Steps indicator */}
       <div className="mb-8">
-        <div className="flex items-center justify-between max-w-3xl mx-auto">
+        <div className="flex items-center justify-between">
           {STEPS.map((step, index) => {
             const StepIcon = step.icon;
+            const isActive = index === currentStep;
             const isCompleted = index < currentStep;
-            const isCurrent = index === currentStep;
-
+            
             return (
-              <div key={step.id} className="flex items-center">
-                <button
-                  onClick={() => isCompleted && setCurrentStep(index)}
-                  disabled={!isCompleted}
-                  className={`flex flex-col items-center gap-2 ${isCompleted ? 'cursor-pointer' : 'cursor-default'}`}
-                >
+              <div key={step.id} className="flex items-center flex-1">
+                <div className="flex flex-col items-center">
                   <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
-                      isCompleted
-                        ? 'bg-green-500 text-white'
-                        : isCurrent
+                      isActive
                         ? 'bg-red-500 text-white'
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-500'
+                        : isCompleted
+                        ? 'bg-green-500 text-white'
+                        : `${colors.background.secondary} ${colors.text.muted}`
                     }`}
                   >
                     {isCompleted ? <Check className="w-5 h-5" /> : <StepIcon className="w-5 h-5" />}
                   </div>
-                  <span className={`text-xs font-medium ${isCurrent ? colors.text.primary : colors.text.muted}`}>
+                  <span className={`mt-2 text-xs ${isActive ? colors.text.primary : colors.text.muted} hidden sm:block`}>
                     {step.title}
                   </span>
-                </button>
+                </div>
                 {index < STEPS.length - 1 && (
                   <div
-                    className={`w-16 h-0.5 mx-2 ${
+                    className={`flex-1 h-0.5 mx-2 ${
                       index < currentStep ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'
                     }`}
                   />
@@ -1702,16 +1559,16 @@ export default function NewSimulationPage() {
       </div>
 
       {/* Step content */}
-      <div className={`max-w-5xl mx-auto rounded-xl p-6 md:p-8 ${colors.background.card} border ${colors.border.light}`}>
+      <div className={`rounded-2xl p-6 sm:p-8 ${colors.background.card} border ${colors.border.light}`}>
         {renderStepContent()}
       </div>
 
       {/* Navigation */}
-      <div className="max-w-5xl mx-auto mt-6 flex items-center justify-between">
+      <div className="flex items-center justify-between mt-6">
         <button
-          onClick={() => setCurrentStep(currentStep - 1)}
+          onClick={() => setCurrentStep((s) => s - 1)}
           disabled={currentStep === 0}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${colors.border.light} ${colors.text.secondary} disabled:opacity-50 disabled:cursor-not-allowed ${colors.background.hover}`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${colors.border.light} ${colors.text.secondary} hover:${colors.background.hover} disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           <ArrowLeft className="w-4 h-4" />
           Indietro
@@ -1719,27 +1576,21 @@ export default function NewSimulationPage() {
 
         <div className="flex items-center gap-3">
           {currentStep === STEPS.length - 1 ? (
-            <>
-              <button
-                onClick={() => handleSubmit(false)}
-                disabled={!isStepValid(currentStep) || isSaving}
-                className={`flex items-center gap-2 px-6 py-2 rounded-lg border ${colors.border.light} ${colors.text.secondary} disabled:opacity-50 disabled:cursor-not-allowed ${colors.background.hover}`}
-              >
+            <button
+              onClick={handleSubmit}
+              disabled={!isStepValid(currentStep) || isSaving}
+              className={`flex items-center gap-2 px-6 py-2 rounded-lg text-white ${colors.primary.bg} hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {isSaving ? (
+                <Spinner size="sm" variant="white" />
+              ) : (
                 <Save className="w-4 h-4" />
-                Salva come bozza
-              </button>
-              <button
-                onClick={() => handleSubmit(true)}
-                disabled={!isStepValid(currentStep) || isSaving}
-                className={`flex items-center gap-2 px-6 py-2 rounded-lg text-white ${colors.primary.bg} hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed`}
-              >
-                {isSaving ? <Spinner size="sm" variant="white" /> : <Send className="w-4 h-4" />}
-                Crea Simulazione
-              </button>
-            </>
+              )}
+              Crea Simulazione
+            </button>
           ) : (
             <button
-              onClick={() => setCurrentStep(currentStep + 1)}
+              onClick={() => setCurrentStep((s) => s + 1)}
               disabled={!isStepValid(currentStep)}
               className={`flex items-center gap-2 px-6 py-2 rounded-lg text-white ${colors.primary.bg} hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed`}
             >

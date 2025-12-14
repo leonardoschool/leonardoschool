@@ -834,6 +834,26 @@ model Simulation {
   isRepeatable Boolean @default(false) // Can students retry?
   maxAttempts  Int? // Max attempts allowed (null = unlimited if repeatable)
 
+  // Paper-based mode (for in-person exams without computer)
+  isPaperBased      Boolean @default(false) // If true, exam is printed and answers entered manually
+  paperInstructions String? @db.Text // Special instructions for paper-based exams
+
+  // Attendance tracking
+  trackAttendance Boolean @default(false) // If true, attendance is recorded for this simulation
+  locationType    String? // 'ONLINE', 'IN_PERSON', 'HYBRID' - for attendance context
+  locationDetails String? // Physical location or online meeting link
+
+  // Sections configuration (for TOLC-style simulations with multiple sections)
+  hasSections Boolean @default(false) // If true, simulation has multiple timed sections
+  sections    Json? // Array of sections: [{name, durationMinutes, questionIds, subjectId}]
+
+  // Anti-cheat settings
+  enableAntiCheat      Boolean @default(false) // Enable anti-cheat measures
+  forceFullscreen      Boolean @default(false) // Force fullscreen mode
+  blockTabChange       Boolean @default(false) // Block tab/window change
+  blockCopyPaste       Boolean @default(false) // Block copy/paste
+  logSuspiciousEvents  Boolean @default(false) // Log suspicious events for review
+
   // Question selection criteria (for auto-generation)
   subjectDistribution    Json? // {subjectId: numberOfQuestions, ...}
   difficultyDistribution Json? // {EASY: n, MEDIUM: n, HARD: n}
@@ -866,6 +886,8 @@ model Simulation {
   @@index([isOfficial])
   @@index([accessType])
   @@index([isScheduled])
+  @@index([isPaperBased])
+  @@index([hasSections])
   @@map("simulations")
 }
 

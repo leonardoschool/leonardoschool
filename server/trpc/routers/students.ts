@@ -399,9 +399,10 @@ export const studentsRouter = router({
       search: z.string().optional(),
       classId: z.string().optional(),
       isActive: z.boolean().optional(),
+      onlyMyGroups: z.boolean().optional().default(false), // For collaborators: only students in their groups
     }))
     .query(async ({ ctx, input }) => {
-      const { page, pageSize, search, classId, isActive } = input;
+      const { page, pageSize, search, classId, isActive, onlyMyGroups } = input;
 
       const where: Record<string, unknown> = {
         role: 'STUDENT',
@@ -420,6 +421,34 @@ export const studentsRouter = router({
 
       if (classId) {
         where.student = { classId };
+      }
+
+      // For collaborators: filter students to those in groups they manage
+      if (onlyMyGroups && ctx.user?.role === 'COLLABORATOR' && ctx.user?.collaborator?.id) {
+        // Get groups managed by this collaborator
+        const collaboratorGroups = await ctx.prisma.group.findMany({
+          where: { referenceCollaboratorId: ctx.user.collaborator.id },
+          select: { id: true },
+        });
+        
+        if (collaboratorGroups.length > 0) {
+          const groupIds = collaboratorGroups.map(g => g.id);
+          // Students must be members of at least one of these groups
+          where.student = {
+            ...(typeof where.student === 'object' ? where.student : {}),
+            groupMemberships: {
+              some: {
+                groupId: { in: groupIds },
+              },
+            },
+          };
+        } else {
+          // No groups assigned - return empty result
+          return {
+            students: [],
+            pagination: { page, pageSize, total: 0, totalPages: 0 },
+          };
+        }
       }
 
       const total = await ctx.prisma.user.count({ where });

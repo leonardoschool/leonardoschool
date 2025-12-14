@@ -214,6 +214,34 @@ export const questionsRouter = router({
       return question;
     }),
 
+  // Get multiple questions with answers (for PDF generation)
+  getQuestionsWithAnswers: staffProcedure
+    .input(z.object({
+      questionIds: z.array(z.string()).min(1).max(100),
+    }))
+    .query(async ({ ctx, input }) => {
+      const questions = await ctx.prisma.question.findMany({
+        where: {
+          id: { in: input.questionIds },
+        },
+        include: {
+          answers: {
+            orderBy: { order: 'asc' },
+          },
+          subject: true,
+          topic: true,
+          subTopic: true,
+        },
+      });
+
+      // Maintain the order of questionIds
+      const orderedQuestions = input.questionIds
+        .map(id => questions.find(q => q.id === id))
+        .filter((q): q is NonNullable<typeof q> => q !== undefined);
+
+      return orderedQuestions;
+    }),
+
   // Create a new question
   createQuestion: staffProcedure
     .input(createQuestionSchema)

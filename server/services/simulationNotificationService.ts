@@ -1,0 +1,351 @@
+/**
+ * Simulation Notification Service
+ * Handles calendar event creation and email notifications for simulations
+ */
+
+import { PrismaClient, Simulation, User } from '@prisma/client';
+import { sendSimulationInvitationEmail, SimulationInviteData, InviteeData } from '@/lib/email/eventEmails';
+
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://leonardoschool.it';
+
+interface SimulationWithRelations extends Simulation {
+  createdBy?: { name: string } | null;
+  assignments?: Array<{
+    studentId?: string | null;
+    groupId?: string | null;
+    classId?: string | null;
+    dueDate?: Date | null;
+  }>;
+}
+
+interface NotificationResult {
+  calendarEventId?: string | null;
+  emailsSent: number;
+  errors: string[];
+}
+
+/**
+ * Create CalendarEvent for a simulation and invite all assigned students
+ */
+export async function createSimulationCalendarEvent(
+  prisma: PrismaClient,
+  simulation: SimulationWithRelations,
+  createdByUser: User
+): Promise<string | null> {
+  // Only create calendar event if simulation has a start date
+  if (!simulation.startDate) {
+    return null;
+  }
+
+  // Calculate end date
+  const endDate = simulation.endDate || new Date(
+    simulation.startDate.getTime() + (simulation.durationMinutes || 60) * 60 * 1000
+  );
+
+  try {
+    // Create the calendar event
+    const calendarEvent = await prisma.calendarEvent.create({
+      data: {
+        title: `📝 ${simulation.title}`,
+        description: simulation.description || `Simulazione: ${simulation.title}\nDomande: ${simulation.totalQuestions}\nDurata: ${simulation.durationMinutes} minuti`,
+        type: 'SIMULATION',
+        startDate: simulation.startDate,
+        endDate,
+        isAllDay: false,
+        locationType: (simulation.locationType as 'ONLINE' | 'IN_PERSON' | 'HYBRID') || 'ONLINE',
+        locationDetails: simulation.locationDetails,
+        onlineLink: `${BASE_URL}/studente/simulazioni/${simulation.id}`,
+        createdById: createdByUser.id,
+        isPublic: simulation.isPublic,
+        sendEmailInvites: true,
+        sendEmailReminders: true,
+        reminderMinutes: 60, // 1 hour before
+      },
+    });
+
+    // Link calendar event to simulation
+    await prisma.simulation.update({
+      where: { id: simulation.id },
+      data: { calendarEventId: calendarEvent.id },
+    });
+
+    return calendarEvent.id;
+  } catch (error) {
+    console.error('Error creating calendar event for simulation:', error);
+    return null;
+  }
+}
+
+/**
+ * Create EventInvitations for all students assigned to a simulation
+ */
+export async function createSimulationEventInvitations(
+  prisma: PrismaClient,
+  calendarEventId: string,
+  assignments: Array<{
+    studentId?: string | null;
+    groupId?: string | null;
+    classId?: string | null;
+  }>
+): Promise<void> {
+  const invitationsToCreate: Array<{
+    eventId: string;
+    userId?: string;
+    groupId?: string;
+    classId?: string;
+  }> = [];
+
+  for (const assignment of assignments) {
+    if (assignment.studentId) {
+      // Get the user ID for this student
+      const student = await prisma.student.findUnique({
+        where: { id: assignment.studentId },
+        select: { userId: true },
+      });
+      if (student) {
+        invitationsToCreate.push({
+          eventId: calendarEventId,
+          userId: student.userId,
+        });
+      }
+    }
+    
+    if (assignment.groupId) {
+      invitationsToCreate.push({
+        eventId: calendarEventId,
+        groupId: assignment.groupId,
+      });
+    }
+    
+    if (assignment.classId) {
+      invitationsToCreate.push({
+        eventId: calendarEventId,
+        classId: assignment.classId,
+      });
+    }
+  }
+
+  if (invitationsToCreate.length > 0) {
+    await prisma.eventInvitation.createMany({
+      data: invitationsToCreate,
+      skipDuplicates: true,
+    });
+  }
+}
+
+/**
+ * Get all student emails for simulation assignments
+ */
+export async function getAssignedStudentEmails(
+  prisma: PrismaClient,
+  assignments: Array<{
+    studentId?: string | null;
+    groupId?: string | null;
+    classId?: string | null;
+  }>
+): Promise<InviteeData[]> {
+  const studentUserIds = new Set<string>();
+  const invitees: InviteeData[] = [];
+
+  for (const assignment of assignments) {
+    // Direct student assignment
+    if (assignment.studentId) {
+      const student = await prisma.student.findUnique({
+        where: { id: assignment.studentId },
+        include: { user: { select: { id: true, email: true, name: true } } },
+      });
+      if (student?.user && !studentUserIds.has(student.user.id)) {
+        studentUserIds.add(student.user.id);
+        invitees.push({
+          email: student.user.email,
+          name: student.user.name,
+        });
+      }
+    }
+
+    // Group assignment - get all students in the group
+    if (assignment.groupId) {
+      const groupMembers = await prisma.groupMember.findMany({
+        where: { groupId: assignment.groupId },
+        include: {
+          student: {
+            include: { user: { select: { id: true, email: true, name: true } } },
+          },
+        },
+      });
+      for (const member of groupMembers) {
+        if (member.student?.user && !studentUserIds.has(member.student.user.id)) {
+          studentUserIds.add(member.student.user.id);
+          invitees.push({
+            email: member.student.user.email,
+            name: member.student.user.name,
+          });
+        }
+      }
+    }
+
+    // Class assignment - get all students in the class
+    if (assignment.classId) {
+      const classStudents = await prisma.student.findMany({
+        where: { classId: assignment.classId },
+        include: { user: { select: { id: true, email: true, name: true } } },
+      });
+      for (const student of classStudents) {
+        if (student.user && !studentUserIds.has(student.user.id)) {
+          studentUserIds.add(student.user.id);
+          invitees.push({
+            email: student.user.email,
+            name: student.user.name,
+          });
+        }
+      }
+    }
+  }
+
+  return invitees;
+}
+
+/**
+ * Send simulation invitation emails to all assigned students
+ */
+export async function sendSimulationNotifications(
+  prisma: PrismaClient,
+  simulation: SimulationWithRelations,
+  createdByUser: User,
+  assignments: Array<{
+    studentId?: string | null;
+    groupId?: string | null;
+    classId?: string | null;
+    dueDate?: Date | null;
+  }>
+): Promise<NotificationResult> {
+  const result: NotificationResult = {
+    calendarEventId: null,
+    emailsSent: 0,
+    errors: [],
+  };
+
+  // Skip if no start date (not a scheduled simulation)
+  if (!simulation.startDate) {
+    return result;
+  }
+
+  // Skip if no assignments
+  if (!assignments || assignments.length === 0) {
+    return result;
+  }
+
+  try {
+    // 1. Create calendar event
+    result.calendarEventId = await createSimulationCalendarEvent(prisma, simulation, createdByUser);
+
+    // 2. Create event invitations if calendar event was created
+    if (result.calendarEventId) {
+      await createSimulationEventInvitations(prisma, result.calendarEventId, assignments);
+    }
+
+    // 3. Get all invitee emails
+    const invitees = await getAssignedStudentEmails(prisma, assignments);
+
+    if (invitees.length === 0) {
+      return result;
+    }
+
+    // 4. Prepare simulation data for email
+    const simulationData: SimulationInviteData = {
+      id: simulation.id,
+      title: simulation.title,
+      description: simulation.description,
+      type: simulation.type,
+      isOfficial: simulation.isOfficial,
+      startDate: simulation.startDate,
+      endDate: simulation.endDate,
+      durationMinutes: simulation.durationMinutes,
+      totalQuestions: simulation.totalQuestions,
+      correctPoints: simulation.correctPoints,
+      wrongPoints: simulation.wrongPoints,
+      blankPoints: simulation.blankPoints,
+      locationType: simulation.locationType,
+      locationDetails: simulation.locationDetails,
+      createdByName: simulation.createdBy?.name || createdByUser.name,
+      dueDate: assignments[0]?.dueDate || null,
+      platformUrl: `${BASE_URL}/studente/simulazioni/${simulation.id}`,
+    };
+
+    // 5. Send emails
+    const emailResult = await sendSimulationInvitationEmail(simulationData, invitees);
+    result.emailsSent = emailResult.sentCount;
+    result.errors = emailResult.errors;
+
+  } catch (error) {
+    console.error('Error in sendSimulationNotifications:', error);
+    result.errors.push(error instanceof Error ? error.message : 'Errore sconosciuto');
+  }
+
+  return result;
+}
+
+/**
+ * Helper function to notify about a simulation by ID
+ * Fetches all required data and sends notifications
+ */
+export async function notifySimulationCreated(
+  simulationId: string,
+  prisma: PrismaClient
+): Promise<NotificationResult> {
+  const result: NotificationResult = {
+    calendarEventId: null,
+    emailsSent: 0,
+    errors: [],
+  };
+
+  try {
+    // Fetch simulation with all required relations
+    const simulation = await prisma.simulation.findUnique({
+      where: { id: simulationId },
+      include: {
+        createdBy: true,
+        assignments: {
+          select: {
+            studentId: true,
+            groupId: true,
+            classId: true,
+            dueDate: true,
+          },
+        },
+      },
+    });
+
+    if (!simulation) {
+      result.errors.push('Simulazione non trovata');
+      return result;
+    }
+
+    if (!simulation.createdBy) {
+      result.errors.push('Creatore simulazione non trovato');
+      return result;
+    }
+
+    if (!simulation.startDate) {
+      // Not a scheduled simulation, no notifications needed
+      return result;
+    }
+
+    if (simulation.assignments.length === 0) {
+      // No assignments, no notifications needed
+      return result;
+    }
+
+    // Call the main notification function
+    return await sendSimulationNotifications(
+      prisma,
+      simulation,
+      simulation.createdBy,
+      simulation.assignments
+    );
+  } catch (error) {
+    console.error('Error in notifySimulationCreated:', error);
+    result.errors.push(error instanceof Error ? error.message : 'Errore sconosciuto');
+    return result;
+  }
+}

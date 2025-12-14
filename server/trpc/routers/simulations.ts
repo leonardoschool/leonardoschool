@@ -1,5 +1,5 @@
 // Simulations Router - Manage tests and simulations
-import { router, staffProcedure, studentProcedure } from '../init';
+import { router, staffProcedure, studentProcedure, protectedProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import {
@@ -14,6 +14,7 @@ import {
   bulkAssignmentSchema,
 } from '@/lib/validations/simulationValidation';
 import type { Prisma, PrismaClient } from '@prisma/client';
+import { notifySimulationCreated } from '@/server/services/simulationNotificationService';
 
 // Helper function to get student from user
 async function getStudentFromUser(prisma: PrismaClient, userId: string) {
@@ -219,6 +220,47 @@ export const simulationsRouter = router({
         });
       }
 
+      // For collaborators: validate they can only assign to their groups/students
+      if (ctx.user.role === 'COLLABORATOR' && ctx.user.collaborator?.id && assignments.length > 0) {
+        const collaboratorId = ctx.user.collaborator.id;
+        
+        // Get groups managed by this collaborator
+        const collaboratorGroups = await ctx.prisma.group.findMany({
+          where: { referenceCollaboratorId: collaboratorId },
+          select: { id: true },
+        });
+        const allowedGroupIds = new Set(collaboratorGroups.map(g => g.id));
+
+        // Get students in those groups
+        const studentsInGroups = await ctx.prisma.groupMember.findMany({
+          where: { groupId: { in: Array.from(allowedGroupIds) } },
+          select: { studentId: true },
+        });
+        const allowedStudentIds = new Set(studentsInGroups.map(m => m.studentId));
+
+        // Validate each assignment
+        for (const target of assignments) {
+          if (target.groupId && !allowedGroupIds.has(target.groupId)) {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message: 'Non puoi assegnare a gruppi che non gestisci',
+            });
+          }
+          if (target.studentId && !allowedStudentIds.has(target.studentId)) {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message: 'Non puoi assegnare a studenti che non sono nei tuoi gruppi',
+            });
+          }
+          if (target.classId) {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message: 'I collaboratori non possono assegnare a intere classi',
+            });
+          }
+        }
+      }
+
       // Validate all questions exist and are published
       const questionIds = questions.map(q => q.questionId);
       const existingQuestions = await ctx.prisma.question.findMany({
@@ -272,6 +314,20 @@ export const simulationsRouter = router({
           topicIds: simulationData.topicIds ?? [],
           subjectDistribution: simulationData.subjectDistribution ?? undefined,
           difficultyDistribution: simulationData.difficultyDistribution ?? undefined,
+          // New fields for paper-based, attendance, sections, and anti-cheat
+          isPaperBased: simulationData.isPaperBased ?? false,
+          paperInstructions: simulationData.paperInstructions,
+          trackAttendance: simulationData.trackAttendance ?? false,
+          locationType: simulationData.locationType,
+          locationDetails: simulationData.locationDetails,
+          hasSections: simulationData.hasSections ?? false,
+          sections: simulationData.sections ?? undefined,
+          isScheduled: simulationData.isScheduled ?? false,
+          enableAntiCheat: simulationData.enableAntiCheat ?? false,
+          forceFullscreen: simulationData.forceFullscreen ?? false,
+          blockTabChange: simulationData.blockTabChange ?? false,
+          blockCopyPaste: simulationData.blockCopyPaste ?? false,
+          logSuspiciousEvents: simulationData.logSuspiciousEvents ?? false,
           createdBy: { connect: { id: ctx.user.id } },
           creatorRole: ctx.user.role,
           class: simClassId ? { connect: { id: simClassId } } : undefined,
@@ -300,6 +356,14 @@ export const simulationsRouter = router({
         },
       });
 
+      // Send notifications to assigned students (calendar event + email with .ics)
+      if (simulation.assignments.length > 0) {
+        // Fire and forget - don't block the response
+        notifySimulationCreated(simulation.id, ctx.prisma).catch((error) => {
+          console.error('[Simulations] Failed to send notifications:', error);
+        });
+      }
+
       return simulation;
     }),
 
@@ -315,6 +379,47 @@ export const simulationsRouter = router({
           code: 'FORBIDDEN',
           message: 'Solo gli admin possono creare simulazioni ufficiali',
         });
+      }
+
+      // For collaborators: validate they can only assign to their groups/students
+      if (ctx.user.role === 'COLLABORATOR' && ctx.user.collaborator?.id && assignments.length > 0) {
+        const collaboratorId = ctx.user.collaborator.id;
+        
+        // Get groups managed by this collaborator
+        const collaboratorGroups = await ctx.prisma.group.findMany({
+          where: { referenceCollaboratorId: collaboratorId },
+          select: { id: true },
+        });
+        const allowedGroupIds = new Set(collaboratorGroups.map(g => g.id));
+
+        // Get students in those groups
+        const studentsInGroups = await ctx.prisma.groupMember.findMany({
+          where: { groupId: { in: Array.from(allowedGroupIds) } },
+          select: { studentId: true },
+        });
+        const allowedStudentIds = new Set(studentsInGroups.map(m => m.studentId));
+
+        // Validate each assignment
+        for (const target of assignments) {
+          if (target.groupId && !allowedGroupIds.has(target.groupId)) {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message: 'Non puoi assegnare a gruppi che non gestisci',
+            });
+          }
+          if (target.studentId && !allowedStudentIds.has(target.studentId)) {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message: 'Non puoi assegnare a studenti che non sono nei tuoi gruppi',
+            });
+          }
+          if (target.classId) {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message: 'I collaboratori non possono assegnare a intere classi',
+            });
+          }
+        }
       }
 
       // Calculate total questions from distribution
@@ -416,6 +521,20 @@ export const simulationsRouter = router({
           subjectDistribution: subjectDistribution as Prisma.JsonObject,
           difficultyDistribution: difficultyDistribution as Prisma.JsonObject | null,
           topicIds: topicIds ?? [],
+          // New fields for paper-based, attendance, sections, and anti-cheat
+          isPaperBased: simulationData.isPaperBased ?? false,
+          paperInstructions: simulationData.paperInstructions,
+          trackAttendance: simulationData.trackAttendance ?? false,
+          locationType: simulationData.locationType,
+          locationDetails: simulationData.locationDetails,
+          hasSections: simulationData.hasSections ?? false,
+          sections: simulationData.sections ?? undefined,
+          isScheduled: simulationData.isScheduled ?? false,
+          enableAntiCheat: simulationData.enableAntiCheat ?? false,
+          forceFullscreen: simulationData.forceFullscreen ?? false,
+          blockTabChange: simulationData.blockTabChange ?? false,
+          blockCopyPaste: simulationData.blockCopyPaste ?? false,
+          logSuspiciousEvents: simulationData.logSuspiciousEvents ?? false,
           createdBy: { connect: { id: ctx.user.id } },
           creatorRole: ctx.user.role,
           class: simClassId ? { connect: { id: simClassId } } : undefined,
@@ -441,6 +560,14 @@ export const simulationsRouter = router({
           assignments: true,
         },
       });
+
+      // Send notifications to assigned students (calendar event + email with .ics)
+      if (simulation.assignments.length > 0) {
+        // Fire and forget - don't block the response
+        notifySimulationCreated(simulation.id, ctx.prisma).catch((error) => {
+          console.error('[Simulations] Failed to send notifications for automatic simulation:', error);
+        });
+      }
 
       return simulation;
     }),
@@ -717,6 +844,47 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi' });
       }
 
+      // For collaborators: validate they can only assign to their groups/students
+      if (ctx.user.role === 'COLLABORATOR' && ctx.user.collaborator?.id) {
+        const collaboratorId = ctx.user.collaborator.id;
+        
+        // Get groups managed by this collaborator
+        const collaboratorGroups = await ctx.prisma.group.findMany({
+          where: { referenceCollaboratorId: collaboratorId },
+          select: { id: true },
+        });
+        const allowedGroupIds = new Set(collaboratorGroups.map(g => g.id));
+
+        // Get students in those groups
+        const studentsInGroups = await ctx.prisma.groupMember.findMany({
+          where: { groupId: { in: Array.from(allowedGroupIds) } },
+          select: { studentId: true },
+        });
+        const allowedStudentIds = new Set(studentsInGroups.map(m => m.studentId));
+
+        // Validate each target
+        for (const target of targets) {
+          if (target.groupId && !allowedGroupIds.has(target.groupId)) {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message: 'Non puoi assegnare a gruppi che non gestisci',
+            });
+          }
+          if (target.studentId && !allowedStudentIds.has(target.studentId)) {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message: 'Non puoi assegnare a studenti che non sono nei tuoi gruppi',
+            });
+          }
+          if (target.classId) {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message: 'I collaboratori non possono assegnare a intere classi',
+            });
+          }
+        }
+      }
+
       // Create assignments (ignore duplicates)
       const created = await ctx.prisma.$transaction(async (tx) => {
         const results = [];
@@ -740,6 +908,14 @@ export const simulationsRouter = router({
         }
         return results;
       });
+
+      // Send notifications for newly added assignments
+      if (created.length > 0) {
+        // Fire and forget - don't block the response
+        notifySimulationCreated(simulationId, ctx.prisma).catch((error) => {
+          console.error('[Simulations] Failed to send notifications for new assignments:', error);
+        });
+      }
 
       return { created: created.length };
     }),
@@ -780,11 +956,11 @@ export const simulationsRouter = router({
       const now = new Date();
 
       // Get student's groups
-      const groupMemberships = await ctx.prisma.groupMember.findMany({
+      const groupMembers = await ctx.prisma.groupMember.findMany({
         where: { studentId },
         select: { groupId: true },
       });
-      const groupIds = groupMemberships.map(gm => gm.groupId);
+      const groupIds = groupMembers.map(gm => gm.groupId);
 
       // Build base conditions for accessible simulations
       const accessConditions: Prisma.SimulationWhereInput[] = [
@@ -910,11 +1086,11 @@ export const simulationsRouter = router({
       const now = new Date();
 
       // Get student's groups
-      const groupMemberships = await ctx.prisma.groupMember.findMany({
+      const groupMembers = await ctx.prisma.groupMember.findMany({
         where: { studentId },
         select: { groupId: true },
       });
-      const groupIds = groupMemberships.map(gm => gm.groupId);
+      const groupIds = groupMembers.map(gm => gm.groupId);
 
       const simulation = await ctx.prisma.simulation.findUnique({
         where: { id: input.id },
@@ -1590,6 +1766,412 @@ export const simulationsRouter = router({
         averageBlank: blankCounts.reduce((a, b) => a + b, 0) / results.length,
         averageTime: times.reduce((a, b) => a + b, 0) / results.length,
         passRate,
+      };
+    }),
+
+  // Get leaderboard for official simulations
+  // Students see their own name but others are anonymized
+  // Admin and simulation creator (collaborator) see all names
+  getLeaderboard: protectedProcedure
+    .input(z.object({ 
+      simulationId: z.string(),
+      limit: z.number().int().min(1).max(100).default(50),
+    }))
+    .query(async ({ ctx, input }) => {
+      const simulation = await ctx.prisma.simulation.findUnique({
+        where: { id: input.simulationId },
+        select: { 
+          id: true,
+          title: true,
+          isOfficial: true,
+          maxScore: true,
+          passingScore: true,
+          totalQuestions: true,
+          createdById: true, // For checking if current user is creator
+        },
+      });
+
+      if (!simulation) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
+      }
+
+      // Determine if current user can see all names
+      const userRole = ctx.user?.role;
+      const isAdmin = userRole === 'ADMIN';
+      const isCreator = ctx.user?.id === simulation.createdById;
+      const canSeeAllNames = isAdmin || isCreator;
+      
+      // Get current student's ID if user is a student
+      let currentStudentId: string | null = null;
+      if (userRole === 'STUDENT' && ctx.user?.student?.id) {
+        currentStudentId = ctx.user.student.id;
+      }
+
+      // Get all completed results ordered by score
+      const results = await ctx.prisma.simulationResult.findMany({
+        where: { 
+          simulationId: input.simulationId, 
+          completedAt: { not: null } 
+        },
+        include: {
+          student: {
+            include: {
+              user: { select: { id: true, name: true, email: true } },
+              class: { select: { id: true, name: true, year: true, section: true } },
+            },
+          },
+        },
+        orderBy: [
+          { totalScore: 'desc' },
+          { durationSeconds: 'asc' }, // Tie-breaker: faster time wins
+        ],
+        take: input.limit,
+      });
+
+      // Calculate rankings with tie handling and anonymization
+      const leaderboard = results.map((result, index) => {
+        // Check if this score ties with previous
+        let rank = index + 1;
+        if (index > 0) {
+          const prevResult = results[index - 1];
+          if (result.totalScore === prevResult.totalScore) {
+            // Find the rank of the first person with this score
+            const firstWithScore = results.findIndex(r => r.totalScore === result.totalScore);
+            rank = firstWithScore + 1;
+          }
+        }
+
+        // Determine if we should show this student's name
+        const isCurrentStudent = result.studentId === currentStudentId;
+        const showRealName = canSeeAllNames || isCurrentStudent;
+        
+        // Generate anonymous name: "Partecipante #X" with some fun adjectives for variety
+        const anonymousAdjectives = [
+          'Misterioso', 'Brillante', 'Coraggioso', 'Diligente', 'Energico',
+          'Fantastico', 'Geniale', 'Intraprendente', 'Laborioso', 'Metodico',
+          'Notevole', 'Originale', 'Perseverante', 'Risoluto', 'Tenace'
+        ];
+        const adjective = anonymousAdjectives[index % anonymousAdjectives.length];
+        const anonymousName = `Partecipante ${adjective} #${rank}`;
+
+        return {
+          rank,
+          studentId: showRealName ? result.studentId : null,
+          studentName: showRealName ? result.student.user.name : anonymousName,
+          studentEmail: showRealName ? result.student.user.email : null,
+          className: showRealName 
+            ? (result.student.class 
+                ? `${result.student.class.year}${result.student.class.section} - ${result.student.class.name}`
+                : null)
+            : null,
+          isCurrentUser: isCurrentStudent,
+          totalScore: result.totalScore,
+          percentageScore: result.percentageScore,
+          correctAnswers: result.correctAnswers,
+          wrongAnswers: result.wrongAnswers,
+          blankAnswers: result.blankAnswers,
+          durationSeconds: result.durationSeconds,
+          completedAt: result.completedAt,
+          passed: simulation.passingScore 
+            ? result.totalScore >= simulation.passingScore 
+            : null,
+        };
+      });
+
+      return {
+        simulation: {
+          id: simulation.id,
+          title: simulation.title,
+          isOfficial: simulation.isOfficial,
+          maxScore: simulation.maxScore,
+          passingScore: simulation.passingScore,
+          totalQuestions: simulation.totalQuestions,
+        },
+        leaderboard,
+        totalParticipants: results.length,
+        canSeeAllNames, // Let frontend know if user can see all names
+      };
+    }),
+
+  // ==================== PAPER-BASED RESULTS ====================
+
+  // Create paper-based result for a student (staff only)
+  createPaperResult: staffProcedure
+    .input(z.object({
+      simulationId: z.string().min(1),
+      studentId: z.string().min(1),
+      answers: z.array(z.object({
+        questionId: z.string().min(1),
+        answerId: z.string().optional().nullable(),
+      })),
+      wasPresent: z.boolean().default(true),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { simulationId, studentId, answers, wasPresent } = input;
+
+      // Get simulation with questions
+      const simulation = await ctx.prisma.simulation.findUnique({
+        where: { id: simulationId },
+        include: {
+          questions: {
+            include: {
+              question: {
+                include: { answers: true },
+              },
+            },
+          },
+        },
+      });
+
+      if (!simulation) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
+      }
+
+      if (!simulation.isPaperBased) {
+        throw new TRPCError({ 
+          code: 'BAD_REQUEST', 
+          message: 'Questa funzione è disponibile solo per simulazioni cartacee' 
+        });
+      }
+
+      // Check student exists
+      const student = await ctx.prisma.student.findUnique({
+        where: { id: studentId },
+      });
+
+      if (!student) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Studente non trovato' });
+      }
+
+      // Check if result already exists
+      const existingResult = await ctx.prisma.simulationResult.findUnique({
+        where: { simulationId_studentId: { simulationId, studentId } },
+      });
+
+      if (existingResult) {
+        throw new TRPCError({ 
+          code: 'CONFLICT', 
+          message: 'Risultato già inserito per questo studente' 
+        });
+      }
+
+      // If student was not present, create empty result
+      if (!wasPresent) {
+        const result = await ctx.prisma.simulationResult.create({
+          data: {
+            simulation: { connect: { id: simulationId } },
+            student: { connect: { id: studentId } },
+            totalQuestions: simulation.totalQuestions,
+            correctAnswers: 0,
+            wrongAnswers: 0,
+            blankAnswers: simulation.totalQuestions,
+            totalScore: 0,
+            percentageScore: 0,
+            answers: [],
+            completedAt: new Date(),
+          },
+        });
+
+        return { 
+          resultId: result.id, 
+          wasPresent: false,
+          message: 'Studente assente registrato' 
+        };
+      }
+
+      // Calculate score
+      let correctCount = 0;
+      let wrongCount = 0;
+      let blankCount = 0;
+      let totalScore = 0;
+
+      const evaluatedAnswers = [];
+
+      for (const sq of simulation.questions) {
+        const studentAnswer = answers.find(a => a.questionId === sq.questionId);
+        const correctAnswer = sq.question.answers.find(a => a.isCorrect);
+
+        const points = sq.customPoints ?? (simulation.useQuestionPoints ? sq.question.points : simulation.correctPoints);
+        const negativePoints = sq.customNegativePoints ?? (simulation.useQuestionPoints ? sq.question.negativePoints : simulation.wrongPoints);
+
+        let isCorrect = false;
+        let earnedPoints = 0;
+
+        if (!studentAnswer?.answerId) {
+          // Blank answer
+          blankCount++;
+          earnedPoints = simulation.blankPoints;
+        } else if (studentAnswer.answerId === correctAnswer?.id) {
+          // Correct answer
+          isCorrect = true;
+          correctCount++;
+          earnedPoints = points;
+        } else {
+          // Wrong answer
+          wrongCount++;
+          earnedPoints = negativePoints;
+        }
+
+        totalScore += earnedPoints;
+
+        evaluatedAnswers.push({
+          questionId: sq.questionId,
+          answerId: studentAnswer?.answerId ?? null,
+          isCorrect,
+          earnedPoints,
+          timeSpent: 0, // Paper-based doesn't track time
+        });
+      }
+
+      // Create result
+      const result = await ctx.prisma.simulationResult.create({
+        data: {
+          simulation: { connect: { id: simulationId } },
+          student: { connect: { id: studentId } },
+          totalQuestions: simulation.totalQuestions,
+          correctAnswers: correctCount,
+          wrongAnswers: wrongCount,
+          blankAnswers: blankCount,
+          totalScore,
+          percentageScore: simulation.maxScore ? (totalScore / simulation.maxScore) * 100 : 0,
+          answers: evaluatedAnswers as Prisma.JsonArray,
+          completedAt: new Date(),
+        },
+      });
+
+      return {
+        resultId: result.id,
+        wasPresent: true,
+        score: totalScore,
+        maxScore: simulation.maxScore,
+        correctCount,
+        wrongCount,
+        blankCount,
+        passed: simulation.passingScore ? totalScore >= simulation.passingScore : null,
+      };
+    }),
+
+  // Get assigned students for paper-based result entry
+  getPaperBasedStudents: staffProcedure
+    .input(z.object({ simulationId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const simulation = await ctx.prisma.simulation.findUnique({
+        where: { id: input.simulationId },
+        include: {
+          assignments: {
+            include: {
+              student: {
+                include: { user: { select: { id: true, name: true, email: true } } },
+              },
+              group: {
+                include: {
+                  members: {
+                    include: {
+                      student: {
+                        include: { user: { select: { id: true, name: true, email: true } } },
+                      },
+                    },
+                  },
+                },
+              },
+              class: {
+                include: {
+                  students: {
+                    include: { user: { select: { id: true, name: true, email: true } } },
+                  },
+                },
+              },
+            },
+          },
+          results: {
+            select: { studentId: true, completedAt: true },
+          },
+          questions: {
+            orderBy: { order: 'asc' },
+            include: {
+              question: {
+                include: {
+                  answers: { orderBy: { order: 'asc' } },
+                  subject: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!simulation) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
+      }
+
+      // Collect all assigned students
+      const studentsMap = new Map<string, { 
+        id: string; 
+        name: string; 
+        email: string;
+        hasResult: boolean;
+      }>();
+
+      for (const assignment of simulation.assignments) {
+        // Direct student assignment
+        if (assignment.student) {
+          studentsMap.set(assignment.student.id, {
+            id: assignment.student.id,
+            name: assignment.student.user.name,
+            email: assignment.student.user.email,
+            hasResult: simulation.results.some(r => r.studentId === assignment.student!.id),
+          });
+        }
+
+        // Group assignment
+        if (assignment.group) {
+          for (const member of assignment.group.members) {
+            studentsMap.set(member.student.id, {
+              id: member.student.id,
+              name: member.student.user.name,
+              email: member.student.user.email,
+              hasResult: simulation.results.some(r => r.studentId === member.student.id),
+            });
+          }
+        }
+
+        // Class assignment
+        if (assignment.class) {
+          for (const student of assignment.class.students) {
+            studentsMap.set(student.id, {
+              id: student.id,
+              name: student.user.name,
+              email: student.user.email,
+              hasResult: simulation.results.some(r => r.studentId === student.id),
+            });
+          }
+        }
+      }
+
+      const students = Array.from(studentsMap.values()).sort((a, b) => 
+        a.name.localeCompare(b.name)
+      );
+
+      return {
+        simulation: {
+          id: simulation.id,
+          title: simulation.title,
+          totalQuestions: simulation.totalQuestions,
+          isPaperBased: simulation.isPaperBased,
+        },
+        questions: simulation.questions.map((sq, index) => ({
+          id: sq.questionId,
+          order: index + 1,
+          text: sq.question.text.replace(/<[^>]*>/g, '').substring(0, 100) + '...',
+          subject: sq.question.subject?.name,
+          answers: sq.question.answers.map(a => ({
+            id: a.id,
+            label: a.label || String.fromCharCode(65 + (a.order || 0)), // A, B, C, D, E
+          })),
+        })),
+        students,
+        completedCount: students.filter(s => s.hasResult).length,
+        totalStudents: students.length,
       };
     }),
 });

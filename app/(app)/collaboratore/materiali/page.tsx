@@ -250,8 +250,17 @@ export default function MaterialsPage() {
   });
   const { data: categories } = trpc.materials.getAllCategories.useQuery();
   const { data: subjects } = trpc.materials.getAllSubjects.useQuery();
-  const { data: groupsData } = trpc.groups.getGroups.useQuery({ page: 1, pageSize: 100 });
-  const { data: allStudents } = trpc.students.getAllForAdmin.useQuery();
+  const { data: groupsData } = trpc.groups.getGroups.useQuery({ 
+    page: 1, 
+    pageSize: 100,
+    onlyMyGroups: true,
+  });
+  const { data: studentsData } = trpc.students.getStudents.useQuery({ 
+    page: 1, 
+    pageSize: 500, 
+    isActive: true,
+    onlyMyGroups: true,
+  });
   const { data: stats } = trpc.materials.getStats.useQuery();
 
   // Mutations
@@ -987,13 +996,13 @@ export default function MaterialsPage() {
                         </div>
                         {/* List */}
                         <div className="max-h-52 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
-                          {allStudents
+                          {studentsData?.students
                             ?.filter((s) => 
                               s.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
                               s.email.toLowerCase().includes(studentSearch.toLowerCase())
                             )
                             .map((student) => {
-                              const studentId = student.student?.id;
+                              const studentId = student.studentId;
                               const isChecked = studentId ? formData.studentIds.includes(studentId) : false;
                               const isDisabled = !studentId;
                               return (
@@ -1038,7 +1047,7 @@ export default function MaterialsPage() {
                                 </label>
                               );
                             })}
-                          {allStudents?.filter((s) => 
+                          {studentsData?.students?.filter((s) => 
                             s.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
                             s.email.toLowerCase().includes(studentSearch.toLowerCase())
                           ).length === 0 && (

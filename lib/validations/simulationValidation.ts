@@ -15,6 +15,9 @@ export type SimulationVisibility = z.infer<typeof SimulationVisibilityEnum>;
 export const CreatorRoleEnum = z.enum(['ADMIN', 'COLLABORATOR', 'STUDENT']);
 export type CreatorRole = z.infer<typeof CreatorRoleEnum>;
 
+export const LocationTypeEnum = z.enum(['ONLINE', 'IN_PERSON', 'HYBRID']);
+export type LocationType = z.infer<typeof LocationTypeEnum>;
+
 // ==================== DISTRIBUTION SCHEMAS ====================
 
 // For subject distribution: { subjectId: numberOfQuestions }
@@ -28,6 +31,20 @@ export const difficultyDistributionSchema = z.object({
   HARD: z.number().int().min(0).default(0),
 });
 export type DifficultyDistribution = z.infer<typeof difficultyDistributionSchema>;
+
+// ==================== SECTION SCHEMA (for TOLC-style simulations) ====================
+
+export const simulationSectionSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1, 'Nome sezione obbligatorio'),
+  durationMinutes: z.number().int().min(1, 'Durata sezione obbligatoria'),
+  questionCount: z.number().int().min(1).optional(),
+  subjectId: z.string().optional().nullable(),
+  questionIds: z.array(z.string()).optional().default([]),
+  order: z.number().int().min(0).default(0),
+});
+
+export type SimulationSection = z.infer<typeof simulationSectionSchema>;
 
 // ==================== SIMULATION QUESTION SCHEMAS ====================
 
@@ -99,6 +116,29 @@ const simulationBaseSchema = z.object({
   // Attempts
   isRepeatable: z.boolean().default(false),
   maxAttempts: z.number().int().min(1).optional().nullable(),
+  
+  // Paper-based mode
+  isPaperBased: z.boolean().default(false),
+  paperInstructions: z.string().optional().nullable(),
+  
+  // Attendance tracking
+  trackAttendance: z.boolean().default(false),
+  locationType: LocationTypeEnum.optional().nullable(),
+  locationDetails: z.string().optional().nullable(),
+  
+  // Sections (for TOLC-style simulations)
+  hasSections: z.boolean().default(false),
+  sections: z.array(simulationSectionSchema).optional().nullable(),
+  
+  // Calendar integration
+  isScheduled: z.boolean().default(false),
+  
+  // Anti-cheat settings
+  enableAntiCheat: z.boolean().default(false),
+  forceFullscreen: z.boolean().default(false),
+  blockTabChange: z.boolean().default(false),
+  blockCopyPaste: z.boolean().default(false),
+  logSuspiciousEvents: z.boolean().default(false),
   
   // Question selection criteria
   subjectDistribution: subjectDistributionSchema.optional().nullable(),
@@ -323,6 +363,14 @@ export const SIMULATION_PRESETS = {
     showCorrectAnswers: false,
     allowReview: false,
     isRepeatable: false,
+    // Anti-cheat for official simulations
+    enableAntiCheat: true,
+    forceFullscreen: true,
+    blockTabChange: true,
+    blockCopyPaste: true,
+    logSuspiciousEvents: true,
+    // Sections for TOLC-MED
+    hasSections: true,
   },
   PRACTICE_TEST: {
     type: 'PRACTICE' as const,
@@ -339,6 +387,12 @@ export const SIMULATION_PRESETS = {
     allowReview: true,
     isRepeatable: true,
     maxAttempts: 3,
+    enableAntiCheat: false,
+    forceFullscreen: false,
+    blockTabChange: false,
+    blockCopyPaste: false,
+    logSuspiciousEvents: false,
+    hasSections: false,
   },
   QUICK_QUIZ: {
     type: 'QUICK_QUIZ' as const,
@@ -354,7 +408,67 @@ export const SIMULATION_PRESETS = {
     showCorrectAnswers: true,
     allowReview: true,
     isRepeatable: true,
+    enableAntiCheat: false,
+    forceFullscreen: false,
+    blockTabChange: false,
+    blockCopyPaste: false,
+    logSuspiciousEvents: false,
+    hasSections: false,
+  },
+  PAPER_BASED: {
+    type: 'CUSTOM' as const,
+    isOfficial: false,
+    durationMinutes: 90,
+    totalQuestions: 50,
+    correctPoints: 1.5,
+    wrongPoints: -0.4,
+    blankPoints: 0,
+    randomizeOrder: false,
+    randomizeAnswers: false,
+    showResults: true,
+    showCorrectAnswers: true,
+    allowReview: true,
+    isRepeatable: false,
+    isPaperBased: true,
+    enableAntiCheat: false,
+    forceFullscreen: false,
+    blockTabChange: false,
+    blockCopyPaste: false,
+    logSuspiciousEvents: false,
+    hasSections: false,
   },
 } as const;
 
 export type SimulationPreset = keyof typeof SIMULATION_PRESETS;
+
+// ==================== PAPER-BASED RESULTS SCHEMAS ====================
+
+// Single answer for paper-based result entry
+export const paperAnswerSchema = z.object({
+  questionId: z.string().min(1),
+  answerId: z.string().optional().nullable(), // null = blank answer
+});
+
+export type PaperAnswer = z.infer<typeof paperAnswerSchema>;
+
+// Create paper-based result schema
+export const createPaperResultSchema = z.object({
+  simulationId: z.string().min(1, 'ID simulazione obbligatorio'),
+  studentId: z.string().min(1, 'ID studente obbligatorio'),
+  answers: z.array(paperAnswerSchema),
+  wasPresent: z.boolean().default(true), // Track attendance
+});
+
+export type CreatePaperResultInput = z.infer<typeof createPaperResultSchema>;
+
+// Bulk paper results schema (for multiple students)
+export const bulkPaperResultsSchema = z.object({
+  simulationId: z.string().min(1, 'ID simulazione obbligatorio'),
+  results: z.array(z.object({
+    studentId: z.string().min(1),
+    answers: z.array(paperAnswerSchema),
+    wasPresent: z.boolean().default(true),
+  })),
+});
+
+export type BulkPaperResultsInput = z.infer<typeof bulkPaperResultsSchema>;

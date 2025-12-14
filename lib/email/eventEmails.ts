@@ -752,3 +752,245 @@ Leonardo School - www.leonardoschool.it
     };
   }
 }
+
+// =============================================================================
+// SIMULATION INVITATION EMAIL
+// =============================================================================
+
+export interface SimulationInviteData {
+  id: string;
+  title: string;
+  description?: string | null;
+  type: string; // OFFICIAL, PRACTICE, etc.
+  isOfficial: boolean;
+  startDate: Date;
+  endDate?: Date | null;
+  durationMinutes: number;
+  totalQuestions: number;
+  correctPoints: number;
+  wrongPoints: number;
+  blankPoints: number;
+  locationType?: string | null;
+  locationDetails?: string | null;
+  createdByName: string;
+  dueDate?: Date | null;
+  platformUrl: string; // URL to the simulation on the platform
+}
+
+/**
+ * Send simulation invitation email with calendar attachment
+ */
+export async function sendSimulationInvitationEmail(
+  simulation: SimulationInviteData,
+  invitees: InviteeData[]
+): Promise<{ success: boolean; sentCount: number; errors: string[] }> {
+  if (invitees.length === 0) {
+    return { success: true, sentCount: 0, errors: [] };
+  }
+
+  const errors: string[] = [];
+  let sentCount = 0;
+
+  const typeLabels: Record<string, string> = {
+    OFFICIAL: 'Simulazione Ufficiale',
+    PRACTICE: 'Test di Pratica',
+    CUSTOM: 'Simulazione Personalizzata',
+    QUICK_QUIZ: 'Quiz Veloce',
+  };
+
+  const subject = simulation.isOfficial 
+    ? `🎓 SIMULAZIONE UFFICIALE: ${simulation.title}`
+    : `📝 Nuova simulazione: ${simulation.title}`;
+  
+  // Calculate end date if not provided
+  const endDate = simulation.endDate || new Date(
+    simulation.startDate.getTime() + simulation.durationMinutes * 60 * 1000
+  );
+
+  // Format dates in Italian
+  const startDateFormatted = simulation.startDate.toLocaleDateString('it-IT', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const dueDateFormatted = simulation.dueDate 
+    ? simulation.dueDate.toLocaleDateString('it-IT', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    : null;
+
+  // Build HTML content
+  let htmlContent = getEmailHeader(
+    simulation.isOfficial ? 'Simulazione Ufficiale' : 'Sei stato invitato a una simulazione',
+    simulation.isOfficial ? '🎓' : '📝',
+    'Leonardo School'
+  );
+  
+  htmlContent += `
+    <div class="event-card" style="border-left: 4px solid ${simulation.isOfficial ? '#dc2626' : '#a8012b'};">
+      <span class="event-type" style="background: ${simulation.isOfficial ? '#dc2626' : '#6b7280'};">
+        ${typeLabels[simulation.type] || simulation.type}
+      </span>
+      <div class="event-title" style="font-size: 20px; margin: 12px 0;">${simulation.title}</div>
+      
+      ${simulation.isOfficial ? `
+        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; margin: 16px 0;">
+          <p style="color: #991b1b; margin: 0; font-weight: 600;">
+            ⚠️ Questa è una simulazione UFFICIALE. Assicurati di essere pronto e di avere una connessione stabile.
+          </p>
+        </div>
+      ` : ''}
+      
+      <div class="info-row" style="display: flex; align-items: flex-start; margin: 12px 0;">
+        <span class="info-icon" style="font-size: 20px; margin-right: 12px;">📅</span>
+        <div class="info-content">
+          <div class="info-label" style="font-size: 12px; color: #6b7280; text-transform: uppercase;">Data e ora</div>
+          <div class="info-value" style="font-weight: 500;">${startDateFormatted}</div>
+        </div>
+      </div>
+      
+      <div class="info-row" style="display: flex; align-items: flex-start; margin: 12px 0;">
+        <span class="info-icon" style="font-size: 20px; margin-right: 12px;">⏱️</span>
+        <div class="info-content">
+          <div class="info-label" style="font-size: 12px; color: #6b7280; text-transform: uppercase;">Durata</div>
+          <div class="info-value" style="font-weight: 500;">${simulation.durationMinutes} minuti</div>
+        </div>
+      </div>
+      
+      <div class="info-row" style="display: flex; align-items: flex-start; margin: 12px 0;">
+        <span class="info-icon" style="font-size: 20px; margin-right: 12px;">📋</span>
+        <div class="info-content">
+          <div class="info-label" style="font-size: 12px; color: #6b7280; text-transform: uppercase;">Domande</div>
+          <div class="info-value" style="font-weight: 500;">${simulation.totalQuestions} domande</div>
+        </div>
+      </div>
+      
+      <div class="info-row" style="display: flex; align-items: flex-start; margin: 12px 0;">
+        <span class="info-icon" style="font-size: 20px; margin-right: 12px;">🎯</span>
+        <div class="info-content">
+          <div class="info-label" style="font-size: 12px; color: #6b7280; text-transform: uppercase;">Punteggio</div>
+          <div class="info-value" style="font-weight: 500;">
+            Corretta: +${simulation.correctPoints} | Errata: ${simulation.wrongPoints} | Non risposta: ${simulation.blankPoints}
+          </div>
+        </div>
+      </div>
+      
+      ${dueDateFormatted ? `
+        <div class="info-row" style="display: flex; align-items: flex-start; margin: 12px 0;">
+          <span class="info-icon" style="font-size: 20px; margin-right: 12px;">⏰</span>
+          <div class="info-content">
+            <div class="info-label" style="font-size: 12px; color: #6b7280; text-transform: uppercase;">Scadenza</div>
+            <div class="info-value" style="font-weight: 500; color: #dc2626;">${dueDateFormatted}</div>
+          </div>
+        </div>
+      ` : ''}
+      
+      ${simulation.description ? `
+        <div class="description" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+          <p style="color: #374151; margin: 0;">${simulation.description.replace(/\n/g, '<br>')}</p>
+        </div>
+      ` : ''}
+      
+      <a href="${simulation.platformUrl}" 
+         class="cta-button" 
+         style="display: block; width: 100%; text-align: center; background: #a8012b; color: white; 
+                padding: 14px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; 
+                margin-top: 20px; box-sizing: border-box;">
+        Vai alla Simulazione →
+      </a>
+    </div>
+    
+    <p style="color: #6b7280; font-size: 13px; text-align: center; margin-top: 20px;">
+      Simulazione creata da <strong>${simulation.createdByName}</strong>
+    </p>
+    
+    <p style="color: #9ca3af; font-size: 12px; text-align: center;">
+      📱 Aggiungi al calendario usando l'allegato .ics
+    </p>
+  `;
+  
+  htmlContent += getEmailFooter();
+  
+  // Plain text version
+  const textContent = `
+Sei stato invitato a una simulazione - Leonardo School
+
+${simulation.isOfficial ? '🎓 SIMULAZIONE UFFICIALE' : ''}
+${simulation.title}
+Tipo: ${typeLabels[simulation.type] || simulation.type}
+
+📅 Data: ${startDateFormatted}
+⏱️ Durata: ${simulation.durationMinutes} minuti
+📋 Domande: ${simulation.totalQuestions}
+🎯 Punteggio: Corretta +${simulation.correctPoints} | Errata ${simulation.wrongPoints} | Non risposta ${simulation.blankPoints}
+${dueDateFormatted ? `⏰ Scadenza: ${dueDateFormatted}` : ''}
+
+${simulation.description ? `Descrizione:\n${simulation.description}` : ''}
+
+➡️ Vai alla simulazione: ${simulation.platformUrl}
+
+Simulazione creata da: ${simulation.createdByName}
+
+📱 Usa il file .ics allegato per aggiungere l'evento al tuo calendario.
+
+---
+Leonardo School - www.leonardoschool.it
+  `.trim();
+
+  // Generate iCalendar file
+  const eventData: EventEmailData = {
+    id: `simulation-${simulation.id}`,
+    title: `📝 ${simulation.title}`,
+    description: `${simulation.description || ''}\n\nDomande: ${simulation.totalQuestions}\nDurata: ${simulation.durationMinutes} minuti\nPunteggio: Corretta +${simulation.correctPoints}, Errata ${simulation.wrongPoints}\n\nLink: ${simulation.platformUrl}`,
+    type: 'SIMULATION',
+    startDate: simulation.startDate,
+    endDate,
+    isAllDay: false,
+    locationType: (simulation.locationType as EventLocationType) || 'ONLINE',
+    locationDetails: simulation.locationDetails,
+    onlineLink: simulation.platformUrl,
+    createdByName: simulation.createdByName,
+  };
+
+  const icsContent = generateICalendar(eventData, 'REQUEST');
+
+  const transporter = createEmailTransporter();
+
+  // Send to each invitee individually
+  for (const invitee of invitees) {
+    try {
+      await transporter.sendMail({
+        from: `"Leonardo School" <${process.env.EMAIL_FROM}>`,
+        to: invitee.email,
+        subject,
+        html: htmlContent.replace('Ciao,', `Ciao ${invitee.name},`),
+        text: textContent,
+        attachments: [
+          {
+            filename: 'simulazione.ics',
+            content: icsContent,
+            contentType: 'text/calendar; charset=utf-8; method=REQUEST',
+          },
+        ],
+        icalEvent: {
+          filename: 'invite.ics',
+          method: 'REQUEST',
+          content: icsContent,
+        },
+      });
+      sentCount++;
+    } catch (error) {
+      console.error(`Error sending simulation invitation to ${invitee.email}:`, error);
+      errors.push(`${invitee.email}: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`);
+    }
+  }
+
+  return { success: errors.length === 0, sentCount, errors };
+}
