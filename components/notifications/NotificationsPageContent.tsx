@@ -9,96 +9,28 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { 
+  notificationConfigs,
+  getNotificationRoute,
+  type NotificationType,
+  type UserRole,
+} from '@/lib/notifications';
+import { 
   Bell, 
   Check, 
   AlertTriangle,
-  FileText,
-  UserCheck,
-  UserPlus,
   Trash2,
-  Briefcase,
-  Mail,
-  FileSignature,
-  XCircle,
   Archive,
   ArchiveRestore,
   CheckCheck,
-  Calendar,
-  ClipboardCheck,
-  FolderOpen,
-  MessageSquare,
-  BookOpen,
-  Users,
-  GraduationCap,
-  type LucideIcon,
 } from 'lucide-react';
-
-// Notification type config with icons and colors
-type NotificationTypeKey = 
-  | 'ACCOUNT_ACTIVATED' | 'NEW_REGISTRATION' | 'PROFILE_COMPLETED'
-  | 'CONTRACT_ASSIGNED' | 'CONTRACT_SIGNED' | 'CONTRACT_REMINDER' | 'CONTRACT_EXPIRED' | 'CONTRACT_CANCELLED'
-  | 'EVENT_INVITATION' | 'EVENT_REMINDER' | 'EVENT_UPDATED' | 'EVENT_CANCELLED'
-  | 'SIMULATION_ASSIGNED' | 'SIMULATION_REMINDER' | 'SIMULATION_READY' | 'SIMULATION_STARTED' | 'SIMULATION_RESULTS' | 'SIMULATION_COMPLETED'
-  | 'STAFF_ABSENCE' | 'ABSENCE_REQUEST' | 'ABSENCE_CONFIRMED' | 'ABSENCE_REJECTED' | 'SUBSTITUTION_ASSIGNED'
-  | 'QUESTION_FEEDBACK' | 'OPEN_ANSWER_TO_REVIEW'
-  | 'MATERIAL_AVAILABLE' | 'MESSAGE_RECEIVED'
-  | 'JOB_APPLICATION' | 'CONTACT_REQUEST'
-  | 'ATTENDANCE_RECORDED' | 'SYSTEM_ALERT' | 'GENERAL';
-
-const notificationConfig: Record<NotificationTypeKey, { icon: LucideIcon; bgClass: string; iconColor: string }> = {
-  // Account & Auth
-  ACCOUNT_ACTIVATED: { icon: UserCheck, bgClass: 'bg-emerald-100 dark:bg-emerald-900/30', iconColor: 'text-emerald-600 dark:text-emerald-400' },
-  NEW_REGISTRATION: { icon: UserPlus, bgClass: 'bg-blue-100 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400' },
-  PROFILE_COMPLETED: { icon: UserPlus, bgClass: 'bg-purple-100 dark:bg-purple-900/30', iconColor: 'text-purple-600 dark:text-purple-400' },
-  // Contracts
-  CONTRACT_ASSIGNED: { icon: FileText, bgClass: 'bg-blue-100 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400' },
-  CONTRACT_SIGNED: { icon: FileSignature, bgClass: 'bg-green-100 dark:bg-green-900/30', iconColor: 'text-green-600 dark:text-green-400' },
-  CONTRACT_REMINDER: { icon: FileText, bgClass: 'bg-amber-100 dark:bg-amber-900/30', iconColor: 'text-amber-600 dark:text-amber-400' },
-  CONTRACT_EXPIRED: { icon: XCircle, bgClass: 'bg-red-100 dark:bg-red-900/30', iconColor: 'text-red-600 dark:text-red-400' },
-  CONTRACT_CANCELLED: { icon: XCircle, bgClass: 'bg-red-100 dark:bg-red-900/30', iconColor: 'text-red-600 dark:text-red-400' },
-  // Events & Calendar
-  EVENT_INVITATION: { icon: Calendar, bgClass: 'bg-indigo-100 dark:bg-indigo-900/30', iconColor: 'text-indigo-600 dark:text-indigo-400' },
-  EVENT_REMINDER: { icon: Calendar, bgClass: 'bg-amber-100 dark:bg-amber-900/30', iconColor: 'text-amber-600 dark:text-amber-400' },
-  EVENT_UPDATED: { icon: Calendar, bgClass: 'bg-blue-100 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400' },
-  EVENT_CANCELLED: { icon: Calendar, bgClass: 'bg-red-100 dark:bg-red-900/30', iconColor: 'text-red-600 dark:text-red-400' },
-  // Simulations
-  SIMULATION_ASSIGNED: { icon: ClipboardCheck, bgClass: 'bg-cyan-100 dark:bg-cyan-900/30', iconColor: 'text-cyan-600 dark:text-cyan-400' },
-  SIMULATION_REMINDER: { icon: ClipboardCheck, bgClass: 'bg-amber-100 dark:bg-amber-900/30', iconColor: 'text-amber-600 dark:text-amber-400' },
-  SIMULATION_READY: { icon: ClipboardCheck, bgClass: 'bg-green-100 dark:bg-green-900/30', iconColor: 'text-green-600 dark:text-green-400' },
-  SIMULATION_STARTED: { icon: ClipboardCheck, bgClass: 'bg-blue-100 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400' },
-  SIMULATION_RESULTS: { icon: ClipboardCheck, bgClass: 'bg-purple-100 dark:bg-purple-900/30', iconColor: 'text-purple-600 dark:text-purple-400' },
-  SIMULATION_COMPLETED: { icon: ClipboardCheck, bgClass: 'bg-green-100 dark:bg-green-900/30', iconColor: 'text-green-600 dark:text-green-400' },
-  // Staff Absences
-  STAFF_ABSENCE: { icon: UserCheck, bgClass: 'bg-orange-100 dark:bg-orange-900/30', iconColor: 'text-orange-600 dark:text-orange-400' },
-  ABSENCE_REQUEST: { icon: UserCheck, bgClass: 'bg-amber-100 dark:bg-amber-900/30', iconColor: 'text-amber-600 dark:text-amber-400' },
-  ABSENCE_CONFIRMED: { icon: Check, bgClass: 'bg-green-100 dark:bg-green-900/30', iconColor: 'text-green-600 dark:text-green-400' },
-  ABSENCE_REJECTED: { icon: XCircle, bgClass: 'bg-red-100 dark:bg-red-900/30', iconColor: 'text-red-600 dark:text-red-400' },
-  SUBSTITUTION_ASSIGNED: { icon: Users, bgClass: 'bg-blue-100 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400' },
-  // Questions
-  QUESTION_FEEDBACK: { icon: MessageSquare, bgClass: 'bg-yellow-100 dark:bg-yellow-900/30', iconColor: 'text-yellow-600 dark:text-yellow-400' },
-  OPEN_ANSWER_TO_REVIEW: { icon: BookOpen, bgClass: 'bg-purple-100 dark:bg-purple-900/30', iconColor: 'text-purple-600 dark:text-purple-400' },
-  // Materials
-  MATERIAL_AVAILABLE: { icon: FolderOpen, bgClass: 'bg-teal-100 dark:bg-teal-900/30', iconColor: 'text-teal-600 dark:text-teal-400' },
-  // Messages
-  MESSAGE_RECEIVED: { icon: MessageSquare, bgClass: 'bg-blue-100 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400' },
-  // Applications
-  JOB_APPLICATION: { icon: Briefcase, bgClass: 'bg-amber-100 dark:bg-amber-900/30', iconColor: 'text-amber-600 dark:text-amber-400' },
-  CONTACT_REQUEST: { icon: Mail, bgClass: 'bg-pink-100 dark:bg-pink-900/30', iconColor: 'text-pink-600 dark:text-pink-400' },
-  // Attendance
-  ATTENDANCE_RECORDED: { icon: GraduationCap, bgClass: 'bg-green-100 dark:bg-green-900/30', iconColor: 'text-green-600 dark:text-green-400' },
-  // System
-  SYSTEM_ALERT: { icon: AlertTriangle, bgClass: 'bg-red-100 dark:bg-red-900/30', iconColor: 'text-red-600 dark:text-red-400' },
-  GENERAL: { icon: Bell, bgClass: 'bg-gray-100 dark:bg-gray-800', iconColor: 'text-gray-600 dark:text-gray-400' },
-};
 
 type FilterType = 'all' | 'unread' | 'archived';
 
 interface NotificationsPageProps {
-  basePath: string; // '/admin', '/collaboratore', '/studente'
-  userRole: 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
+  userRole: UserRole;
 }
 
-export default function NotificationsPageContent({ basePath, userRole }: NotificationsPageProps) {
+export default function NotificationsPageContent({ userRole }: NotificationsPageProps) {
   const router = useRouter();
   const [filter, setFilter] = useState<FilterType>('all');
   const [showArchiveAllModal, setShowArchiveAllModal] = useState(false);
@@ -206,11 +138,12 @@ export default function NotificationsPageContent({ basePath, userRole }: Notific
     }).format(d);
   };
 
-  // Handle notification click
+  // Handle notification click - use centralized routing logic
   const handleNotificationClick = (notification: {
     id: string;
     type: string;
     linkUrl?: string | null;
+    linkEntityId?: string | null;
     isRead: boolean;
   }) => {
     // Mark as read if not already
@@ -218,49 +151,29 @@ export default function NotificationsPageContent({ basePath, userRole }: Notific
       markAsReadMutation.mutate({ notificationId: notification.id });
     }
 
-    // Navigate if linkUrl is provided
+    // Priority 1: Use linkUrl if provided (direct link from notification creation)
     if (notification.linkUrl) {
       router.push(notification.linkUrl);
       return;
     }
 
-    // Fallback navigation based on notification type
-    switch (notification.type) {
-      case 'JOB_APPLICATION':
-        if (userRole === 'ADMIN') router.push('/admin/candidature');
-        break;
-      case 'CONTACT_REQUEST':
-        if (userRole === 'ADMIN') router.push('/admin/richieste');
-        break;
-      case 'CONTRACT_ASSIGNED':
-      case 'CONTRACT_SIGNED':
-      case 'CONTRACT_REMINDER':
-      case 'CONTRACT_EXPIRED':
-      case 'CONTRACT_CANCELLED':
-        if (userRole === 'ADMIN') router.push('/admin/contratti');
-        break;
-      case 'SIMULATION_ASSIGNED':
-      case 'SIMULATION_REMINDER':
-      case 'SIMULATION_READY':
-      case 'SIMULATION_STARTED':
-      case 'SIMULATION_RESULTS':
-      case 'SIMULATION_COMPLETED':
-        router.push(`${basePath}/simulazioni`);
-        break;
-      case 'MATERIAL_AVAILABLE':
-        router.push(`${basePath}/materiali`);
-        break;
-      case 'EVENT_INVITATION':
-      case 'EVENT_REMINDER':
-      case 'EVENT_UPDATED':
-      case 'EVENT_CANCELLED':
-        router.push(`${basePath}/calendario`);
-        break;
-      case 'ACCOUNT_ACTIVATED':
-      case 'PROFILE_COMPLETED':
-      case 'NEW_REGISTRATION':
-        if (userRole === 'ADMIN') router.push('/admin/utenti');
-        break;
+    // Priority 2: Generate route from notification type using centralized config
+    const notificationType = notification.type as NotificationType;
+    const routeParams = notification.linkEntityId ? {
+      entityId: notification.linkEntityId,
+      contractId: notification.linkEntityId,
+      eventId: notification.linkEntityId,
+      simulationId: notification.linkEntityId,
+      conversationId: notification.linkEntityId,
+      questionId: notification.linkEntityId,
+      applicationId: notification.linkEntityId,
+      requestId: notification.linkEntityId,
+      studentId: notification.linkEntityId,
+    } : undefined;
+    
+    const route = getNotificationRoute(notificationType, userRole, routeParams);
+    if (route) {
+      router.push(route);
     }
   };
 
@@ -375,7 +288,9 @@ export default function NotificationsPageContent({ basePath, userRole }: Notific
           <div className="divide-y divide-gray-200 dark:divide-gray-700">
             {notifications.map((notification) => {
               if (!notification.id || !notification.type) return null;
-              const config = notificationConfig[notification.type as NotificationTypeKey] || notificationConfig.GENERAL;
+              // Use centralized notification config
+              const notificationType = notification.type as NotificationType;
+              const config = notificationConfigs[notificationType] || notificationConfigs.GENERAL;
               const NotificationIcon = config.icon;
               const isArchived = notification.isArchived;
 
@@ -386,6 +301,7 @@ export default function NotificationsPageContent({ basePath, userRole }: Notific
                     id: notification.id,
                     type: notification.type,
                     linkUrl: notification.linkUrl,
+                    linkEntityId: notification.linkEntityId,
                     isRead: notification.isRead ?? false,
                   })}
                   className={`p-5 transition-colors cursor-pointer ${
@@ -394,11 +310,11 @@ export default function NotificationsPageContent({ basePath, userRole }: Notific
                 >
                   <div className="flex items-start gap-4">
                     {/* Icon */}
-                    <div className={`w-10 h-10 rounded-xl ${config.bgClass} flex items-center justify-center flex-shrink-0`}>
+                    <div className={`w-10 h-10 rounded-xl ${config.iconBgClass} flex items-center justify-center flex-shrink-0`}>
                       {notification.isUrgent ? (
                         <AlertTriangle className={`w-5 h-5 ${colors.status.warning.text}`} />
                       ) : (
-                        <NotificationIcon className={`w-5 h-5 ${config.iconColor}`} />
+                        <NotificationIcon className={`w-5 h-5 ${config.iconColorClass}`} />
                       )}
                     </div>
 

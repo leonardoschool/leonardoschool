@@ -1,237 +1,46 @@
 /**
- * Unified Notification Service
+ * Unified Notification Service (Server-Side)
  * 
- * This service handles creating notifications for all user types (admin, collaborator, student)
- * using the new unified Notification model, while maintaining backward compatibility
- * with AdminNotification during the transition period.
+ * This module re-exports the notification helpers from lib/notifications
+ * and adds server-specific functionality like email sending.
+ * 
+ * Use this module for server-side notification creation.
+ * The lib/notifications module is shared between client and server.
+ * 
+ * @example
+ * import * as notificationService from '@/server/services/notificationService';
+ * 
+ * await notificationService.notifyProfileCompleted(prisma, studentId, studentName, studentEmail);
  */
 
 import type { PrismaClient } from '@prisma/client';
 import * as emailService from './emailService';
+import {
+  notifications,
+  createNotification,
+  createBulkNotifications,
+  notifyAdmins,
+  notifyStaff,
+  notifyByRole,
+  deleteNotificationsForEntity,
+  archiveReadNotifications,
+  getUnreadCount,
+} from '@/lib/notifications';
 
-// Types for notification - these will be available after prisma generate
-type NotificationType = 
-  | 'ACCOUNT_ACTIVATED'
-  | 'NEW_REGISTRATION'
-  | 'PROFILE_COMPLETED'
-  | 'CONTRACT_ASSIGNED'
-  | 'CONTRACT_SIGNED'
-  | 'CONTRACT_REMINDER'
-  | 'CONTRACT_EXPIRED'
-  | 'CONTRACT_CANCELLED'
-  | 'EVENT_INVITATION'
-  | 'EVENT_REMINDER'
-  | 'EVENT_UPDATED'
-  | 'EVENT_CANCELLED'
-  | 'SIMULATION_ASSIGNED'
-  | 'SIMULATION_REMINDER'
-  | 'SIMULATION_READY'
-  | 'SIMULATION_STARTED'
-  | 'SIMULATION_RESULTS'
-  | 'SIMULATION_COMPLETED'
-  | 'STAFF_ABSENCE'
-  | 'ABSENCE_REQUEST'
-  | 'ABSENCE_CONFIRMED'
-  | 'ABSENCE_REJECTED'
-  | 'SUBSTITUTION_ASSIGNED'
-  | 'QUESTION_FEEDBACK'
-  | 'OPEN_ANSWER_TO_REVIEW'
-  | 'MATERIAL_AVAILABLE'
-  | 'MESSAGE_RECEIVED'
-  | 'JOB_APPLICATION'
-  | 'CONTACT_REQUEST'
-  | 'ATTENDANCE_RECORDED'
-  | 'SYSTEM_ALERT'
-  | 'GENERAL';
+// Re-export core functions for backward compatibility
+export {
+  createNotification,
+  createBulkNotifications,
+  notifyAdmins,
+  notifyStaff,
+  notifyByRole,
+  deleteNotificationsForEntity,
+  archiveReadNotifications,
+  getUnreadCount,
+};
 
-type NotificationChannel = 'IN_APP' | 'EMAIL' | 'BOTH';
-
-type UserRole = 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
-
-// Types for notification creation
-interface CreateNotificationParams {
-  userId: string;
-  type: NotificationType;
-  title: string;
-  message: string;
-  channel?: NotificationChannel;
-  linkUrl?: string;
-  linkType?: string;
-  linkEntityId?: string;
-  isUrgent?: boolean;
-  groupKey?: string;
-  expiresAt?: Date;
-  sendEmail?: boolean;
-  emailData?: Record<string, unknown>;
-}
-
-interface BulkNotificationParams {
-  userIds: string[];
-  type: NotificationType;
-  title: string;
-  message: string;
-  channel?: NotificationChannel;
-  linkUrl?: string;
-  linkType?: string;
-  linkEntityId?: string;
-  isUrgent?: boolean;
-  groupKey?: string;
-  expiresAt?: Date;
-}
-
-// Notification creation result
-interface NotificationResult {
-  success: boolean;
-  notificationId?: string;
-  error?: string;
-}
-
-/**
- * Create a notification for a single user
- */
-export async function createNotification(
-  prisma: PrismaClient,
-  params: CreateNotificationParams
-): Promise<NotificationResult> {
-  try {
-    const notification = await prisma.notification.create({
-      data: {
-        userId: params.userId,
-        type: params.type,
-        title: params.title,
-        message: params.message,
-        channel: params.channel || 'IN_APP',
-        linkUrl: params.linkUrl,
-        linkType: params.linkType,
-        linkEntityId: params.linkEntityId,
-        isUrgent: params.isUrgent || false,
-        groupKey: params.groupKey,
-        expiresAt: params.expiresAt,
-      },
-    });
-
-    // If email should be sent, check user preferences and send
-    if (params.sendEmail && (params.channel === 'EMAIL' || params.channel === 'BOTH')) {
-      // Check user notification preferences
-      const preference = await prisma.notificationPreference.findUnique({
-        where: {
-          userId_notificationType: {
-            userId: params.userId,
-            notificationType: params.type,
-          },
-        },
-      });
-
-      // If no preference exists or email is enabled, try to send email
-      if (!preference || preference.emailEnabled) {
-        // Mark email as pending - actual sending happens via email service
-        await prisma.notification.update({
-          where: { id: notification.id },
-          data: { emailSent: false },
-        });
-      }
-    }
-
-    return { success: true, notificationId: notification.id };
-  } catch (error) {
-    console.error('Failed to create notification:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-  }
-}
-
-/**
- * Create notifications for multiple users at once
- */
-export async function createBulkNotifications(
-  prisma: PrismaClient,
-  params: BulkNotificationParams
-): Promise<{ success: boolean; count: number; errors: string[] }> {
-  const errors: string[] = [];
-  let successCount = 0;
-
-  // Use transaction for bulk insert
-  try {
-    await prisma.notification.createMany({
-      data: params.userIds.map(userId => ({
-        userId,
-        type: params.type,
-        title: params.title,
-        message: params.message,
-        channel: params.channel || 'IN_APP',
-        linkUrl: params.linkUrl,
-        linkType: params.linkType,
-        linkEntityId: params.linkEntityId,
-        isUrgent: params.isUrgent || false,
-        groupKey: params.groupKey,
-        expiresAt: params.expiresAt,
-      })),
-    });
-    successCount = params.userIds.length;
-  } catch (error) {
-    errors.push(error instanceof Error ? error.message : 'Bulk insert failed');
-  }
-
-  return { success: errors.length === 0, count: successCount, errors };
-}
-
-/**
- * Create notifications for all users with a specific role
- */
-export async function notifyByRole(
-  prisma: PrismaClient,
-  role: UserRole,
-  params: Omit<BulkNotificationParams, 'userIds'>
-): Promise<{ success: boolean; count: number }> {
-  const users = await prisma.user.findMany({
-    where: { role, isActive: true },
-    select: { id: true },
-  });
-
-  const result = await createBulkNotifications(prisma, {
-    ...params,
-    userIds: users.map(u => u.id),
-  });
-
-  return { success: result.success, count: result.count };
-}
-
-/**
- * Notify all admins
- */
-export async function notifyAdmins(
-  prisma: PrismaClient,
-  params: Omit<BulkNotificationParams, 'userIds'>
-): Promise<{ success: boolean; count: number }> {
-  return notifyByRole(prisma, 'ADMIN', params);
-}
-
-/**
- * Notify all staff (admins + collaborators)
- */
-export async function notifyStaff(
-  prisma: PrismaClient,
-  params: Omit<BulkNotificationParams, 'userIds'>
-): Promise<{ success: boolean; count: number }> {
-  const users = await prisma.user.findMany({
-    where: { 
-      role: { in: ['ADMIN', 'COLLABORATOR'] },
-      isActive: true,
-    },
-    select: { id: true },
-  });
-
-  const result = await createBulkNotifications(prisma, {
-    ...params,
-    userIds: users.map(u => u.id),
-  });
-
-  return { success: result.success, count: result.count };
-}
-
-// ==================== SPECIFIC NOTIFICATION CREATORS ====================
+// ==================== SERVER-SIDE NOTIFICATION CREATORS ====================
+// These functions combine notification creation with email sending
 
 /**
  * Notify admins when a student completes their profile
@@ -242,24 +51,16 @@ export async function notifyProfileCompleted(
   studentName: string,
   studentEmail: string
 ): Promise<void> {
-  // Create notifications for all admins
-  await notifyAdmins(prisma, {
-    type: 'PROFILE_COMPLETED',
-    title: 'Nuovo profilo completato',
-    message: `${studentName} ha completato il profilo anagrafico`,
-    linkType: 'student',
-    linkEntityId: studentId,
-    linkUrl: `/admin/studenti/${studentId}`,
+  // Get the user ID for the student
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: { userId: true },
   });
 
-  // Also create legacy AdminNotification for backward compatibility
-  await prisma.adminNotification.create({
-    data: {
-      type: 'PROFILE_COMPLETED',
-      title: 'Nuovo profilo completato',
-      message: `${studentName} ha completato il profilo anagrafico`,
-      studentId,
-    },
+  // Create notifications for all admins
+  await notifications.profileCompleted(prisma, {
+    studentUserId: student?.userId || studentId,
+    studentName,
   });
 
   // Send email notification
@@ -268,7 +69,7 @@ export async function notifyProfileCompleted(
     studentEmail,
     studentId,
   }).catch(err => {
-    console.error('Failed to send profile completed admin notification:', err);
+    console.error('[NotificationService] Failed to send profile completed admin notification:', err);
   });
 }
 
@@ -290,40 +91,13 @@ export async function notifyContractAssigned(
     expiresAt: Date;
   }
 ): Promise<void> {
-  // Notify the recipient (student or collaborator)
-  await createNotification(prisma, {
-    userId: params.recipientUserId,
-    type: 'CONTRACT_ASSIGNED',
-    title: 'Nuovo contratto da firmare',
-    message: `Ti è stato assegnato il contratto "${params.templateName}"`,
-    linkType: 'contract',
-    linkEntityId: params.contractId,
-    linkUrl: params.signLink,
-    isUrgent: true,
-    channel: 'BOTH',
-    sendEmail: true,
-  });
-
-  // Notify admins
-  await notifyAdmins(prisma, {
-    type: 'CONTRACT_ASSIGNED',
-    title: 'Contratto assegnato',
-    message: `Contratto "${params.templateName}" assegnato a ${params.recipientName}`,
-    linkType: 'contract',
-    linkEntityId: params.contractId,
-    linkUrl: `/admin/contratti/${params.contractId}`,
-  });
-
-  // Legacy AdminNotification
-  await prisma.adminNotification.create({
-    data: {
-      type: 'CONTRACT_ASSIGNED',
-      title: 'Contratto assegnato',
-      message: `Contratto "${params.templateName}" assegnato a ${params.recipientName}`,
-      studentId: params.recipientType === 'STUDENT' ? params.recipientProfileId : undefined,
-      collaboratorId: params.recipientType === 'COLLABORATOR' ? params.recipientProfileId : undefined,
-      contractId: params.contractId,
-    },
+  // Create notifications
+  await notifications.contractAssigned(prisma, {
+    recipientUserId: params.recipientUserId,
+    recipientName: params.recipientName,
+    contractId: params.contractId,
+    contractName: params.templateName,
+    signLink: params.signLink,
   });
 
   // Send email to recipient
@@ -335,7 +109,7 @@ export async function notifyContractAssigned(
     price: params.price,
     expiresAt: params.expiresAt,
   }).catch(err => {
-    console.error('Failed to send contract assigned email:', err);
+    console.error('[NotificationService] Failed to send contract assigned email:', err);
   });
 }
 
@@ -356,40 +130,12 @@ export async function notifyContractSigned(
     price: number;
   }
 ): Promise<void> {
-  // Notify the signer (confirmation)
-  await createNotification(prisma, {
-    userId: params.signerUserId,
-    type: 'CONTRACT_SIGNED',
-    title: 'Contratto firmato',
-    message: `Hai firmato con successo il contratto "${params.templateName}"`,
-    linkType: 'contract',
-    linkEntityId: params.contractId,
-    channel: 'BOTH',
-    sendEmail: true,
-  });
-
-  // Notify admins
-  await notifyAdmins(prisma, {
-    type: 'CONTRACT_SIGNED',
-    title: 'Contratto firmato',
-    message: `${params.signerName} ha firmato il contratto "${params.templateName}"`,
-    linkType: 'contract',
-    linkEntityId: params.contractId,
-    linkUrl: `/admin/contratti/${params.contractId}`,
-    isUrgent: true,
-  });
-
-  // Legacy AdminNotification
-  await prisma.adminNotification.create({
-    data: {
-      type: 'CONTRACT_SIGNED',
-      title: 'Contratto firmato',
-      message: `${params.signerName} ha firmato il contratto "${params.templateName}"`,
-      studentId: params.signerType === 'STUDENT' ? params.signerProfileId : null,
-      collaboratorId: params.signerType === 'COLLABORATOR' ? params.signerProfileId : null,
-      contractId: params.contractId,
-      isUrgent: true,
-    },
+  // Create notifications
+  await notifications.contractSigned(prisma, {
+    signerUserId: params.signerUserId,
+    signerName: params.signerName,
+    contractId: params.contractId,
+    contractName: params.templateName,
   });
 
   // Send confirmation email to signer
@@ -400,7 +146,7 @@ export async function notifyContractSigned(
     signedAt: params.signedAt,
     price: params.price,
   }).catch(err => {
-    console.error('Failed to send contract signed confirmation email:', err);
+    console.error('[NotificationService] Failed to send contract signed confirmation email:', err);
   });
 
   // Send notification email to admin
@@ -410,7 +156,7 @@ export async function notifyContractSigned(
     contractName: params.templateName,
     signedAt: params.signedAt,
   }).catch(err => {
-    console.error('Failed to send contract signed admin notification:', err);
+    console.error('[NotificationService] Failed to send contract signed admin notification:', err);
   });
 }
 
@@ -427,25 +173,10 @@ export async function notifyAccountActivated(
     loginUrl: string;
   }
 ): Promise<void> {
-  // Notify the user
-  await createNotification(prisma, {
+  // Create notification
+  await notifications.accountActivated(prisma, {
     userId: params.userId,
-    type: 'ACCOUNT_ACTIVATED',
-    title: 'Account attivato',
-    message: 'Il tuo account è stato attivato. Ora puoi accedere a tutte le funzionalità.',
-    linkUrl: params.loginUrl,
-    channel: 'BOTH',
-    sendEmail: true,
-  });
-
-  // Legacy AdminNotification (for tracking)
-  await prisma.adminNotification.create({
-    data: {
-      type: 'ACCOUNT_ACTIVATED',
-      title: 'Account attivato',
-      message: `Account di ${params.userName} è stato attivato`,
-      studentId: params.profileId,
-    },
+    userName: params.userName,
   });
 
   // Send email
@@ -454,7 +185,7 @@ export async function notifyAccountActivated(
     studentEmail: params.userEmail,
     loginUrl: params.loginUrl,
   }).catch(err => {
-    console.error('Failed to send account activated email:', err);
+    console.error('[NotificationService] Failed to send account activated email:', err);
   });
 }
 
@@ -472,36 +203,11 @@ export async function notifyContractCancelled(
     recipientType?: 'STUDENT' | 'COLLABORATOR';
   }
 ): Promise<void> {
-  // Notify the recipient if we have their userId
-  if (params.recipientUserId) {
-    await createNotification(prisma, {
-      userId: params.recipientUserId,
-      type: 'CONTRACT_CANCELLED',
-      title: 'Contratto revocato',
-      message: `Il contratto "${params.templateName}" è stato revocato.`,
-      linkType: 'contract',
-      channel: 'BOTH',
-      sendEmail: true,
-    });
-  }
-
-  // Notify admins
-  await notifyAdmins(prisma, {
-    type: 'CONTRACT_CANCELLED',
-    title: 'Contratto revocato',
-    message: `Contratto "${params.templateName}" per ${params.recipientName} è stato revocato ed eliminato`,
-    linkType: 'contract',
-  });
-
-  // Legacy AdminNotification
-  await prisma.adminNotification.create({
-    data: {
-      type: 'CONTRACT_CANCELLED',
-      title: 'Contratto revocato',
-      message: `Contratto "${params.templateName}" per ${params.recipientName} è stato revocato ed eliminato`,
-      studentId: params.recipientType === 'STUDENT' ? params.recipientProfileId : undefined,
-      collaboratorId: params.recipientType === 'COLLABORATOR' ? params.recipientProfileId : undefined,
-    },
+  await notifications.contractCancelled(prisma, {
+    recipientUserId: params.recipientUserId,
+    recipientName: params.recipientName,
+    contractId: params.contractId,
+    contractName: params.templateName,
   });
 }
 
@@ -518,23 +224,10 @@ export async function notifyJobApplication(
     materia: string;
   }
 ): Promise<void> {
-  await notifyAdmins(prisma, {
-    type: 'JOB_APPLICATION',
-    title: 'Nuova candidatura',
-    message: `${params.applicantName} ha inviato una candidatura per ${params.materia}`,
-    linkType: 'job_application',
-    linkEntityId: params.applicationId,
-    linkUrl: `/admin/candidature/${params.applicationId}`,
-    isUrgent: false,
-  });
-
-  // Legacy AdminNotification
-  await prisma.adminNotification.create({
-    data: {
-      type: 'JOB_APPLICATION',
-      title: 'Nuova candidatura',
-      message: `${params.applicantName} ha inviato una candidatura per ${params.materia}`,
-    },
+  await notifications.jobApplication(prisma, {
+    applicationId: params.applicationId,
+    applicantName: params.applicantName,
+    subject: params.materia,
   });
 }
 
@@ -550,22 +243,10 @@ export async function notifyContactRequest(
     subject: string;
   }
 ): Promise<void> {
-  await notifyAdmins(prisma, {
-    type: 'CONTACT_REQUEST',
-    title: 'Nuova richiesta di contatto',
-    message: `${params.senderName}: ${params.subject}`,
-    linkType: 'contact_request',
-    linkEntityId: params.requestId,
-    linkUrl: `/admin/richieste/${params.requestId}`,
-  });
-
-  // Legacy AdminNotification
-  await prisma.adminNotification.create({
-    data: {
-      type: 'CONTACT_REQUEST',
-      title: 'Nuova richiesta di contatto',
-      message: `${params.senderName}: ${params.subject}`,
-    },
+  await notifications.contactRequest(prisma, {
+    requestId: params.requestId,
+    senderName: params.senderName,
+    subject: params.subject,
   });
 }
 
@@ -583,25 +264,18 @@ export async function notifyEventInvitation(
     sendEmail: boolean;
   }
 ): Promise<void> {
-  const formattedDate = params.eventDate.toLocaleDateString('it-IT', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+  // Get user role
+  const user = await prisma.user.findUnique({
+    where: { id: params.inviteeUserId },
+    select: { role: true },
   });
 
-  await createNotification(prisma, {
-    userId: params.inviteeUserId,
-    type: 'EVENT_INVITATION',
-    title: 'Nuovo invito evento',
-    message: `Sei stato invitato a: ${params.eventTitle} - ${formattedDate}`,
-    linkType: 'event',
-    linkEntityId: params.eventId,
-    linkUrl: `/calendario/${params.eventId}`,
-    channel: params.sendEmail ? 'BOTH' : 'IN_APP',
-    sendEmail: params.sendEmail,
+  await notifications.eventInvitation(prisma, {
+    inviteeUserId: params.inviteeUserId,
+    eventId: params.eventId,
+    eventTitle: params.eventTitle,
+    eventDate: params.eventDate,
+    inviteeRole: (user?.role as 'ADMIN' | 'COLLABORATOR' | 'STUDENT') || 'STUDENT',
   });
 }
 
@@ -617,19 +291,7 @@ export async function notifyEventCancelled(
     affectedUserIds: string[];
   }
 ): Promise<void> {
-  const message = params.reason 
-    ? `L'evento "${params.eventTitle}" è stato annullato. Motivo: ${params.reason}`
-    : `L'evento "${params.eventTitle}" è stato annullato.`;
-
-  await createBulkNotifications(prisma, {
-    userIds: params.affectedUserIds,
-    type: 'EVENT_CANCELLED',
-    title: 'Evento annullato',
-    message,
-    linkType: 'event',
-    linkEntityId: params.eventId,
-    isUrgent: true,
-  });
+  await notifications.eventCancelled(prisma, params);
 }
 
 /**
@@ -647,25 +309,13 @@ export async function notifyStaffAbsence(
     affectedStudentIds: string[];
   }
 ): Promise<void> {
-  const formattedStart = params.startDate.toLocaleDateString('it-IT');
-  const formattedEnd = params.endDate.toLocaleDateString('it-IT');
-  const dateRange = formattedStart === formattedEnd 
-    ? formattedStart 
-    : `${formattedStart} - ${formattedEnd}`;
-
-  let message = `${params.staffName} sarà assente il ${dateRange}.`;
-  if (params.affectedEventTitle) {
-    message += ` L'evento "${params.affectedEventTitle}" potrebbe subire modifiche.`;
-  }
-
-  await createBulkNotifications(prisma, {
-    userIds: params.affectedStudentIds,
-    type: 'STAFF_ABSENCE',
-    title: 'Assenza docente',
-    message,
-    linkType: params.affectedEventId ? 'event' : undefined,
-    linkEntityId: params.affectedEventId,
-    isUrgent: true,
+  await notifications.staffAbsence(prisma, {
+    affectedStudentIds: params.affectedStudentIds,
+    staffName: params.staffName,
+    startDate: params.startDate,
+    endDate: params.endDate,
+    affectedEventTitle: params.affectedEventTitle,
+    affectedEventId: params.affectedEventId,
   });
 }
 
@@ -681,27 +331,7 @@ export async function notifySimulationAssigned(
     assignedUserIds: string[];
   }
 ): Promise<void> {
-  let message = `Ti è stata assegnata la simulazione "${params.simulationTitle}".`;
-  if (params.dueDate) {
-    const formattedDate = params.dueDate.toLocaleDateString('it-IT', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-    message += ` Scadenza: ${formattedDate}`;
-  }
-
-  await createBulkNotifications(prisma, {
-    userIds: params.assignedUserIds,
-    type: 'SIMULATION_ASSIGNED',
-    title: 'Nuova simulazione assegnata',
-    message,
-    linkType: 'simulation',
-    linkEntityId: params.simulationId,
-    linkUrl: `/studente/simulazioni/${params.simulationId}`,
-  });
+  await notifications.simulationAssigned(prisma, params);
 }
 
 /**
@@ -717,17 +347,7 @@ export async function notifySimulationResults(
     ranking?: number;
   }
 ): Promise<void> {
-  await createNotification(prisma, {
-    userId: params.studentUserId,
-    type: 'SIMULATION_RESULTS',
-    title: 'Risultati disponibili',
-    message: `I risultati della simulazione "${params.simulationTitle}" sono ora disponibili. Punteggio: ${params.score}${params.ranking ? `, Posizione: ${params.ranking}°` : ''}`,
-    linkType: 'simulation_result',
-    linkEntityId: params.simulationId,
-    linkUrl: `/studente/simulazioni/${params.simulationId}/risultati`,
-    channel: 'BOTH',
-    sendEmail: true,
-  });
+  await notifications.simulationResults(prisma, params);
 }
 
 /**
@@ -743,64 +363,158 @@ export async function notifyMessageReceived(
     messagePreview: string;
   }
 ): Promise<void> {
-  const preview = params.messagePreview.length > 50 
-    ? params.messagePreview.substring(0, 50) + '...' 
-    : params.messagePreview;
+  // Get recipient role
+  const user = await prisma.user.findUnique({
+    where: { id: params.recipientUserId },
+    select: { role: true },
+  });
 
-  await createNotification(prisma, {
-    userId: params.recipientUserId,
-    type: 'MESSAGE_RECEIVED',
-    title: `Nuovo messaggio da ${params.senderName}`,
-    message: preview,
-    linkType: 'conversation',
-    linkEntityId: params.conversationId,
-    linkUrl: `/messaggi/${params.conversationId}`,
-    groupKey: `conversation_${params.conversationId}`,
-    channel: 'IN_APP', // Messages usually in-app only, user can change preferences
+  await notifications.messageReceived(prisma, {
+    recipientUserId: params.recipientUserId,
+    conversationId: params.conversationId,
+    senderName: params.senderName,
+    messagePreview: params.messagePreview,
+    recipientRole: (user?.role as 'ADMIN' | 'COLLABORATOR' | 'STUDENT') || 'STUDENT',
   });
 }
 
-// ==================== USER UTILITY FUNCTIONS ====================
+// ==================== UTILITY FUNCTIONS ====================
 
 /**
- * Archive all read notifications for a user
- * Archived notifications are hidden from the main view but kept for reference
+ * Notify about contract reminder (for scheduled jobs)
  */
-export async function archiveReadNotifications(
+export async function notifyContractReminder(
   prisma: PrismaClient,
-  userId: string
-): Promise<{ archived: number }> {
-  const result = await prisma.notification.updateMany({
-    where: {
-      userId,
-      isRead: true,
-      isArchived: false,
-    },
-    data: {
-      isArchived: true,
-    },
+  params: {
+    recipientUserId: string;
+    recipientEmail: string;
+    recipientName: string;
+    contractId: string;
+    contractName: string;
+    expiresAt: Date;
+    signLink: string;
+  }
+): Promise<void> {
+  await notifications.contractReminder(prisma, {
+    recipientUserId: params.recipientUserId,
+    contractId: params.contractId,
+    contractName: params.contractName,
+    expiresAt: params.expiresAt,
+    signLink: params.signLink,
   });
 
-  return { archived: result.count };
+  // TODO: Add sendContractReminderEmail to emailService when needed
+  // await emailService.sendContractReminderEmail({...})
 }
 
 /**
- * Bulk delete notifications for a specific entity
- * Useful when an entity is deleted (e.g., contract, event, simulation)
+ * Notify about contract expiration
  */
-export async function deleteNotificationsForEntity(
+export async function notifyContractExpired(
   prisma: PrismaClient,
-  entityType: string,
-  entityId: string
-): Promise<{ deleted: number }> {
-  const result = await prisma.notification.deleteMany({
-    where: {
-      linkEntityType: entityType,
-      linkEntityId: entityId,
-    },
+  params: {
+    recipientUserId: string;
+    recipientEmail: string;
+    recipientName: string;
+    contractId: string;
+    contractName: string;
+  }
+): Promise<void> {
+  await notifications.contractExpired(prisma, {
+    recipientUserId: params.recipientUserId,
+    contractId: params.contractId,
+    contractName: params.contractName,
   });
 
-  return { deleted: result.count };
+  // TODO: Add sendContractExpiredEmail to emailService when needed
+  // await emailService.sendContractExpiredEmail({...})
+}
+
+/**
+ * Notify about simulation results
+ */
+export async function notifySimulationResultsAvailable(
+  prisma: PrismaClient,
+  params: {
+    simulationId: string;
+    simulationTitle: string;
+    studentUserId: string;
+    studentEmail: string;
+    studentName: string;
+    score: number;
+    ranking?: number;
+  }
+): Promise<void> {
+  await notifications.simulationResults(prisma, {
+    simulationId: params.simulationId,
+    simulationTitle: params.simulationTitle,
+    studentUserId: params.studentUserId,
+    score: params.score,
+    ranking: params.ranking,
+  });
+
+  // TODO: Add email for simulation results when template is ready
+}
+
+/**
+ * Notify about simulation completion (for staff)
+ * This notifies admins that a simulation has been completed by students
+ */
+export async function notifySimulationCompletedByStudent(
+  prisma: PrismaClient,
+  params: {
+    simulationId: string;
+    simulationTitle: string;
+    studentName: string;
+    hasOpenAnswers: boolean;
+    openAnswersCount?: number;
+  }
+): Promise<void> {
+  // If there are open answers to review, send that notification instead
+  if (params.hasOpenAnswers && params.openAnswersCount) {
+    await notifications.openAnswerToReview(prisma, {
+      simulationId: params.simulationId,
+      simulationTitle: params.simulationTitle,
+      studentName: params.studentName,
+      answersCount: params.openAnswersCount,
+    });
+  }
+  
+  // Note: simulationCompleted is meant for batch notification (e.g., "X students completed")
+  // For individual completion, we use openAnswerToReview when relevant
+}
+
+/**
+ * Notify about material availability
+ */
+export async function notifyMaterialAvailable(
+  prisma: PrismaClient,
+  params: {
+    materialId: string;
+    materialTitle: string;
+    targetUserIds: string[];
+  }
+): Promise<void> {
+  await notifications.materialAvailable(prisma, {
+    recipientUserIds: params.targetUserIds,
+    materialId: params.materialId,
+    materialTitle: params.materialTitle,
+  });
+}
+
+/**
+ * Notify about question feedback
+ */
+export async function notifyQuestionFeedback(
+  prisma: PrismaClient,
+  params: {
+    questionId: string;
+    questionTitle: string;
+    feedbackType: string;
+    reporterName: string;
+  }
+): Promise<void> {
+  await notifications.questionFeedback(prisma, params);
 }
 
 /**
@@ -811,15 +525,5 @@ export async function getUserUnreadCount(
   prisma: PrismaClient,
   userId: string
 ): Promise<number> {
-  return prisma.notification.count({
-    where: {
-      userId,
-      isRead: false,
-      isArchived: false,
-    },
-  });
+  return getUnreadCount(prisma, userId);
 }
-
-// NOTE: For batch cleanup of old notifications, use cleanupService.ts
-// which handles all database cleanup tasks including notifications.
-// Export all functions as named exports (default export removed to comply with lint rules)

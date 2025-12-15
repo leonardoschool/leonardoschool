@@ -4,9 +4,6 @@ import NotificationsPageContent from '@/components/notifications/NotificationsPa
 
 export default function StudenteNotifichePage() {
   return (
-    <NotificationsPageContent 
-      basePath="/studente" 
-      userRole="STUDENT" 
-    />
+    <NotificationsPageContent userRole="STUDENT" />
   );
 }

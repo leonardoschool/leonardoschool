@@ -4,9 +4,6 @@ import NotificationsPageContent from '@/components/notifications/NotificationsPa
 
 export default function CollaboratoreNotifichePage() {
   return (
-    <NotificationsPageContent 
-      basePath="/collaboratore" 
-      userRole="COLLABORATOR" 
-    />
+    <NotificationsPageContent userRole="COLLABORATOR" />
   );
 }

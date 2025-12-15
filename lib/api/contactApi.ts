@@ -348,14 +348,12 @@ export async function handleContactRequest(options: HandleContactRequestOptions)
           },
         });
         
-        // Create admin notification for new job application
-        await prisma.adminNotification.create({
-          data: {
-            type: 'JOB_APPLICATION',
-            title: 'Nuova candidatura ricevuta',
-            message: `${data.name} ha inviato una candidatura per ${data.materia || 'posizione non specificata'}`,
-            isUrgent: false,
-          },
+        // Create admin notifications for new job application using the new unified system
+        const { notifications } = await import('@/lib/notifications');
+        await notifications.jobApplication(prisma, {
+          applicationId: jobApplication.id,
+          applicantName: data.name,
+          subject: data.materia || 'posizione non specificata',
         });
         
         console.log('Job application saved with ID:', jobApplication.id);
@@ -377,14 +375,12 @@ export async function handleContactRequest(options: HandleContactRequestOptions)
           },
         });
         
-        // Create admin notification for new contact request
-        await prisma.adminNotification.create({
-          data: {
-            type: 'CONTACT_REQUEST',
-            title: 'Nuova richiesta di informazioni',
-            message: `${data.name} ha inviato una richiesta: "${data.subject}"`,
-            isUrgent: false,
-          },
+        // Create admin notifications for new contact request using the new unified system
+        const { notifications } = await import('@/lib/notifications');
+        await notifications.contactRequest(prisma, {
+          requestId: contactRequest.id,
+          senderName: data.name,
+          subject: data.subject,
         });
         
         console.log('Contact request saved with ID:', contactRequest.id);

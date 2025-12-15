@@ -2,6 +2,7 @@
 import { router, publicProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import { notifications } from '@/lib/notifications';
 
 export const authRouter = router({
   /**
@@ -85,6 +86,15 @@ export const authRouter = router({
           },
         });
       }
+
+      // Notify admins about new registration (background, don't block response)
+      notifications.newRegistration(ctx.prisma, {
+        userId: user.id,
+        userName: user.name,
+        userEmail: user.email,
+      }).catch(err => {
+        console.error('[Auth] Failed to send new registration notification:', err);
+      });
 
       return user;
     }),

@@ -2,6 +2,7 @@
 import { router, protectedProcedure, studentProcedure, staffProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import * as notificationService from '@/server/services/notificationService';
 
 export const materialsRouter = router({
   // ==================== CATEGORIES ====================
@@ -764,7 +765,7 @@ export const materialsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { groupIds, studentIds, categoryId, subjectId, ...materialData } = input;
 
-      return ctx.prisma.$transaction(async (tx) => {
+      const result = await ctx.prisma.$transaction(async (tx) => {
         // Create material
         const material = await tx.material.create({
           data: {
@@ -808,8 +809,49 @@ export const materialsRouter = router({
           });
         }
 
-        return material;
+        return { material, groupIds, studentIds };
       });
+
+      // Send notifications to target students (background, outside transaction)
+      // Get target user IDs based on visibility
+      let targetUserIds: string[] = [];
+      
+      if (input.visibility === 'ALL_STUDENTS') {
+        // Get all active students
+        const allStudents = await ctx.prisma.student.findMany({
+          where: { user: { isActive: true } },
+          select: { userId: true },
+        });
+        targetUserIds = allStudents.map(s => s.userId);
+      } else if (input.visibility === 'GROUP_BASED' && result.groupIds?.length) {
+        // Get students in the specified groups
+        const groupMembers = await ctx.prisma.groupMember.findMany({
+          where: { groupId: { in: result.groupIds } },
+          select: { student: { select: { userId: true } } },
+        });
+        targetUserIds = groupMembers.map(m => m.student.userId);
+      } else if (input.visibility === 'SELECTED_STUDENTS' && result.studentIds?.length) {
+        // Get user IDs for selected students
+        const students = await ctx.prisma.student.findMany({
+          where: { id: { in: result.studentIds } },
+          select: { userId: true },
+        });
+        targetUserIds = students.map(s => s.userId);
+      }
+
+      // Remove duplicates and send notifications
+      if (targetUserIds.length > 0) {
+        const uniqueUserIds = [...new Set(targetUserIds)];
+        notificationService.notifyMaterialAvailable(ctx.prisma, {
+          materialId: result.material.id,
+          materialTitle: result.material.title,
+          targetUserIds: uniqueUserIds,
+        }).catch(err => {
+          console.error('[Materials] Failed to send new material notification:', err);
+        });
+      }
+
+      return result.material;
     }),
 
   // Update material (staff: admin + collaborator)

@@ -4,9 +4,6 @@ import NotificationsPageContent from '@/components/notifications/NotificationsPa
 
 export default function AdminNotifichePage() {
   return (
-    <NotificationsPageContent 
-      basePath="/admin" 
-      userRole="ADMIN" 
-    />
+    <NotificationsPageContent userRole="ADMIN" />
   );
 }

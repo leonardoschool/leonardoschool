@@ -22,7 +22,7 @@ import {
   type EventEmailData,
   type InviteeData,
 } from '@/lib/email/eventEmails';
-import { createBulkNotifications, createNotification } from '@/server/services/notificationService';
+import { notifications, createBulkNotifications } from '@/lib/notifications';
 
 // ==================== CALENDAR EVENTS ====================
 
@@ -382,7 +382,7 @@ export const calendarRouter = router({
           createBulkNotifications(ctx.prisma, {
             userIds,
             type: 'EVENT_INVITATION',
-            title: '📅 Nuovo invito evento',
+            title: 'Nuovo invito evento',
             message: `Sei stato invitato all'evento "${event.title}"`,
             linkType: 'event',
             linkEntityId: event.id,
@@ -564,7 +564,7 @@ export const calendarRouter = router({
           createBulkNotifications(ctx.prisma, {
             userIds,
             type: 'EVENT_UPDATED',
-            title: '🔄 Evento modificato',
+            title: 'Evento modificato',
             message: `L'evento "${event.title}" è stato modificato`,
             linkType: 'event',
             linkEntityId: event.id,
@@ -731,7 +731,7 @@ export const calendarRouter = router({
           createBulkNotifications(ctx.prisma, {
             userIds,
             type: 'EVENT_CANCELLED',
-            title: '❌ Evento annullato',
+            title: 'Evento annullato',
             message: `L'evento "${eventWithInvitations.title}" è stato annullato${input.reason ? `: ${input.reason}` : ''}`,
             linkType: 'event',
             linkEntityId: eventWithInvitations.id,
@@ -1286,26 +1286,16 @@ export const calendarRouter = router({
       });
 
       // Create notification for all admins about new absence request
-      const admins = await ctx.prisma.user.findMany({
-        where: { role: 'ADMIN', isActive: true },
-        select: { id: true },
+      const requesterName = absence.requester?.name || 'Un collaboratore';
+      notifications.absenceRequest(ctx.prisma, {
+        absenceId: absence.id,
+        requesterName,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        isUrgent: input.isUrgent,
+      }).catch((error) => {
+        console.error('Error creating absence request notifications for admins:', error);
       });
-
-      if (admins.length > 0) {
-        const requesterName = absence.requester?.name || 'Un collaboratore';
-        createBulkNotifications(ctx.prisma, {
-          userIds: admins.map(a => a.id),
-          type: 'ABSENCE_REQUEST',
-          title: input.isUrgent ? '🚨 Nuova richiesta assenza urgente' : '📋 Nuova richiesta assenza',
-          message: `${requesterName} ha richiesto un'assenza dal ${input.startDate.toLocaleDateString('it-IT')} al ${input.endDate.toLocaleDateString('it-IT')}`,
-          linkUrl: '/admin/assenze',
-          linkType: 'absence',
-          linkEntityId: absence.id,
-          isUrgent: input.isUrgent,
-        }).catch((error) => {
-          console.error('Error creating absence request notifications for admins:', error);
-        });
-      }
 
       return absence;
     }),
@@ -1365,19 +1355,26 @@ export const calendarRouter = router({
       // Create in-app notification for requester
       if (absence.requester?.id) {
         const isConfirmed = input.status === 'CONFIRMED';
-        createNotification(ctx.prisma, {
-          userId: absence.requester.id,
-          type: isConfirmed ? 'ABSENCE_CONFIRMED' : 'ABSENCE_REJECTED',
-          title: isConfirmed ? '✅ Assenza confermata' : '❌ Assenza rifiutata',
-          message: isConfirmed 
-            ? `La tua richiesta di assenza dal ${absence.startDate.toLocaleDateString('it-IT')} al ${absence.endDate.toLocaleDateString('it-IT')} è stata confermata.`
-            : `La tua richiesta di assenza dal ${absence.startDate.toLocaleDateString('it-IT')} al ${absence.endDate.toLocaleDateString('it-IT')} è stata rifiutata.${input.adminNotes ? ` Motivo: ${input.adminNotes}` : ''}`,
-          linkUrl: '/collaboratore/assenze',
-          linkType: 'absence',
-          linkEntityId: absence.id,
-        }).catch((error) => {
-          console.error('Error creating absence status notification:', error);
-        });
+        if (isConfirmed) {
+          notifications.absenceConfirmed(ctx.prisma, {
+            collaboratorUserId: absence.requester.id,
+            absenceId: absence.id,
+            startDate: absence.startDate,
+            endDate: absence.endDate,
+          }).catch((error) => {
+            console.error('Error creating absence confirmed notification:', error);
+          });
+        } else {
+          notifications.absenceRejected(ctx.prisma, {
+            collaboratorUserId: absence.requester.id,
+            absenceId: absence.id,
+            startDate: absence.startDate,
+            endDate: absence.endDate,
+            reason: input.adminNotes,
+          }).catch((error) => {
+            console.error('Error creating absence rejected notification:', error);
+          });
+        }
       }
 
       return absence;

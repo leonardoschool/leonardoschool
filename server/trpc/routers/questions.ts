@@ -12,6 +12,7 @@ import {
   validateQuestionKeywords,
   importQuestionRowSchema,
 } from '@/lib/validations/questionValidation';
+import * as notificationService from '@/server/services/notificationService';
 
 export const questionsRouter = router({
   // ==================== QUESTION CRUD ====================
@@ -1239,7 +1240,13 @@ export const questionsRouter = router({
         });
       }
 
-      return ctx.prisma.questionFeedback.create({
+      // Get question title for notification
+      const question = await ctx.prisma.question.findUnique({
+        where: { id: input.questionId },
+        select: { text: true },
+      });
+
+      const feedback = await ctx.prisma.questionFeedback.create({
         data: {
           questionId: input.questionId,
           studentId: student.id,
@@ -1247,6 +1254,19 @@ export const questionsRouter = router({
           message: input.message,
         },
       });
+
+      // Notify staff about the feedback (background, don't block response)
+      const questionTitle = question?.text?.substring(0, 50) || 'Domanda';
+      notificationService.notifyQuestionFeedback(ctx.prisma, {
+        questionId: input.questionId,
+        questionTitle: questionTitle + (question?.text && question.text.length > 50 ? '...' : ''),
+        feedbackType: input.type,
+        reporterName: ctx.user.name,
+      }).catch(err => {
+        console.error('[Questions] Failed to send feedback notification:', err);
+      });
+
+      return feedback;
     }),
 
   // ==================== FEEDBACK MANAGEMENT (Admin) ====================

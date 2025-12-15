@@ -1,10 +1,11 @@
 /**
  * Simulation Notification Service
- * Handles calendar event creation and email notifications for simulations
+ * Handles calendar event creation, in-app notifications and email notifications for simulations
  */
 
 import { PrismaClient, Simulation, User } from '@prisma/client';
 import { sendSimulationInvitationEmail, SimulationInviteData, InviteeData } from '@/lib/email/eventEmails';
+import { notifications } from '@/lib/notifications';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://leonardoschool.it';
 
@@ -46,7 +47,7 @@ export async function createSimulationCalendarEvent(
     // Create the calendar event
     const calendarEvent = await prisma.calendarEvent.create({
       data: {
-        title: `📝 ${simulation.title}`,
+        title: simulation.title,
         description: simulation.description || `Simulazione: ${simulation.title}\nDomande: ${simulation.totalQuestions}\nDurata: ${simulation.durationMinutes} minuti`,
         type: 'SIMULATION',
         startDate: simulation.startDate,
@@ -206,6 +207,61 @@ export async function getAssignedStudentEmails(
 }
 
 /**
+ * Get user IDs for all assigned students (for in-app notifications)
+ */
+export async function getAssignedStudentUserIds(
+  prisma: PrismaClient,
+  assignments: Array<{
+    studentId?: string | null;
+    groupId?: string | null;
+    classId?: string | null;
+  }>
+): Promise<string[]> {
+  const userIds = new Set<string>();
+
+  for (const assignment of assignments) {
+    // Direct student assignment
+    if (assignment.studentId) {
+      const student = await prisma.student.findUnique({
+        where: { id: assignment.studentId },
+        select: { userId: true },
+      });
+      if (student?.userId) {
+        userIds.add(student.userId);
+      }
+    }
+
+    // Group assignment - get all students in the group
+    if (assignment.groupId) {
+      const groupMembers = await prisma.groupMember.findMany({
+        where: { groupId: assignment.groupId },
+        select: { student: { select: { userId: true } } },
+      });
+      for (const member of groupMembers) {
+        if (member.student?.userId) {
+          userIds.add(member.student.userId);
+        }
+      }
+    }
+
+    // Class assignment - get all students in the class
+    if (assignment.classId) {
+      const classStudents = await prisma.student.findMany({
+        where: { classId: assignment.classId },
+        select: { userId: true },
+      });
+      for (const student of classStudents) {
+        if (student.userId) {
+          userIds.add(student.userId);
+        }
+      }
+    }
+  }
+
+  return Array.from(userIds);
+}
+
+/**
  * Send simulation invitation emails to all assigned students
  */
 export async function sendSimulationNotifications(
@@ -244,11 +300,22 @@ export async function sendSimulationNotifications(
       await createSimulationEventInvitations(prisma, result.calendarEventId, assignments);
     }
 
-    // 3. Get all invitee emails
+    // 3. Get all invitee data (emails and user IDs)
     const invitees = await getAssignedStudentEmails(prisma, assignments);
 
     if (invitees.length === 0) {
       return result;
+    }
+
+    // 3.1. Create in-app notifications for assigned students
+    const inviteeUserIds = await getAssignedStudentUserIds(prisma, assignments);
+    if (inviteeUserIds.length > 0) {
+      await notifications.simulationAssigned(prisma, {
+        assignedUserIds: inviteeUserIds,
+        simulationId: simulation.id,
+        simulationTitle: simulation.title,
+        dueDate: assignments[0]?.dueDate || undefined,
+      });
     }
 
     // 4. Prepare simulation data for email

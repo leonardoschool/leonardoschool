@@ -10,6 +10,7 @@
 import { z } from 'zod';
 import { router, protectedProcedure } from '../init';
 import { TRPCError } from '@trpc/server';
+import { notifications } from '@/lib/notifications';
 
 // Schema for creating a new conversation
 const createConversationSchema = z.object({
@@ -267,17 +268,12 @@ export const messagesRouter = router({
         });
         
         // Create notification for recipient
-        await ctx.prisma.notification.create({
-          data: {
-            userId: input.recipientId,
-            type: 'MESSAGE_RECEIVED',
-            title: 'Nuovo messaggio',
-            message: `Hai ricevuto un nuovo messaggio da ${currentUser.name}`,
-            linkUrl: getMessagesLinkUrl(recipient.role, existingConversation.id),
-            linkType: 'message',
-            linkEntityType: 'conversation',
-            linkEntityId: existingConversation.id,
-          },
+        await notifications.messageReceived(ctx.prisma, {
+          recipientUserId: input.recipientId,
+          conversationId: existingConversation.id,
+          senderName: currentUser.name,
+          messagePreview: input.content,
+          recipientRole: recipient.role,
         });
         
         return { conversationId: existingConversation.id, messageId: message.id };
@@ -308,17 +304,12 @@ export const messagesRouter = router({
       });
       
       // Create notification for recipient
-      await ctx.prisma.notification.create({
-        data: {
-          userId: input.recipientId,
-          type: 'MESSAGE_RECEIVED',
-          title: 'Nuovo messaggio',
-          message: `Hai ricevuto un nuovo messaggio da ${currentUser.name}`,
-          linkUrl: getMessagesLinkUrl(recipient.role, conversation.id),
-          linkType: 'message',
-          linkEntityType: 'conversation',
-          linkEntityId: conversation.id,
-        },
+      await notifications.messageReceived(ctx.prisma, {
+        recipientUserId: input.recipientId,
+        conversationId: conversation.id,
+        senderName: currentUser.name,
+        messagePreview: input.content,
+        recipientRole: recipient.role,
       });
       
       return { conversationId: conversation.id, messageId: conversation.messages[0]?.id };
@@ -393,17 +384,12 @@ export const messagesRouter = router({
       
       // Create notifications for other participants
       for (const participant of otherParticipants) {
-        await ctx.prisma.notification.create({
-          data: {
-            userId: participant.userId,
-            type: 'MESSAGE_RECEIVED',
-            title: 'Nuovo messaggio',
-            message: `Hai ricevuto un nuovo messaggio da ${currentUser.name}`,
-            linkUrl: getMessagesLinkUrl(participant.user.role, input.conversationId),
-            linkType: 'message',
-            linkEntityType: 'conversation',
-            linkEntityId: input.conversationId,
-          },
+        await notifications.messageReceived(ctx.prisma, {
+          recipientUserId: participant.userId,
+          conversationId: input.conversationId,
+          senderName: currentUser.name,
+          messagePreview: input.content,
+          recipientRole: participant.user.role,
         });
       }
       
@@ -740,15 +726,4 @@ function canUserContact(
     return ['ADMIN', 'COLLABORATOR'].includes(recipientRole);
   }
   return false;
-}
-
-// Helper function to get the messages link URL based on role
-function getMessagesLinkUrl(role: string, conversationId?: string): string {
-  let basePath = '/studente';
-  if (role === 'ADMIN') basePath = '/admin';
-  else if (role === 'COLLABORATOR') basePath = '/collaboratore';
-  
-  return conversationId 
-    ? `${basePath}/messaggi?conversazione=${conversationId}`
-    : `${basePath}/messaggi`;
 }

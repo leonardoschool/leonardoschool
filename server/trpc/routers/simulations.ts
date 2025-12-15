@@ -15,6 +15,7 @@ import {
 } from '@/lib/validations/simulationValidation';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { notifySimulationCreated } from '@/server/services/simulationNotificationService';
+import * as notificationService from '@/server/services/notificationService';
 
 // Helper function to get student from user
 async function getStudentFromUser(prisma: PrismaClient, userId: string) {
@@ -1423,6 +1424,20 @@ export const simulationsRouter = router({
           durationSeconds: totalTimeSpent,
           completedAt: new Date(),
         },
+      });
+
+      // Count open answers that need review (answers with text but no answerId selected)
+      const openAnswersCount = evaluatedAnswers.filter(a => a.answerText && !a.answerId).length;
+
+      // Notify staff about completion (background, don't block response)
+      notificationService.notifySimulationCompletedByStudent(ctx.prisma, {
+        simulationId: simulation.id,
+        simulationTitle: simulation.title,
+        studentName: ctx.user.name,
+        hasOpenAnswers: openAnswersCount > 0,
+        openAnswersCount: openAnswersCount > 0 ? openAnswersCount : undefined,
+      }).catch(err => {
+        console.error('[Simulations] Failed to send completion notification:', err);
       });
 
       // Return results if allowed
