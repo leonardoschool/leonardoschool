@@ -148,7 +148,9 @@ export default function AppHeader() {
   
   // Extract notifications from response
   const notifications = notificationsData?.notifications || [];
-  const unreadCount = notificationsData?.unreadCount || 0;
+  // Filter out MESSAGE_RECEIVED notifications for the bell (they show on message icon instead)
+  const filteredNotifications = notifications.filter(n => n.type !== 'MESSAGE_RECEIVED');
+  const unreadCount = filteredNotifications.filter(n => !n.isRead).length;
 
   // Get job applications stats (admin only) - for badge count
   const { data: jobApplicationsStats } = trpc.jobApplications.getStats.useQuery(
@@ -301,38 +303,38 @@ export default function AppHeader() {
 
   // Menu Gestione (dropdown) - Admin only: Utenti, Gruppi, Contratti, Candidature, Richieste
   const gestioneItems = [
-    { href: '/admin/utenti', label: 'Utenti', icon: Users },
-    { href: '/admin/gruppi', label: 'Gruppi', icon: UsersRound },
-    { href: '/admin/contratti', label: 'Contratti', icon: FileSignature },
-    { href: '/admin/candidature', label: 'Candidature', icon: Briefcase },
-    { href: '/admin/richieste', label: 'Richieste', icon: Mail },
+    { href: '/utenti', label: 'Utenti', icon: Users },
+    { href: '/gruppi', label: 'Gruppi', icon: UsersRound },
+    { href: '/contratti', label: 'Contratti', icon: FileSignature },
+    { href: '/candidature', label: 'Candidature', icon: Briefcase },
+    { href: '/richieste', label: 'Richieste', icon: Mail },
   ];
 
   // Menu Registro (dropdown) - Admin: Registro Elettronico, Assenze Staff
   const registroItemsAdmin = [
-    { href: '/admin/presenze', label: 'Registro Elettronico', icon: ClipboardCheck },
-    { href: '/admin/assenze', label: 'Assenze Staff', icon: UserMinus },
+    { href: '/presenze', label: 'Registro Elettronico', icon: ClipboardCheck },
+    { href: '/assenze', label: 'Assenze Staff', icon: UserMinus },
   ];
 
   // Menu Registro (dropdown) - Collaboratore: Registro Elettronico, Le Mie Assenze
   const registroItemsCollaborator = [
-    { href: '/collaboratore/presenze', label: 'Registro Elettronico', icon: ClipboardCheck },
-    { href: '/collaboratore/le-mie-assenze', label: 'Le Mie Assenze', icon: UserMinus },
+    { href: '/presenze', label: 'Registro Elettronico', icon: ClipboardCheck },
+    { href: '/le-mie-assenze', label: 'Le Mie Assenze', icon: UserMinus },
   ];
 
   // Menu Didattica (dropdown) - Admin: Domande, Tags, Materie & Materiali, Simulazioni
   const didatticaItemsAdmin = [
-    { href: '/admin/domande', label: 'Domande', icon: BookOpen },
-    { href: '/admin/tags', label: 'Tag', icon: Tag },
-    { href: '/admin/materiali', label: 'Materie & Materiali', icon: FolderOpen },
-    { href: '/admin/simulazioni', label: 'Simulazioni', icon: ClipboardList },
+    { href: '/domande', label: 'Domande', icon: BookOpen },
+    { href: '/tags', label: 'Tag', icon: Tag },
+    { href: '/materiali', label: 'Materie & Materiali', icon: FolderOpen },
+    { href: '/simulazioni', label: 'Simulazioni', icon: ClipboardList },
   ];
 
   // Menu Didattica (dropdown) - Collaboratore: Domande, Tags, Materiali
   const didatticaItemsCollaborator = [
-    { href: '/collaboratore/domande', label: 'Domande', icon: BookOpen },
-    { href: '/collaboratore/tags', label: 'Tag', icon: Tag },
-    { href: '/collaboratore/materiali', label: 'Materiali', icon: FolderOpen },
+    { href: '/domande', label: 'Domande', icon: BookOpen },
+    { href: '/tags', label: 'Tag', icon: Tag },
+    { href: '/materiali', label: 'Materiali', icon: FolderOpen },
   ];
 
   // Get registro items based on role
@@ -343,27 +345,26 @@ export default function AppHeader() {
 
   // Simplified nav items - Dashboard, Calendario (standalone), Statistiche
   const adminNavItems = [
-    { href: '/admin', label: 'Dashboard', icon: Home },
-    { href: '/admin/calendario', label: 'Calendario', icon: Calendar },
-    { href: '/admin/statistiche', label: 'Statistiche', icon: BarChart3 },
+    { href: '/dashboard', label: 'Dashboard', icon: Home },
+    { href: '/calendario', label: 'Calendario', icon: Calendar },
+    { href: '/statistiche', label: 'Statistiche', icon: BarChart3 },
   ];
 
-  // Collaborator: Dashboard, Calendario (standalone), Studenti (standalone), Statistiche
+  // Collaborator: Dashboard, Calendario (standalone), Studenti (standalone)
   const collaboratorNavItems = [
-    { href: '/collaboratore', label: 'Dashboard', icon: Home },
-    { href: '/collaboratore/calendario', label: 'Calendario', icon: Calendar },
-    { href: '/collaboratore/studenti', label: 'Studenti', icon: Users },
-    { href: '/collaboratore/statistiche', label: 'Statistiche', icon: BarChart3 },
+    { href: '/dashboard', label: 'Dashboard', icon: Home },
+    { href: '/calendario', label: 'Calendario', icon: Calendar },
+    { href: '/studenti', label: 'Studenti', icon: Users },
   ];
 
   // Student: simulazioni, calendario, materiale didattico, statistiche, il mio gruppo
   const studentNavItems = [
-    { href: '/studente', label: 'Dashboard', icon: Home },
-    { href: '/studente/calendario', label: 'Calendario', icon: Calendar },
-    { href: '/studente/simulazioni', label: 'Simulazioni', icon: ClipboardList },
-    { href: '/studente/materiali', label: 'Materiale Didattico', icon: FolderOpen },
-    { href: '/studente/statistiche', label: 'Statistiche', icon: BarChart3 },
-    { href: '/studente/gruppo', label: 'Il Mio Gruppo', icon: UsersRound },
+    { href: '/dashboard', label: 'Dashboard', icon: Home },
+    { href: '/calendario', label: 'Calendario', icon: Calendar },
+    { href: '/simulazioni', label: 'Simulazioni', icon: ClipboardList },
+    { href: '/materiali', label: 'Materiale Didattico', icon: FolderOpen },
+    { href: '/statistiche', label: 'Statistiche', icon: BarChart3 },
+    { href: '/gruppo', label: 'Il Mio Gruppo', icon: UsersRound },
   ];
 
   const navItems = isAdmin ? adminNavItems : isCollaborator ? collaboratorNavItems : isStudent ? studentNavItems : [];
@@ -392,9 +393,7 @@ export default function AppHeader() {
 
   // Get notification page URL based on user role
   const getNotificationsPageUrl = () => {
-    if (isAdmin) return '/admin/notifiche';
-    if (isCollaborator) return '/collaboratore/notifiche';
-    return '/studente/notifiche';
+    return '/notifiche';
   };
 
   // Handle notification click - navigate to relevant section or linkUrl
@@ -415,22 +414,20 @@ export default function AppHeader() {
       return;
     }
 
-    // Fallback navigation based on notification type and user role
-    const basePath = isAdmin ? '/admin' : isCollaborator ? '/collaboratore' : '/studente';
-    
+    // Fallback navigation based on notification type
     switch (notification.type) {
       case 'JOB_APPLICATION':
-        if (isAdmin) router.push('/admin/candidature');
+        if (isAdmin) router.push('/candidature');
         break;
       case 'CONTACT_REQUEST':
-        if (isAdmin) router.push('/admin/richieste');
+        if (isAdmin) router.push('/richieste');
         break;
       case 'CONTRACT_ASSIGNED':
       case 'CONTRACT_SIGNED':
       case 'CONTRACT_REMINDER':
       case 'CONTRACT_EXPIRED':
       case 'CONTRACT_CANCELLED':
-        if (isAdmin) router.push('/admin/contratti');
+        if (isAdmin) router.push('/contratti');
         break;
       case 'SIMULATION_ASSIGNED':
       case 'SIMULATION_REMINDER':
@@ -438,27 +435,27 @@ export default function AppHeader() {
       case 'SIMULATION_STARTED':
       case 'SIMULATION_RESULTS':
       case 'SIMULATION_COMPLETED':
-        router.push(`${basePath}/simulazioni`);
+        router.push('/simulazioni');
         break;
       case 'MATERIAL_AVAILABLE':
-        router.push(`${basePath}/materiali`);
+        router.push('/materiali');
         break;
       case 'EVENT_INVITATION':
       case 'EVENT_REMINDER':
       case 'EVENT_UPDATED':
       case 'EVENT_CANCELLED':
-        router.push(`${basePath}/calendario`);
+        router.push('/calendario');
         break;
       case 'MESSAGE_RECEIVED':
-        router.push(`${basePath}/messaggi`);
+        router.push('/messaggi');
         break;
       case 'ACCOUNT_ACTIVATED':
       case 'PROFILE_COMPLETED':
       case 'NEW_REGISTRATION':
-        if (isAdmin) router.push('/admin/utenti');
+        if (isAdmin) router.push('/utenti');
         break;
       default:
-        router.push(basePath);
+        router.push('/dashboard');
     }
   };
 
@@ -467,7 +464,7 @@ export default function AppHeader() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href={isAdmin ? '/admin' : isCollaborator ? '/collaboratore' : '/studente'} className="flex items-center gap-3">
+          <Link href="/dashboard" className="flex items-center gap-3">
             <div className="relative w-14 h-14 rounded-lg p-1">
               <Image
                 src="/images/logo.png"
@@ -483,9 +480,9 @@ export default function AppHeader() {
             <nav className="hidden lg:flex items-center gap-1">
               {/* Dashboard link */}
               <Link
-                href={isAdmin ? '/admin' : '/collaboratore'}
+                href="/dashboard"
                 className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-                  pathname === '/admin' || pathname === '/collaboratore'
+                  pathname === '/dashboard'
                     ? `${colors.primary.softBg} ${colors.primary.text}`
                     : `${colors.text.primary} ${colors.effects.hover.bgSubtle}`
                 }`}
@@ -519,9 +516,9 @@ export default function AppHeader() {
                         const isItemActive = pathname.startsWith(item.href);
                         // Show badge for Utenti, Candidature and Richieste
                         const badgeCount = 
-                          item.href === '/admin/utenti' ? pendingContractUsersCount :
-                          item.href === '/admin/candidature' ? pendingApplicationsCount :
-                          item.href === '/admin/richieste' ? pendingContactRequestsCount : 0;
+                          item.href === '/utenti' ? pendingContractUsersCount :
+                          item.href === '/candidature' ? pendingApplicationsCount :
+                          item.href === '/richieste' ? pendingContactRequestsCount : 0;
                         return (
                           <Link
                             key={item.href}
@@ -631,7 +628,7 @@ export default function AppHeader() {
               )}
 
               {/* Other nav items */}
-              {navItems.filter(item => item.href !== '/admin' && item.href !== '/collaboratore').map((item) => {
+              {navItems.filter(item => item.href !== '/dashboard').map((item) => {
                 const isActive = pathname === item.href || pathname.startsWith(item.href);
                 return (
                   <Link
@@ -717,7 +714,7 @@ export default function AppHeader() {
             {/* Messages Icon (All authenticated users) */}
             {user && (
               <Link
-                href={isAdmin ? '/admin/messaggi' : isCollaborator ? '/collaboratore/messaggi' : '/studente/messaggi'}
+                href="/messaggi"
                 className={`p-2 rounded-lg ${colors.effects.hover.bgSubtle} ${colors.icon.interactive} transition-colors relative`}
                 title="Messaggi"
               >
@@ -759,8 +756,8 @@ export default function AppHeader() {
                     </div>
                     
                     <div className="max-h-96 overflow-y-auto">
-                      {notifications && notifications.length > 0 ? (
-                        notifications.map((notification) => {
+                      {filteredNotifications.length > 0 ? (
+                        filteredNotifications.map((notification) => {
                           if (!notification.id || !notification.type) return null;
                           const config = notificationConfig[notification.type as NotificationTypeKey] || notificationConfig.GENERAL;
                           const NotificationIcon = config.icon;
@@ -859,7 +856,7 @@ export default function AppHeader() {
                   {/* Menu items */}
                   <div className="py-2">
                     <Link
-                      href={isAdmin ? '/admin/profilo' : isCollaborator ? '/collaboratore/profilo' : '/studente/profilo'}
+                      href="/profilo"
                       onClick={() => setUserMenuOpen(false)}
                       className={`flex items-center gap-3 px-4 py-2.5 text-sm ${colors.text.primary} ${colors.effects.hover.bgSubtle} transition-colors`}
                     >
@@ -869,7 +866,7 @@ export default function AppHeader() {
                     {/* Hide settings for collaborators without signed contract/active account */}
                     {collaboratorCanNavigate && (
                       <Link
-                        href={isAdmin ? '/admin/impostazioni' : isCollaborator ? '/collaboratore/impostazioni' : '/studente/impostazioni'}
+                        href="/impostazioni"
                         onClick={() => setUserMenuOpen(false)}
                         className={`flex items-center gap-3 px-4 py-2.5 text-sm ${colors.text.primary} ${colors.effects.hover.bgSubtle} transition-colors`}
                       >
@@ -933,8 +930,8 @@ export default function AppHeader() {
             {isAdmin && gestioneItems.map((item) => {
               const isActive = pathname.startsWith(item.href);
               const badgeCount = 
-                item.href === '/admin/candidature' ? pendingApplicationsCount :
-                item.href === '/admin/richieste' ? pendingContactRequestsCount : 0;
+                item.href === '/candidature' ? pendingApplicationsCount :
+                item.href === '/richieste' ? pendingContactRequestsCount : 0;
               return (
                 <Link
                   key={item.href}
