@@ -792,4 +792,67 @@ export const studentsRouter = router({
         materials: uniqueMaterials,
       };
     }),
+
+  // Get students from groups managed by current collaborator
+  getFromMyGroups: protectedProcedure.query(async ({ ctx }) => {
+    if (!ctx.user) {
+      throw new TRPCError({
+        code: 'UNAUTHORIZED',
+        message: 'Utente non autenticato',
+      });
+    }
+
+    // Get collaborator ID
+    const collaborator = await ctx.prisma.collaborator.findUnique({
+      where: { userId: ctx.user.id },
+    });
+
+    if (!collaborator) {
+      return [];
+    }
+
+    // Get groups where this collaborator is the reference
+    const myGroups = await ctx.prisma.group.findMany({
+      where: {
+        referenceCollaboratorId: collaborator.id,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+
+    if (myGroups.length === 0) {
+      return [];
+    }
+
+    const groupIds = myGroups.map(g => g.id);
+
+    // Get all students who are members of these groups
+    const groupMembers = await ctx.prisma.groupMember.findMany({
+      where: {
+        groupId: { in: groupIds },
+        memberType: 'STUDENT',
+        student: { isNot: null },
+      },
+      include: {
+        student: {
+          include: {
+            user: {
+              select: { id: true, name: true, email: true },
+            },
+          },
+        },
+      },
+      distinct: ['studentId'],
+    });
+
+    return groupMembers
+      .filter(gm => gm.student !== null)
+      .map(gm => ({
+        id: gm.student!.id,
+        userId: gm.student!.user.id,
+        name: gm.student!.user.name,
+        email: gm.student!.user.email,
+        user: gm.student!.user,
+      }));
+  }),
 });

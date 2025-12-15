@@ -320,11 +320,11 @@ export default function AppHeader() {
     { href: '/collaboratore/le-mie-assenze', label: 'Le Mie Assenze', icon: UserMinus },
   ];
 
-  // Menu Didattica (dropdown) - Admin: Domande, Tags, Materiali, Simulazioni
+  // Menu Didattica (dropdown) - Admin: Domande, Tags, Materie & Materiali, Simulazioni
   const didatticaItemsAdmin = [
     { href: '/admin/domande', label: 'Domande', icon: BookOpen },
     { href: '/admin/tags', label: 'Tag', icon: Tag },
-    { href: '/admin/materiali', label: 'Materiali', icon: FolderOpen },
+    { href: '/admin/materiali', label: 'Materie & Materiali', icon: FolderOpen },
     { href: '/admin/simulazioni', label: 'Simulazioni', icon: ClipboardList },
   ];
 

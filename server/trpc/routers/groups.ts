@@ -855,4 +855,43 @@ export const groupsRouter = router({
       ),
     };
   }),
+
+  // Get groups managed by the current collaborator
+  getMyGroups: protectedProcedure.query(async ({ ctx }) => {
+    if (!ctx.user) {
+      throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Utente non autenticato' });
+    }
+
+    // Get collaborator ID
+    const collaborator = await ctx.prisma.collaborator.findUnique({
+      where: { userId: ctx.user.id },
+    });
+
+    if (!collaborator) {
+      return [];
+    }
+
+    // Get groups where this collaborator is the reference
+    const groups = await ctx.prisma.group.findMany({
+      where: {
+        referenceCollaboratorId: collaborator.id,
+        isActive: true,
+      },
+      orderBy: { name: 'asc' },
+      include: {
+        _count: {
+          select: { members: true },
+        },
+      },
+    });
+
+    return groups.map((g) => ({
+      id: g.id,
+      name: g.name,
+      description: g.description,
+      color: g.color,
+      type: g.type,
+      memberCount: g._count.members,
+    }));
+  }),
 });

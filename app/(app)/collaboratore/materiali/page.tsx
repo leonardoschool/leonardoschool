@@ -1,15 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// Note: 'any' types used for complex tRPC query results with file uploads
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
-import TopicsManager from '@/components/admin/TopicsManager';
+import { GroupInfoModal } from '@/components/ui/GroupInfoModal';
 import { 
   FolderOpen, 
   Plus, 
@@ -24,131 +24,24 @@ import {
   X,
   Eye,
   Users,
-  BookOpen,
+  User,
   Download,
   Search,
-  ChevronDown,
-  ChevronRight,
   Check,
   Globe,
   UserCheck,
-  Settings,
   ExternalLink,
-  Palette,
-  FolderPlus,
-  List,
-  Dna,
-  Atom,
-  Calculator,
-  Brain,
-  Beaker,
-  Microscope,
-  FlaskConical,
-  TestTube,
-  Stethoscope,
-  Heart,
-  Activity,
-  Sigma,
-  Pi,
-  Binary,
-  Code,
-  Lightbulb,
-  GraduationCap,
-  type LucideIcon,
+  AlertCircle,
+  Info,
 } from 'lucide-react';
 import { firebaseStorage } from '@/lib/firebase/storage';
 
-// Map of icon names to Lucide components
-const iconMap: Record<string, LucideIcon> = {
-  dna: Dna,
-  atom: Atom,
-  calculator: Calculator,
-  brain: Brain,
-  beaker: Beaker,
-  microscope: Microscope,
-  flask: FlaskConical,
-  'flask-conical': FlaskConical,
-  'test-tube': TestTube,
-  testtube: TestTube,
-  stethoscope: Stethoscope,
-  heart: Heart,
-  activity: Activity,
-  sigma: Sigma,
-  pi: Pi,
-  binary: Binary,
-  code: Code,
-  lightbulb: Lightbulb,
-  graduation: GraduationCap,
-  'graduation-cap': GraduationCap,
-  book: BookOpen,
-  'book-open': BookOpen,
-};
-
-// Helper to check if string is an emoji
-const isEmoji = (str: string): boolean => {
-  const emojiRegex = /^[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u;
-  return emojiRegex.test(str);
-};
-
-// Component to render subject icon (Lucide icon, emoji, or fallback)
-const SubjectIcon = ({ icon, color, size = 'md' }: { icon?: string | null; color?: string | null; size?: 'sm' | 'md' }) => {
-  const sizeClasses = size === 'sm' ? 'w-4 h-4' : 'w-5 h-5';
-  const containerSize = size === 'sm' ? 'w-8 h-8' : 'w-10 h-10';
-  const emojiSize = size === 'sm' ? 'text-lg' : 'text-xl';
-  
-  if (!icon) {
-    // Fallback: colored circle
-    return (
-      <div 
-        className={`${containerSize} rounded-lg flex items-center justify-center`}
-        style={{ backgroundColor: `${color || '#6366f1'}20` }}
-      >
-        <div 
-          className={sizeClasses}
-          style={{ backgroundColor: color || '#6366f1', borderRadius: '50%' }}
-        />
-      </div>
-    );
-  }
-
-  // Check if it's an emoji
-  if (isEmoji(icon)) {
-    return (
-      <div 
-        className={`${containerSize} rounded-lg flex items-center justify-center ${emojiSize}`}
-        style={{ backgroundColor: `${color || '#6366f1'}20` }}
-      >
-        {icon}
-      </div>
-    );
-  }
-
-  // Try to find Lucide icon
-  const IconComponent = iconMap[icon.toLowerCase()];
-  if (IconComponent) {
-    return (
-      <div 
-        className={`${containerSize} rounded-lg flex items-center justify-center`}
-        style={{ backgroundColor: `${color || '#6366f1'}20` }}
-      >
-        <IconComponent className={sizeClasses} style={{ color: color || '#6366f1' }} />
-      </div>
-    );
-  }
-
-  // Fallback: show the text as-is (first 2 chars)
-  return (
-    <div 
-      className={`${containerSize} rounded-lg flex items-center justify-center text-sm font-bold`}
-      style={{ backgroundColor: `${color || '#6366f1'}20`, color: color || '#6366f1' }}
-    >
-      {icon.slice(0, 2).toUpperCase()}
-    </div>
-  );
-};
+// ==================== TYPES ====================
 
 type MaterialType = 'PDF' | 'VIDEO' | 'LINK' | 'DOCUMENT';
 type MaterialVisibility = 'ALL_STUDENTS' | 'GROUP_BASED' | 'SELECTED_STUDENTS';
+
+// ==================== CONSTANTS ====================
 
 const typeIcons: Record<MaterialType, typeof FileText> = {
   PDF: FileText,
@@ -176,37 +69,30 @@ const visibilityLabels: Record<MaterialVisibility, string> = {
   SELECTED_STUDENTS: 'Studenti selezionati',
 };
 
-export default function MaterialsPage() {
-  const [showForm, setShowForm] = useState(false);
-  const [showCategoryForm, setShowCategoryForm] = useState(false);
-  const [showSubjectForm, setShowSubjectForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
-  const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'materials' | 'categories' | 'subjects'>('materials');
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+// ==================== MAIN COMPONENT ====================
+
+export default function CollaboratorMaterialsPage() {
+  // Material management
+  const [showMaterialForm, setShowMaterialForm] = useState(false);
+  const [editingMaterialId, setEditingMaterialId] = useState<string | null>(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assigningMaterialId, setAssigningMaterialId] = useState<string | null>(null);
+  
+  // Group info modal
+  const [selectedGroupInfo, setSelectedGroupInfo] = useState<string | null>(null);
+  
+  // Filters
+  const [filterType, setFilterType] = useState<MaterialType | ''>('');
+  const [filterSubject, setFilterSubject] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Upload
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [filterType, setFilterType] = useState<MaterialType | ''>('');
-  const [filterCategory, setFilterCategory] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [groupSearch, setGroupSearch] = useState('');
-  const [studentSearch, setStudentSearch] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // Topics manager modal state
-  const [topicsModal, setTopicsModal] = useState<{
-    isOpen: boolean;
-    subjectId: string;
-    subjectName: string;
-    subjectColor: string | null;
-  }>({ isOpen: false, subjectId: '', subjectName: '', subjectColor: null });
-
-  const { handleMutationError } = useApiError();
-  const { showSuccess, showError } = useToast();
 
   // Form state
-  const [formData, setFormData] = useState({
+  const [materialFormData, setMaterialFormData] = useState({
     title: '',
     description: '',
     type: 'PDF' as MaterialType,
@@ -214,145 +100,85 @@ export default function MaterialsPage() {
     fileName: '',
     fileSize: 0,
     externalUrl: '',
-    thumbnailUrl: '',
-    visibility: 'ALL_STUDENTS' as MaterialVisibility,
-    categoryId: '',
     subjectId: '',
     tags: [] as string[],
+  });
+
+  // Assignment state
+  const [assignmentData, setAssignmentData] = useState({
+    visibility: 'ALL_STUDENTS' as MaterialVisibility,
     groupIds: [] as string[],
     studentIds: [] as string[],
   });
 
-  // Category form state
-  const [categoryFormData, setCategoryFormData] = useState({
-    name: '',
-    description: '',
-    icon: '',
-    order: 0,
-  });
+  // Portal mounting state
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
-  // Subject form state
-  const [subjectFormData, setSubjectFormData] = useState({
-    name: '',
-    code: '',
-    description: '',
-    color: '#6366f1',
-    icon: '',
-    order: 0,
-  });
-
+  const { handleMutationError } = useApiError();
+  const { showSuccess, showError } = useToast();
   const utils = trpc.useUtils();
 
-  // Queries
-  const { data: materials, isLoading } = trpc.materials.getAll.useQuery({
-    type: filterType || undefined,
-    categoryId: filterCategory || undefined,
-  });
-  const { data: categories } = trpc.materials.getAllCategories.useQuery();
+  // ==================== QUERIES ====================
+  
   const { data: subjects } = trpc.materials.getAllSubjects.useQuery();
-  const { data: groupsData } = trpc.groups.getGroups.useQuery({ 
-    page: 1, 
-    pageSize: 100,
-    onlyMyGroups: true,
+  const { data: materials, isLoading: materialsLoading } = trpc.materials.getAll.useQuery({
+    type: filterType || undefined,
+    subjectId: filterSubject || undefined,
   });
-  const { data: studentsData } = trpc.students.getStudents.useQuery({ 
-    page: 1, 
-    pageSize: 500, 
-    isActive: true,
-    onlyMyGroups: true,
-  });
-  const { data: stats } = trpc.materials.getStats.useQuery();
+  
+  // Get collaborator's groups (only groups they manage)
+  const { data: myGroups } = trpc.groups.getMyGroups.useQuery();
+  
+  // Get students from my groups
+  const { data: myStudents } = trpc.students.getFromMyGroups.useQuery();
 
-  // Mutations
-  const createMutation = trpc.materials.create.useMutation({
+  // ==================== MUTATIONS ====================
+
+  const createMaterialMutation = trpc.materials.create.useMutation({
     onSuccess: () => {
       utils.materials.getAll.invalidate();
-      utils.materials.getStats.invalidate();
       showSuccess('Materiale creato', 'Il nuovo materiale è stato aggiunto.');
-      resetForm();
+      resetMaterialForm();
     },
     onError: handleMutationError,
   });
 
-  const updateMutation = trpc.materials.update.useMutation({
+  const updateMaterialMutation = trpc.materials.update.useMutation({
     onSuccess: () => {
       utils.materials.getAll.invalidate();
       showSuccess('Materiale aggiornato', 'Le modifiche sono state salvate.');
-      resetForm();
+      resetMaterialForm();
     },
     onError: handleMutationError,
   });
 
-  const deleteMutation = trpc.materials.delete.useMutation({
+  const deleteMaterialMutation = trpc.materials.delete.useMutation({
     onSuccess: () => {
       utils.materials.getAll.invalidate();
-      utils.materials.getStats.invalidate();
       showSuccess('Materiale eliminato', 'Il materiale è stato rimosso.');
     },
     onError: handleMutationError,
   });
 
-  const createCategoryMutation = trpc.materials.createCategory.useMutation({
+  const updateAssignmentsMutation = trpc.materials.update.useMutation({
     onSuccess: () => {
-      utils.materials.getAllCategories.invalidate();
-      utils.materials.getCategories.invalidate();
-      showSuccess('Categoria creata', 'La nuova categoria è stata aggiunta.');
-      resetCategoryForm();
+      utils.materials.getAll.invalidate();
+      showSuccess('Destinatari aggiornati', 'Le assegnazioni sono state salvate.');
+      setShowAssignModal(false);
+      setAssigningMaterialId(null);
     },
     onError: handleMutationError,
   });
 
-  const updateCategoryMutation = trpc.materials.updateCategory.useMutation({
-    onSuccess: () => {
-      utils.materials.getAllCategories.invalidate();
-      utils.materials.getCategories.invalidate();
-      showSuccess('Categoria aggiornata', 'Le modifiche sono state salvate.');
-      resetCategoryForm();
-    },
-    onError: handleMutationError,
-  });
+  // ==================== HANDLERS ====================
 
-  const deleteCategoryMutation = trpc.materials.deleteCategory.useMutation({
-    onSuccess: () => {
-      utils.materials.getAllCategories.invalidate();
-      utils.materials.getCategories.invalidate();
-      showSuccess('Categoria eliminata', 'La categoria è stata rimossa.');
-    },
-    onError: handleMutationError,
-  });
-
-  // Subject mutations
-  const createSubjectMutation = trpc.materials.createSubject.useMutation({
-    onSuccess: () => {
-      utils.materials.getAllSubjects.invalidate();
-      utils.materials.getSubjects.invalidate();
-      showSuccess('Materia creata', 'La nuova materia è stata aggiunta.');
-      resetSubjectForm();
-    },
-    onError: handleMutationError,
-  });
-
-  const updateSubjectMutation = trpc.materials.updateSubject.useMutation({
-    onSuccess: () => {
-      utils.materials.getAllSubjects.invalidate();
-      utils.materials.getSubjects.invalidate();
-      showSuccess('Materia aggiornata', 'Le modifiche sono state salvate.');
-      resetSubjectForm();
-    },
-    onError: handleMutationError,
-  });
-
-  const deleteSubjectMutation = trpc.materials.deleteSubject.useMutation({
-    onSuccess: () => {
-      utils.materials.getAllSubjects.invalidate();
-      utils.materials.getSubjects.invalidate();
-      showSuccess('Materia eliminata', 'La materia è stata rimossa.');
-    },
-    onError: handleMutationError,
-  });
-
-  const resetForm = () => {
-    setFormData({
+  const resetMaterialForm = () => {
+    setMaterialFormData({
       title: '',
       description: '',
       type: 'PDF',
@@ -360,44 +186,15 @@ export default function MaterialsPage() {
       fileName: '',
       fileSize: 0,
       externalUrl: '',
-      thumbnailUrl: '',
-      visibility: 'ALL_STUDENTS',
-      categoryId: '',
       subjectId: '',
       tags: [],
-      groupIds: [],
-      studentIds: [],
     });
-    setShowForm(false);
-    setEditingId(null);
+    setShowMaterialForm(false);
+    setEditingMaterialId(null);
   };
 
-  const resetCategoryForm = () => {
-    setCategoryFormData({
-      name: '',
-      description: '',
-      icon: '',
-      order: 0,
-    });
-    setShowCategoryForm(false);
-    setEditingCategoryId(null);
-  };
-
-  const resetSubjectForm = () => {
-    setSubjectFormData({
-      name: '',
-      code: '',
-      description: '',
-      color: '#6366f1',
-      icon: '',
-      order: 0,
-    });
-    setShowSubjectForm(false);
-    setEditingSubjectId(null);
-  };
-
-  const handleEdit = (material: any) => {
-    setFormData({
+  const handleEditMaterial = (material: any) => {
+    setMaterialFormData({
       title: material.title,
       description: material.description || '',
       type: material.type,
@@ -405,28 +202,11 @@ export default function MaterialsPage() {
       fileName: material.fileName || '',
       fileSize: material.fileSize || 0,
       externalUrl: material.externalUrl || '',
-      thumbnailUrl: material.thumbnailUrl || '',
-      visibility: material.visibility,
-      categoryId: material.categoryId || '',
       subjectId: material.subjectId || '',
       tags: material.tags || [],
-      groupIds: material.groupAccess?.map((ga: any) => ga.groupId) || [],
-      studentIds: material.studentAccess?.map((sa: any) => sa.studentId) || [],
     });
-    setEditingId(material.id);
-    setShowForm(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleEditCategory = (category: any) => {
-    setCategoryFormData({
-      name: category.name,
-      description: category.description || '',
-      icon: category.icon || '',
-      order: category.order || 0,
-    });
-    setEditingCategoryId(category.id);
-    setShowCategoryForm(true);
+    setEditingMaterialId(material.id);
+    setShowMaterialForm(true);
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -437,14 +217,13 @@ export default function MaterialsPage() {
     setUploadProgress(0);
 
     try {
-      // Upload to Firebase Storage
-      const { url, path: _path } = await firebaseStorage.uploadMaterialFile(
+      const { url } = await firebaseStorage.uploadMaterialFile(
         file,
-        formData.type.toLowerCase(),
+        materialFormData.type.toLowerCase(),
         (progress) => setUploadProgress(progress)
       );
 
-      setFormData((prev) => ({
+      setMaterialFormData((prev) => ({
         ...prev,
         fileUrl: url,
         fileName: file.name,
@@ -452,87 +231,49 @@ export default function MaterialsPage() {
       }));
       showSuccess('File caricato', 'Il file è stato caricato con successo.');
     } catch {
-      showError('Errore caricamento', 'Si è verificato un errore durante il caricamento del file.');
+      showError('Errore caricamento', 'Si è verificato un errore durante il caricamento.');
     } finally {
       setUploading(false);
       setUploadProgress(0);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleMaterialSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
     const data = {
-      title: formData.title,
-      description: formData.description || undefined,
-      type: formData.type,
-      fileUrl: formData.fileUrl || undefined,
-      fileName: formData.fileName || undefined,
-      fileSize: formData.fileSize || undefined,
-      externalUrl: formData.externalUrl || undefined,
-      thumbnailUrl: formData.thumbnailUrl || undefined,
-      visibility: formData.visibility,
-      categoryId: formData.categoryId || undefined,
-      subjectId: formData.subjectId || undefined,
-      tags: formData.tags,
-      groupIds: formData.visibility === 'GROUP_BASED' ? formData.groupIds : undefined,
-      studentIds: formData.visibility === 'SELECTED_STUDENTS' ? formData.studentIds : undefined,
+      title: materialFormData.title,
+      description: materialFormData.description || undefined,
+      type: materialFormData.type,
+      fileUrl: materialFormData.fileUrl || undefined,
+      fileName: materialFormData.fileName || undefined,
+      fileSize: materialFormData.fileSize || undefined,
+      externalUrl: materialFormData.externalUrl || undefined,
+      subjectId: materialFormData.subjectId || undefined,
+      tags: materialFormData.tags,
+      visibility: 'ALL_STUDENTS' as const,
     };
 
-    if (editingId) {
-      updateMutation.mutate({ id: editingId, ...data });
+    if (editingMaterialId) {
+      updateMaterialMutation.mutate({ id: editingMaterialId, ...data });
     } else {
-      createMutation.mutate(data);
+      createMaterialMutation.mutate(data);
     }
   };
 
-  const handleCategorySubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const openAssignModal = (materialId: string, material: any) => {
+    setAssigningMaterialId(materialId);
+    // Only show groups that collaborator manages
+    const myGroupIds = myGroups?.map(g => g.id) || [];
+    const materialGroupIds = material.groupAccess?.map((ga: any) => ga.groupId) || [];
+    const relevantGroupIds = materialGroupIds.filter((id: string) => myGroupIds.includes(id));
     
-    if (editingCategoryId) {
-      updateCategoryMutation.mutate({
-        id: editingCategoryId,
-        ...categoryFormData,
-      });
-    } else {
-      createCategoryMutation.mutate(categoryFormData);
-    }
-  };
-
-  const handleSubjectSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (editingSubjectId) {
-      updateSubjectMutation.mutate({
-        id: editingSubjectId,
-        ...subjectFormData,
-      });
-    } else {
-      createSubjectMutation.mutate(subjectFormData);
-    }
-  };
-
-  const handleEditSubject = (subject: any) => {
-    setSubjectFormData({
-      name: subject.name,
-      code: subject.code || '',
-      description: subject.description || '',
-      color: subject.color || '#6366f1',
-      icon: subject.icon || '',
-      order: subject.order || 0,
+    setAssignmentData({
+      visibility: material.visibility || 'ALL_STUDENTS',
+      groupIds: relevantGroupIds,
+      studentIds: material.studentAccess?.map((sa: any) => sa.studentId) || [],
     });
-    setEditingSubjectId(subject.id);
-    setShowSubjectForm(true);
-  };
-
-  const toggleCategory = (categoryId: string) => {
-    const newExpanded = new Set(expandedCategories);
-    if (newExpanded.has(categoryId)) {
-      newExpanded.delete(categoryId);
-    } else {
-      newExpanded.add(categoryId);
-    }
-    setExpandedCategories(newExpanded);
+    setShowAssignModal(true);
   };
 
   const formatFileSize = (bytes: number) => {
@@ -547,20 +288,11 @@ export default function MaterialsPage() {
       const query = searchQuery.toLowerCase();
       return (
         m.title.toLowerCase().includes(query) ||
-        m.description?.toLowerCase().includes(query) ||
-        m.tags?.some((t: string) => t.toLowerCase().includes(query))
+        m.description?.toLowerCase().includes(query)
       );
     }
     return true;
   });
-
-  // Group materials by category
-  const groupedMaterials = filteredMaterials?.reduce((acc, material) => {
-    const catId = material.categoryId || 'uncategorized';
-    if (!acc[catId]) acc[catId] = [];
-    acc[catId].push(material);
-    return acc;
-  }, {} as Record<string, typeof filteredMaterials>);
 
   return (
     <div className="space-y-6">
@@ -569,1174 +301,564 @@ export default function MaterialsPage() {
         <div>
           <h1 className={`text-2xl font-bold ${colors.text.primary} flex items-center gap-3`}>
             <FolderOpen className="w-7 h-7 text-teal-600" />
-            Materiale Didattico
+            Materiali Didattici
           </h1>
           <p className={`mt-1 ${colors.text.secondary}`}>
-            Gestisci PDF, video e risorse per gli studenti
+            Gestisci e assegna materiali ai tuoi gruppi
           </p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => {
-              setActiveTab('materials');
-              setShowForm(true);
-            }}
-            className={`px-4 py-2.5 ${colors.primary.bg} text-white rounded-xl hover:opacity-90 transition-opacity font-medium flex items-center gap-2`}
-          >
-            <Plus className="w-5 h-5" />
-            Nuovo Materiale
-          </button>
-        </div>
+        <button
+          onClick={() => setShowMaterialForm(true)}
+          className="px-4 py-2.5 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-colors font-medium flex items-center gap-2"
+        >
+          <Plus className="w-5 h-5" />
+          Nuovo Materiale
+        </button>
       </div>
 
-      {/* Stats Cards */}
-      {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className={`${colors.background.card} rounded-xl p-4 shadow-sm`}>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center">
-                <FolderOpen className="w-5 h-5 text-teal-600" />
-              </div>
-              <div>
-                <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.totalMaterials}</p>
-                <p className={`text-sm ${colors.text.muted}`}>Totale</p>
-              </div>
-            </div>
-          </div>
-          <div className={`${colors.background.card} rounded-xl p-4 shadow-sm`}>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                <FileText className="w-5 h-5 text-red-600" />
-              </div>
-              <div>
-                <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.byType?.PDF || 0}</p>
-                <p className={`text-sm ${colors.text.muted}`}>PDF</p>
-              </div>
-            </div>
-          </div>
-          <div className={`${colors.background.card} rounded-xl p-4 shadow-sm`}>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                <Video className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.byType?.VIDEO || 0}</p>
-                <p className={`text-sm ${colors.text.muted}`}>Video</p>
-              </div>
-            </div>
-          </div>
-          <div className={`${colors.background.card} rounded-xl p-4 shadow-sm`}>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                <LinkIcon className="w-5 h-5 text-purple-600" />
-              </div>
-              <div>
-                <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.byType?.LINK || 0}</p>
-                <p className={`text-sm ${colors.text.muted}`}>Link</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Main Content */}
+      <div className={`${colors.background.card} rounded-xl shadow-sm p-6`}>
+        {/* Material Form */}
+        {showMaterialForm && (
+          <div className={`mb-6 p-6 rounded-xl border ${colors.border.primary} ${colors.background.secondary}`}>
+            <h3 className={`text-lg font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
+              {editingMaterialId ? <Edit2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+              {editingMaterialId ? 'Modifica Materiale' : 'Nuovo Materiale'}
+            </h3>
 
-      {/* Tabs */}
-      <div className={`${colors.background.card} rounded-xl shadow-sm`}>
-        <div className="flex border-b border-gray-200 dark:border-gray-700">
-          <button
-            onClick={() => setActiveTab('materials')}
-            className={`px-6 py-3 font-medium text-sm flex items-center gap-2 border-b-2 transition-colors ${
-              activeTab === 'materials'
-                ? 'border-red-600 text-red-600'
-                : `border-transparent ${colors.text.muted} hover:text-gray-700 dark:hover:text-gray-300`
-            }`}
-          >
-            <FolderOpen className="w-4 h-4" />
-            Materiali
-          </button>
-          <button
-            onClick={() => setActiveTab('categories')}
-            className={`px-6 py-3 font-medium text-sm flex items-center gap-2 border-b-2 transition-colors ${
-              activeTab === 'categories'
-                ? 'border-red-600 text-red-600'
-                : `border-transparent ${colors.text.muted} hover:text-gray-700 dark:hover:text-gray-300`
-            }`}
-          >
-            <Settings className="w-4 h-4" />
-            Categorie
-          </button>
-          <button
-            onClick={() => setActiveTab('subjects')}
-            className={`px-6 py-3 font-medium text-sm flex items-center gap-2 border-b-2 transition-colors ${
-              activeTab === 'subjects'
-                ? 'border-red-600 text-red-600'
-                : `border-transparent ${colors.text.muted} hover:text-gray-700 dark:hover:text-gray-300`
-            }`}
-          >
-            <Palette className="w-4 h-4" />
-            Materie
-          </button>
-        </div>
-
-        {/* Materials Tab */}
-        {activeTab === 'materials' && (
-          <div className="p-6">
-            {/* Material Form */}
-            {showForm && (
-              <div className={`mb-6 p-6 rounded-xl border ${colors.border.primary} ${colors.background.secondary}`}>
-                <h3 className={`text-lg font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
-                  {editingId ? <Edit2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-                  {editingId ? 'Modifica Materiale' : 'Nuovo Materiale'}
-                </h3>
-
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  {/* Basic Info */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        Titolo <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.title}
-                        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                        className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent`}
-                        placeholder="Es: Introduzione alla Biologia Cellulare"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        Tipo <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={formData.type}
-                        onChange={(e) => setFormData({ ...formData, type: e.target.value as MaterialType })}
-                        className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent`}
-                      >
-                        {Object.entries(typeLabels).map(([key, label]) => (
-                          <option key={key} value={key}>{label}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                      Descrizione
-                    </label>
-                    <textarea
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      rows={3}
-                      className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent`}
-                      placeholder="Descrivi brevemente il contenuto..."
-                    />
-                  </div>
-
-                  {/* File Upload / URL */}
-                  {(formData.type === 'PDF' || formData.type === 'VIDEO' || formData.type === 'DOCUMENT') && (
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        Carica File
-                      </label>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        onChange={handleFileUpload}
-                        accept={formData.type === 'PDF' ? '.pdf' : formData.type === 'VIDEO' ? 'video/*' : '*'}
-                        className="hidden"
-                      />
-                      {formData.fileUrl ? (
-                        <div className={`flex items-center gap-3 p-4 rounded-lg border ${colors.border.primary} ${colors.background.input}`}>
-                          <FileText className="w-8 h-8 text-red-600" />
-                          <div className="flex-1 min-w-0">
-                            <p className={`font-medium ${colors.text.primary} truncate`}>{formData.fileName}</p>
-                            <p className={`text-sm ${colors.text.muted}`}>{formatFileSize(formData.fileSize)}</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setFormData({ ...formData, fileUrl: '', fileName: '', fileSize: 0 })}
-                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-                          >
-                            <X className="w-5 h-5 text-gray-500" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          disabled={uploading}
-                          className={`w-full p-6 border-2 border-dashed ${colors.border.primary} rounded-xl hover:border-red-400 transition-colors flex flex-col items-center gap-2 ${colors.text.muted}`}
-                        >
-                          {uploading ? (
-                            <>
-                              <Spinner size="lg" />
-                              <span>Caricamento... {uploadProgress}%</span>
-                            </>
-                          ) : (
-                            <>
-                              <Upload className="w-8 h-8" />
-                              <span>Clicca per caricare un file</span>
-                              <span className="text-sm">
-                                {formData.type === 'PDF' ? 'Solo file PDF' : formData.type === 'VIDEO' ? 'File video (MP4, WebM, etc.)' : 'Qualsiasi file'}
-                              </span>
-                            </>
-                          )}
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {formData.type === 'LINK' && (
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        URL Esterno <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="url"
-                        value={formData.externalUrl}
-                        onChange={(e) => setFormData({ ...formData, externalUrl: e.target.value })}
-                        className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent`}
-                        placeholder="https://example.com/video"
-                        required={formData.type === 'LINK'}
-                      />
-                    </div>
-                  )}
-
-                  {/* Category & Subject */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        Categoria
-                      </label>
-                      <CustomSelect
-                        value={formData.categoryId}
-                        onChange={(value) => setFormData({ ...formData, categoryId: value })}
-                        options={[
-                          { value: '', label: 'Nessuna categoria' },
-                          ...(categories?.map((cat) => ({ value: cat.id, label: cat.name })) || [])
-                        ]}
-                        placeholder="Seleziona categoria..."
-                        searchable
-                      />
-                    </div>
-
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        Materia
-                      </label>
-                      <CustomSelect
-                        value={formData.subjectId}
-                        onChange={(value) => setFormData({ ...formData, subjectId: value })}
-                        options={[
-                          { value: '', label: 'Nessuna materia' },
-                          ...(subjects?.map((s) => ({ value: s.id, label: s.name })) || [])
-                        ]}
-                        placeholder="Seleziona materia..."
-                        searchable
-                      />
-                    </div>
-                  </div>
-
-                  {/* Visibility */}
-                  <div>
-                    <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                      Visibilità <span className="text-red-500">*</span>
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {Object.entries(visibilityLabels).map(([key, label]) => {
-                        const Icon = visibilityIcons[key as MaterialVisibility];
-                        const isSelected = formData.visibility === key;
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() => setFormData({ ...formData, visibility: key as MaterialVisibility })}
-                            className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${
-                              isSelected
-                                ? 'border-red-600 bg-red-50 dark:bg-red-900/20'
-                                : `${colors.border.primary} hover:border-gray-300 dark:hover:border-gray-600`
-                            }`}
-                          >
-                            <Icon className={`w-6 h-6 ${isSelected ? 'text-red-600' : colors.text.muted}`} />
-                            <span className={`text-sm font-medium ${isSelected ? 'text-red-600' : colors.text.secondary}`}>
-                              {label}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Group Selection */}
-                  {formData.visibility === 'GROUP_BASED' && (
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <label className={`block text-sm font-medium ${colors.text.primary}`}>
-                          Seleziona Gruppi
-                          {formData.groupIds.length > 0 && (
-                            <span className="ml-2 px-2 py-0.5 text-xs bg-red-100 dark:bg-red-900/30 text-red-600 rounded-full">
-                              {formData.groupIds.length} selezionati
-                            </span>
-                          )}
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setFormData({ ...formData, groupIds: [] })}
-                          className={`text-xs ${colors.text.muted} hover:text-red-600 transition-colors`}
-                        >
-                          Deseleziona tutti
-                        </button>
-                      </div>
-                      <div className={`rounded-xl border ${colors.border.primary} ${colors.background.secondary} overflow-hidden`}>
-                        {/* Search */}
-                        <div className="p-3 border-b border-gray-200 dark:border-gray-700">
-                          <div className="relative">
-                            <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${colors.text.muted}`} />
-                            <input
-                              type="text"
-                              value={groupSearch}
-                              onChange={(e) => setGroupSearch(e.target.value)}
-                              placeholder="Cerca gruppo..."
-                              className={`w-full pl-9 pr-4 py-2 text-sm rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent`}
-                            />
-                          </div>
-                        </div>
-                        {/* List */}
-                        <div className="max-h-52 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
-                          {groupsData?.groups
-                            ?.filter((g) => g.name.toLowerCase().includes(groupSearch.toLowerCase()))
-                            .map((group) => {
-                              const isChecked = formData.groupIds.includes(group.id);
-                              return (
-                                <label
-                                  key={group.id}
-                                  className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${
-                                    isChecked 
-                                      ? 'bg-red-50 dark:bg-red-900/20' 
-                                      : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                                  }`}
-                                >
-                                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                                    isChecked 
-                                      ? 'bg-red-600 border-red-600' 
-                                      : `${colors.border.primary} bg-transparent`
-                                  }`}>
-                                    {isChecked && <Check className="w-3 h-3 text-white" />}
-                                  </div>
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setFormData({ ...formData, groupIds: [...formData.groupIds, group.id] });
-                                      } else {
-                                        setFormData({ ...formData, groupIds: formData.groupIds.filter((id) => id !== group.id) });
-                                      }
-                                    }}
-                                    className="sr-only"
-                                  />
-                                  <div className="flex-1 flex items-center gap-2">
-                                    {group.color && (
-                                      <div 
-                                        className="w-3 h-3 rounded-full" 
-                                        style={{ backgroundColor: group.color }}
-                                      />
-                                    )}
-                                    <p className={`text-sm font-medium ${colors.text.primary}`}>{group.name}</p>
-                                  </div>
-                                  <Users className={`w-4 h-4 ${isChecked ? 'text-red-600' : colors.text.muted}`} />
-                                </label>
-                              );
-                            })}
-                          {groupsData?.groups?.filter((g) => g.name.toLowerCase().includes(groupSearch.toLowerCase())).length === 0 && (
-                            <div className="px-4 py-6 text-center">
-                              <p className={`text-sm ${colors.text.muted}`}>Nessun gruppo trovato</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Student Selection */}
-                  {formData.visibility === 'SELECTED_STUDENTS' && (
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <label className={`block text-sm font-medium ${colors.text.primary}`}>
-                          Seleziona Studenti
-                          {formData.studentIds.length > 0 && (
-                            <span className="ml-2 px-2 py-0.5 text-xs bg-red-100 dark:bg-red-900/30 text-red-600 rounded-full">
-                              {formData.studentIds.length} selezionati
-                            </span>
-                          )}
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setFormData({ ...formData, studentIds: [] })}
-                          className={`text-xs ${colors.text.muted} hover:text-red-600 transition-colors`}
-                        >
-                          Deseleziona tutti
-                        </button>
-                      </div>
-                      <div className={`rounded-xl border ${colors.border.primary} ${colors.background.secondary} overflow-hidden`}>
-                        {/* Search */}
-                        <div className="p-3 border-b border-gray-200 dark:border-gray-700">
-                          <div className="relative">
-                            <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${colors.text.muted}`} />
-                            <input
-                              type="text"
-                              value={studentSearch}
-                              onChange={(e) => setStudentSearch(e.target.value)}
-                              placeholder="Cerca studente per nome o email..."
-                              className={`w-full pl-9 pr-4 py-2 text-sm rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent`}
-                            />
-                          </div>
-                        </div>
-                        {/* List */}
-                        <div className="max-h-52 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
-                          {studentsData?.students
-                            ?.filter((s) => 
-                              s.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
-                              s.email.toLowerCase().includes(studentSearch.toLowerCase())
-                            )
-                            .map((student) => {
-                              const studentId = student.studentId;
-                              const isChecked = studentId ? formData.studentIds.includes(studentId) : false;
-                              const isDisabled = !studentId;
-                              return (
-                                <label
-                                  key={student.id}
-                                  className={`flex items-center gap-3 px-4 py-3 transition-colors ${
-                                    isDisabled 
-                                      ? 'opacity-50 cursor-not-allowed' 
-                                      : isChecked 
-                                        ? 'bg-red-50 dark:bg-red-900/20 cursor-pointer' 
-                                        : 'hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer'
-                                  }`}
-                                >
-                                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                                    isDisabled
-                                      ? 'bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600'
-                                      : isChecked 
-                                        ? 'bg-red-600 border-red-600' 
-                                        : `${colors.border.primary} bg-transparent`
-                                  }`}>
-                                    {isChecked && <Check className="w-3 h-3 text-white" />}
-                                  </div>
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    disabled={isDisabled}
-                                    onChange={(e) => {
-                                      if (!studentId) return;
-                                      if (e.target.checked) {
-                                        setFormData({ ...formData, studentIds: [...formData.studentIds, studentId] });
-                                      } else {
-                                        setFormData({ ...formData, studentIds: formData.studentIds.filter((id) => id !== studentId) });
-                                      }
-                                    }}
-                                    className="sr-only"
-                                  />
-                                  <div className="flex-1 min-w-0">
-                                    <p className={`text-sm font-medium ${colors.text.primary} truncate`}>{student.name}</p>
-                                    <p className={`text-xs ${colors.text.muted} truncate`}>{student.email}</p>
-                                  </div>
-                                  <Users className={`w-4 h-4 flex-shrink-0 ${isChecked ? 'text-red-600' : colors.text.muted}`} />
-                                </label>
-                              );
-                            })}
-                          {studentsData?.students?.filter((s) => 
-                            s.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
-                            s.email.toLowerCase().includes(studentSearch.toLowerCase())
-                          ).length === 0 && (
-                            <div className="px-4 py-6 text-center">
-                              <p className={`text-sm ${colors.text.muted}`}>Nessuno studente trovato</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Actions */}
-                  <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <button
-                      type="button"
-                      onClick={resetForm}
-                      className={`px-4 py-2.5 rounded-lg border ${colors.border.primary} ${colors.text.secondary} hover:bg-gray-50 dark:hover:bg-gray-700`}
-                    >
-                      Annulla
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={createMutation.isPending || updateMutation.isPending}
-                      className={`px-6 py-2.5 ${colors.primary.bg} text-white rounded-lg hover:opacity-90 transition-opacity font-medium flex items-center gap-2 disabled:opacity-50`}
-                    >
-                      {(createMutation.isPending || updateMutation.isPending) ? (
-                        <>
-                          <Spinner size="xs" variant="white" />
-                          Salvataggio...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="w-4 h-4" />
-                          {editingId ? 'Salva Modifiche' : 'Carica Materiale'}
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-
-            {/* Search & Filters */}
-            <div className="flex flex-col sm:flex-row gap-4 mb-6">
-              <div className="relative flex-1">
-                <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${colors.text.muted}`} />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Cerca materiali..."
-                  className={`w-full pl-10 pr-4 py-2.5 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent`}
-                />
-              </div>
-              <div className="w-full sm:w-48">
-                <CustomSelect
-                  value={filterType}
-                  onChange={(value) => setFilterType(value as MaterialType | '')}
-                  options={[
-                    { value: '', label: 'Tutti i tipi' },
-                    ...Object.entries(typeLabels).map(([key, label]) => ({ value: key, label }))
-                  ]}
-                  placeholder="Tutti i tipi"
-                  size="md"
-                />
-              </div>
-              <div className="w-full sm:w-52">
-                <CustomSelect
-                  value={filterCategory}
-                  onChange={setFilterCategory}
-                  options={[
-                    { value: '', label: 'Tutte le categorie' },
-                    ...(categories?.map((cat) => ({ value: cat.id, label: cat.name })) || [])
-                  ]}
-                  placeholder="Tutte le categorie"
-                  searchable
-                  size="md"
-                />
-              </div>
-            </div>
-
-            {/* Materials List */}
-            {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Spinner size="lg" />
-              </div>
-            ) : !filteredMaterials?.length ? (
-              <div className="text-center py-12">
-                <FolderOpen className={`w-16 h-16 mx-auto mb-4 ${colors.text.muted}`} />
-                <p className={`text-lg font-medium ${colors.text.primary}`}>Nessun materiale</p>
-                <p className={`mt-1 ${colors.text.secondary}`}>Clicca su &quot;Nuovo Materiale&quot; per iniziare</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Grouped by category */}
-                {categories?.map((category) => {
-                  const catMaterials = groupedMaterials?.[category.id];
-                  if (!catMaterials?.length) return null;
-                  
-                  const isExpanded = expandedCategories.has(category.id);
-                  
-                  return (
-                    <div key={category.id} className={`border ${colors.border.primary} rounded-xl overflow-hidden`}>
-                      <button
-                        onClick={() => toggleCategory(category.id)}
-                        className={`w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors`}
-                      >
-                        <div className="flex items-center gap-3">
-                          {isExpanded ? <ChevronDown className="w-5 h-5 text-gray-400" /> : <ChevronRight className="w-5 h-5 text-gray-400" />}
-                          <FolderOpen className="w-5 h-5 text-teal-600" />
-                          <span className={`font-medium ${colors.text.primary}`}>{category.name}</span>
-                          <span className={`text-sm ${colors.text.muted}`}>({catMaterials.length})</span>
-                        </div>
-                      </button>
-                      
-                      {isExpanded && (
-                        <div className="border-t border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700">
-                          {catMaterials.map((material: any) => (
-                            <MaterialRow
-                              key={material.id}
-                              material={material}
-                              onEdit={handleEdit}
-                              onDelete={(id) => {
-                                if (confirm('Sei sicuro di voler eliminare questo materiale?')) {
-                                  deleteMutation.mutate({ id });
-                                }
-                              }}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {/* Uncategorized */}
-                {groupedMaterials?.uncategorized?.length > 0 && (
-                  <div className={`border ${colors.border.primary} rounded-xl overflow-hidden`}>
-                    <button
-                      onClick={() => toggleCategory('uncategorized')}
-                      className={`w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors`}
-                    >
-                      <div className="flex items-center gap-3">
-                        {expandedCategories.has('uncategorized') ? <ChevronDown className="w-5 h-5 text-gray-400" /> : <ChevronRight className="w-5 h-5 text-gray-400" />}
-                        <FolderOpen className="w-5 h-5 text-gray-400" />
-                        <span className={`font-medium ${colors.text.primary}`}>Senza categoria</span>
-                        <span className={`text-sm ${colors.text.muted}`}>({groupedMaterials.uncategorized.length})</span>
-                      </div>
-                    </button>
-                    
-                    {expandedCategories.has('uncategorized') && (
-                      <div className="border-t border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700">
-                        {groupedMaterials.uncategorized.map((material: any) => (
-                          <MaterialRow
-                            key={material.id}
-                            material={material}
-                            onEdit={handleEdit}
-                            onDelete={(id) => {
-                              if (confirm('Sei sicuro di voler eliminare questo materiale?')) {
-                                deleteMutation.mutate({ id });
-                              }
-                            }}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Categories Tab */}
-        {activeTab === 'categories' && (
-          <div className="p-6">
-            {/* Category Form */}
-            {showCategoryForm && (
-              <div className={`mb-6 p-6 rounded-xl border ${colors.border.primary} ${colors.background.secondary}`}>
-                <h3 className={`text-lg font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
-                  {editingCategoryId ? <Edit2 className="w-5 h-5" /> : <FolderPlus className="w-5 h-5" />}
-                  {editingCategoryId ? 'Modifica Categoria' : 'Nuova Categoria'}
-                </h3>
-
-                <form onSubmit={handleCategorySubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        Nome <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={categoryFormData.name}
-                        onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
-                        className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent`}
-                        placeholder="Es: Biologia Molecolare"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        Ordine
-                      </label>
-                      <input
-                        type="number"
-                        value={categoryFormData.order}
-                        onChange={(e) => setCategoryFormData({ ...categoryFormData, order: parseInt(e.target.value) || 0 })}
-                        className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent`}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                      Descrizione
-                    </label>
-                    <textarea
-                      value={categoryFormData.description}
-                      onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
-                      rows={2}
-                      className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent`}
-                    />
-                  </div>
-
-                  <div className="flex justify-end gap-3 pt-4">
-                    <button
-                      type="button"
-                      onClick={resetCategoryForm}
-                      className={`px-4 py-2.5 rounded-lg border ${colors.border.primary} ${colors.text.secondary} hover:bg-gray-50 dark:hover:bg-gray-700`}
-                    >
-                      Annulla
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={createCategoryMutation.isPending || updateCategoryMutation.isPending}
-                      className={`px-6 py-2.5 ${colors.primary.bg} text-white rounded-lg hover:opacity-90 transition-opacity font-medium flex items-center gap-2 disabled:opacity-50`}
-                    >
-                      <Save className="w-4 h-4" />
-                      {editingCategoryId ? 'Salva' : 'Crea Categoria'}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-
-            {!showCategoryForm && (
-              <button
-                onClick={() => setShowCategoryForm(true)}
-                className={`mb-6 px-4 py-2.5 border-2 border-dashed ${colors.border.primary} rounded-xl hover:border-red-400 transition-colors ${colors.text.muted} hover:text-red-600 flex items-center gap-2`}
-              >
-                <FolderPlus className="w-5 h-5" />
-                Nuova Categoria
-              </button>
-            )}
-
-            {/* Categories List */}
-            <div className="space-y-3">
-              {categories?.map((category) => (
-                <div
-                  key={category.id}
-                  className={`flex items-center justify-between p-4 rounded-xl border ${colors.border.primary} hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center">
-                      <FolderOpen className="w-5 h-5 text-teal-600" />
-                    </div>
-                    <div>
-                      <p className={`font-medium ${colors.text.primary}`}>{category.name}</p>
-                      {category.description && (
-                        <p className={`text-sm ${colors.text.muted}`}>{category.description}</p>
-                      )}
-                    </div>
-                    <span className={`px-2 py-1 rounded-full text-xs ${colors.background.secondary} ${colors.text.muted}`}>
-                      {category._count?.materials || 0} materiali
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleEditCategory(category)}
-                      className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-                      title="Modifica"
-                    >
-                      <Edit2 className="w-4 h-4 text-gray-500" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm('Sei sicuro di voler eliminare questa categoria?')) {
-                          deleteCategoryMutation.mutate({ id: category.id });
-                        }
-                      }}
-                      className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
-                      title="Elimina"
-                      disabled={(category._count?.materials || 0) > 0}
-                    >
-                      <Trash2 className={`w-4 h-4 ${(category._count?.materials || 0) > 0 ? 'text-gray-300 dark:text-gray-600' : 'text-red-500'}`} />
-                    </button>
-                  </div>
+            <form onSubmit={handleMaterialSubmit} className="space-y-6">
+              {/* Title & Type */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                    Titolo <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={materialFormData.title}
+                    onChange={(e) => setMaterialFormData({ ...materialFormData, title: e.target.value })}
+                    className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-teal-500 focus:border-transparent`}
+                    placeholder="Es: Introduzione alla Biologia Cellulare"
+                    required
+                  />
                 </div>
-              ))}
+                <div>
+                  <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                    Tipo <span className="text-red-500">*</span>
+                  </label>
+                  <CustomSelect
+                    value={materialFormData.type}
+                    onChange={(value) => setMaterialFormData({ ...materialFormData, type: value as MaterialType })}
+                    options={Object.entries(typeLabels).map(([key, label]) => ({ value: key, label }))}
+                    placeholder="Seleziona tipo"
+                  />
+                </div>
+              </div>
 
-              {!categories?.length && (
-                <div className="text-center py-8">
-                  <FolderOpen className={`w-12 h-12 mx-auto mb-3 ${colors.text.muted}`} />
-                  <p className={colors.text.secondary}>Nessuna categoria creata</p>
+              {/* Description */}
+              <div>
+                <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                  Descrizione
+                </label>
+                <textarea
+                  value={materialFormData.description}
+                  onChange={(e) => setMaterialFormData({ ...materialFormData, description: e.target.value })}
+                  rows={3}
+                  className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-teal-500 focus:border-transparent`}
+                  placeholder="Descrivi brevemente il contenuto..."
+                />
+              </div>
+
+              {/* File Upload / URL */}
+              {(materialFormData.type === 'PDF' || materialFormData.type === 'VIDEO' || materialFormData.type === 'DOCUMENT') && (
+                <div>
+                  <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                    Carica File
+                  </label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    onChange={handleFileUpload}
+                    accept={materialFormData.type === 'PDF' ? '.pdf' : materialFormData.type === 'VIDEO' ? 'video/*' : '*'}
+                    className="hidden"
+                  />
+                  {materialFormData.fileUrl ? (
+                    <div className={`flex items-center gap-3 p-4 rounded-lg border ${colors.border.primary} ${colors.background.input}`}>
+                      <FileText className="w-8 h-8 text-red-600" />
+                      <div className="flex-1 min-w-0">
+                        <p className={`font-medium ${colors.text.primary} truncate`}>{materialFormData.fileName}</p>
+                        <p className={`text-sm ${colors.text.muted}`}>{formatFileSize(materialFormData.fileSize)}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setMaterialFormData({ ...materialFormData, fileUrl: '', fileName: '', fileSize: 0 })}
+                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                      >
+                        <X className="w-5 h-5 text-gray-500" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className={`w-full p-6 border-2 border-dashed ${colors.border.primary} rounded-xl hover:border-teal-400 transition-colors flex flex-col items-center gap-2 ${colors.text.muted}`}
+                    >
+                      {uploading ? (
+                        <>
+                          <Spinner size="lg" />
+                          <span>Caricamento... {uploadProgress}%</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-8 h-8" />
+                          <span>Clicca per caricare un file</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               )}
-            </div>
+
+              {materialFormData.type === 'LINK' && (
+                <div>
+                  <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                    URL Esterno <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={materialFormData.externalUrl}
+                    onChange={(e) => setMaterialFormData({ ...materialFormData, externalUrl: e.target.value })}
+                    className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-teal-500 focus:border-transparent`}
+                    placeholder="https://example.com/video"
+                    required={materialFormData.type === 'LINK'}
+                  />
+                </div>
+              )}
+
+              {/* Subject */}
+              <div>
+                <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                  Materia
+                </label>
+                <CustomSelect
+                  value={materialFormData.subjectId}
+                  onChange={(value) => setMaterialFormData({ ...materialFormData, subjectId: value })}
+                  options={[
+                    { value: '', label: 'Nessuna materia' },
+                    ...(subjects?.map((s) => ({ value: s.id, label: s.name })) || [])
+                  ]}
+                  placeholder="Seleziona materia..."
+                  searchable
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={resetMaterialForm}
+                  className={`px-4 py-2.5 rounded-lg border ${colors.border.primary} ${colors.text.secondary} hover:bg-gray-50 dark:hover:bg-gray-700`}
+                >
+                  Annulla
+                </button>
+                <button
+                  type="submit"
+                  disabled={createMaterialMutation.isPending || updateMaterialMutation.isPending}
+                  className="px-6 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50"
+                >
+                  {(createMaterialMutation.isPending || updateMaterialMutation.isPending) ? (
+                    <>
+                      <Spinner size="xs" variant="white" />
+                      Salvataggio...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      {editingMaterialId ? 'Salva Modifiche' : 'Carica Materiale'}
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         )}
 
-        {/* Subjects Tab */}
-        {activeTab === 'subjects' && (
-          <div className="p-6">
-            {/* Subject Form */}
-            {showSubjectForm && (
-              <div className={`mb-6 p-6 rounded-xl border ${colors.border.primary} ${colors.background.secondary}`}>
-                <h3 className={`text-lg font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
-                  {editingSubjectId ? <Edit2 className="w-5 h-5" /> : <Palette className="w-5 h-5" />}
-                  {editingSubjectId ? 'Modifica Materia' : 'Nuova Materia'}
-                </h3>
+        {/* Search & Filters */}
+        <div className="flex flex-col sm:flex-row gap-4 mb-6">
+          <div className="relative flex-1">
+            <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${colors.text.muted}`} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cerca materiali..."
+              className={`w-full pl-10 pr-4 py-2.5 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-teal-500 focus:border-transparent`}
+            />
+          </div>
+          <div className="w-full sm:w-40">
+            <CustomSelect
+              value={filterType}
+              onChange={(value) => setFilterType(value as MaterialType | '')}
+              options={[
+                { value: '', label: 'Tutti i tipi' },
+                ...Object.entries(typeLabels).map(([key, label]) => ({ value: key, label }))
+              ]}
+              placeholder="Tutti i tipi"
+            />
+          </div>
+          <div className="w-full sm:w-48">
+            <CustomSelect
+              value={filterSubject}
+              onChange={setFilterSubject}
+              options={[
+                { value: '', label: 'Tutte le materie' },
+                ...(subjects?.map((s) => ({ value: s.id, label: s.name })) || [])
+              ]}
+              placeholder="Tutte le materie"
+              searchable
+            />
+          </div>
+        </div>
 
-                <form onSubmit={handleSubjectSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        Nome <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={subjectFormData.name}
-                        onChange={(e) => setSubjectFormData({ ...subjectFormData, name: e.target.value })}
-                        className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent`}
-                        placeholder="Es: Biologia"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        Codice <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={subjectFormData.code}
-                        onChange={(e) => setSubjectFormData({ ...subjectFormData, code: e.target.value.toUpperCase() })}
-                        className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent uppercase`}
-                        placeholder="Es: BIO"
-                        maxLength={10}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        Ordine
-                      </label>
-                      <input
-                        type="number"
-                        value={subjectFormData.order}
-                        onChange={(e) => setSubjectFormData({ ...subjectFormData, order: parseInt(e.target.value) || 0 })}
-                        className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent`}
-                      />
-                    </div>
-                  </div>
+        {/* Materials List */}
+        {materialsLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Spinner size="lg" />
+          </div>
+        ) : !filteredMaterials?.length ? (
+          <div className="text-center py-12">
+            <FolderOpen className={`w-16 h-16 mx-auto mb-4 ${colors.text.muted}`} />
+            <p className={`text-lg font-medium ${colors.text.primary}`}>Nessun materiale</p>
+            <p className={`mt-1 ${colors.text.secondary}`}>Clicca su &quot;Nuovo Materiale&quot; per iniziare</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredMaterials.map((material: any) => {
+              const TypeIcon = typeIcons[material.type as MaterialType] || File;
+              const VisIcon = visibilityIcons[material.visibility as MaterialVisibility] || Globe;
+              const groups = material.groupAccess?.map((ga: any) => ga.group).filter(Boolean) || [];
+              const hasAssignments = groups.length > 0 || material.studentAccess?.length > 0;
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        Colore
-                      </label>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="color"
-                          value={subjectFormData.color}
-                          onChange={(e) => setSubjectFormData({ ...subjectFormData, color: e.target.value })}
-                          className="w-12 h-12 rounded-lg border-0 cursor-pointer"
-                        />
-                        <input
-                          type="text"
-                          value={subjectFormData.color}
-                          onChange={(e) => setSubjectFormData({ ...subjectFormData, color: e.target.value })}
-                          className={`flex-1 px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent font-mono`}
-                          placeholder="#6366f1"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        Icona (nome o emoji)
-                      </label>
-                      <input
-                        type="text"
-                        value={subjectFormData.icon}
-                        onChange={(e) => setSubjectFormData({ ...subjectFormData, icon: e.target.value })}
-                        className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent`}
-                        placeholder="Es: dna, atom, 🧬, 🔬..."
-                      />
-                      <p className={`text-xs ${colors.text.muted} mt-1`}>
-                        Usa un nome Lucide (dna, atom, brain, calculator, microscope) o un&apos;emoji
-                      </p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                      Descrizione
-                    </label>
-                    <textarea
-                      value={subjectFormData.description}
-                      onChange={(e) => setSubjectFormData({ ...subjectFormData, description: e.target.value })}
-                      rows={2}
-                      className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent`}
-                      placeholder="Descrizione opzionale della materia..."
-                    />
-                  </div>
-
-                  <div className="flex justify-end gap-3 pt-4">
-                    <button
-                      type="button"
-                      onClick={resetSubjectForm}
-                      className={`px-4 py-2.5 rounded-lg border ${colors.border.primary} ${colors.text.secondary} hover:bg-gray-50 dark:hover:bg-gray-700`}
-                    >
-                      Annulla
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={createSubjectMutation.isPending || updateSubjectMutation.isPending}
-                      className={`px-6 py-2.5 ${colors.primary.bg} text-white rounded-lg hover:opacity-90 transition-opacity font-medium flex items-center gap-2 disabled:opacity-50`}
-                    >
-                      <Save className="w-4 h-4" />
-                      {editingSubjectId ? 'Salva' : 'Crea Materia'}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-
-            {!showSubjectForm && (
-              <button
-                onClick={() => setShowSubjectForm(true)}
-                className={`mb-6 px-4 py-2.5 border-2 border-dashed ${colors.border.primary} rounded-xl hover:border-red-400 transition-colors ${colors.text.muted} hover:text-red-600 flex items-center gap-2`}
-              >
-                <Palette className="w-5 h-5" />
-                Nuova Materia
-              </button>
-            )}
-
-            {/* Subjects List */}
-            <div className="space-y-3">
-              {subjects?.map((subject) => (
+              return (
                 <div
-                  key={subject.id}
-                  className={`flex items-center justify-between p-4 rounded-xl border ${colors.border.primary} hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors`}
+                  key={material.id}
+                  className={`p-4 rounded-xl border ${colors.border.primary} hover:shadow-md transition-all ${colors.background.card}`}
                 >
-                  <div className="flex items-center gap-4">
-                    <SubjectIcon icon={subject.icon} color={subject.color} />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className={`font-medium ${colors.text.primary}`}>{subject.name}</p>
-                        <span 
-                          className="px-2 py-0.5 rounded text-xs font-mono"
-                          style={{ backgroundColor: `${subject.color}20`, color: subject.color || '#6366f1' }}
-                        >
-                          {subject.code}
+                  <div className="flex items-start gap-4">
+                    {/* Icon */}
+                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                      material.type === 'PDF' ? 'bg-red-100 dark:bg-red-900/30' :
+                      material.type === 'VIDEO' ? 'bg-blue-100 dark:bg-blue-900/30' :
+                      material.type === 'LINK' ? 'bg-purple-100 dark:bg-purple-900/30' :
+                      'bg-gray-100 dark:bg-gray-700'
+                    }`}>
+                      <TypeIcon className={`w-6 h-6 ${
+                        material.type === 'PDF' ? 'text-red-600' :
+                        material.type === 'VIDEO' ? 'text-blue-600' :
+                        material.type === 'LINK' ? 'text-purple-600' :
+                        'text-gray-600'
+                      }`} />
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-medium ${colors.text.primary}`}>{material.title}</p>
+                      {material.description && (
+                        <p className={`text-sm ${colors.text.muted} mt-1 line-clamp-1`}>{material.description}</p>
+                      )}
+                      <div className={`flex items-center flex-wrap gap-2 text-sm ${colors.text.muted} mt-2`}>
+                        {material.subject && (
+                          <span 
+                            className="px-2 py-0.5 rounded-full text-xs font-medium"
+                            style={{
+                              backgroundColor: material.subject.color ? `${material.subject.color}20` : '#e5e7eb',
+                              color: material.subject.color || '#6b7280'
+                            }}
+                          >
+                            {material.subject.name}
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1 text-xs">
+                          <VisIcon className="w-3.5 h-3.5" />
+                          {visibilityLabels[material.visibility as MaterialVisibility]}
+                        </span>
+                        {!hasAssignments && material.visibility !== 'ALL_STUDENTS' && (
+                          <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            Nessun assegnatario
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1 text-xs ml-auto">
+                          <Eye className="w-3.5 h-3.5" />
+                          {material.viewCount}
+                        </span>
+                        <span className="flex items-center gap-1 text-xs">
+                          <Download className="w-3.5 h-3.5" />
+                          {material.downloadCount}
                         </span>
                       </div>
-                      {subject.description && (
-                        <p className={`text-sm ${colors.text.muted}`}>{subject.description}</p>
-                      )}
                     </div>
-                    <span className={`px-2 py-1 rounded-full text-xs ${colors.background.secondary} ${colors.text.muted}`}>
-                      {subject._count?.materials || 0} materiali
-                    </span>
-                    {!subject.isActive && (
-                      <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-500 dark:bg-gray-700">
-                        Inattiva
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setTopicsModal({
-                        isOpen: true,
-                        subjectId: subject.id,
-                        subjectName: subject.name,
-                        subjectColor: subject.color,
-                      })}
-                      className="p-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg"
-                      title="Gestisci argomenti"
-                    >
-                      <List className="w-4 h-4 text-blue-500" />
-                    </button>
-                    <button
-                      onClick={() => handleEditSubject(subject)}
-                      className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-                      title="Modifica"
-                    >
-                      <Edit2 className="w-4 h-4 text-gray-500" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm('Sei sicuro di voler eliminare questa materia?')) {
-                          deleteSubjectMutation.mutate({ id: subject.id });
-                        }
-                      }}
-                      className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
-                      title="Elimina"
-                      disabled={(subject._count?.materials || 0) > 0}
-                    >
-                      <Trash2 className={`w-4 h-4 ${(subject._count?.materials || 0) > 0 ? 'text-gray-300 dark:text-gray-600' : 'text-red-500'}`} />
-                    </button>
-                  </div>
-                </div>
-              ))}
 
-              {!subjects?.length && (
-                <div className="text-center py-8">
-                  <Palette className={`w-12 h-12 mx-auto mb-3 ${colors.text.muted}`} />
-                  <p className={colors.text.secondary}>Nessuna materia creata</p>
-                  <p className={`text-sm ${colors.text.muted} mt-1`}>
-                    Crea delle materie per organizzare i materiali didattici
-                  </p>
+                    {/* Actions */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => openAssignModal(material.id, material)}
+                        className="p-2 hover:bg-teal-50 dark:hover:bg-teal-900/20 rounded-lg"
+                        title="Assegna ai miei gruppi"
+                      >
+                        <Users className="w-4 h-4 text-teal-600" />
+                      </button>
+                      {(material.fileUrl || material.externalUrl) && (
+                        <a
+                          href={material.fileUrl || material.externalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                          title="Apri"
+                        >
+                          <ExternalLink className="w-4 h-4 text-gray-500" />
+                        </a>
+                      )}
+                      <button
+                        onClick={() => handleEditMaterial(material)}
+                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                        title="Modifica"
+                      >
+                        <Edit2 className="w-4 h-4 text-gray-500" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm('Sei sicuro di voler eliminare questo materiale?')) {
+                            deleteMaterialMutation.mutate({ id: material.id });
+                          }
+                        }}
+                        className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                        title="Elimina"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Topics Manager Modal */}
-      <TopicsManager
-        isOpen={topicsModal.isOpen}
-        onClose={() => setTopicsModal({ isOpen: false, subjectId: '', subjectName: '', subjectColor: null })}
-        subjectId={topicsModal.subjectId}
-        subjectName={topicsModal.subjectName}
-        subjectColor={topicsModal.subjectColor}
-      />
-    </div>
-  );
-}
-
-// Material Row Component
-function MaterialRow({ 
-  material, 
-  onEdit, 
-  onDelete 
-}: { 
-  material: any; 
-  onEdit: (m: any) => void; 
-  onDelete: (id: string) => void;
-}) {
-  const TypeIcon = typeIcons[material.type as MaterialType] || File;
-  const VisIcon = visibilityIcons[material.visibility as MaterialVisibility] || Globe;
-
-  // Debug: log material data
-  console.log('Material data:', { 
-    id: material.id, 
-    title: material.title,
-    groupAccess: material.groupAccess, 
-    studentAccess: material.studentAccess 
-  });
-
-  // Extract groups and students info
-  const groups = material.groupAccess?.map((ga: any) => ({
-    id: ga.group.id,
-    name: ga.group.name,
-    color: ga.group.color,
-    membersCount: ga.group._count?.members || 0,
-  })) || [];
-
-  const students = material.studentAccess?.map((sa: any) => ({
-    id: sa.student.id,
-    name: sa.student.user.name,
-    email: sa.student.user.email,
-  })) || [];
-
-  console.log('Extracted groups:', groups);
-  console.log('Extracted students:', students);
-
-  return (
-    <div className="px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-      <div className="flex items-center gap-4">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-          material.type === 'PDF' ? 'bg-red-100 dark:bg-red-900/30' :
-          material.type === 'VIDEO' ? 'bg-blue-100 dark:bg-blue-900/30' :
-          material.type === 'LINK' ? 'bg-purple-100 dark:bg-purple-900/30' :
-          'bg-gray-100 dark:bg-gray-700'
-        }`}>
-          <TypeIcon className={`w-5 h-5 ${
-            material.type === 'PDF' ? 'text-red-600' :
-            material.type === 'VIDEO' ? 'text-blue-600' :
-            material.type === 'LINK' ? 'text-purple-600' :
-            'text-gray-600'
-          }`} />
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <p className={`font-medium ${colors.text.primary} truncate`}>{material.title}</p>
-          <div className={`flex items-center gap-3 text-sm ${colors.text.muted}`}>
-            <span className="flex items-center gap-1">
-              <VisIcon className="w-3.5 h-3.5" />
-              {visibilityLabels[material.visibility as MaterialVisibility]}
-            </span>
-            {material.subject && (
-              <span 
-                className="px-2 py-0.5 rounded-full text-xs"
-                style={{
-                  backgroundColor: material.subject.color ? `${material.subject.color}20` : '#e5e7eb',
-                  color: material.subject.color || '#6b7280'
+      {/* Assignment Modal - Only shows collaborator's groups - Using Portal */}
+      {showAssignModal && assigningMaterialId && mounted && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div 
+            className={`${colors.background.card} rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className={`text-xl font-semibold ${colors.text.primary} flex items-center gap-2`}>
+                <Users className="w-5 h-5 text-teal-600" />
+                Assegna ai Miei Gruppi e Studenti
+              </h2>
+              <button
+                onClick={() => {
+                  setShowAssignModal(false);
+                  setAssigningMaterialId(null);
                 }}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
               >
-                {material.subject.name}
-              </span>
-            )}
-            <span className="flex items-center gap-1">
-              <Eye className="w-3.5 h-3.5" />
-              {material.viewCount}
-            </span>
-            <span className="flex items-center gap-1">
-              <Download className="w-3.5 h-3.5" />
-              {material.downloadCount}
-            </span>
-          </div>
-        </div>
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
 
-        <div className="flex items-center gap-1">
-          {(material.fileUrl || material.externalUrl) && (
-            <a
-              href={material.fileUrl || material.externalUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-              title="Apri"
-            >
-              <ExternalLink className="w-4 h-4 text-gray-500" />
-            </a>
-          )}
-          <button
-            onClick={() => onEdit(material)}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-            title="Modifica"
-          >
-            <Edit2 className="w-4 h-4 text-gray-500" />
-          </button>
-          <button
-            onClick={() => onDelete(material.id)}
-            className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
-            title="Elimina"
-          >
-            <Trash2 className="w-4 h-4 text-red-500" />
-          </button>
-        </div>
-      </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Info */}
+              <div className={`p-4 rounded-lg bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800`}>
+                <p className="text-sm text-teal-700 dark:text-teal-300">
+                  Puoi selezionare uno o più gruppi e aggiungere singoli studenti dei tuoi gruppi.
+                </p>
+              </div>
 
-      {/* Assignment details */}
-      {(groups.length > 0 || students.length > 0) && (
-        <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-          <p className={`text-xs font-medium ${colors.text.muted} mb-2`}>Assegnato a:</p>
-          <div className="flex flex-wrap gap-2">
-            {/* Groups */}
-            {groups.map((group: any) => (
-              <span
-                key={group.id}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+              {/* My Groups */}
+              <div>
+                <label className={`block text-sm font-medium ${colors.text.primary} mb-2 flex items-center gap-2`}>
+                  <Users className="w-4 h-4 text-teal-600" />
+                  I Miei Gruppi
+                  {assignmentData.groupIds.length > 0 && (
+                    <span className="px-2 py-0.5 text-xs bg-teal-100 dark:bg-teal-900/30 text-teal-600 rounded-full">
+                      {assignmentData.groupIds.length} selezionati
+                    </span>
+                  )}
+                </label>
+                <div className={`rounded-xl border ${colors.border.primary} max-h-48 overflow-y-auto`}>
+                  {myGroups?.length ? myGroups.map((group) => {
+                    const isChecked = assignmentData.groupIds.includes(group.id);
+                    return (
+                      <label
+                        key={group.id}
+                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b last:border-b-0 border-gray-100 dark:border-gray-700 ${
+                          isChecked ? 'bg-teal-50 dark:bg-teal-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                        }`}
+                      >
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                          isChecked ? 'bg-teal-600 border-teal-600' : colors.border.primary
+                        }`}>
+                          {isChecked && <Check className="w-3 h-3 text-white" />}
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setAssignmentData({ ...assignmentData, groupIds: [...assignmentData.groupIds, group.id] });
+                            } else {
+                              setAssignmentData({ ...assignmentData, groupIds: assignmentData.groupIds.filter(id => id !== group.id) });
+                            }
+                          }}
+                          className="sr-only"
+                        />
+                        {group.color && (
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: group.color }} />
+                        )}
+                        <span className={`font-medium ${colors.text.primary} flex-1`}>{group.name}</span>
+                        <span className={`text-xs ${colors.text.muted}`}>{group.memberCount} membri</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setSelectedGroupInfo(group.id);
+                          }}
+                          className="p-1 hover:bg-teal-100 dark:hover:bg-teal-900/30 rounded-lg transition-colors"
+                          title="Vedi membri del gruppo"
+                        >
+                          <Info className="w-4 h-4 text-teal-500" />
+                        </button>
+                      </label>
+                    );
+                  }) : (
+                    <div className="px-4 py-6 text-center">
+                      <p className={`text-sm ${colors.text.muted}`}>Non gestisci nessun gruppo</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* My Students */}
+              <div>
+                <label className={`block text-sm font-medium ${colors.text.primary} mb-2 flex items-center gap-2`}>
+                  <User className="w-4 h-4 text-teal-600" />
+                  Aggiungi Studenti Singoli
+                  {assignmentData.studentIds.length > 0 && (
+                    <span className="px-2 py-0.5 text-xs bg-teal-100 dark:bg-teal-900/30 text-teal-600 rounded-full">
+                      {assignmentData.studentIds.length} selezionati
+                    </span>
+                  )}
+                </label>
+                <p className={`text-xs ${colors.text.muted} mb-2`}>
+                  Seleziona studenti aggiuntivi che non fanno parte dei gruppi selezionati
+                </p>
+                <div className={`rounded-xl border ${colors.border.primary} max-h-48 overflow-y-auto`}>
+                  {myStudents && myStudents.length > 0 ? myStudents.map((student: any) => {
+                    const isChecked = assignmentData.studentIds.includes(student.id);
+                    return (
+                      <label
+                        key={student.id}
+                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b last:border-b-0 border-gray-100 dark:border-gray-700 ${
+                          isChecked ? 'bg-teal-50 dark:bg-teal-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                        }`}
+                      >
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                          isChecked ? 'bg-teal-600 border-teal-600' : colors.border.primary
+                        }`}>
+                          {isChecked && <Check className="w-3 h-3 text-white" />}
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setAssignmentData({ ...assignmentData, studentIds: [...assignmentData.studentIds, student.id] });
+                            } else {
+                              setAssignmentData({ ...assignmentData, studentIds: assignmentData.studentIds.filter((id: string) => id !== student.id) });
+                            }
+                          }}
+                          className="sr-only"
+                        />
+                        <User className="w-4 h-4 text-gray-400" />
+                        <div className="flex-1 min-w-0">
+                          <p className={`font-medium ${colors.text.primary} truncate`}>{student.user?.name || student.name}</p>
+                          {student.user?.email && (
+                            <p className={`text-xs ${colors.text.muted} truncate`}>{student.user.email}</p>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  }) : (
+                    <div className="px-4 py-6 text-center">
+                      <p className={`text-sm ${colors.text.muted}`}>Nessuno studente disponibile</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => {
+                  setShowAssignModal(false);
+                  setAssigningMaterialId(null);
+                }}
+                className={`px-4 py-2.5 rounded-lg border ${colors.border.primary} ${colors.text.secondary} hover:bg-gray-50 dark:hover:bg-gray-700`}
               >
-                {group.color && (
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: group.color }} />
+                Annulla
+              </button>
+              <button
+                onClick={() => {
+                  // Determine visibility based on selections
+                  let visibility: MaterialVisibility = 'ALL_STUDENTS';
+                  if (assignmentData.groupIds.length > 0 && assignmentData.studentIds.length > 0) {
+                    visibility = 'SELECTED_STUDENTS';
+                  } else if (assignmentData.groupIds.length > 0) {
+                    visibility = 'GROUP_BASED';
+                  } else if (assignmentData.studentIds.length > 0) {
+                    visibility = 'SELECTED_STUDENTS';
+                  }
+                  
+                  updateAssignmentsMutation.mutate({
+                    id: assigningMaterialId,
+                    visibility,
+                    groupIds: assignmentData.groupIds,
+                    studentIds: assignmentData.studentIds,
+                  });
+                }}
+                disabled={updateAssignmentsMutation.isPending}
+                className="px-6 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50"
+              >
+                {updateAssignmentsMutation.isPending ? (
+                  <>
+                    <Spinner size="xs" variant="white" />
+                    Salvataggio...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    Salva Assegnazioni
+                  </>
                 )}
-                <Users className="w-3 h-3" />
-                {group.name}
-                <span className="text-blue-500 dark:text-blue-300">({group.membersCount})</span>
-              </span>
-            ))}
-            {/* Students */}
-            {students.slice(0, 5).map((student: any) => (
-              <span
-                key={student.id}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-              >
-                <UserCheck className="w-3 h-3" />
-                {student.name}
-              </span>
-            ))}
-            {students.length > 5 && (
-              <span className={`text-xs ${colors.text.muted} self-center`}>
-                +{students.length - 5} altri studenti
-              </span>
-            )}
+              </button>
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Group Info Modal */}
+      {selectedGroupInfo && (
+        <GroupInfoModal
+          groupId={selectedGroupInfo}
+          isOpen={true}
+          onClose={() => setSelectedGroupInfo(null)}
+        />
       )}
     </div>
   );
