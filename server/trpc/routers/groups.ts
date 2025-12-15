@@ -617,6 +617,52 @@ export const groupsRouter = router({
         skipDuplicates: true,
       });
 
+      // Send notifications to newly added students
+      if (newStudentIds.length > 0) {
+        // Get student user IDs for notifications
+        const students = await ctx.prisma.student.findMany({
+          where: { id: { in: newStudentIds } },
+          select: { userId: true },
+        });
+        
+        // Create notifications for each new student member
+        const notificationsToCreate = students.map((student) => ({
+          userId: student.userId,
+          type: 'GENERAL' as const,
+          title: 'Aggiunto a un gruppo',
+          message: `Sei stato aggiunto al gruppo "${group.name}".`,
+          data: { groupId: group.id, groupName: group.name },
+        }));
+
+        if (notificationsToCreate.length > 0) {
+          await ctx.prisma.notification.createMany({
+            data: notificationsToCreate,
+          });
+        }
+      }
+
+      // Send notifications to newly added collaborators
+      if (newCollaboratorIds.length > 0) {
+        const collaborators = await ctx.prisma.collaborator.findMany({
+          where: { id: { in: newCollaboratorIds } },
+          select: { userId: true },
+        });
+        
+        const notificationsToCreate = collaborators.map((collab) => ({
+          userId: collab.userId,
+          type: 'GENERAL' as const,
+          title: 'Aggiunto a un gruppo',
+          message: `Sei stato aggiunto al gruppo "${group.name}".`,
+          data: { groupId: group.id, groupName: group.name },
+        }));
+
+        if (notificationsToCreate.length > 0) {
+          await ctx.prisma.notification.createMany({
+            data: notificationsToCreate,
+          });
+        }
+      }
+
       return {
         added: membersToCreate.length,
         skipped: studentIds.length + collaboratorIds.length - membersToCreate.length,

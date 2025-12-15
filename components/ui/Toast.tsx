@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { X, CheckCircle, AlertTriangle, XCircle, Info } from 'lucide-react';
-import { colors } from '@/lib/theme/colors';
 
 // Toast types
 type ToastType = 'success' | 'error' | 'warning' | 'info';
@@ -54,30 +53,40 @@ const toastConfig: Record<ToastType, {
   bgClass: string; 
   borderClass: string;
   iconClass: string;
+  titleClass: string;
+  messageClass: string;
 }> = {
   success: {
     icon: CheckCircle,
-    bgClass: 'bg-green-50 dark:bg-green-950/50',
+    bgClass: 'bg-green-50 dark:bg-green-900/90',
     borderClass: 'border-green-500',
-    iconClass: 'text-green-500',
+    iconClass: 'text-green-600 dark:text-green-400',
+    titleClass: 'text-green-900 dark:text-green-100',
+    messageClass: 'text-green-800 dark:text-green-200',
   },
   error: {
     icon: XCircle,
-    bgClass: 'bg-red-50 dark:bg-red-950/50',
+    bgClass: 'bg-red-50 dark:bg-red-900/90',
     borderClass: 'border-red-500',
-    iconClass: 'text-red-500',
+    iconClass: 'text-red-600 dark:text-red-400',
+    titleClass: 'text-red-900 dark:text-red-100',
+    messageClass: 'text-red-800 dark:text-red-200',
   },
   warning: {
     icon: AlertTriangle,
-    bgClass: 'bg-amber-50 dark:bg-amber-950/50',
+    bgClass: 'bg-amber-50 dark:bg-amber-900/90',
     borderClass: 'border-amber-500',
-    iconClass: 'text-amber-500',
+    iconClass: 'text-amber-600 dark:text-amber-400',
+    titleClass: 'text-amber-900 dark:text-amber-100',
+    messageClass: 'text-amber-800 dark:text-amber-200',
   },
   info: {
     icon: Info,
-    bgClass: 'bg-blue-50 dark:bg-blue-950/50',
+    bgClass: 'bg-blue-50 dark:bg-blue-900/90',
     borderClass: 'border-blue-500',
-    iconClass: 'text-blue-500',
+    iconClass: 'text-blue-600 dark:text-blue-400',
+    titleClass: 'text-blue-900 dark:text-blue-100',
+    messageClass: 'text-blue-800 dark:text-blue-200',
   },
 };
 
@@ -100,11 +109,11 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: () => void }) 
       <Icon className={`w-5 h-5 flex-shrink-0 mt-0.5 ${config.iconClass}`} />
       
       <div className="flex-1 min-w-0">
-        <p className={`font-semibold text-sm ${colors.text.primary}`}>
+        <p className={`font-semibold text-sm ${config.titleClass}`}>
           {toast.title}
         </p>
         {toast.message && (
-          <p className={`text-sm mt-1 ${colors.text.secondary}`}>
+          <p className={`text-sm mt-1 ${config.messageClass}`}>
             {toast.message}
           </p>
         )}
@@ -119,7 +128,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: () => void }) 
         `}
         aria-label="Chiudi notifica"
       >
-        <X className={`w-4 h-4 ${colors.text.muted}`} />
+        <X className={`w-4 h-4 ${config.iconClass}`} />
       </button>
     </div>
   );

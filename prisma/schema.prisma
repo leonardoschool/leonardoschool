@@ -907,6 +907,11 @@ model SimulationAssignment {
   dueDate      DateTime? // Optional specific due date for this assignment
   notes        String?   @db.Text // Notes for this specific assignment
 
+  // Schedule for this specific assignment
+  startDate    DateTime? // When this assignment becomes available
+  endDate      DateTime? // When this assignment closes
+  locationType String?   // 'ONLINE', 'IN_PERSON', 'HYBRID'
+
   // Relations
   simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
   student    Student?   @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -921,6 +926,8 @@ model SimulationAssignment {
   @@index([studentId])
   @@index([groupId])
   @@index([classId])
+  @@index([startDate])
+  @@index([endDate])
   @@map("simulation_assignments")
 }
 

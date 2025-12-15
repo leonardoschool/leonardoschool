@@ -2,7 +2,7 @@
 
 import { use, useState, useMemo } from 'react';
 import { trpc } from '@/lib/trpc/client';
-import { colors, getSubjectColor } from '@/lib/theme/colors';
+import { colors } from '@/lib/theme/colors';
 import { PageLoader } from '@/components/ui/loaders';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 
 export default function SimulationResultPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+  const { id: simulationId } = use(params);
   const searchParams = useSearchParams();
   const resultId = searchParams.get('resultId');
 
@@ -32,22 +32,21 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
   const [showAllQuestions, setShowAllQuestions] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'correct' | 'wrong' | 'blank'>('all');
 
-  // Fetch result details
+  // Fetch result details - use resultId if available, otherwise use simulationId
   const { data: result, isLoading, error } = trpc.simulations.getResultDetails.useQuery(
-    { resultId: resultId || '' },
-    { enabled: !!resultId }
+    resultId ? { resultId } : { simulationId }
   );
 
   // Calculate statistics by subject
   const subjectStats = useMemo(() => {
     if (!result?.answers) return [];
 
-    const stats: Record<string, { correct: number; wrong: number; blank: number; total: number }> = {};
+    const stats: Record<string, { correct: number; wrong: number; blank: number; total: number; color: string | null }> = {};
 
-    result.answers.forEach((answer: { question: { subject: string }; isCorrect: boolean | null }) => {
+    result.answers.forEach((answer: { question: { subject: string; subjectColor?: string | null }; isCorrect: boolean | null }) => {
       const subject = answer.question.subject;
       if (!stats[subject]) {
-        stats[subject] = { correct: 0, wrong: 0, blank: 0, total: 0 };
+        stats[subject] = { correct: 0, wrong: 0, blank: 0, total: 0, color: answer.question.subjectColor || null };
       }
       stats[subject].total++;
       if (answer.isCorrect === null) {
@@ -216,7 +215,7 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
           {simulation.isOfficial && (
             <div className="mt-6">
               <Link
-                href={`/studente/simulazioni/${id}/classifica`}
+                href={`/studente/simulazioni/${simulationId}/classifica`}
                 className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${colors.background.secondary} ${colors.text.primary} hover:opacity-80 transition-opacity border ${colors.border.light}`}
               >
                 <Trophy className="w-5 h-5 text-yellow-500" />
@@ -247,7 +246,7 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
                 </div>
                 <div className="h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden flex">
                   <div
-                    className={`${getSubjectColor(subject as 'BIOLOGIA' | 'CHIMICA' | 'FISICA' | 'MATEMATICA' | 'LOGICA' | 'CULTURA_GENERALE', 'bg')} opacity-100`}
+                    className="bg-green-500"
                     style={{ width: `${(correct / total) * 100}%` }}
                   />
                   <div
@@ -327,6 +326,7 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
                 id: string;
                 text: string;
                 subject: string;
+                subjectColor?: string | null;
                 answers: { id: string; text: string; isCorrect: boolean }[];
                 explanation?: string;
               };
@@ -336,6 +336,8 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
             }, index: number) => {
               const isExpanded = showAllQuestions || expandedQuestion === answer.id;
               const _correctAnswer = answer.question.answers.find((a: { isCorrect: boolean }) => a.isCorrect);
+              // Use subject color from DB if available, otherwise fallback to getSubjectColor
+              const subjectColor = answer.question.subjectColor;
 
               return (
                 <div key={answer.id} className="p-4">
@@ -365,7 +367,10 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
                             <span className={`text-sm font-medium ${colors.text.primary}`}>
                               Domanda {index + 1}
                             </span>
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${getSubjectColor(answer.question.subject as 'BIOLOGIA' | 'CHIMICA' | 'FISICA' | 'MATEMATICA' | 'LOGICA' | 'CULTURA_GENERALE', 'bg')} ${getSubjectColor(answer.question.subject as 'BIOLOGIA' | 'CHIMICA' | 'FISICA' | 'MATEMATICA' | 'LOGICA' | 'CULTURA_GENERALE', 'text')}`}>
+                            <span 
+                              className="text-xs px-2 py-0.5 rounded-full text-white"
+                              style={subjectColor ? { backgroundColor: subjectColor } : undefined}
+                            >
                               {answer.question.subject.replace(/_/g, ' ')}
                             </span>
                           </div>
@@ -473,12 +478,14 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
         >
           Torna alle simulazioni
         </Link>
-        <Link
-          href={`/studente/simulazioni/${id}`}
-          className={`px-6 py-3 rounded-lg text-white ${colors.primary.bg} hover:opacity-90 text-center`}
-        >
-          Riprova la simulazione
-        </Link>
+        {simulation.isRepeatable && (
+          <Link
+            href={`/studente/simulazioni/${simulationId}`}
+            className={`px-6 py-3 rounded-lg text-white ${colors.primary.bg} hover:opacity-90 text-center`}
+          >
+            Riprova la simulazione
+          </Link>
+        )}
       </div>
     </div>
   );

@@ -48,6 +48,7 @@ export const simulationsRouter = router({
         visibility,
         isOfficial,
         classId,
+        groupId,
         createdById,
         creatorRole,
         startDateFrom,
@@ -80,6 +81,15 @@ export const simulationsRouter = router({
       if (classId) where.classId = classId;
       if (createdById) where.createdById = createdById;
       if (creatorRole) where.creatorRole = creatorRole;
+      
+      // Filter by group (simulations assigned to a specific group)
+      if (groupId) {
+        andConditions.push({
+          assignments: {
+            some: { groupId },
+          },
+        });
+      }
 
       // Date ranges
       if (startDateFrom || startDateTo) {
@@ -886,7 +896,7 @@ export const simulationsRouter = router({
         }
       }
 
-      // Create assignments (ignore duplicates)
+      // Create assignments (ignore duplicates) and auto-publish simulation
       const created = await ctx.prisma.$transaction(async (tx) => {
         const results = [];
         for (const target of targets) {
@@ -900,6 +910,10 @@ export const simulationsRouter = router({
                 dueDate: target.dueDate ? new Date(target.dueDate) : null,
                 notes: target.notes,
                 assignedById: ctx.user.id,
+                // New schedule fields for this assignment
+                startDate: target.startDate ? new Date(target.startDate) : null,
+                endDate: target.endDate ? new Date(target.endDate) : null,
+                locationType: target.locationType,
               },
             });
             results.push(assignment);
@@ -907,6 +921,15 @@ export const simulationsRouter = router({
             // Ignore duplicate assignments
           }
         }
+
+        // Auto-publish simulation when assignments are created
+        if (results.length > 0 && simulation.status === 'DRAFT') {
+          await tx.simulation.update({
+            where: { id: simulationId },
+            data: { status: 'PUBLISHED' },
+          });
+        }
+
         return results;
       });
 
@@ -1464,35 +1487,79 @@ export const simulationsRouter = router({
 
   // Get detailed result for review
   getResultDetails: studentProcedure
-    .input(z.object({ resultId: z.string() }))
+    .input(z.object({ 
+      resultId: z.string().optional(),
+      simulationId: z.string().optional(),
+    }).refine(data => data.resultId || data.simulationId, {
+      message: 'Devi specificare resultId o simulationId'
+    }))
     .query(async ({ ctx, input }) => {
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
       
-      const result = await ctx.prisma.simulationResult.findUnique({
-        where: { id: input.resultId },
-        include: {
-          simulation: {
-            select: {
-              id: true,
-              title: true,
-              description: true,
-              type: true,
-              isOfficial: true,
-              maxScore: true,
-              passingScore: true,
-              totalQuestions: true,
-              correctPoints: true,
-              wrongPoints: true,
-              blankPoints: true,
-              showCorrectAnswers: true,
-              allowReview: true,
+      let result;
+      
+      if (input.resultId) {
+        // Find by resultId
+        result = await ctx.prisma.simulationResult.findUnique({
+          where: { id: input.resultId },
+          include: {
+            simulation: {
+              select: {
+                id: true,
+                title: true,
+                description: true,
+                type: true,
+                isOfficial: true,
+                maxScore: true,
+                passingScore: true,
+                totalQuestions: true,
+                correctPoints: true,
+                wrongPoints: true,
+                blankPoints: true,
+                showCorrectAnswers: true,
+                allowReview: true,
+                isRepeatable: true,
+              },
+            },
+            student: {
+              select: { id: true },
             },
           },
-          student: {
-            select: { id: true },
+        });
+      } else if (input.simulationId) {
+        // Find by simulationId - get the latest completed result for this student
+        result = await ctx.prisma.simulationResult.findFirst({
+          where: { 
+            simulationId: input.simulationId,
+            student: { userId: ctx.user.id },
+            completedAt: { not: null }, // Completed results have completedAt set
           },
-        },
-      });
+          orderBy: { completedAt: 'desc' },
+          include: {
+            simulation: {
+              select: {
+                id: true,
+                title: true,
+                description: true,
+                type: true,
+                isOfficial: true,
+                maxScore: true,
+                passingScore: true,
+                totalQuestions: true,
+                correctPoints: true,
+                wrongPoints: true,
+                blankPoints: true,
+                showCorrectAnswers: true,
+                allowReview: true,
+                isRepeatable: true,
+              },
+            },
+            student: {
+              select: { id: true },
+            },
+          },
+        });
+      }
 
       if (!result) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Risultato non trovato' });
@@ -1542,7 +1609,7 @@ export const simulationsRouter = router({
               isCorrect: result.simulation.showCorrectAnswers,
             },
           },
-          subject: { select: { name: true } },
+          subject: { select: { name: true, color: true } },
           topic: { select: { name: true } },
         },
       });
@@ -1556,6 +1623,7 @@ export const simulationsRouter = router({
             id: question?.id || '',
             text: question?.text || '',
             subject: question?.subject?.name || 'UNKNOWN',
+            subjectColor: question?.subject?.color || null,
             explanation: question?.generalExplanation || question?.correctExplanation || null,
             answers: question?.answers || [],
           },
@@ -1781,6 +1849,367 @@ export const simulationsRouter = router({
         averageBlank: blankCounts.reduce((a, b) => a + b, 0) / results.length,
         averageTime: times.reduce((a, b) => a + b, 0) / results.length,
         passRate,
+      };
+    }),
+
+  // Get detailed question-level analysis for a simulation
+  getQuestionAnalysis: staffProcedure
+    .input(z.object({ simulationId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const simulation = await ctx.prisma.simulation.findUnique({
+        where: { id: input.simulationId },
+        include: {
+          questions: {
+            orderBy: { order: 'asc' },
+            include: {
+              question: {
+                include: {
+                  subject: { select: { id: true, name: true, code: true, color: true } },
+                  topic: { select: { id: true, name: true } },
+                  answers: { orderBy: { order: 'asc' } },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!simulation) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
+      }
+
+      if (ctx.user.role === 'COLLABORATOR' && simulation.createdById !== ctx.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai accesso a questa analisi' });
+      }
+
+      // Get all completed results with answers
+      const results = await ctx.prisma.simulationResult.findMany({
+        where: { simulationId: input.simulationId, completedAt: { not: null } },
+        select: {
+          id: true,
+          answers: true,
+          totalScore: true,
+          percentageScore: true,
+          durationSeconds: true,
+          student: {
+            include: { user: { select: { id: true, name: true, email: true } } },
+          },
+        },
+      });
+
+      if (results.length === 0) {
+        return {
+          simulation: {
+            id: simulation.id,
+            title: simulation.title,
+            totalQuestions: simulation.totalQuestions,
+            passingScore: simulation.passingScore,
+          },
+          totalAttempts: 0,
+          questionAnalysis: [],
+          subjectBreakdown: [],
+        };
+      }
+
+      // Build question analysis
+      type AnswerData = {
+        questionId: string;
+        answer: string;
+        isCorrect: boolean;
+        timeSpent?: number;
+      };
+
+      const questionStats = new Map<string, {
+        questionId: string;
+        order: number;
+        text: string;
+        subject: { id: string; name: string; code: string; color: string } | null;
+        topic: { id: string; name: string } | null;
+        correctAnswer: string;
+        totalAnswers: number;
+        correctCount: number;
+        wrongCount: number;
+        blankCount: number;
+        answerDistribution: Record<string, number>;
+        totalTimeSpent: number;
+        timeSpentCount: number;
+      }>();
+
+      // Initialize stats for each question
+      simulation.questions.forEach((sq, idx) => {
+        const correctAnswerObj = sq.question.answers.find(a => a.isCorrect);
+        const correctAnswerLetter = correctAnswerObj 
+          ? String.fromCharCode(65 + sq.question.answers.indexOf(correctAnswerObj)) 
+          : '';
+
+        questionStats.set(sq.questionId, {
+          questionId: sq.questionId,
+          order: idx + 1,
+          text: sq.question.text,
+          subject: sq.question.subject,
+          topic: sq.question.topic,
+          correctAnswer: correctAnswerLetter,
+          totalAnswers: 0,
+          correctCount: 0,
+          wrongCount: 0,
+          blankCount: 0,
+          answerDistribution: { A: 0, B: 0, C: 0, D: 0, E: 0, BLANK: 0 },
+          totalTimeSpent: 0,
+          timeSpentCount: 0,
+        });
+      });
+
+      // Process each result
+      results.forEach(result => {
+        const answers = result.answers as AnswerData[];
+        if (!Array.isArray(answers)) return;
+
+        answers.forEach(answerData => {
+          const stats = questionStats.get(answerData.questionId);
+          if (!stats) return;
+
+          stats.totalAnswers++;
+          if (answerData.answer === 'BLANK' || !answerData.answer) {
+            stats.blankCount++;
+            stats.answerDistribution['BLANK']++;
+          } else if (answerData.isCorrect) {
+            stats.correctCount++;
+            stats.answerDistribution[answerData.answer] = 
+              (stats.answerDistribution[answerData.answer] || 0) + 1;
+          } else {
+            stats.wrongCount++;
+            stats.answerDistribution[answerData.answer] = 
+              (stats.answerDistribution[answerData.answer] || 0) + 1;
+          }
+
+          if (typeof answerData.timeSpent === 'number' && answerData.timeSpent > 0) {
+            stats.totalTimeSpent += answerData.timeSpent;
+            stats.timeSpentCount++;
+          }
+        });
+      });
+
+      // Convert to array and calculate percentages
+      const questionAnalysis = Array.from(questionStats.values()).map(stats => ({
+        ...stats,
+        correctRate: stats.totalAnswers > 0 
+          ? (stats.correctCount / stats.totalAnswers) * 100 
+          : 0,
+        wrongRate: stats.totalAnswers > 0 
+          ? (stats.wrongCount / stats.totalAnswers) * 100 
+          : 0,
+        blankRate: stats.totalAnswers > 0 
+          ? (stats.blankCount / stats.totalAnswers) * 100 
+          : 0,
+        averageTimeSpent: stats.timeSpentCount > 0 
+          ? stats.totalTimeSpent / stats.timeSpentCount 
+          : 0,
+      }));
+
+      // Calculate subject breakdown
+      const subjectStats = new Map<string, {
+        subject: { id: string; name: string; code: string; color: string };
+        totalQuestions: number;
+        totalCorrect: number;
+        totalWrong: number;
+        totalBlank: number;
+      }>();
+
+      questionAnalysis.forEach(q => {
+        if (!q.subject) return;
+        
+        if (!subjectStats.has(q.subject.id)) {
+          subjectStats.set(q.subject.id, {
+            subject: q.subject,
+            totalQuestions: 0,
+            totalCorrect: 0,
+            totalWrong: 0,
+            totalBlank: 0,
+          });
+        }
+
+        const stats = subjectStats.get(q.subject.id)!;
+        stats.totalQuestions++;
+        stats.totalCorrect += q.correctCount;
+        stats.totalWrong += q.wrongCount;
+        stats.totalBlank += q.blankCount;
+      });
+
+      const subjectBreakdown = Array.from(subjectStats.values()).map(stats => ({
+        ...stats,
+        correctRate: (stats.totalCorrect + stats.totalWrong + stats.totalBlank) > 0
+          ? (stats.totalCorrect / (stats.totalCorrect + stats.totalWrong + stats.totalBlank)) * 100
+          : 0,
+      }));
+
+      return {
+        simulation: {
+          id: simulation.id,
+          title: simulation.title,
+          totalQuestions: simulation.totalQuestions,
+          passingScore: simulation.passingScore,
+        },
+        totalAttempts: results.length,
+        questionAnalysis,
+        subjectBreakdown,
+      };
+    }),
+
+  // Get all assignments with full details (for the assignments view)
+  getAssignments: staffProcedure
+    .input(z.object({
+      page: z.number().int().min(1).default(1),
+      pageSize: z.number().int().min(1).max(100).default(20),
+      simulationId: z.string().optional(),
+      groupId: z.string().optional(),
+      status: z.enum(['PENDING', 'COMPLETED', 'ALL']).default('ALL'),
+    }))
+    .query(async ({ ctx, input }) => {
+      const { page, pageSize, simulationId, groupId, status } = input;
+      const skip = (page - 1) * pageSize;
+
+      // Build where clause
+      const where: Prisma.SimulationAssignmentWhereInput = {};
+
+      // For collaborators, only show assignments they created or for simulations they created
+      if (ctx.user.role === 'COLLABORATOR') {
+        where.OR = [
+          { assignedById: ctx.user.id },
+          { simulation: { createdById: ctx.user.id } },
+        ];
+      }
+
+      if (simulationId) {
+        where.simulationId = simulationId;
+      }
+
+      if (groupId) {
+        where.groupId = groupId;
+      }
+
+      // Get total count
+      const total = await ctx.prisma.simulationAssignment.count({ where });
+
+      // Get assignments with related data
+      const assignments = await ctx.prisma.simulationAssignment.findMany({
+        where,
+        skip,
+        take: pageSize,
+        orderBy: { assignedAt: 'desc' },
+        include: {
+          simulation: {
+            select: {
+              id: true,
+              title: true,
+              type: true,
+              status: true,
+              isOfficial: true,
+              durationMinutes: true,
+              totalQuestions: true,
+              startDate: true,
+              endDate: true,
+              createdById: true,
+              createdBy: { select: { id: true, name: true } },
+              _count: { select: { results: true } },
+            },
+          },
+          student: {
+            include: { user: { select: { id: true, name: true, email: true } } },
+          },
+          group: {
+            select: { id: true, name: true, color: true, _count: { select: { members: true } } },
+          },
+          class: {
+            select: { id: true, name: true, year: true, section: true },
+          },
+          assignedBy: { select: { id: true, name: true } },
+        },
+      });
+
+      // Enrich with completion data if needed
+      const enrichedAssignments = await Promise.all(
+        assignments.map(async (assignment) => {
+          let completedCount = 0;
+          let totalTargeted = 0;
+
+          if (assignment.studentId) {
+            // Single student assignment
+            totalTargeted = 1;
+            const result = await ctx.prisma.simulationResult.findUnique({
+              where: {
+                simulationId_studentId: {
+                  simulationId: assignment.simulationId,
+                  studentId: assignment.studentId,
+                },
+              },
+              select: { completedAt: true },
+            });
+            completedCount = result?.completedAt ? 1 : 0;
+          } else if (assignment.groupId) {
+            // Group assignment - count members and their completions
+            const members = await ctx.prisma.groupMember.findMany({
+              where: { groupId: assignment.groupId },
+              select: { studentId: true },
+            });
+            totalTargeted = members.length;
+
+            if (members.length > 0) {
+              const results = await ctx.prisma.simulationResult.findMany({
+                where: {
+                  simulationId: assignment.simulationId,
+                  studentId: { in: members.map(m => m.studentId) },
+                  completedAt: { not: null },
+                },
+                select: { id: true },
+              });
+              completedCount = results.length;
+            }
+          } else if (assignment.classId) {
+            // Class assignment
+            const students = await ctx.prisma.student.findMany({
+              where: { classId: assignment.classId },
+              select: { id: true },
+            });
+            totalTargeted = students.length;
+
+            if (students.length > 0) {
+              const results = await ctx.prisma.simulationResult.findMany({
+                where: {
+                  simulationId: assignment.simulationId,
+                  studentId: { in: students.map(s => s.id) },
+                  completedAt: { not: null },
+                },
+                select: { id: true },
+              });
+              completedCount = results.length;
+            }
+          }
+
+          return {
+            ...assignment,
+            completedCount,
+            totalTargeted,
+            completionRate: totalTargeted > 0 ? (completedCount / totalTargeted) * 100 : 0,
+          };
+        })
+      );
+
+      // Filter by status if needed
+      let filteredAssignments = enrichedAssignments;
+      if (status === 'COMPLETED') {
+        filteredAssignments = enrichedAssignments.filter(a => a.completedCount === a.totalTargeted && a.totalTargeted > 0);
+      } else if (status === 'PENDING') {
+        filteredAssignments = enrichedAssignments.filter(a => a.completedCount < a.totalTargeted);
+      }
+
+      return {
+        assignments: filteredAssignments,
+        pagination: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize),
+        },
       };
     }),
 

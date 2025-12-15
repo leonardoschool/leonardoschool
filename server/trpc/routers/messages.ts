@@ -79,6 +79,65 @@ export const messagesRouter = router({
       ],
     });
     
+    // For students, also include reference students from their groups
+    if (currentUser.role === 'STUDENT') {
+      // Get student profile
+      const student = await ctx.prisma.student.findUnique({
+        where: { userId: currentUser.id },
+        select: { id: true },
+      });
+      
+      if (student) {
+        // Get groups where this student is a member
+        const groups = await ctx.prisma.groupMember.findMany({
+          where: { studentId: student.id },
+          select: {
+            group: {
+              select: {
+                referenceStudent: {
+                  select: {
+                    user: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        role: true,
+                        isActive: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        });
+        
+        // Extract unique reference students (excluding self)
+        const referenceStudents = groups
+          .map(g => g.group.referenceStudent?.user)
+          .filter((u): u is NonNullable<typeof u> => 
+            u !== null && 
+            u !== undefined && 
+            u.id !== currentUser.id && 
+            u.isActive
+          );
+        
+        // Add reference students if not already in the list
+        const existingIds = new Set(users.map(u => u.id));
+        for (const refStudent of referenceStudents) {
+          if (!existingIds.has(refStudent.id)) {
+            users.push({
+              id: refStudent.id,
+              name: refStudent.name,
+              email: refStudent.email,
+              role: refStudent.role,
+            });
+            existingIds.add(refStudent.id);
+          }
+        }
+      }
+    }
+    
     return users;
   }),
 
@@ -229,7 +288,30 @@ export const messagesRouter = router({
       }
       
       // Verify permission to contact this user
-      const canContact = await canUserContact(currentUser.role, recipient.role);
+      let canContact = canUserContact(currentUser.role, recipient.role);
+      
+      // Special case: Students can contact reference students from their groups
+      if (!canContact && currentUser.role === 'STUDENT' && recipient.role === 'STUDENT') {
+        const student = await ctx.prisma.student.findUnique({
+          where: { userId: currentUser.id },
+          select: { id: true },
+        });
+        
+        if (student) {
+          // Check if recipient is a reference student in any of sender's groups
+          const sharedGroup = await ctx.prisma.group.findFirst({
+            where: {
+              members: { some: { studentId: student.id } },
+              referenceStudent: { userId: recipient.id },
+            },
+          });
+          
+          if (sharedGroup) {
+            canContact = true;
+          }
+        }
+      }
+      
       if (!canContact) {
         throw new TRPCError({
           code: 'FORBIDDEN',

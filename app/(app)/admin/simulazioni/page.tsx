@@ -5,10 +5,11 @@ import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
-import { PageLoader } from '@/components/ui/loaders';
+import { PageLoader, Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import { Portal } from '@/components/ui/Portal';
+import SimulationAssignModal from '@/components/admin/SimulationAssignModal';
 import Link from 'next/link';
 import {
   Plus,
@@ -28,8 +29,13 @@ import {
   ChevronRight,
   BarChart3,
   Send,
+  CheckCircle,
+  Calendar,
+  UserPlus,
 } from 'lucide-react';
 import type { SimulationType, SimulationStatus, SimulationVisibility } from '@/lib/validations/simulationValidation';
+
+type TabType = 'simulations' | 'assignments';
 
 // Type labels
 const typeLabels: Record<SimulationType, string> = {
@@ -76,23 +82,36 @@ export default function SimulationsPage() {
   const { showSuccess } = useToast();
   const utils = trpc.useUtils();
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState<TabType>('simulations');
+
   // Filters state
   const [search, setSearch] = useState('');
   const [type, setType] = useState<SimulationType | ''>('');
   const [status, setStatus] = useState<SimulationStatus | ''>('');
   const [visibility, setVisibility] = useState<SimulationVisibility | ''>('');
   const [isOfficial, setIsOfficial] = useState<boolean | ''>('');
+  const [groupId, setGroupId] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Assignments filters
+  const [assignmentPage, setAssignmentPage] = useState(1);
+  const [assignmentGroupId, setAssignmentGroupId] = useState('');
+  const [assignmentSimulationId, setAssignmentSimulationId] = useState('');
 
   // Action menus state
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
   const [archiveConfirm, setArchiveConfirm] = useState<{ id: string; title: string } | null>(null);
+  const [assignModal, setAssignModal] = useState<{ id: string; title: string } | null>(null);
 
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Fetch groups for filter
+  const { data: groupsData } = trpc.groups.getGroups.useQuery({ page: 1, pageSize: 100 });
 
   // Fetch simulations
   const { data: simulationsData, isLoading } = trpc.simulations.getSimulations.useQuery({
@@ -103,7 +122,19 @@ export default function SimulationsPage() {
     status: status || undefined,
     visibility: visibility || undefined,
     isOfficial: isOfficial === '' ? undefined : isOfficial,
+    groupId: groupId || undefined,
   });
+
+  // Fetch assignments
+  const { data: assignmentsData, isLoading: assignmentsLoading } = trpc.simulations.getAssignments.useQuery(
+    {
+      page: assignmentPage,
+      pageSize: 20,
+      groupId: assignmentGroupId || undefined,
+      simulationId: assignmentSimulationId || undefined,
+    },
+    { enabled: activeTab === 'assignments' }
+  );
 
   // Mutations
   const deleteMutation = trpc.simulations.delete.useMutation({
@@ -155,16 +186,6 @@ export default function SimulationsPage() {
     setOpenMenuId(openMenuId === id ? null : id);
   };
 
-  // Format date
-  const formatDate = (date: Date | string | null | undefined) => {
-    if (!date) return '-';
-    return new Date(date).toLocaleDateString('it-IT', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
   // Format duration
   const formatDuration = (minutes: number) => {
     if (minutes === 0) return 'Illimitato';
@@ -200,37 +221,66 @@ export default function SimulationsPage() {
         </Link>
       </div>
 
-      {/* Filters */}
-      <div className={`rounded-xl p-4 mb-6 ${colors.background.card} border ${colors.border.light}`}>
-        {/* Search bar */}
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Cerca simulazioni..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className={`w-full pl-10 pr-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary} focus:outline-none focus:ring-2 focus:ring-red-500/30`}
-            />
-          </div>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.hover} ${colors.text.secondary}`}
-          >
-            <Filter className="w-4 h-4" />
-            Filtri
-            {(type || status || visibility || isOfficial !== '') && (
-              <span className="w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
-                {[type, status, visibility, isOfficial !== ''].filter(Boolean).length}
-              </span>
-            )}
-          </button>
-        </div>
+      {/* Tabs */}
+      <div className={`flex gap-2 p-1 rounded-lg ${colors.background.card} border ${colors.border.light} mb-6 w-fit`}>
+        <button
+          onClick={() => setActiveTab('simulations')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+            activeTab === 'simulations'
+              ? `${colors.primary.bg} text-white`
+              : `${colors.text.secondary} hover:${colors.background.hover}`
+          }`}
+        >
+          <FileText className="w-4 h-4" />
+          Simulazioni Create
+        </button>
+        <button
+          onClick={() => setActiveTab('assignments')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+            activeTab === 'assignments'
+              ? `${colors.primary.bg} text-white`
+              : `${colors.text.secondary} hover:${colors.background.hover}`
+          }`}
+        >
+          <Calendar className="w-4 h-4" />
+          Assegnazioni
+        </button>
+      </div>
+
+      {/* Tab: Simulations */}
+      {activeTab === 'simulations' && (
+        <>
+          {/* Filters */}
+          <div className={`rounded-xl p-4 mb-6 ${colors.background.card} border ${colors.border.light}`}>
+            {/* Search bar */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Cerca simulazioni..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className={`w-full pl-10 pr-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary} focus:outline-none focus:ring-2 focus:ring-red-500/30`}
+                />
+              </div>
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.hover} ${colors.text.secondary}`}
+              >
+                <Filter className="w-4 h-4" />
+                Filtri
+                {(type || status || visibility || isOfficial !== '') && (
+                  <span className="w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
+                    {[type, status, visibility, isOfficial !== '', groupId].filter(Boolean).length}
+                  </span>
+                )}
+              </button>
+            </div>
 
         {/* Extended filters */}
         {showFilters && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
             <CustomSelect
               label="Tipo"
               value={type}
@@ -259,6 +309,15 @@ export default function SimulationsPage() {
               ]}
             />
             <CustomSelect
+              label="Gruppo"
+              value={groupId}
+              onChange={(v) => setGroupId(v)}
+              options={[
+                { value: '', label: 'Tutti' },
+                ...(groupsData?.groups || []).map((g) => ({ value: g.id, label: g.name })),
+              ]}
+            />
+            <CustomSelect
               label="Ufficiale"
               value={isOfficial === '' ? '' : isOfficial ? 'true' : 'false'}
               onChange={(v) => setIsOfficial(v === '' ? '' : v === 'true')}
@@ -284,14 +343,11 @@ export default function SimulationsPage() {
                 <th className={`px-4 py-3 text-left text-xs font-medium ${colors.text.muted} uppercase tracking-wider hidden md:table-cell`}>
                   Tipo
                 </th>
-                <th className={`px-4 py-3 text-left text-xs font-medium ${colors.text.muted} uppercase tracking-wider hidden lg:table-cell`}>
-                  Date
-                </th>
                 <th className={`px-4 py-3 text-center text-xs font-medium ${colors.text.muted} uppercase tracking-wider`}>
                   Domande
                 </th>
                 <th className={`px-4 py-3 text-center text-xs font-medium ${colors.text.muted} uppercase tracking-wider hidden sm:table-cell`}>
-                  Partecipanti
+                  Assegnazioni
                 </th>
                 <th className={`px-4 py-3 text-left text-xs font-medium ${colors.text.muted} uppercase tracking-wider`}>
                   Stato
@@ -304,7 +360,7 @@ export default function SimulationsPage() {
             <tbody className={`divide-y ${colors.border.light}`}>
               {simulations.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center">
+                  <td colSpan={6} className="px-4 py-12 text-center">
                     <FileText className="w-12 h-12 mx-auto text-gray-400 mb-3" />
                     <p className={`text-sm ${colors.text.muted}`}>Nessuna simulazione trovata</p>
                   </td>
@@ -348,16 +404,6 @@ export default function SimulationsPage() {
                         {typeLabels[simulation.type as SimulationType]}
                       </span>
                     </td>
-                    <td className="px-4 py-4 hidden lg:table-cell">
-                      <div className="text-sm">
-                        <p className={colors.text.secondary}>
-                          <span className="text-gray-500">Inizio:</span> {formatDate(simulation.startDate)}
-                        </p>
-                        <p className={colors.text.secondary}>
-                          <span className="text-gray-500">Fine:</span> {formatDate(simulation.endDate)}
-                        </p>
-                      </div>
-                    </td>
                     <td className="px-4 py-4 text-center">
                       <span className={`inline-flex items-center gap-1 text-sm ${colors.text.primary}`}>
                         <Target className="w-4 h-4 text-gray-400" />
@@ -366,8 +412,8 @@ export default function SimulationsPage() {
                     </td>
                     <td className="px-4 py-4 text-center hidden sm:table-cell">
                       <span className={`inline-flex items-center gap-1 text-sm ${colors.text.primary}`}>
-                        <Users className="w-4 h-4 text-gray-400" />
-                        {simulation._count.results}
+                        <Calendar className="w-4 h-4 text-gray-400" />
+                        {simulation._count.assignments}
                       </span>
                     </td>
                     <td className="px-4 py-4">
@@ -415,6 +461,205 @@ export default function SimulationsPage() {
           </div>
         )}
       </div>
+        </>
+      )}
+
+      {/* Tab: Assignments */}
+      {activeTab === 'assignments' && (
+        <div className={`rounded-xl overflow-hidden ${colors.background.card} border ${colors.border.light}`}>
+          {/* Filters for assignments */}
+          <div className={`p-4 border-b ${colors.border.light}`}>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1">
+                <CustomSelect
+                  label="Simulazione"
+                  value={assignmentSimulationId}
+                  onChange={(v) => {
+                    setAssignmentSimulationId(v);
+                    setAssignmentPage(1);
+                  }}
+                  options={[
+                    { value: '', label: 'Tutte le simulazioni' },
+                    ...(simulationsData?.simulations || []).map((s) => ({ value: s.id, label: s.title })),
+                  ]}
+                />
+              </div>
+              <div className="flex-1">
+                <CustomSelect
+                  label="Gruppo"
+                  value={assignmentGroupId}
+                  onChange={(v) => {
+                    setAssignmentGroupId(v);
+                    setAssignmentPage(1);
+                  }}
+                  options={[
+                    { value: '', label: 'Tutti i gruppi' },
+                    ...(groupsData?.groups || []).map((g) => ({ value: g.id, label: g.name })),
+                  ]}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Assignments Table */}
+          {assignmentsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Spinner size="lg" />
+            </div>
+          ) : !assignmentsData?.assignments.length ? (
+            <div className="py-12 text-center">
+              <Calendar className={`w-12 h-12 mx-auto mb-4 ${colors.text.muted}`} />
+              <h3 className={`text-lg font-medium ${colors.text.primary} mb-2`}>
+                Nessuna assegnazione trovata
+              </h3>
+              <p className={`text-sm ${colors.text.muted}`}>
+                Le simulazioni assegnate a gruppi, classi o studenti appariranno qui.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className={`border-b ${colors.border.light}`}>
+                      <th className={`px-4 py-3 text-left text-xs font-medium ${colors.text.muted} uppercase tracking-wider`}>
+                        Simulazione
+                      </th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium ${colors.text.muted} uppercase tracking-wider`}>
+                        Assegnata a
+                      </th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium ${colors.text.muted} uppercase tracking-wider`}>
+                        Data Inizio
+                      </th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium ${colors.text.muted} uppercase tracking-wider`}>
+                        Data Fine
+                      </th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium ${colors.text.muted} uppercase tracking-wider`}>
+                        Completamenti
+                      </th>
+                      <th className={`px-4 py-3 text-right text-xs font-medium ${colors.text.muted} uppercase tracking-wider`}>
+                        Azioni
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className={`divide-y ${colors.border.light}`}>
+                    {assignmentsData.assignments.map((assignment) => (
+                      <tr key={assignment.id} className={`${colors.background.hover}`}>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-lg ${colors.primary.light} flex items-center justify-center`}>
+                              <FileText className={`w-5 h-5 ${colors.primary.text}`} />
+                            </div>
+                            <div>
+                              <p className={`font-medium ${colors.text.primary}`}>{assignment.simulation.title}</p>
+                              <p className={`text-xs ${colors.text.muted}`}>
+                                {typeLabels[assignment.simulation.type as SimulationType]}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <Users className={`w-4 h-4 ${colors.text.muted}`} />
+                            <span className={colors.text.secondary}>
+                              {assignment.student?.user?.name 
+                                || assignment.group?.name 
+                                || (assignment.class ? `${assignment.class.name} - ${assignment.class.year}${assignment.class.section}` : '-')}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-sm ${colors.text.secondary}`}>
+                            {(assignment as { startDate?: string | Date | null }).startDate 
+                              ? new Date((assignment as { startDate: string | Date }).startDate).toLocaleDateString('it-IT', { 
+                                  day: '2-digit', 
+                                  month: 'short', 
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })
+                              : '-'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-sm ${colors.text.secondary}`}>
+                            {(assignment as { endDate?: string | Date | null }).endDate 
+                              ? new Date((assignment as { endDate: string | Date }).endDate).toLocaleDateString('it-IT', { 
+                                  day: '2-digit', 
+                                  month: 'short', 
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })
+                              : '-'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 rounded-full bg-gray-200 dark:bg-gray-700 max-w-[80px]">
+                              <div 
+                                className={`h-full rounded-full ${
+                                  assignment.completionRate >= 80 
+                                    ? 'bg-green-500' 
+                                    : assignment.completionRate >= 50 
+                                    ? 'bg-yellow-500' 
+                                    : 'bg-red-500'
+                                }`}
+                                style={{ width: `${assignment.completionRate}%` }}
+                              />
+                            </div>
+                            <span className={`text-sm ${colors.text.secondary} whitespace-nowrap`}>
+                              {assignment.completedCount}/{assignment.totalTargeted}
+                            </span>
+                            {assignment.completionRate === 100 && (
+                              <CheckCircle className="w-4 h-4 text-green-500" />
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <Link
+                            href={`/admin/simulazioni/${assignment.simulation.id}/statistiche`}
+                            className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg ${colors.primary.light} ${colors.primary.text} hover:opacity-80 transition-opacity`}
+                          >
+                            <BarChart3 className="w-4 h-4" />
+                            Statistiche
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Assignments Pagination */}
+              {assignmentsData.pagination.totalPages > 1 && (
+                <div className={`px-4 py-3 border-t ${colors.border.light} flex items-center justify-between`}>
+                  <p className={`text-sm ${colors.text.muted}`}>
+                    Pagina {assignmentsData.pagination.page} di {assignmentsData.pagination.totalPages}
+                    {' '}({assignmentsData.pagination.total} assegnazioni)
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setAssignmentPage(Math.max(1, assignmentPage - 1))}
+                      disabled={assignmentPage === 1}
+                      className={`p-2 rounded-lg ${colors.background.hover} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setAssignmentPage(Math.min(assignmentsData.pagination.totalPages, assignmentPage + 1))}
+                      disabled={assignmentPage === assignmentsData.pagination.totalPages}
+                      className={`p-2 rounded-lg ${colors.background.hover} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Action Menu Portal */}
       {openMenuId && menuPosition && (
@@ -448,6 +693,19 @@ export default function SimulationsPage() {
               <BarChart3 className="w-4 h-4" />
               Statistiche
             </Link>
+            <button
+              onClick={() => {
+                const sim = simulations.find(s => s.id === openMenuId);
+                if (sim) {
+                  setAssignModal({ id: sim.id, title: sim.title });
+                }
+                setOpenMenuId(null);
+              }}
+              className={`w-full flex items-center gap-2 px-4 py-2 text-sm text-green-600 ${colors.background.hover}`}
+            >
+              <UserPlus className="w-4 h-4" />
+              Assegna
+            </button>
             <button
               onClick={() => {
                 const sim = simulations.find(s => s.id === openMenuId);
@@ -520,6 +778,16 @@ export default function SimulationsPage() {
           isLoading={archiveMutation.isPending}
           onConfirm={() => archiveMutation.mutate({ id: archiveConfirm.id })}
           onCancel={() => setArchiveConfirm(null)}
+        />
+      )}
+
+      {/* Assign Modal */}
+      {assignModal && (
+        <SimulationAssignModal
+          isOpen={true}
+          onClose={() => setAssignModal(null)}
+          simulationId={assignModal.id}
+          simulationTitle={assignModal.title}
         />
       )}
     </div>

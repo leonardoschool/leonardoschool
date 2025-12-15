@@ -306,12 +306,103 @@ export default function CollaboratorSimulationDetailPage({ params }: { params: P
             </div>
           </div>
 
+          {/* Assignments Section */}
+          {simulation.assignments.length > 0 && (
+            <div className={`p-6 rounded-xl ${colors.background.card} border ${colors.border.light}`}>
+              <h2 className={`text-lg font-semibold ${colors.text.primary} mb-4`}>
+                Assegnazioni ({simulation.assignments.length})
+              </h2>
+              <div className="space-y-3">
+                {/* Group by type */}
+                {(() => {
+                  const groupAssignments = simulation.assignments.filter(a => a.group);
+                  const studentAssignments = simulation.assignments.filter(a => a.student && !a.group);
+                  const classAssignments = simulation.assignments.filter(a => a.class && !a.group && !a.student);
+                  
+                  return (
+                    <>
+                      {/* Groups */}
+                      {groupAssignments.length > 0 && (
+                        <div>
+                          <p className={`text-sm font-medium ${colors.text.muted} mb-2`}>Gruppi</p>
+                          <div className="flex flex-wrap gap-2">
+                            {groupAssignments.map((a) => (
+                              <span 
+                                key={a.id} 
+                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium"
+                                style={{ 
+                                  backgroundColor: a.group?.color ? `${a.group.color}20` : undefined,
+                                  color: a.group?.color || undefined,
+                                  border: `1px solid ${a.group?.color || '#6b7280'}`
+                                }}
+                              >
+                                <Users className="w-4 h-4" />
+                                {a.group?.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Individual Students */}
+                      {studentAssignments.length > 0 && (
+                        <div>
+                          <p className={`text-sm font-medium ${colors.text.muted} mb-2`}>Studenti singoli</p>
+                          <div className="flex flex-wrap gap-2">
+                            {studentAssignments.slice(0, 10).map((a) => (
+                              <span 
+                                key={a.id} 
+                                className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm ${colors.background.secondary} ${colors.text.primary}`}
+                              >
+                                {a.student?.user?.name || 'Studente'}
+                              </span>
+                            ))}
+                            {studentAssignments.length > 10 && (
+                              <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-sm ${colors.text.muted}`}>
+                                +{studentAssignments.length - 10} altri
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Classes */}
+                      {classAssignments.length > 0 && (
+                        <div>
+                          <p className={`text-sm font-medium ${colors.text.muted} mb-2`}>Classi</p>
+                          <div className="flex flex-wrap gap-2">
+                            {classAssignments.map((a) => (
+                              <span 
+                                key={a.id} 
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+                              >
+                                📚 {a.class?.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
           {/* Recent results */}
           {simulation.results.length > 0 && (
             <div className={`p-6 rounded-xl ${colors.background.card} border ${colors.border.light}`}>
-              <h2 className={`text-lg font-semibold ${colors.text.primary} mb-4`}>
-                Risultati Recenti
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className={`text-lg font-semibold ${colors.text.primary}`}>
+                  Risultati Recenti
+                </h2>
+                <Link
+                  href={`/collaboratore/simulazioni/${id}/statistiche`}
+                  className={`text-sm ${colors.primary.text} hover:underline`}
+                >
+                  Vedi tutti
+                </Link>
+              </div>
               <div className="space-y-2">
                 {simulation.results.slice(0, 5).map((result) => {
                   const isPassed = simulation.passingScore 

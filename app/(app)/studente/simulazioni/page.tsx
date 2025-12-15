@@ -23,9 +23,16 @@ import {
 } from 'lucide-react';
 import type { SimulationType } from '@/lib/validations/simulationValidation';
 
-// Type labels
+// Type labels (escluso OFFICIAL che ha filtro separato)
 const typeLabels: Record<SimulationType, string> = {
   OFFICIAL: 'Ufficiale',
+  PRACTICE: 'Esercitazione',
+  CUSTOM: 'Personalizzata',
+  QUICK_QUIZ: 'Quiz Veloce',
+};
+
+// Filtro tipi (senza OFFICIAL per evitare confusione con filtro "Ufficiale")
+const filterTypeLabels: Partial<Record<SimulationType, string>> = {
   PRACTICE: 'Esercitazione',
   CUSTOM: 'Personalizzata',
   QUICK_QUIZ: 'Quiz Veloce',
@@ -250,7 +257,7 @@ export default function StudentSimulationsPage() {
               onChange={(v) => setType(v as SimulationType | '')}
               options={[
                 { value: '', label: 'Tutti' },
-                ...Object.entries(typeLabels).map(([value, label]) => ({ value, label })),
+                ...Object.entries(filterTypeLabels).map(([value, label]) => ({ value, label })),
               ]}
             />
             <CustomSelect
@@ -292,11 +299,15 @@ export default function StudentSimulationsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {simulations.map((simulation) => {
             const statusInfo = studentStatusColors[simulation.studentStatus] || studentStatusColors.available;
+            // Per simulazioni completate, vai direttamente ai risultati
+            const href = simulation.studentStatus === 'completed' 
+              ? `/studente/simulazioni/${simulation.id}/risultato`
+              : `/studente/simulazioni/${simulation.id}`;
             
             return (
               <Link
                 key={simulation.id}
-                href={`/studente/simulazioni/${simulation.id}`}
+                href={href}
                 className={`block p-5 rounded-xl ${colors.background.card} border ${colors.border.light} hover:shadow-lg transition-all group`}
               >
                 {/* Header */}

@@ -485,41 +485,84 @@ export default function SimulationDetailPage({ params }: { params: Promise<{ id:
               <h2 className={`text-lg font-semibold ${colors.text.primary} mb-4`}>
                 Assegnazioni ({simulation.assignments.length})
               </h2>
-              <div className="space-y-2">
-                {simulation.assignments.slice(0, 5).map((assignment) => (
-                  <div key={assignment.id} className={`p-2 rounded-lg ${colors.background.secondary}`}>
-                    {assignment.student && (
-                      <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-gray-400" />
-                        <span className={`text-sm ${colors.text.primary}`}>
-                          {assignment.student.user?.name}
-                        </span>
+              {/* Group assignments by type */}
+              {(() => {
+                const groupAssignments = simulation.assignments.filter(a => a.group);
+                const studentAssignments = simulation.assignments.filter(a => a.student);
+                const classAssignments = simulation.assignments.filter(a => a.class);
+
+                return (
+                  <div className="space-y-4">
+                    {/* Groups */}
+                    {groupAssignments.length > 0 && (
+                      <div>
+                        <h4 className={`text-xs font-medium ${colors.text.muted} uppercase mb-2`}>
+                          Gruppi ({groupAssignments.length})
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {groupAssignments.map((a) => (
+                            <span
+                              key={a.id}
+                              className="px-2 py-1 rounded-full text-xs font-medium"
+                              style={{
+                                backgroundColor: (a.group?.color || '#6B7280') + '20',
+                                color: a.group?.color || '#6B7280',
+                              }}
+                            >
+                              {a.group?.name}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     )}
-                    {assignment.group && (
-                      <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-gray-400" />
-                        <span className={`text-sm ${colors.text.primary}`}>
-                          Gruppo: {assignment.group.name}
-                        </span>
+
+                    {/* Individual Students */}
+                    {studentAssignments.length > 0 && (
+                      <div>
+                        <h4 className={`text-xs font-medium ${colors.text.muted} uppercase mb-2`}>
+                          Studenti individuali ({studentAssignments.length})
+                        </h4>
+                        <div className="space-y-1">
+                          {studentAssignments.slice(0, 5).map((a) => (
+                            <div key={a.id} className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                                <Users className="w-3 h-3 text-gray-500" />
+                              </div>
+                              <span className={`text-sm ${colors.text.primary}`}>
+                                {a.student?.user?.name || 'Studente'}
+                              </span>
+                            </div>
+                          ))}
+                          {studentAssignments.length > 5 && (
+                            <p className={`text-xs ${colors.text.muted} ml-8`}>
+                              +{studentAssignments.length - 5} altri
+                            </p>
+                          )}
+                        </div>
                       </div>
                     )}
-                    {assignment.class && (
-                      <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-gray-400" />
-                        <span className={`text-sm ${colors.text.primary}`}>
-                          Classe: {assignment.class.name}
-                        </span>
+
+                    {/* Classes */}
+                    {classAssignments.length > 0 && (
+                      <div>
+                        <h4 className={`text-xs font-medium ${colors.text.muted} uppercase mb-2`}>
+                          Classi ({classAssignments.length})
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {classAssignments.map((a) => (
+                            <span
+                              key={a.id}
+                              className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+                            >
+                              {a.class?.name}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
-                ))}
-                {simulation.assignments.length > 5 && (
-                  <p className={`text-sm ${colors.text.muted} text-center pt-2`}>
-                    +{simulation.assignments.length - 5} altri
-                  </p>
-                )}
-              </div>
+                );
+              })()}
             </div>
           )}
         </div>

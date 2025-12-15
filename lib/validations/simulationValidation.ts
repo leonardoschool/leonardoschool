@@ -65,6 +65,10 @@ export const assignmentTargetSchema = z.object({
   classId: z.string().optional().nullable(),
   dueDate: z.string().datetime().optional().nullable(),
   notes: z.string().optional().nullable(),
+  // Schedule for this assignment
+  startDate: z.string().datetime().optional().nullable(),
+  endDate: z.string().datetime().optional().nullable(),
+  locationType: z.enum(['ONLINE', 'IN_PERSON', 'HYBRID']).optional().nullable(),
 }).refine(
   data => data.studentId || data.groupId || data.classId,
   { message: 'Devi selezionare almeno uno tra studente, gruppo o classe' }
@@ -216,6 +220,7 @@ export const simulationFilterSchema = z.object({
   visibility: SimulationVisibilityEnum.optional(),
   isOfficial: z.boolean().optional(),
   classId: z.string().optional(),
+  groupId: z.string().optional(),
   createdById: z.string().optional(),
   creatorRole: CreatorRoleEnum.optional(),
   

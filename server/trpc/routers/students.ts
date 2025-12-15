@@ -598,24 +598,24 @@ export const studentsRouter = router({
           include: {
             referenceStudent: {
               include: {
-                user: { select: { name: true, email: true } },
+                user: { select: { id: true, name: true, email: true } },
               },
             },
             referenceCollaborator: {
               include: {
-                user: { select: { name: true, email: true } },
+                user: { select: { id: true, name: true, email: true } },
               },
             },
             members: {
               include: {
                 student: {
                   include: {
-                    user: { select: { name: true, email: true } },
+                    user: { select: { id: true, name: true, email: true } },
                   },
                 },
                 collaborator: {
                   include: {
-                    user: { select: { name: true, email: true } },
+                    user: { select: { id: true, name: true, email: true } },
                   },
                 },
               },
@@ -629,40 +629,52 @@ export const studentsRouter = router({
       return null;
     }
 
-    // Return the first (primary) group
-    const membership = groupMemberships[0];
-    const group = membership.group;
+    // Return all groups the student belongs to
+    return groupMemberships.map(membership => {
+      const group = membership.group;
 
-    return {
-      id: group.id,
-      name: group.name,
-      description: group.description,
-      color: group.color,
-      type: group.type,
-      joinedAt: membership.joinedAt,
-      reference: group.referenceStudent
-        ? {
-            type: 'STUDENT' as const,
-            name: group.referenceStudent.user.name,
-            email: group.referenceStudent.user.email,
-          }
-        : group.referenceCollaborator
-        ? {
-            type: 'COLLABORATOR' as const,
-            name: group.referenceCollaborator.user.name,
-            email: group.referenceCollaborator.user.email,
-          }
-        : null,
-      members: group.members.map(m => ({
-        id: m.id,
+      // Build members list (excluding reference student/collaborator - they'll be shown separately)
+      const members = group.members.map(m => ({
+        id: m.studentId || m.collaboratorId || m.id,
+        memberId: m.id,
         joinedAt: m.joinedAt,
         type: m.studentId ? ('STUDENT' as const) : ('COLLABORATOR' as const),
         name: m.student?.user.name || m.collaborator?.user.name || '',
         email: m.student?.user.email || m.collaborator?.user.email || '',
+        userId: m.student?.user.id || m.collaborator?.user.id || '',
         isCurrentUser: m.studentId === student.id,
-      })),
-      totalMembers: group.members.length,
-    };
+      }));
+
+      return {
+        id: group.id,
+        name: group.name,
+        description: group.description,
+        color: group.color,
+        type: group.type,
+        joinedAt: membership.joinedAt,
+        // Reference student (responsabile studenti)
+        referenceStudent: group.referenceStudent
+          ? {
+              id: group.referenceStudent.id,
+              userId: group.referenceStudent.user.id,
+              name: group.referenceStudent.user.name,
+              email: group.referenceStudent.user.email,
+              isCurrentUser: group.referenceStudent.id === student.id,
+            }
+          : null,
+        // Reference collaborator (responsabile collaboratore)
+        referenceCollaborator: group.referenceCollaborator
+          ? {
+              id: group.referenceCollaborator.id,
+              userId: group.referenceCollaborator.user.id,
+              name: group.referenceCollaborator.user.name,
+              email: group.referenceCollaborator.user.email,
+            }
+          : null,
+        members,
+        totalMembers: members.length,
+      };
+    });
   }),
 
   /**
