@@ -5,7 +5,6 @@ import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
-import { useAuth } from '@/lib/hooks/useAuth';
 import { Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import Checkbox from '@/components/ui/Checkbox';
@@ -19,7 +18,6 @@ import {
   Check,
   Target,
   Settings,
-  Users,
   Search,
   Plus,
   X,
@@ -38,17 +36,17 @@ import {
   Shield,
   Clock,
   Layers,
+  Info,
 } from 'lucide-react';
-import type { SimulationType, SimulationVisibility, LocationType } from '@/lib/validations/simulationValidation';
+import type { SimulationType, LocationType } from '@/lib/validations/simulationValidation';
 import { SIMULATION_PRESETS } from '@/lib/validations/simulationValidation';
 
-// Step definitions
+// Step definitions (no assignments step - added post-creation)
 const STEPS = [
   { id: 'type', title: 'Tipo', icon: FileText },
   { id: 'config', title: 'Configurazione', icon: Settings },
   { id: 'questions', title: 'Domande', icon: Target },
   { id: 'scheduling', title: 'Pianificazione', icon: Calendar },
-  { id: 'assignments', title: 'Destinatari', icon: Users },
   { id: 'review', title: 'Riepilogo', icon: Eye },
 ];
 
@@ -106,28 +104,16 @@ interface SelectedQuestion {
     text: string;
     type: string;
     difficulty: string;
-    subject?: { name: string; color: string };
+    subject?: { name: string; color: string | null };
     topic?: { name: string };
   };
-}
-
-interface AssignmentTarget {
-  studentId?: string | null;
-  groupId?: string | null;
-  classId?: string | null;
-  dueDate?: string | null;
-  notes?: string | null;
 }
 
 export default function NewSimulationPage() {
   const router = useRouter();
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
-  const { user } = useAuth();
   const _utils = trpc.useUtils();
-  
-  // Check if user is a collaborator (for filtering groups/students)
-  const isCollaborator = user?.role === 'COLLABORATOR';
 
   // Step state
   const [currentStep, setCurrentStep] = useState(0);
@@ -137,12 +123,12 @@ export default function NewSimulationPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [isOfficial, setIsOfficial] = useState(false);
-  const [visibility, _setVisibility] = useState<SimulationVisibility>('PRIVATE');
   
   // Timing
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(60);
+  const [useTimeWindow, setUseTimeWindow] = useState(false); // false = single date, true = time window
   
   // Configuration
   const [showResults, setShowResults] = useState(true);
@@ -194,28 +180,16 @@ export default function NewSimulationPage() {
   const [selectionMode, setSelectionMode] = useState<'manual' | 'random'>('manual');
   const [randomCount, setRandomCount] = useState(10);
   
-  // Assignments
-  const [assignments, setAssignments] = useState<AssignmentTarget[]>([]);
-  const [isPublic, setIsPublic] = useState(false);
+  // Question detail modal
+  const [previewQuestion, setPreviewQuestion] = useState<string | null>(null);
 
   // Loading states
   const [isSaving, setIsSaving] = useState(false);
   const [isPdfLoading, setIsPdfLoading] = useState(false);
 
-  // Fetch data - filter by collaborator's groups if applicable
+  // Fetch data
   const { data: subjectsData } = trpc.questions.getSubjects.useQuery();
   const { data: tagCategoriesData } = trpc.questionTags.getCategories.useQuery({});
-  const { data: groupsData } = trpc.groups.getGroups.useQuery({ 
-    page: 1, 
-    pageSize: 100,
-    onlyMyGroups: isCollaborator, // Collaborators only see their assigned groups
-  });
-  const { data: studentsData } = trpc.students.getStudents.useQuery({ 
-    page: 1, 
-    pageSize: 500, 
-    isActive: true,
-    onlyMyGroups: isCollaborator, // Collaborators only see students in their groups
-  });
 
   // Questions query - include tag filter
   const { data: questionsData, isLoading: questionsLoading } = trpc.questions.getQuestions.useQuery({
@@ -227,6 +201,12 @@ export default function NewSimulationPage() {
     status: 'PUBLISHED',
     tagIds: questionTagFilter.length > 0 ? questionTagFilter : undefined,
   });
+
+  // Query for question detail (with answers)
+  const { data: questionDetail } = trpc.questions.getQuestion.useQuery(
+    previewQuestion ? { id: previewQuestion } : { id: '' },
+    { enabled: !!previewQuestion }
+  );
 
   // Mutations
   const createWithQuestionsMutation = trpc.simulations.createWithQuestions.useMutation({
@@ -366,6 +346,35 @@ export default function NewSimulationPage() {
     ]);
   };
 
+  // Add all filtered questions at once
+  const addAllFilteredQuestions = (questions: typeof questionsData.questions) => {
+    setSelectedQuestions(prev => {
+      const newQuestions = questions.filter(q => !prev.some(sq => sq.questionId === q.id));
+      return [
+        ...prev,
+        ...newQuestions.map((question, idx) => ({
+          questionId: question.id,
+          order: prev.length + idx,
+          question: {
+            id: question.id,
+            text: question.text,
+            type: question.type,
+            difficulty: question.difficulty,
+            subject: question.subject,
+            topic: question.topic,
+          },
+        })),
+      ];
+    });
+  };
+
+  // Remove all filtered questions at once
+  const removeAllFilteredQuestions = (questionIds: string[]) => {
+    setSelectedQuestions(prev => 
+      prev.filter(q => !questionIds.includes(q.questionId)).map((q, i) => ({ ...q, order: i }))
+    );
+  };
+
   // Remove question
   const removeQuestion = (questionId: string) => {
     setSelectedQuestions(prev => 
@@ -472,31 +481,7 @@ export default function NewSimulationPage() {
     }
   };
 
-  // Add assignment
-  const addAssignment = (type: 'student' | 'group' | 'class', id: string) => {
-    const existing = assignments.find(a => 
-      (type === 'student' && a.studentId === id) ||
-      (type === 'group' && a.groupId === id) ||
-      (type === 'class' && a.classId === id)
-    );
-    if (existing) return;
-
-    setAssignments([
-      ...assignments,
-      {
-        studentId: type === 'student' ? id : null,
-        groupId: type === 'group' ? id : null,
-        classId: type === 'class' ? id : null,
-      },
-    ]);
-  };
-
-  // Remove assignment
-  const removeAssignment = (index: number) => {
-    setAssignments(assignments.filter((_, i) => i !== index));
-  };
-
-  // Validation
+  // Validation (5 steps: type, config, questions, scheduling, review)
   const isStepValid = (step: number): boolean => {
     switch (step) {
       case 0: // Type
@@ -511,9 +496,7 @@ export default function NewSimulationPage() {
         // If tracking attendance and in-person, need location details
         if (trackAttendance && locationType === 'IN_PERSON' && !locationDetails) return false;
         return true;
-      case 4: // Assignments
-        return isPublic || assignments.length > 0;
-      case 5: // Review
+      case 4: // Review
         return true;
       default:
         return false;
@@ -539,7 +522,7 @@ export default function NewSimulationPage() {
         title,
         description: description || undefined,
         type: simulationType,
-        visibility,
+        visibility: 'PRIVATE', // Always private until published with assignments
         isOfficial,
         startDate: formatDate(startDate),
         endDate: formatDate(endDate),
@@ -558,7 +541,7 @@ export default function NewSimulationPage() {
         passingScore,
         isRepeatable,
         maxAttempts,
-        isPublic,
+        isPublic: false,
         // New fields
         isPaperBased,
         paperInstructions: paperInstructions || undefined,
@@ -578,13 +561,7 @@ export default function NewSimulationPage() {
           customPoints: q.customPoints,
           customNegativePoints: q.customNegativePoints,
         })),
-        assignments: assignments.filter(a => a.studentId || a.groupId || a.classId).map(a => ({
-          studentId: a.studentId || undefined,
-          groupId: a.groupId || undefined,
-          classId: a.classId || undefined,
-          dueDate: a.dueDate ? new Date(a.dueDate).toISOString() : undefined,
-          notes: a.notes || undefined,
-        })),
+        assignments: [], // Assignments added post-creation
       });
     } finally {
       setIsSaving(false);
@@ -733,45 +710,227 @@ export default function NewSimulationPage() {
             {/* Timing */}
             <div className="space-y-4">
               <h3 className={`text-lg font-medium ${colors.text.primary}`}>Tempistiche</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                    Data inizio
-                  </label>
-                  <DateTimePicker
-                    id="startDate"
-                    value={startDate}
-                    onChange={setStartDate}
-                    placeholder="Seleziona data e ora"
-                  />
+              
+              {/* For OFFICIAL simulations: only start date + duration */}
+              {simulationType === 'OFFICIAL' ? (
+                <div className="space-y-4">
+                  <div className={`p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800`}>
+                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                      <strong>Simulazione Ufficiale:</strong> Inserisci data e ora di inizio. La fine verrà calcolata automaticamente in base alla durata.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+                        Data e ora inizio
+                      </label>
+                      <DateTimePicker
+                        id="startDate"
+                        value={startDate}
+                        onChange={(val) => {
+                          setStartDate(val);
+                          // Auto-calculate end date based on duration
+                          if (val && durationMinutes > 0) {
+                            const start = new Date(val);
+                            start.setMinutes(start.getMinutes() + durationMinutes);
+                            setEndDate(start.toISOString().slice(0, 16));
+                          }
+                        }}
+                        placeholder="Seleziona data e ora"
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+                        Durata (minuti)
+                      </label>
+                      <input
+                        type="number"
+                        value={durationMinutes}
+                        onChange={(e) => {
+                          const newDuration = parseInt(e.target.value) || 0;
+                          setDurationMinutes(newDuration);
+                          // Recalculate end date
+                          if (startDate && newDuration > 0) {
+                            const start = new Date(startDate);
+                            start.setMinutes(start.getMinutes() + newDuration);
+                            setEndDate(start.toISOString().slice(0, 16));
+                          }
+                        }}
+                        min={1}
+                        className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
+                      />
+                    </div>
+                  </div>
+                  {startDate && durationMinutes > 0 && (
+                    <div className={`p-3 rounded-lg ${colors.background.secondary} border ${colors.border.light}`}>
+                      <p className={`text-sm ${colors.text.secondary}`}>
+                        <Clock className="w-4 h-4 inline mr-2" />
+                        La simulazione terminerà alle{' '}
+                        <strong className={colors.text.primary}>
+                          {new Date(new Date(startDate).getTime() + durationMinutes * 60000).toLocaleString('it-IT', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </strong>
+                      </p>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                    Data fine
-                  </label>
-                  <DateTimePicker
-                    id="endDate"
-                    value={endDate}
-                    onChange={setEndDate}
-                    placeholder="Seleziona data e ora"
-                    minDate={startDate ? startDate.split('T')[0] : undefined}
-                  />
+              ) : (
+                /* For other simulation types: choice between single date or time window */
+                <div className="space-y-4">
+                  {/* Mode selector */}
+                  <div className="flex gap-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUseTimeWindow(false);
+                        setEndDate('');
+                      }}
+                      className={`flex-1 p-4 rounded-xl border-2 text-left transition-all ${
+                        !useTimeWindow
+                          ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
+                          : `border-gray-200 dark:border-gray-700 ${colors.background.hover}`
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Clock className={`w-5 h-5 ${!useTimeWindow ? 'text-red-500' : colors.text.muted}`} />
+                        <div>
+                          <p className={`font-medium ${colors.text.primary}`}>Data singola</p>
+                          <p className={`text-sm ${colors.text.muted}`}>Inizio specifico + durata</p>
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUseTimeWindow(true)}
+                      className={`flex-1 p-4 rounded-xl border-2 text-left transition-all ${
+                        useTimeWindow
+                          ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
+                          : `border-gray-200 dark:border-gray-700 ${colors.background.hover}`
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Calendar className={`w-5 h-5 ${useTimeWindow ? 'text-red-500' : colors.text.muted}`} />
+                        <div>
+                          <p className={`font-medium ${colors.text.primary}`}>Finestra temporale</p>
+                          <p className={`text-sm ${colors.text.muted}`}>Disponibile dal giorno X al Y</p>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Single date mode */}
+                  {!useTimeWindow ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+                          Data e ora inizio
+                        </label>
+                        <DateTimePicker
+                          id="startDate"
+                          value={startDate}
+                          onChange={(val) => {
+                            setStartDate(val);
+                            // Auto-calculate end date based on duration
+                            if (val && durationMinutes > 0) {
+                              const start = new Date(val);
+                              start.setMinutes(start.getMinutes() + durationMinutes);
+                              setEndDate(start.toISOString().slice(0, 16));
+                            }
+                          }}
+                          placeholder="Seleziona data e ora"
+                        />
+                        <p className={`text-xs ${colors.text.muted} mt-1`}>
+                          Se non svolgi entro questa data → scaduta
+                        </p>
+                      </div>
+                      <div>
+                        <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+                          Durata (minuti)
+                        </label>
+                        <input
+                          type="number"
+                          value={durationMinutes}
+                          onChange={(e) => {
+                            const newDuration = parseInt(e.target.value) || 0;
+                            setDurationMinutes(newDuration);
+                            // Recalculate end date
+                            if (startDate && newDuration > 0) {
+                              const start = new Date(startDate);
+                              start.setMinutes(start.getMinutes() + newDuration);
+                              setEndDate(start.toISOString().slice(0, 16));
+                            }
+                          }}
+                          min={0}
+                          className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
+                        />
+                        <p className={`text-xs ${colors.text.muted} mt-1`}>0 = tempo illimitato</p>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Time window mode */
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+                            Disponibile dal
+                          </label>
+                          <DateTimePicker
+                            id="startDate"
+                            value={startDate}
+                            onChange={setStartDate}
+                            placeholder="Seleziona data e ora"
+                          />
+                        </div>
+                        <div>
+                          <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+                            Disponibile fino al
+                          </label>
+                          <DateTimePicker
+                            id="endDate"
+                            value={endDate}
+                            onChange={setEndDate}
+                            placeholder="Seleziona data e ora"
+                            minDate={startDate ? startDate.split('T')[0] : undefined}
+                          />
+                        </div>
+                      </div>
+                      <div className="max-w-xs">
+                        <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+                          Durata singolo tentativo (minuti)
+                        </label>
+                        <input
+                          type="number"
+                          value={durationMinutes}
+                          onChange={(e) => setDurationMinutes(parseInt(e.target.value) || 0)}
+                          min={0}
+                          className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
+                        />
+                        <p className={`text-xs ${colors.text.muted} mt-1`}>0 = tempo illimitato</p>
+                      </div>
+                      {startDate && endDate && (
+                        <div className={`p-3 rounded-lg ${colors.background.secondary} border ${colors.border.light}`}>
+                          <p className={`text-sm ${colors.text.secondary}`}>
+                            <Calendar className="w-4 h-4 inline mr-2" />
+                            Gli studenti potranno svolgere la simulazione{' '}
+                            <strong className={colors.text.primary}>
+                              dal {new Date(startDate).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}
+                              {' '}al {new Date(endDate).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </strong>
+                            {durationMinutes > 0 && (
+                              <span> con un tempo massimo di <strong>{durationMinutes} minuti</strong> per tentativo</span>
+                            )}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                    Durata (minuti)
-                  </label>
-                  <input
-                    type="number"
-                    value={durationMinutes}
-                    onChange={(e) => setDurationMinutes(parseInt(e.target.value) || 0)}
-                    min={0}
-                    placeholder="0 = illimitato"
-                    className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
-                  />
-                  <p className={`text-xs ${colors.text.muted} mt-1`}>0 = tempo illimitato</p>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Scoring */}
@@ -1086,8 +1245,8 @@ export default function NewSimulationPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Available questions */}
-              <div className={`rounded-xl border ${colors.border.light} overflow-hidden`}>
-                <div className={`p-4 ${colors.background.secondary} border-b ${colors.border.light}`}>
+              <div className={`rounded-xl border ${colors.border.light} overflow-hidden flex flex-col max-h-[500px]`}>
+                <div className={`p-4 ${colors.background.secondary} border-b ${colors.border.light} flex-shrink-0`}>
                   <h3 className={`font-medium ${colors.text.primary} mb-3`}>
                     Domande disponibili {questionsData?.pagination?.total !== undefined && `(${questionsData.pagination.total})`}
                   </h3>
@@ -1128,9 +1287,30 @@ export default function NewSimulationPage() {
                         />
                       </div>
                     </div>
+                    {/* Select/Deselect all filtered questions */}
+                    {questionsData && questionsData.questions.length > 0 && (
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => addAllFilteredQuestions(questionsData.questions)}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg border ${colors.border.light} ${colors.text.secondary} hover:bg-green-50 hover:border-green-300 hover:text-green-700 dark:hover:bg-green-900/20 dark:hover:border-green-700 dark:hover:text-green-400 transition-colors`}
+                        >
+                          <Plus className="w-3 h-3 inline mr-1" />
+                          Seleziona tutte ({questionsData.questions.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeAllFilteredQuestions(questionsData.questions.map(q => q.id))}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg border ${colors.border.light} ${colors.text.secondary} hover:bg-red-50 hover:border-red-300 hover:text-red-700 dark:hover:bg-red-900/20 dark:hover:border-red-700 dark:hover:text-red-400 transition-colors`}
+                        >
+                          <X className="w-3 h-3 inline mr-1" />
+                          Deseleziona tutte
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="max-h-96 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto">
                   {questionsLoading ? (
                     <div className="p-8 text-center">
                       <Spinner size="md" />
@@ -1143,6 +1323,8 @@ export default function NewSimulationPage() {
                     <div className="divide-y divide-gray-200 dark:divide-gray-700">
                       {questionsData?.questions.map((question) => {
                         const isSelected = selectedQuestions.some(q => q.questionId === question.id);
+                        const difficultyLabel = question.difficulty === 'EASY' ? 'Facile' : question.difficulty === 'MEDIUM' ? 'Media' : question.difficulty === 'HARD' ? 'Difficile' : question.difficulty;
+                        const difficultyColor = question.difficulty === 'EASY' ? 'text-green-600 dark:text-green-400' : question.difficulty === 'MEDIUM' ? 'text-yellow-600 dark:text-yellow-400' : question.difficulty === 'HARD' ? 'text-red-600 dark:text-red-400' : colors.text.muted;
                         return (
                           <div
                             key={question.id}
@@ -1162,14 +1344,24 @@ export default function NewSimulationPage() {
                                 {question.subject && (
                                   <span 
                                     className="px-2 py-0.5 rounded text-xs font-medium"
-                                    style={{ backgroundColor: question.subject.color + '20', color: question.subject.color }}
+                                    style={{ 
+                                      backgroundColor: (question.subject.color || '#6b7280') + 'd9', 
+                                      color: 'white'
+                                    }}
                                   >
                                     {question.subject.name}
                                   </span>
                                 )}
-                                <span className={`text-xs ${colors.text.muted}`}>{question.difficulty}</span>
+                                <span className={`text-xs font-medium ${difficultyColor}`}>{difficultyLabel}</span>
                               </div>
                             </div>
+                            <button
+                              onClick={() => setPreviewQuestion(question.id)}
+                              className={`p-1.5 rounded-lg ${colors.text.muted} hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-blue-500`}
+                              title="Visualizza dettagli"
+                            >
+                              <Info className="w-4 h-4" />
+                            </button>
                           </div>
                         );
                       })}
@@ -1179,13 +1371,13 @@ export default function NewSimulationPage() {
               </div>
 
               {/* Selected questions */}
-              <div className={`rounded-xl border ${colors.border.light} overflow-hidden`}>
-                <div className={`p-4 ${colors.background.secondary} border-b ${colors.border.light}`}>
+              <div className={`rounded-xl border ${colors.border.light} overflow-hidden flex flex-col max-h-[500px]`}>
+                <div className={`p-4 ${colors.background.secondary} border-b ${colors.border.light} flex-shrink-0`}>
                   <h3 className={`font-medium ${colors.text.primary}`}>
                     Domande selezionate ({selectedQuestions.length})
                   </h3>
                 </div>
-                <div className="max-h-96 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto">
                   {selectedQuestions.length === 0 ? (
                     <div className="p-8 text-center">
                       <Target className="w-12 h-12 mx-auto text-gray-400 mb-2" />
@@ -1200,14 +1392,14 @@ export default function NewSimulationPage() {
                             <button
                               onClick={() => moveQuestion(index, 'up')}
                               disabled={index === 0}
-                              className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30"
+                              className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 ${colors.text.secondary}`}
                             >
                               <ChevronUp className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => moveQuestion(index, 'down')}
                               disabled={index === selectedQuestions.length - 1}
-                              className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30"
+                              className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 ${colors.text.secondary}`}
                             >
                               <ChevronDown className="w-4 h-4" />
                             </button>
@@ -1223,13 +1415,32 @@ export default function NewSimulationPage() {
                               {sq.question?.subject && (
                                 <span 
                                   className="px-2 py-0.5 rounded text-xs font-medium"
-                                  style={{ backgroundColor: sq.question.subject.color + '20', color: sq.question.subject.color }}
+                                  style={{ 
+                                    backgroundColor: (sq.question.subject.color || '#6b7280') + 'd9', 
+                                    color: 'white'
+                                  }}
                                 >
                                   {sq.question.subject.name}
                                 </span>
                               )}
+                              {sq.question?.difficulty && (
+                                <span className={`text-xs font-medium ${
+                                  sq.question.difficulty === 'EASY' ? 'text-green-600 dark:text-green-400' : 
+                                  sq.question.difficulty === 'MEDIUM' ? 'text-yellow-600 dark:text-yellow-400' : 
+                                  sq.question.difficulty === 'HARD' ? 'text-red-600 dark:text-red-400' : colors.text.muted
+                                }`}>
+                                  {sq.question.difficulty === 'EASY' ? 'Facile' : sq.question.difficulty === 'MEDIUM' ? 'Media' : sq.question.difficulty === 'HARD' ? 'Difficile' : sq.question.difficulty}
+                                </span>
+                              )}
                             </div>
                           </div>
+                          <button
+                            onClick={() => setPreviewQuestion(sq.questionId)}
+                            className={`p-1.5 rounded-lg ${colors.text.muted} hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-blue-500`}
+                            title="Visualizza dettagli"
+                          >
+                            <Info className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => removeQuestion(sq.questionId)}
                             className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
@@ -1364,116 +1575,15 @@ export default function NewSimulationPage() {
           </div>
         );
 
-      case 4:
-        return (
-          <div className="space-y-6">
-            <h2 className={`text-xl font-semibold ${colors.text.primary}`}>
-              Assegna la simulazione
-            </h2>
-
-            {/* Visibility */}
-            <div className={`p-6 rounded-xl ${colors.background.secondary}`}>
-              <h3 className={`font-medium ${colors.text.primary} mb-4`}>Visibilità</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Checkbox
-                  id="isPublic"
-                  label="Pubblica per tutti"
-                  description="Tutti gli studenti attivi possono accedere"
-                  checked={isPublic}
-                  onChange={(e) => setIsPublic(e.target.checked)}
-                />
-              </div>
-            </div>
-
-            {/* Individual assignments */}
-            {!isPublic && (
-              <div className={`p-6 rounded-xl ${colors.background.secondary}`}>
-                <h3 className={`font-medium ${colors.text.primary} mb-4`}>
-                  Assegnazioni individuali ({assignments.length})
-                </h3>
-
-                {/* Add assignment */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                  <div>
-                    <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                      Aggiungi studente
-                    </label>
-                    <CustomSelect
-                      value=""
-                      onChange={(value) => {
-                        if (value) addAssignment('student', value);
-                      }}
-                      options={[
-                        { value: '', label: 'Seleziona...' },
-                        ...(studentsData?.students?.map((s) => ({ 
-                          value: s.studentId || '', 
-                          label: s.name || 'Studente' 
-                        })) || []),
-                      ]}
-                      placeholder="Seleziona..."
-                    />
-                  </div>
-                  <div>
-                    <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                      Aggiungi gruppo
-                    </label>
-                    <CustomSelect
-                      value=""
-                      onChange={(value) => {
-                        if (value) addAssignment('group', value);
-                      }}
-                      options={[
-                        { value: '', label: 'Seleziona...' },
-                        ...(groupsData?.groups?.map((g) => ({ value: g.id, label: g.name })) || []),
-                      ]}
-                      placeholder="Seleziona..."
-                    />
-                  </div>
-                </div>
-
-                {/* Assignment list */}
-                {assignments.length > 0 && (
-                  <div className={`rounded-lg border ${colors.border.light} divide-y ${colors.border.light}`}>
-                    {assignments.map((assignment, index) => {
-                      let label = '';
-                      let icon = <Users className="w-4 h-4" />;
-                      if (assignment.studentId) {
-                        const student = studentsData?.students?.find(s => s.studentId === assignment.studentId);
-                        label = student?.name || 'Studente';
-                        icon = <Users className="w-4 h-4" />;
-                      } else if (assignment.groupId) {
-                        const group = groupsData?.groups?.find(g => g.id === assignment.groupId);
-                        label = `Gruppo: ${group?.name || ''}`;
-                      }
-
-                      return (
-                        <div key={index} className={`p-3 flex items-center justify-between ${colors.background.card}`}>
-                          <div className="flex items-center gap-3">
-                            {icon}
-                            <span className={colors.text.primary}>{label}</span>
-                          </div>
-                          <button
-                            onClick={() => removeAssignment(index)}
-                            className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        );
-
-      case 5: // Review step
+      case 4: // Review step
         return (
           <div className="space-y-6">
             <h2 className={`text-xl font-semibold ${colors.text.primary}`}>
               Riepilogo simulazione
             </h2>
+            <p className={`text-sm ${colors.text.muted}`}>
+              Dopo la creazione potrai assegnare la simulazione a studenti, gruppi o classi dalla pagina di dettaglio.
+            </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Basic info */}
@@ -1591,20 +1701,6 @@ export default function NewSimulationPage() {
                     </div>
                   )}
                 </dl>
-              </div>
-
-              {/* Assignments */}
-              <div className={`p-6 rounded-xl ${colors.background.secondary}`}>
-                <h3 className={`font-medium ${colors.text.primary} mb-4`}>Destinatari</h3>
-                {isPublic ? (
-                  <p className={colors.text.secondary}>Pubblica per tutti gli studenti attivi</p>
-                ) : assignments.length > 0 ? (
-                  <p className={colors.text.secondary}>
-                    {assignments.length} assegnazioni individuali
-                  </p>
-                ) : (
-                  <p className={`${colors.text.muted} italic`}>Nessun destinatario selezionato</p>
-                )}
               </div>
             </div>
 
@@ -1749,6 +1845,85 @@ export default function NewSimulationPage() {
           )}
         </div>
       </div>
+
+      {/* Question Preview Modal */}
+      {previewQuestion && questionDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setPreviewQuestion(null)}>
+          <div 
+            className={`w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-xl ${colors.background.card} shadow-2xl`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={`p-4 border-b ${colors.border.light} flex items-center justify-between`}>
+              <h3 className={`font-semibold ${colors.text.primary}`}>Anteprima Domanda</h3>
+              <button
+                onClick={() => setPreviewQuestion(null)}
+                className={`p-1 rounded-lg ${colors.text.muted} hover:bg-gray-100 dark:hover:bg-gray-800`}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* Question metadata */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {questionDetail.subject && (
+                  <span 
+                    className="px-2 py-1 rounded text-xs font-medium text-white"
+                    style={{ backgroundColor: questionDetail.subject.color || '#6b7280' }}
+                  >
+                    {questionDetail.subject.name}
+                  </span>
+                )}
+                {questionDetail.topic && (
+                  <span className={`px-2 py-1 rounded text-xs ${colors.background.secondary} ${colors.text.secondary}`}>
+                    {questionDetail.topic.name}
+                  </span>
+                )}
+                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                  questionDetail.difficulty === 'EASY' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                  questionDetail.difficulty === 'MEDIUM' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                }`}>
+                  {questionDetail.difficulty === 'EASY' ? 'Facile' : questionDetail.difficulty === 'MEDIUM' ? 'Media' : 'Difficile'}
+                </span>
+              </div>
+
+              {/* Question text */}
+              <div 
+                className={`prose dark:prose-invert max-w-none ${colors.text.primary}`}
+                dangerouslySetInnerHTML={{ __html: questionDetail.text }}
+              />
+
+              {/* Answers */}
+              <div className="space-y-2 mt-4">
+                <h4 className={`font-medium ${colors.text.primary}`}>Risposte:</h4>
+                {questionDetail.answers?.map((answer, idx) => (
+                  <div 
+                    key={idx}
+                    className={`p-3 rounded-lg border ${
+                      answer.isCorrect 
+                        ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
+                        : `${colors.border.light} ${colors.background.secondary}`
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className={`font-medium ${answer.isCorrect ? 'text-green-600 dark:text-green-400' : colors.text.secondary}`}>
+                        {String.fromCharCode(65 + idx)}.
+                      </span>
+                      <div 
+                        className={answer.isCorrect ? 'text-green-700 dark:text-green-300' : colors.text.primary}
+                        dangerouslySetInnerHTML={{ __html: answer.text }}
+                      />
+                      {answer.isCorrect && (
+                        <Check className="w-4 h-4 text-green-500 ml-auto flex-shrink-0" />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
