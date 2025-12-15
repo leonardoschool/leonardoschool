@@ -378,7 +378,7 @@ export default function SimulationsPage() {
                     <td className="px-4 py-4 text-right">
                       <button
                         onClick={(e) => handleMenuOpen(simulation.id, e)}
-                        className={`p-2 rounded-lg ${colors.background.hover} transition-colors`}
+                        className={`p-2 rounded-lg ${colors.background.hover} ${colors.icon.interactive} transition-colors`}
                       >
                         <MoreVertical className="w-4 h-4" />
                       </button>
