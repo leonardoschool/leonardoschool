@@ -860,6 +860,120 @@ export const questionsRouter = router({
       return questions;
     }),
 
+  // Export questions to CSV (compatible with import format)
+  exportQuestionsCSV: staffProcedure
+    .input(z.object({
+      ids: z.array(z.string()).optional(),
+      subjectId: z.string().optional(),
+      status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']).optional(),
+      type: z.enum(['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'OPEN_TEXT']).optional(),
+      difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']).optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const where: Record<string, unknown> = {};
+      
+      if (input.ids && input.ids.length > 0) {
+        where.id = { in: input.ids };
+      }
+      if (input.subjectId) {
+        where.subjectId = input.subjectId;
+      }
+      if (input.status) {
+        where.status = input.status;
+      }
+      if (input.type) {
+        where.type = input.type;
+      }
+      if (input.difficulty) {
+        where.difficulty = input.difficulty;
+      }
+
+      const questions = await ctx.prisma.question.findMany({
+        where,
+        include: {
+          subject: { select: { code: true } },
+          answers: { orderBy: { order: 'asc' } },
+          questionTags: { include: { tag: { select: { name: true } } } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      // CSV headers matching import format
+      const headers = [
+        'text',
+        'type',
+        'difficulty',
+        'points',
+        'negativePoints',
+        'subject',
+        'answer1',
+        'answer1Correct',
+        'answer2',
+        'answer2Correct',
+        'answer3',
+        'answer3Correct',
+        'answer4',
+        'answer4Correct',
+        'answer5',
+        'answer5Correct',
+        'correctExplanation',
+        'wrongExplanation',
+        'tags',
+        'year',
+        'source',
+      ];
+
+      // Helper to escape CSV values
+      const escapeCSV = (value: string | number | null | undefined): string => {
+        if (value === null || value === undefined) return '';
+        const str = String(value);
+        // If contains comma, semicolon, newline or quotes, wrap in quotes
+        if (str.includes(',') || str.includes(';') || str.includes('\n') || str.includes('"')) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      };
+
+      // Build CSV rows
+      const rows = questions.map(q => {
+        const answers = q.answers || [];
+        const tagNames = q.questionTags?.map(qt => qt.tag.name).join(',') || q.legacyTags.join(',');
+        
+        return [
+          escapeCSV(q.text),
+          q.type,
+          q.difficulty,
+          q.points,
+          q.negativePoints,
+          q.subject?.code || '',
+          escapeCSV(answers[0]?.text || ''),
+          answers[0]?.isCorrect ? 'true' : 'false',
+          escapeCSV(answers[1]?.text || ''),
+          answers[1]?.isCorrect ? 'true' : 'false',
+          escapeCSV(answers[2]?.text || ''),
+          answers[2]?.isCorrect ? 'true' : 'false',
+          escapeCSV(answers[3]?.text || ''),
+          answers[3]?.isCorrect ? 'true' : 'false',
+          escapeCSV(answers[4]?.text || ''),
+          answers[4]?.isCorrect ? 'true' : 'false',
+          escapeCSV(q.correctExplanation || ''),
+          escapeCSV(q.wrongExplanation || ''),
+          escapeCSV(tagNames),
+          q.year || '',
+          escapeCSV(q.source || ''),
+        ].join(',');
+      });
+
+      // Combine headers and rows
+      const csvContent = [headers.join(','), ...rows].join('\n');
+      
+      return {
+        csv: csvContent,
+        count: questions.length,
+        filename: `domande_export_${new Date().toISOString().split('T')[0]}.csv`,
+      };
+    }),
+
   // Import questions from data
   importQuestions: adminProcedure
     .input(z.object({

@@ -595,6 +595,14 @@ async function cleanSeedData() {
   await prisma.simulationQuestion.deleteMany({});
   await prisma.simulation.deleteMany({});
 
+  // Materials and categories - DELETE ALL
+  await prisma.materialStudentAccess.deleteMany({});
+  await prisma.materialGroupAccess.deleteMany({});
+  await prisma.material.deleteMany({});
+  await prisma.materialCategoryStudentAccess.deleteMany({});
+  await prisma.materialCategoryGroupAccess.deleteMany({});
+  await prisma.materialCategory.deleteMany({});
+
   // Questions - DELETE ALL
   await prisma.questionTagAssignment.deleteMany({});
   await prisma.questionFeedback.deleteMany({});
@@ -626,7 +634,12 @@ async function cleanSeedData() {
   console.log('✅ Database cleaned');
 }
 
-async function seedSubjectsAndQuestions(adminId?: string, collaboratorId?: string): Promise<{ questions: CreatedQuestion[] }> {
+async function seedSubjectsAndQuestions(adminId?: string, collaboratorId?: string): Promise<{
+  questions: CreatedQuestion[];
+  subjectMap: Map<string, string>;
+  topicMap: Map<string, string>;
+  subTopicMap: Map<string, string>;
+}> {
   console.log('\n📚 Creating subjects, topics, subtopics...');
 
   const subjectMap = new Map<string, string>();
@@ -754,7 +767,142 @@ async function seedSubjectsAndQuestions(adminId?: string, collaboratorId?: strin
   }
 
   console.log(`✅ Created ${createdQuestions.length} questions`);
-  return { questions: createdQuestions };
+  return { questions: createdQuestions, subjectMap, topicMap, subTopicMap };
+}
+
+// ===================== MATERIALS SEEDING =====================
+async function seedMaterials(
+  creatorId: string | undefined,
+  subjectMap: Map<string, string>,
+  topicMap: Map<string, string>,
+  subTopicMap: Map<string, string>,
+) {
+  console.log('\n📁 Creating material categories...');
+
+  // Create standalone categories (containers for grouping materials)
+  const category1 = await prisma.materialCategory.create({
+    data: {
+      name: 'Seed - Materiali Test Ammissione',
+      description: 'Raccolta materiali per preparazione test di ammissione',
+      icon: 'GraduationCap',
+      order: 0,
+      visibility: 'ALL_STUDENTS',
+      createdBy: creatorId,
+    },
+  });
+
+  const category2 = await prisma.materialCategory.create({
+    data: {
+      name: 'Seed - Approfondimenti',
+      description: 'Materiali di approfondimento facoltativi',
+      icon: 'BookOpen',
+      order: 1,
+      visibility: 'ALL_STUDENTS',
+      createdBy: creatorId,
+    },
+  });
+
+  console.log('📄 Creating materials...');
+
+  // Get some subject/topic/subtopic IDs for materials
+  const bioSubjectId = subjectMap.get('BIO');
+  const chiSubjectId = subjectMap.get('CHI');
+  const fisSubjectId = subjectMap.get('FIS');
+  const matSubjectId = subjectMap.get('MAT');
+
+  const bioTopicId = topicMap.get('BIO:Cellula e metabolismo');
+  const bioSubTopicId = subTopicMap.get('BIO:Cellula e metabolismo:Organuli cellulari');
+
+  const chiTopicId = topicMap.get('CHI:Chimica generale');
+  const chiSubTopicId = subTopicMap.get('CHI:Chimica generale:Legami chimici');
+
+  const fisTopicId = topicMap.get('FIS:Meccanica');
+  const fisSubTopicId = subTopicMap.get('FIS:Meccanica:Cinematica');
+
+  const matTopicId = topicMap.get('MAT:Algebra');
+  const matSubTopicId = subTopicMap.get('MAT:Algebra:Equazioni e disequazioni');
+
+  const materialsData = [
+    {
+      title: 'Seed - Introduzione alla cellula',
+      description: 'Dispensa introduttiva sulla struttura cellulare',
+      type: 'PDF' as const,
+      subjectId: bioSubjectId,
+      topicId: bioTopicId,
+      subTopicId: bioSubTopicId,
+      categoryId: category1.id,
+      externalUrl: 'https://example.com/cellula.pdf',
+    },
+    {
+      title: 'Seed - Video: La respirazione cellulare',
+      description: 'Video esplicativo sul processo di respirazione cellulare',
+      type: 'VIDEO' as const,
+      subjectId: bioSubjectId,
+      topicId: bioTopicId,
+      externalUrl: 'https://www.youtube.com/watch?v=example1',
+    },
+    {
+      title: 'Seed - Legami chimici - Teoria',
+      description: 'Appunti sui legami ionici, covalenti e metallici',
+      type: 'DOCUMENT' as const,
+      subjectId: chiSubjectId,
+      topicId: chiTopicId,
+      subTopicId: chiSubTopicId,
+      categoryId: category1.id,
+      externalUrl: 'https://example.com/legami.docx',
+    },
+    {
+      title: 'Seed - Esercizi cinematica',
+      description: 'Raccolta di esercizi svolti sulla cinematica',
+      type: 'PDF' as const,
+      subjectId: fisSubjectId,
+      topicId: fisTopicId,
+      subTopicId: fisSubTopicId,
+      categoryId: category1.id,
+      externalUrl: 'https://example.com/cinematica.pdf',
+    },
+    {
+      title: 'Seed - Formulario matematica',
+      description: 'Formulario completo per algebra e analisi',
+      type: 'PDF' as const,
+      subjectId: matSubjectId,
+      topicId: matTopicId,
+      subTopicId: matSubTopicId,
+      categoryId: category2.id,
+      externalUrl: 'https://example.com/formulario.pdf',
+    },
+    {
+      title: 'Seed - Link risorse online',
+      description: 'Collezione di link utili per lo studio',
+      type: 'LINK' as const,
+      subjectId: bioSubjectId,
+      categoryId: category2.id,
+      externalUrl: 'https://www.khanacademy.org/science/biology',
+    },
+  ];
+
+  let materialCount = 0;
+  for (const [index, matData] of materialsData.entries()) {
+    await prisma.material.create({
+      data: {
+        title: matData.title,
+        description: matData.description,
+        type: matData.type,
+        externalUrl: matData.externalUrl,
+        subjectId: matData.subjectId,
+        topicId: matData.topicId,
+        subTopicId: matData.subTopicId,
+        categoryId: matData.categoryId,
+        visibility: 'ALL_STUDENTS',
+        order: index,
+        createdBy: creatorId,
+        tags: ['Seed Demo'],
+      },
+    });
+    materialCount++;
+  }
+
+  console.log(`✅ Created ${materialCount} materials in 2 categories`);
 }
 
 async function seedClasses(students: SeedStudent) {
@@ -1064,11 +1212,12 @@ async function main() {
   // 4) Seed content
   const adminUserId = createdAdmins[0]?.userId;
   const collaboratorUserId = createdCollabs[0]?.userId;
-  const { questions } = await seedSubjectsAndQuestions(adminUserId, collaboratorUserId);
+  const { questions, subjectMap, topicMap, subTopicMap } = await seedSubjectsAndQuestions(adminUserId, collaboratorUserId);
   const classes = await seedClasses(createdStudents);
   const creatorId = adminUserId ?? collaboratorUserId;
   const creatorRole: 'ADMIN' | 'COLLABORATOR' = adminUserId ? 'ADMIN' : 'COLLABORATOR';
   await seedSimulations(creatorId, creatorRole, classes, createdStudents, questions);
+  await seedMaterials(creatorId, subjectMap, topicMap, subTopicMap);
 
   // Summary
   console.log('\n' + '═'.repeat(60));
@@ -1079,6 +1228,7 @@ async function main() {
   console.log(`👨‍🎓 Students:       ${createdStudents.length}`);
   console.log(`📚 Subjects:       ${SEED_SUBJECTS.length}`);
   console.log(`❓ Questions:      ${questions.length}`);
+  console.log('📁 Materials:      6');
   console.log('🏫 Classes:        2');
   console.log('🧪 Simulations:    2');
   console.log('═'.repeat(60));

@@ -317,14 +317,15 @@ model Student {
   graduationYear Int?
 
   // Relations
-  user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  class             Class?                  @relation(fields: [classId], references: [id], onDelete: SetNull)
-  simulationResults SimulationResult[]
-  stats             StudentStats?
-  contracts         Contract[]
-  materialAccess    MaterialStudentAccess[]
-  groupMemberships  GroupMember[] // Gruppi a cui appartiene
-  referenceGroups   Group[]                 @relation("GroupReferenceStudent") // Gruppi di cui è riferimento
+  user                   User                            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class                  Class?                          @relation(fields: [classId], references: [id], onDelete: SetNull)
+  simulationResults      SimulationResult[]
+  stats                  StudentStats?
+  contracts              Contract[]
+  materialAccess         MaterialStudentAccess[]
+  materialCategoryAccess MaterialCategoryStudentAccess[]
+  groupMemberships       GroupMember[] // Gruppi a cui appartiene
+  referenceGroups        Group[]                         @relation("GroupReferenceStudent") // Gruppi di cui è riferimento
 
   // Question-related relations
   questionFeedbacks     QuestionFeedback[] // Segnalazioni domande
@@ -853,11 +854,11 @@ model Simulation {
   sections    Json? // Array of sections: [{name, durationMinutes, questionIds, subjectId}]
 
   // Anti-cheat settings
-  enableAntiCheat      Boolean @default(false) // Enable anti-cheat measures
-  forceFullscreen      Boolean @default(false) // Force fullscreen mode
-  blockTabChange       Boolean @default(false) // Block tab/window change
-  blockCopyPaste       Boolean @default(false) // Block copy/paste
-  logSuspiciousEvents  Boolean @default(false) // Log suspicious events for review
+  enableAntiCheat     Boolean @default(false) // Enable anti-cheat measures
+  forceFullscreen     Boolean @default(false) // Force fullscreen mode
+  blockTabChange      Boolean @default(false) // Block tab/window change
+  blockCopyPaste      Boolean @default(false) // Block copy/paste
+  logSuspiciousEvents Boolean @default(false) // Log suspicious events for review
 
   // Question selection criteria (for auto-generation)
   subjectDistribution    Json? // {subjectId: numberOfQuestions, ...}
@@ -915,7 +916,7 @@ model SimulationAssignment {
   // Schedule for this specific assignment
   startDate    DateTime? // When this assignment becomes available
   endDate      DateTime? // When this assignment closes
-  locationType String?   // 'ONLINE', 'IN_PERSON', 'HYBRID'
+  locationType String? // 'ONLINE', 'IN_PERSON', 'HYBRID'
 
   // Relations
   simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
@@ -1626,27 +1627,66 @@ enum MaterialType {
 }
 
 enum MaterialVisibility {
+  NONE // Not assigned to anyone
   ALL_STUDENTS // Visible to all active students
   GROUP_BASED // Based on student groups
   SELECTED_STUDENTS // Selected individual students
 }
 
+// Material Category - Container for grouping materials (with visibility)
 model MaterialCategory {
   id          String  @id @default(cuid())
-  name        String  @unique
+  name        String
   description String?
   icon        String? // Lucide icon name
   order       Int     @default(0)
   isActive    Boolean @default(true)
 
+  // Visibility settings (same as Material)
+  visibility MaterialVisibility @default(ALL_STUDENTS)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  createdBy String? // userId who created it
 
-  materials Material[]
+  materials     Material[]
+  groupAccess   MaterialCategoryGroupAccess[]
+  studentAccess MaterialCategoryStudentAccess[]
 
   @@index([isActive])
   @@index([order])
+  @@index([visibility])
   @@map("material_categories")
+}
+
+// Group-based access for categories
+model MaterialCategoryGroupAccess {
+  id         String @id @default(cuid())
+  categoryId String
+  groupId    String
+
+  category MaterialCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  group    Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, groupId])
+  @@index([categoryId])
+  @@index([groupId])
+  @@map("material_category_group_access")
+}
+
+// Individual student access for categories
+model MaterialCategoryStudentAccess {
+  id         String @id @default(cuid())
+  categoryId String
+  studentId  String
+
+  category MaterialCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  student  Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, studentId])
+  @@index([categoryId])
+  @@index([studentId])
+  @@map("material_category_student_access")
 }
 
 // Custom subjects managed by admin (for materials AND questions)
@@ -1687,6 +1727,7 @@ model Topic {
 
   subTopics SubTopic[]
   questions Question[] // Domande di questo argomento
+  materials Material[] // Materiali di questo argomento
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1712,6 +1753,7 @@ model SubTopic {
   topic   Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
   questions Question[] // Domande di questo sotto-argomento
+  materials Material[] // Materiali di questo sotto-argomento
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1740,11 +1782,13 @@ model Material {
   // Visibility settings
   visibility MaterialVisibility @default(ALL_STUDENTS)
 
-  // Category
-  categoryId String?
+  // Classification: Subject > Topic > SubTopic
+  subjectId  String?
+  topicId    String?
+  subTopicId String?
 
-  // Subject (dynamic, managed by admin)
-  subjectId String?
+  // Container category (for grouping materials)
+  categoryId String?
 
   // Metadata
   tags     String[]
@@ -1760,15 +1804,19 @@ model Material {
   createdBy String? // Admin userId
 
   // Relations
-  category      MaterialCategory?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   subject       CustomSubject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  topic         Topic?                  @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  subTopic      SubTopic?               @relation(fields: [subTopicId], references: [id], onDelete: SetNull)
+  category      MaterialCategory?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   groupAccess   MaterialGroupAccess[]
   studentAccess MaterialStudentAccess[]
 
   @@index([type])
   @@index([visibility])
-  @@index([categoryId])
   @@index([subjectId])
+  @@index([topicId])
+  @@index([subTopicId])
+  @@index([categoryId])
   @@index([isActive])
   @@map("materials")
 }
@@ -1944,7 +1992,8 @@ model Group {
   simulationAssignments SimulationAssignment[]
 
   // Material access
-  materialAccess MaterialGroupAccess[]
+  materialAccess         MaterialGroupAccess[]
+  materialCategoryAccess MaterialCategoryGroupAccess[]
 
   // Event invitations
   eventInvitations EventInvitation[]

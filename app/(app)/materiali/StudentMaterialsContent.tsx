@@ -1,472 +1,608 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, JSX } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
-import CustomSelect from '@/components/ui/CustomSelect';
-import { 
-  FolderOpen, 
-  FileText,
-  Video,
-  Link as LinkIcon,
-  File,
-  Download,
-  Search,
-  Eye,
-  ExternalLink,
-  ChevronDown,
+import {
+  Book,
   ChevronRight,
-  Play,
-  BookOpen,
+  ChevronDown,
+  Download,
+  File,
+  Video,
+  FileText,
+  ImageIcon,
+  Folder,
+  FolderOpen,
+  Search,
+  Filter,
   X,
 } from 'lucide-react';
 
-type MaterialType = 'PDF' | 'VIDEO' | 'LINK' | 'DOCUMENT';
+// Helper per generare colore di sfondo chiaro da hex
+const getSubjectBgStyle = (hexColor: string | null | undefined) => {
+  if (!hexColor) return { backgroundColor: '#f3f4f6' };
+  // Rimuovi # se presente
+  const hex = hexColor.replace('#', '');
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  // Sfondo molto chiaro (15% opacità)
+  return { backgroundColor: `rgba(${r}, ${g}, ${b}, 0.15)` };
+};
 
-// Type for material data from tRPC query
-interface Material {
+// Helper per generare colore testo da hex
+const getSubjectTextStyle = (hexColor: string | null | undefined) => {
+  if (!hexColor) return { color: '#374151' };
+  return { color: hexColor };
+};
+
+// Interfacce per la gerarchia (aggiornate per nuovo schema)
+interface MaterialData {
   id: string;
   title: string;
-  description?: string | null;
-  type: MaterialType;
-  fileUrl?: string | null;
-  externalUrl?: string | null;
-  fileSize?: number | null;
-  categoryId?: string | null;
-  subjects?: string[] | null;
-  subject?: {
+  description: string | null;
+  type: string;
+  fileUrl: string | null;
+  fileName: string | null;
+  fileSize: number | null;
+  externalUrl: string | null;
+  createdAt: Date;
+  category: {
+    id: string;
     name: string;
-    color?: string | null;
+  } | null;
+  topic: {
+    id: string;
+    name: string;
+  } | null;
+  subTopic: {
+    id: string;
+    name: string;
+    difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+  } | null;
+  subject: {
+    id: string;
+    name: string;
+    color: string | null;
   } | null;
 }
 
-const typeIcons: Record<MaterialType, typeof FileText> = {
-  PDF: FileText,
-  VIDEO: Video,
-  LINK: LinkIcon,
-  DOCUMENT: File,
-};
-
-const typeLabels: Record<MaterialType, string> = {
-  PDF: 'PDF',
-  VIDEO: 'Video',
-  LINK: 'Link',
-  DOCUMENT: 'Documento',
-};
+interface HierarchyNode {
+  subject: {
+    id: string;
+    name: string;
+    color: string | null;
+  };
+  topics: {
+    topic: {
+      id: string;
+      name: string;
+    };
+    subTopics: {
+      subTopic: {
+        id: string;
+        name: string;
+        difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+      };
+      materials: MaterialData[];
+    }[];
+    // Materials directly under topic (no subTopic)
+    directMaterials: MaterialData[];
+  }[];
+  // Materials directly under subject (no topic)
+  directMaterials: MaterialData[];
+}
 
 export default function StudentMaterialsContent() {
+  // Stati UI
+  const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
+  const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
+  const [expandedSubTopics, setExpandedSubTopics] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<MaterialType | ''>('');
-  const [filterCategory, setFilterCategory] = useState('');
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['all']));
-  const [viewingMaterial, setViewingMaterial] = useState<Material | null>(null);
+  const [difficultyFilter, setDifficultyFilter] = useState<string>('');
+  const [showFilters, setShowFilters] = useState(false);
 
-  // Queries
-  const { data: materials, isLoading } = trpc.materials.getMyMaterials.useQuery({
-    type: filterType || undefined,
-    categoryId: filterCategory || undefined,
-  });
-  const { data: categories } = trpc.materials.getCategories.useQuery();
+  // Query per materiali studente
+  const { data: materials, isLoading: loadingMaterials } = trpc.materials.getMyMaterials.useQuery();
 
-  // Mutations for tracking
-  const recordViewMutation = trpc.materials.recordView.useMutation();
-  const recordDownloadMutation = trpc.materials.recordDownload.useMutation();
+  // Costruisci gerarchia dai materiali (aggiornata per nuovo schema)
+  const hierarchy = useMemo<HierarchyNode[]>(() => {
+    if (!materials) return [];
 
-  // Filter materials
-  const filteredMaterials = materials?.filter((m) => {
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      return (
-        m.title.toLowerCase().includes(query) ||
-        m.description?.toLowerCase().includes(query) ||
-        m.tags?.some((t: string) => t.toLowerCase().includes(query))
+    const subjectMap = new Map<string, HierarchyNode>();
+
+    materials.forEach((material) => {
+      const mat = material as unknown as MaterialData;
+      
+      // Subject è opzionale, se non c'è raggruppiamo sotto "Altro"
+      const subjectId = mat.subject?.id || 'other';
+      const subjectName = mat.subject?.name || 'Altro';
+      const subjectColor = mat.subject?.color || null;
+
+      // Get or create subject node
+      if (!subjectMap.has(subjectId)) {
+        subjectMap.set(subjectId, {
+          subject: {
+            id: subjectId,
+            name: subjectName,
+            color: subjectColor,
+          },
+          topics: [],
+          directMaterials: [],
+        });
+      }
+      const subjectNode = subjectMap.get(subjectId)!;
+
+      // Se non c'è topic, aggiungi ai materiali diretti del subject
+      if (!mat.topic) {
+        subjectNode.directMaterials.push(mat);
+        return;
+      }
+
+      // Find or create topic
+      let topicNode = subjectNode.topics.find((t) => t.topic.id === mat.topic!.id);
+      if (!topicNode) {
+        topicNode = {
+          topic: {
+            id: mat.topic.id,
+            name: mat.topic.name,
+          },
+          subTopics: [],
+          directMaterials: [],
+        };
+        subjectNode.topics.push(topicNode);
+      }
+
+      // Se non c'è subTopic, aggiungi ai materiali diretti del topic
+      if (!mat.subTopic) {
+        topicNode.directMaterials.push(mat);
+        return;
+      }
+
+      // Find or create subTopic
+      let subTopicNode = topicNode.subTopics.find(
+        (st) => st.subTopic.id === mat.subTopic!.id
       );
-    }
-    return true;
-  });
+      if (!subTopicNode) {
+        subTopicNode = {
+          subTopic: {
+            id: mat.subTopic.id,
+            name: mat.subTopic.name,
+            difficulty: mat.subTopic.difficulty,
+          },
+          materials: [],
+        };
+        topicNode.subTopics.push(subTopicNode);
+      }
 
-  // Group by category
-  const groupedMaterials = filteredMaterials?.reduce((acc, material) => {
-    const catId = material.categoryId || 'uncategorized';
-    if (!acc[catId]) acc[catId] = [];
-    acc[catId].push(material);
-    return acc;
-  }, {} as Record<string, typeof filteredMaterials>);
+      // Add material
+      subTopicNode.materials.push(mat);
+    });
 
-  const toggleCategory = (categoryId: string) => {
-    const newExpanded = new Set(expandedCategories);
-    if (newExpanded.has(categoryId)) {
-      newExpanded.delete(categoryId);
-    } else {
-      newExpanded.add(categoryId);
-    }
-    setExpandedCategories(newExpanded);
+    return Array.from(subjectMap.values());
+  }, [materials]);
+
+  // Filtra materiali
+  const filteredHierarchy = useMemo<HierarchyNode[]>(() => {
+    if (!searchQuery && !difficultyFilter) return hierarchy;
+
+    const searchLower = searchQuery.toLowerCase();
+
+    return hierarchy
+      .map((subjectNode) => ({
+        ...subjectNode,
+        directMaterials: subjectNode.directMaterials.filter(
+          (m) =>
+            m.title.toLowerCase().includes(searchLower) ||
+            m.description?.toLowerCase().includes(searchLower)
+        ),
+        topics: subjectNode.topics
+          .map((topicNode) => ({
+            ...topicNode,
+            directMaterials: topicNode.directMaterials.filter(
+              (m) =>
+                m.title.toLowerCase().includes(searchLower) ||
+                m.description?.toLowerCase().includes(searchLower) ||
+                topicNode.topic.name.toLowerCase().includes(searchLower)
+            ),
+            subTopics: topicNode.subTopics
+              .filter((stNode) => {
+                if (difficultyFilter && stNode.subTopic.difficulty !== difficultyFilter) {
+                  return false;
+                }
+                return true;
+              })
+              .map((stNode) => ({
+                ...stNode,
+                materials: stNode.materials.filter(
+                  (m) =>
+                    m.title.toLowerCase().includes(searchLower) ||
+                    m.description?.toLowerCase().includes(searchLower) ||
+                    stNode.subTopic.name.toLowerCase().includes(searchLower) ||
+                    topicNode.topic.name.toLowerCase().includes(searchLower)
+                ),
+              }))
+              .filter((stNode) => stNode.materials.length > 0),
+          }))
+          .filter((topicNode) => topicNode.subTopics.length > 0 || topicNode.directMaterials.length > 0),
+      }))
+      .filter((subNode) => subNode.topics.length > 0 || subNode.directMaterials.length > 0);
+  }, [hierarchy, searchQuery, difficultyFilter]);
+
+  // Toggle functions
+  const toggleSubject = (id: string) => {
+    setExpandedSubjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
-  const handleView = (material: Material) => {
-    recordViewMutation.mutate({ id: material.id });
-    
-    if (material.type === 'LINK' && material.externalUrl) {
-      window.open(material.externalUrl, '_blank');
-    } else if (material.fileUrl) {
-      setViewingMaterial(material);
-    }
+  const toggleTopic = (id: string) => {
+    setExpandedTopics((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
-  const handleDownload = (material: Material) => {
-    recordDownloadMutation.mutate({ id: material.id });
-    
-    if (material.fileUrl) {
-      window.open(material.fileUrl, '_blank');
-    }
+  const toggleSubTopic = (id: string) => {
+    setExpandedSubTopics((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
-  // Utility functions - kept for future use
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const formatFileSize = (bytes?: number | null) => {
-    if (!bytes) return '';
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  // Helper per icona file
+  const getFileIcon = (fileType: string) => {
+    if (fileType.includes('video')) return <Video className="w-4 h-4" />;
+    if (fileType.includes('image')) return <ImageIcon className="w-4 h-4" />;
+    if (fileType.includes('pdf')) return <FileText className="w-4 h-4" />;
+    return <File className="w-4 h-4" />;
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const getTypeColor = (type: MaterialType) => {
-    switch (type) {
-      case 'PDF': return 'bg-red-100 dark:bg-red-900/30 text-red-600';
-      case 'VIDEO': return 'bg-blue-100 dark:bg-blue-900/30 text-blue-600';
-      case 'LINK': return 'bg-purple-100 dark:bg-purple-900/30 text-purple-600';
-      case 'DOCUMENT': return 'bg-amber-100 dark:bg-amber-900/30 text-amber-600';
-    }
+  // Helper per formattare dimensione file
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
+
+  // Helper per badge difficolta
+  const getDifficultyBadge = (difficulty: 'EASY' | 'MEDIUM' | 'HARD') => {
+    const styles = {
+      EASY: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+      MEDIUM: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+      HARD: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    };
+    const labels = {
+      EASY: 'Facile',
+      MEDIUM: 'Medio',
+      HARD: 'Difficile',
+    };
+    return (
+      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[difficulty]}`}>
+        {labels[difficulty]}
+      </span>
+    );
+  };
+
+  // Conta totale materiali
+  const totalMaterials = materials?.length || 0;
+
+  if (loadingMaterials) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className={`text-2xl font-bold ${colors.text.primary} flex items-center gap-3`}>
-          <BookOpen className="w-7 h-7 text-teal-600" />
-          Materiale Didattico
-        </h1>
-        <p className={`mt-1 ${colors.text.secondary}`}>
-          PDF, video e risorse per il tuo studio
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">I Miei Materiali</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            {totalMaterials} materiali disponibili
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`p-2 rounded-lg border transition-colors ${
+              showFilters || difficultyFilter
+                ? `${colors.primary.bg} ${colors.primary.text} border-transparent`
+                : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            <Filter className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       {/* Search & Filters */}
-      <div className={`${colors.background.card} rounded-xl shadow-sm p-4`}>
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${colors.text.muted}`} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cerca materiali..."
-              className={`w-full pl-10 pr-4 py-2.5 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500 focus:border-transparent`}
-            />
-          </div>
-          <div className="flex gap-3">
-            <div className="w-40">
-              <CustomSelect
-                value={filterType}
-                onChange={(value) => setFilterType(value as MaterialType | '')}
-                options={[
-                  { value: '', label: 'Tutti i tipi' },
-                  ...Object.entries(typeLabels).map(([key, label]) => ({ value: key, label }))
-                ]}
-                placeholder="Tutti i tipi"
-              />
-            </div>
-            <div className="w-48">
-              <CustomSelect
-                value={filterCategory}
-                onChange={setFilterCategory}
-                options={[
-                  { value: '', label: 'Tutte le categorie' },
-                  ...(categories?.map((cat) => ({ value: cat.id, label: cat.name })) || [])
-                ]}
-                placeholder="Tutte le categorie"
-                searchable
-              />
-            </div>
-          </div>
+      <div className="space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Cerca materiali..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
+
+        {showFilters && (
+          <div className="flex flex-wrap gap-2 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+            <span className="text-sm text-gray-600 dark:text-gray-400 self-center">Difficolta:</span>
+            {['', 'EASY', 'MEDIUM', 'HARD'].map((diff) => (
+              <button
+                key={diff}
+                onClick={() => setDifficultyFilter(diff)}
+                className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                  difficultyFilter === diff
+                    ? `${colors.primary.bg} text-white`
+                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+                }`}
+              >
+                {diff === '' ? 'Tutti' : diff === 'EASY' ? 'Facile' : diff === 'MEDIUM' ? 'Medio' : 'Difficile'}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Materials List */}
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Spinner size="lg" />
-        </div>
-      ) : !filteredMaterials?.length ? (
-        <div className={`${colors.background.card} rounded-xl shadow-sm p-12 text-center`}>
-          <FolderOpen className={`w-16 h-16 mx-auto mb-4 ${colors.text.muted}`} />
-          <p className={`text-lg font-medium ${colors.text.primary}`}>Nessun materiale disponibile</p>
-          <p className={`mt-1 ${colors.text.secondary}`}>
-            Non ci sono materiali didattici assegnati al tuo profilo al momento.
+      {/* Empty State */}
+      {filteredHierarchy.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+            <Book className="w-8 h-8 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+            {searchQuery || difficultyFilter ? 'Nessun risultato' : 'Nessun materiale disponibile'}
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400 max-w-md">
+            {searchQuery || difficultyFilter
+              ? 'Prova a modificare i filtri di ricerca'
+              : 'I materiali assegnati appariranno qui'}
           </p>
         </div>
-      ) : (
-        <div className="space-y-4">
-          {/* Render by category */}
-          {categories?.map((category) => {
-            const catMaterials = groupedMaterials?.[category.id];
-            if (!catMaterials?.length) return null;
+      )}
 
-            const isExpanded = expandedCategories.has(category.id);
+      {/* Hierarchical Tree */}
+      <div className="space-y-3">
+        {filteredHierarchy.map((subjectNode) => {
+          const isSubjectExpanded = expandedSubjects.has(subjectNode.subject.id);
+          const subjectColor = subjectNode.subject.color;
+          
+          // Conta totale materiali per subject
+          const totalMaterialsInSubject = 
+            subjectNode.directMaterials.length +
+            subjectNode.topics.reduce(
+              (acc, t) => acc + t.directMaterials.length + t.subTopics.reduce((a, st) => a + st.materials.length, 0),
+              0
+            );
 
-            return (
-              <div key={category.id} className={`${colors.background.card} rounded-xl shadow-sm overflow-hidden`}>
-                <button
-                  onClick={() => toggleCategory(category.id)}
-                  className={`w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors`}
-                >
-                  <div className="flex items-center gap-3">
-                    {isExpanded ? (
-                      <ChevronDown className="w-5 h-5 text-gray-400" />
-                    ) : (
-                      <ChevronRight className="w-5 h-5 text-gray-400" />
-                    )}
-                    <div className="w-10 h-10 rounded-lg bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center">
-                      <FolderOpen className="w-5 h-5 text-teal-600" />
-                    </div>
-                    <div className="text-left">
-                      <p className={`font-medium ${colors.text.primary}`}>{category.name}</p>
-                      {category.description && (
-                        <p className={`text-sm ${colors.text.muted}`}>{category.description}</p>
-                      )}
-                    </div>
-                    <span className={`ml-2 px-2 py-1 rounded-full text-xs ${colors.background.secondary} ${colors.text.muted}`}>
-                      {catMaterials.length}
-                    </span>
-                  </div>
-                </button>
+          return (
+            <div
+              key={subjectNode.subject.id}
+              className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden"
+            >
+              {/* Subject Header */}
+              <button
+                onClick={() => toggleSubject(subjectNode.subject.id)}
+                style={getSubjectBgStyle(subjectColor)}
+                className="w-full flex items-center gap-3 p-4 transition-colors"
+              >
+                {isSubjectExpanded ? (
+                  <ChevronDown style={getSubjectTextStyle(subjectColor)} className="w-5 h-5" />
+                ) : (
+                  <ChevronRight style={getSubjectTextStyle(subjectColor)} className="w-5 h-5" />
+                )}
+                <Book style={getSubjectTextStyle(subjectColor)} className="w-5 h-5" />
+                <span style={getSubjectTextStyle(subjectColor)} className="font-semibold">{subjectNode.subject.name}</span>
+                <span className="ml-auto text-sm text-gray-600 dark:text-gray-400">
+                  {totalMaterialsInSubject} materiali
+                </span>
+              </button>
 
-                {isExpanded && (
-                  <div className="border-t border-gray-200 dark:border-gray-700">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-5">
-                      {catMaterials.map((material: Material) => (
+              {/* Topics */}
+              {isSubjectExpanded && (
+                <div className="bg-white dark:bg-gray-800">
+                  {/* Materiali diretti del subject (senza topic) */}
+                  {subjectNode.directMaterials.length > 0 && (
+                    <div className="border-t border-gray-100 dark:border-gray-700 pl-8 pr-4 py-3 space-y-2">
+                      {subjectNode.directMaterials.map((material) => (
                         <MaterialCard
                           key={material.id}
                           material={material}
-                          onView={handleView}
-                          onDownload={handleDownload}
+                          getFileIcon={getFileIcon}
+                          formatFileSize={formatFileSize}
                         />
                       ))}
                     </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {/* Uncategorized */}
-          {groupedMaterials?.uncategorized?.length > 0 && (
-            <div className={`${colors.background.card} rounded-xl shadow-sm overflow-hidden`}>
-              <button
-                onClick={() => toggleCategory('uncategorized')}
-                className={`w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors`}
-              >
-                <div className="flex items-center gap-3">
-                  {expandedCategories.has('uncategorized') ? (
-                    <ChevronDown className="w-5 h-5 text-gray-400" />
-                  ) : (
-                    <ChevronRight className="w-5 h-5 text-gray-400" />
                   )}
-                  <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                    <FolderOpen className="w-5 h-5 text-gray-500" />
-                  </div>
-                  <p className={`font-medium ${colors.text.primary}`}>Altro</p>
-                  <span className={`ml-2 px-2 py-1 rounded-full text-xs ${colors.background.secondary} ${colors.text.muted}`}>
-                    {groupedMaterials.uncategorized.length}
-                  </span>
-                </div>
-              </button>
+                  
+                  {subjectNode.topics.map((topicNode) => {
+                    const isTopicExpanded = expandedTopics.has(topicNode.topic.id);
+                    const topicMaterialCount = topicNode.directMaterials.length + 
+                      topicNode.subTopics.reduce((a, st) => a + st.materials.length, 0);
 
-              {expandedCategories.has('uncategorized') && (
-                <div className="border-t border-gray-200 dark:border-gray-700">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-5">
-                    {groupedMaterials.uncategorized.map((material: Material) => (
-                      <MaterialCard
-                        key={material.id}
-                        material={material}
-                        onView={handleView}
-                        onDownload={handleDownload}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+                    return (
+                      <div key={topicNode.topic.id} className="border-t border-gray-100 dark:border-gray-700">
+                        {/* Topic Header */}
+                        <button
+                          onClick={() => toggleTopic(topicNode.topic.id)}
+                          className="w-full flex items-center gap-3 p-3 pl-8 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                        >
+                          {isTopicExpanded ? (
+                            <ChevronDown className="w-4 h-4 text-gray-500" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4 text-gray-500" />
+                          )}
+                          {isTopicExpanded ? (
+                            <FolderOpen className="w-4 h-4 text-gray-500" />
+                          ) : (
+                            <Folder className="w-4 h-4 text-gray-500" />
+                          )}
+                          <span className="font-medium text-gray-800 dark:text-gray-200">
+                            {topicNode.topic.name}
+                          </span>
+                          <span className="ml-auto text-xs text-gray-500">
+                            {topicMaterialCount} materiali
+                          </span>
+                        </button>
 
-      {/* View Modal for PDF/Video */}
-      {viewingMaterial && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className={`${colors.background.card} rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col`}>
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex items-center gap-3">
-                {viewingMaterial.type === 'PDF' ? (
-                  <FileText className="w-6 h-6 text-red-600" />
-                ) : viewingMaterial.type === 'VIDEO' ? (
-                  <Video className="w-6 h-6 text-blue-600" />
-                ) : (
-                  <File className="w-6 h-6 text-gray-600" />
-                )}
-                <h2 className={`text-lg font-semibold ${colors.text.primary}`}>
-                  {viewingMaterial.title}
-                </h2>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleDownload(viewingMaterial)}
-                  className={`px-4 py-2 rounded-lg ${colors.primary.bg} text-white font-medium flex items-center gap-2 hover:opacity-90`}
-                >
-                  <Download className="w-4 h-4" />
-                  Scarica
-                </button>
-                <button
-                  onClick={() => setViewingMaterial(null)}
-                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-                >
-                  <X className="w-5 h-5 text-gray-500" />
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-auto bg-gray-100 dark:bg-gray-900">
-              {viewingMaterial.type === 'PDF' && (
-                <iframe
-                  src={`${viewingMaterial.fileUrl}#view=FitH`}
-                  className="w-full h-full min-h-[70vh]"
-                  title={viewingMaterial.title}
-                />
-              )}
-              {viewingMaterial.type === 'VIDEO' && (
-                <video
-                  src={viewingMaterial.fileUrl}
-                  controls
-                  autoPlay
-                  className="w-full h-full max-h-[70vh] object-contain"
-                >
-                  Il tuo browser non supporta la riproduzione video.
-                </video>
-              )}
-              {viewingMaterial.type === 'DOCUMENT' && (
-                <div className="flex flex-col items-center justify-center h-64 gap-4">
-                  <File className="w-16 h-16 text-gray-400" />
-                  <p className={colors.text.secondary}>Questo documento non può essere visualizzato direttamente.</p>
-                  <button
-                    onClick={() => handleDownload(viewingMaterial)}
-                    className={`px-6 py-3 ${colors.primary.bg} text-white rounded-xl font-medium flex items-center gap-2`}
-                  >
-                    <Download className="w-5 h-5" />
-                    Scarica il documento
-                  </button>
+                        {/* SubTopics and direct materials */}
+                        {isTopicExpanded && (
+                          <div className="bg-gray-50/50 dark:bg-gray-800/50">
+                            {/* Materiali diretti del topic (senza subTopic) */}
+                            {topicNode.directMaterials.length > 0 && (
+                              <div className="pl-14 pr-4 py-3 space-y-2">
+                                {topicNode.directMaterials.map((material) => (
+                                  <MaterialCard
+                                    key={material.id}
+                                    material={material}
+                                    getFileIcon={getFileIcon}
+                                    formatFileSize={formatFileSize}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                            
+                            {topicNode.subTopics.map((stNode) => {
+                              const isStExpanded = expandedSubTopics.has(stNode.subTopic.id);
+
+                              return (
+                                <div key={stNode.subTopic.id}>
+                                  {/* SubTopic Header */}
+                                  <button
+                                    onClick={() => toggleSubTopic(stNode.subTopic.id)}
+                                    className="w-full flex items-center gap-3 p-3 pl-14 hover:bg-gray-100 dark:hover:bg-gray-700/30 transition-colors"
+                                  >
+                                    {isStExpanded ? (
+                                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                                    ) : (
+                                      <ChevronRight className="w-4 h-4 text-gray-400" />
+                                    )}
+                                    {isStExpanded ? (
+                                      <FolderOpen className="w-4 h-4 text-gray-400" />
+                                    ) : (
+                                      <Folder className="w-4 h-4 text-gray-400" />
+                                    )}
+                                    <span className="text-gray-700 dark:text-gray-300">
+                                      {stNode.subTopic.name}
+                                    </span>
+                                    {getDifficultyBadge(stNode.subTopic.difficulty)}
+                                    <span className="ml-auto text-xs text-gray-400">
+                                      {stNode.materials.length} file
+                                    </span>
+                                  </button>
+
+                                  {/* Materials */}
+                                  {isStExpanded && (
+                                    <div className="pl-20 pr-4 pb-3 space-y-2">
+                                      {stNode.materials.map((material) => (
+                                        <MaterialCard
+                                          key={material.id}
+                                          material={material}
+                                          getFileIcon={getFileIcon}
+                                          formatFileSize={formatFileSize}
+                                        />
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-// Material Card Component
+// Componente card materiale
 function MaterialCard({
   material,
-  onView,
-  onDownload,
+  getFileIcon,
+  formatFileSize,
 }: {
-  material: Material;
-  onView: (m: Material) => void;
-  onDownload: (m: Material) => void;
+  material: MaterialData;
+  getFileIcon: (fileType: string) => JSX.Element;
+  formatFileSize: (bytes: number) => string;
 }) {
-  const TypeIcon = typeIcons[material.type as MaterialType] || File;
-
-  const getTypeColor = (type: MaterialType) => {
-    switch (type) {
-      case 'PDF': return 'bg-red-100 dark:bg-red-900/30';
-      case 'VIDEO': return 'bg-blue-100 dark:bg-blue-900/30';
-      case 'LINK': return 'bg-purple-100 dark:bg-purple-900/30';
-      case 'DOCUMENT': return 'bg-amber-100 dark:bg-amber-900/30';
+  const handleOpen = () => {
+    const url = material.fileUrl || material.externalUrl;
+    if (url) {
+      window.open(url, '_blank');
     }
   };
 
-  const getIconColor = (type: MaterialType) => {
-    switch (type) {
-      case 'PDF': return 'text-red-600';
-      case 'VIDEO': return 'text-blue-600';
-      case 'LINK': return 'text-purple-600';
-      case 'DOCUMENT': return 'text-amber-600';
+  // Determina l'icona dal type
+  const getIconType = () => {
+    switch (material.type) {
+      case 'PDF':
+        return 'pdf';
+      case 'VIDEO':
+        return 'video';
+      case 'LINK':
+        return 'link';
+      default:
+        return 'document';
     }
   };
 
   return (
-    <div className={`p-4 rounded-xl border ${colors.border.primary} hover:shadow-md transition-all hover:-translate-y-0.5 ${colors.background.card}`}>
-      <div className="flex items-start gap-3">
-        <div className={`w-12 h-12 rounded-xl ${getTypeColor(material.type)} flex items-center justify-center flex-shrink-0`}>
-          <TypeIcon className={`w-6 h-6 ${getIconColor(material.type)}`} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className={`font-medium ${colors.text.primary} line-clamp-2`}>{material.title}</h3>
-          {material.description && (
-            <p className={`text-sm ${colors.text.muted} mt-1 line-clamp-2`}>{material.description}</p>
-          )}
-          <div className={`flex items-center gap-3 mt-2 text-xs ${colors.text.muted}`}>
-            <span className={`px-2 py-0.5 rounded-full ${getTypeColor(material.type)} ${getIconColor(material.type)}`}>
-              {typeLabels[material.type as MaterialType]}
-            </span>
-            {material.subject && (
-              <span 
-                className="px-2 py-0.5 rounded-full"
-                style={{
-                  backgroundColor: material.subject.color ? `${material.subject.color}20` : '#e5e7eb',
-                  color: material.subject.color || '#6b7280'
-                }}
-              >
-                {material.subject.name}
-              </span>
-            )}
-          </div>
-        </div>
+    <div className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:shadow-sm transition-shadow">
+      <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
+        {getFileIcon(getIconType())}
       </div>
-
-      <div className="flex gap-2 mt-4">
-        <button
-          onClick={() => onView(material)}
-          className={`flex-1 py-2 px-3 rounded-lg ${colors.background.secondary} hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-2 ${colors.text.primary} text-sm font-medium`}
-        >
-          {material.type === 'VIDEO' ? (
-            <>
-              <Play className="w-4 h-4" />
-              Guarda
-            </>
-          ) : material.type === 'LINK' ? (
-            <>
-              <ExternalLink className="w-4 h-4" />
-              Apri
-            </>
-          ) : (
-            <>
-              <Eye className="w-4 h-4" />
-              Visualizza
-            </>
-          )}
-        </button>
-        {material.type !== 'LINK' && material.fileUrl && (
-          <button
-            onClick={() => onDownload(material)}
-            className={`py-2 px-3 rounded-lg ${colors.primary.bg} text-white hover:opacity-90 transition-opacity flex items-center gap-2 text-sm font-medium`}
-          >
-            <Download className="w-4 h-4" />
-          </button>
+      <div className="flex-1 min-w-0">
+        <p className="font-medium text-gray-900 dark:text-white truncate">{material.title}</p>
+        {material.description && (
+          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{material.description}</p>
         )}
+        <p className="text-xs text-gray-400 mt-1">
+          {material.fileSize ? formatFileSize(material.fileSize) + ' - ' : ''}
+          {new Date(material.createdAt).toLocaleDateString('it-IT')}
+        </p>
       </div>
+      <button
+        onClick={handleOpen}
+        disabled={!material.fileUrl && !material.externalUrl}
+        className={`p-2 rounded-lg ${colors.primary.bg} text-white hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed`}
+      >
+        <Download className="w-4 h-4" />
+      </button>
     </div>
   );
 }

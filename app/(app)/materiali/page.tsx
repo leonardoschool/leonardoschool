@@ -7,12 +7,7 @@ import { PageLoader } from '@/components/ui/loaders';
 import dynamic from 'next/dynamic';
 
 const AdminMaterialsContent = dynamic(
-  () => import('./AdminMaterialsContent'),
-  { loading: () => <PageLoader /> }
-);
-
-const CollaboratorMaterialsContent = dynamic(
-  () => import('./CollaboratorMaterialsContent'),
+  () => import('./MaterialsContent'),
   { loading: () => <PageLoader /> }
 );
 
@@ -36,9 +31,8 @@ export default function MaterialiPage() {
   // Render based on role
   switch (userRole) {
     case 'ADMIN':
-      return <AdminMaterialsContent />;
     case 'COLLABORATOR':
-      return <CollaboratorMaterialsContent />;
+      return <AdminMaterialsContent role={userRole} />;
     case 'STUDENT':
       return <StudentMaterialsContent />;
     default:

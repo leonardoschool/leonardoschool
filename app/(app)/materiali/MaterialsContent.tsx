@@ -10,8 +10,10 @@ import { useToast } from '@/components/ui/Toast';
 import { Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import TopicsManager from '@/components/admin/TopicsManager';
+import CategoryManager from '@/components/admin/CategoryManager';
 import { GroupInfoModal } from '@/components/ui/GroupInfoModal';
 import { 
+  Folder,
   FolderOpen, 
   Plus, 
   Edit2, 
@@ -24,6 +26,7 @@ import {
   Save,
   X,
   Eye,
+  EyeOff,
   Users,
   User,
   BookOpen,
@@ -47,7 +50,7 @@ import { firebaseStorage } from '@/lib/firebase/storage';
 // ==================== TYPES ====================
 
 type MaterialType = 'PDF' | 'VIDEO' | 'LINK' | 'DOCUMENT';
-type MaterialVisibility = 'ALL_STUDENTS' | 'GROUP_BASED' | 'SELECTED_STUDENTS';
+type MaterialVisibility = 'NONE' | 'ALL_STUDENTS' | 'GROUP_BASED' | 'SELECTED_STUDENTS';
 type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD';
 
 // ==================== CONSTANTS ====================
@@ -67,12 +70,14 @@ const typeLabels: Record<MaterialType, string> = {
 };
 
 const visibilityIcons: Record<MaterialVisibility, typeof Globe> = {
+  NONE: EyeOff,
   ALL_STUDENTS: Globe,
   GROUP_BASED: Users,
   SELECTED_STUDENTS: UserCheck,
 };
 
 const visibilityLabels: Record<MaterialVisibility, string> = {
+  NONE: 'Non assegnato',
   ALL_STUDENTS: 'Tutti gli studenti',
   GROUP_BASED: 'Per gruppo',
   SELECTED_STUDENTS: 'Studenti selezionati',
@@ -152,9 +157,9 @@ const SubjectIcon = ({ icon, color, size = 'md' }: { icon?: string | null; color
 
 // ==================== MAIN COMPONENT ====================
 
-export default function AdminMaterialsContent() {
-  // Active tab: 'subjects' or 'materials'
-  const [activeTab, setActiveTab] = useState<'subjects' | 'materials'>('subjects');
+export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLABORATOR' }) {
+  // Active tab: 'subjects', 'materials', or 'categories'
+  const [activeTab, setActiveTab] = useState<'subjects' | 'materials' | 'categories'>('subjects');
   
   // Subject management
   const [showSubjectForm, setShowSubjectForm] = useState(false);
@@ -187,6 +192,22 @@ export default function AdminMaterialsContent() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const multiFileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Multi-upload (unified for files and links)
+  const [showMultiUpload, setShowMultiUpload] = useState(false);
+  const [multiUploadFiles, setMultiUploadFiles] = useState<File[]>([]);
+  const [multiUploadLinks, setMultiUploadLinks] = useState<Array<{ title: string; url: string }>>([]);
+  const [newLinkTitle, setNewLinkTitle] = useState('');
+  const [newLinkUrl, setNewLinkUrl] = useState('');
+  const [multiUploadProgress, setMultiUploadProgress] = useState<Record<string, number>>({});
+  const [multiUploadData, setMultiUploadData] = useState({
+    subjectId: '',
+    topicId: '',      // Classification - Argomento
+    subTopicId: '',   // Classification - Sotto-argomento
+    categoryId: '',   // Container category (optional)
+    type: 'PDF' as MaterialType,
+  });
 
   // Form states
   const [subjectFormData, setSubjectFormData] = useState({
@@ -207,8 +228,9 @@ export default function AdminMaterialsContent() {
     fileSize: 0,
     externalUrl: '',
     subjectId: '',
-    topicId: '',
-    subTopicId: '',
+    topicId: '',       // Classification - Argomento
+    subTopicId: '',    // Classification - Sotto-argomento
+    categoryId: '',    // Container category (optional)
     tags: [] as string[],
   });
 
@@ -241,6 +263,35 @@ export default function AdminMaterialsContent() {
   const { data: groupsData } = trpc.groups.getGroups.useQuery({ page: 1, pageSize: 100 });
   const { data: allStudents } = trpc.students.getAllForAdmin.useQuery();
   const { data: stats } = trpc.materials.getStats.useQuery();
+
+  // Categories for material forms (standalone containers) - fetched but used for cache invalidation
+  const { data: _allCategories } = trpc.materials.getAllCategories.useQuery();
+
+  // Topics for the selected subject in material form
+  const { data: formTopics } = trpc.materials.getTopics.useQuery(
+    { subjectId: materialFormData.subjectId },
+    { enabled: !!materialFormData.subjectId }
+  );
+
+  // Topics for multi-upload form
+  const { data: multiFormTopics } = trpc.materials.getTopics.useQuery(
+    { subjectId: multiUploadData.subjectId },
+    { enabled: !!multiUploadData.subjectId }
+  );
+
+  // Find selected topic to get its subtopics (for single form)
+  const selectedTopic = formTopics?.find((t: { id: string }) => t.id === materialFormData.topicId) as {
+    id: string;
+    name: string;
+    subTopics?: Array<{ id: string; name: string; difficulty: string }>;
+  } | undefined;
+
+  // Find selected topic for multi-upload
+  const multiSelectedTopic = multiFormTopics?.find((t: { id: string }) => t.id === multiUploadData.topicId) as {
+    id: string;
+    name: string;
+    subTopics?: Array<{ id: string; name: string; difficulty: string }>;
+  } | undefined;
 
   // ==================== SUBJECT MUTATIONS ====================
 
@@ -286,7 +337,7 @@ export default function AdminMaterialsContent() {
     onSuccess: () => {
       utils.materials.getAll.invalidate();
       showSuccess('Materiale aggiornato', 'Le modifiche sono state salvate.');
-      resetMaterialForm();
+      resetMultiUpload();
     },
     onError: handleMutationError,
   });
@@ -310,6 +361,17 @@ export default function AdminMaterialsContent() {
     onError: handleMutationError,
   });
 
+  // Batch upload mutation
+  const createBatchMaterialsMutation = trpc.materials.createBatch.useMutation({
+    onSuccess: (result) => {
+      utils.materials.getAll.invalidate();
+      utils.materials.getStats.invalidate();
+      showSuccess('Materiali caricati', `${result.created} materiali sono stati creati con successo.`);
+      resetMultiUpload();
+    },
+    onError: handleMutationError,
+  });
+
   // ==================== MATERIAL HANDLERS ====================
 
   const resetMaterialForm = () => {
@@ -324,6 +386,7 @@ export default function AdminMaterialsContent() {
       subjectId: '',
       topicId: '',
       subTopicId: '',
+      categoryId: '',
       tags: [],
     });
     setShowMaterialForm(false);
@@ -331,21 +394,24 @@ export default function AdminMaterialsContent() {
   };
 
   const handleEditMaterial = (material: any) => {
-    setMaterialFormData({
-      title: material.title,
-      description: material.description || '',
-      type: material.type,
-      fileUrl: material.fileUrl || '',
-      fileName: material.fileName || '',
-      fileSize: material.fileSize || 0,
-      externalUrl: material.externalUrl || '',
+    // Use multi-upload form for editing (same as creation)
+    setMultiUploadData({
       subjectId: material.subjectId || '',
-      topicId: '',
-      subTopicId: '',
-      tags: material.tags || [],
+      topicId: material.topicId || '',
+      subTopicId: material.subTopicId || '',
+      categoryId: material.categoryId || '',
+      type: material.type,
     });
+    
+    // For LINK type, populate multiUploadLinks
+    if (material.type === 'LINK') {
+      setMultiUploadLinks([{ title: material.title, url: material.externalUrl || '' }]);
+    }
+    // For file types, we'll show the existing file info but won't pre-populate files
+    // User can keep existing or upload new
+    
     setEditingMaterialId(material.id);
-    setShowMaterialForm(true);
+    setShowMultiUpload(true);
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -377,6 +443,154 @@ export default function AdminMaterialsContent() {
     }
   };
 
+  // Multi-file upload handler
+  const handleMultiFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length > 0) {
+      setMultiUploadFiles(files);
+    }
+  };
+
+  const handleMultiUpload = async () => {
+    // If editing, use update mutation
+    if (editingMaterialId) {
+      const isLinkType = multiUploadData.type === 'LINK';
+      const material = materials?.find((m: any) => m.id === editingMaterialId);
+      
+      // For editing, we keep existing file data unless new files are uploaded
+      let fileData: any = {
+        fileUrl: material?.fileUrl,
+        fileName: material?.fileName,
+        fileSize: material?.fileSize,
+        externalUrl: material?.externalUrl,
+      };
+
+      // If user uploaded a new file, use it
+      if (!isLinkType && multiUploadFiles.length > 0) {
+        setUploading(true);
+        try {
+          const file = multiUploadFiles[0]; // Take first file for edit
+          setMultiUploadProgress({ [file.name]: 0 });
+
+          const { url } = await firebaseStorage.uploadMaterialFile(
+            file,
+            multiUploadData.type.toLowerCase(),
+            (progress) => setMultiUploadProgress({ [file.name]: progress })
+          );
+
+          fileData = {
+            fileUrl: url,
+            fileName: file.name,
+            fileSize: file.size,
+          };
+        } catch {
+          showError('Errore caricamento', 'Si è verificato un errore durante il caricamento.');
+          setUploading(false);
+          return;
+        }
+      } else if (isLinkType && multiUploadLinks.length > 0) {
+        fileData.externalUrl = multiUploadLinks[0].url;
+      }
+
+      // Update material
+      updateMaterialMutation.mutate({
+        id: editingMaterialId,
+        type: multiUploadData.type,
+        ...fileData,
+        subjectId: multiUploadData.subjectId || undefined,
+        topicId: multiUploadData.topicId || undefined,
+        subTopicId: multiUploadData.subTopicId || undefined,
+        categoryId: multiUploadData.categoryId || undefined,
+      });
+      
+      setUploading(false);
+      return;
+    }
+
+    // CREATION MODE: For LINK type, use multiUploadLinks; for others, use multiUploadFiles
+    const isLinkType = multiUploadData.type === 'LINK';
+    
+    if (isLinkType && multiUploadLinks.length === 0) return;
+    if (!isLinkType && multiUploadFiles.length === 0) return;
+
+    setUploading(true);
+    const uploadedMaterials: Array<{
+      title: string;
+      type: MaterialType;
+      fileUrl?: string;
+      fileName?: string;
+      fileSize?: number;
+      externalUrl?: string;
+    }> = [];
+
+    try {
+      if (isLinkType) {
+        // Handle links - no upload needed
+        for (const link of multiUploadLinks) {
+          uploadedMaterials.push({
+            title: link.title,
+            type: 'LINK',
+            externalUrl: link.url,
+          });
+        }
+      } else {
+        // Handle files - upload to Firebase
+        for (let i = 0; i < multiUploadFiles.length; i++) {
+          const file = multiUploadFiles[i];
+          const fileName = file.name.replace(/\.[^/.]+$/, ''); // Remove extension for title
+          
+          setMultiUploadProgress((prev) => ({ ...prev, [file.name]: 0 }));
+
+          const { url } = await firebaseStorage.uploadMaterialFile(
+            file,
+            multiUploadData.type.toLowerCase(),
+            (progress) => setMultiUploadProgress((prev) => ({ ...prev, [file.name]: progress }))
+          );
+
+          uploadedMaterials.push({
+            title: fileName,
+            type: multiUploadData.type,
+            fileUrl: url,
+            fileName: file.name,
+            fileSize: file.size,
+          });
+        }
+      }
+
+      // Create all materials via batch mutation
+      createBatchMaterialsMutation.mutate({
+        files: uploadedMaterials,
+        subjectId: multiUploadData.subjectId || undefined,
+        topicId: multiUploadData.topicId || undefined,
+        subTopicId: multiUploadData.subTopicId || undefined,
+        categoryId: multiUploadData.categoryId || undefined,
+        visibility: 'NONE', // Materials are not assigned by default, use "Gestisci destinatari" button
+      });
+    } catch {
+      showError('Errore caricamento', 'Si è verificato un errore durante il caricamento.');
+    } finally {
+      setUploading(false);
+      setMultiUploadProgress({});
+    }
+  };
+
+  const resetMultiUpload = () => {
+    setMultiUploadFiles([]);
+    setMultiUploadLinks([]);
+    setNewLinkTitle('');
+    setNewLinkUrl('');
+    setMultiUploadProgress({});
+    setMultiUploadData({
+      subjectId: '',
+      topicId: '',
+      subTopicId: '',
+      categoryId: '',
+      type: 'PDF',
+    });
+    setEditingMaterialId(null);
+    setShowMultiUpload(false);
+  };
+
   const handleMaterialSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -389,6 +603,8 @@ export default function AdminMaterialsContent() {
       fileSize: materialFormData.fileSize || undefined,
       externalUrl: materialFormData.externalUrl || undefined,
       subjectId: materialFormData.subjectId || undefined,
+      categoryId: materialFormData.categoryId || undefined,
+      subTopicId: materialFormData.subTopicId || undefined,
       tags: materialFormData.tags,
       visibility: 'ALL_STUDENTS' as const, // Default, will be changed via assignment modal
     };
@@ -403,7 +619,7 @@ export default function AdminMaterialsContent() {
   const openAssignModal = (materialId: string, material: any) => {
     setAssigningMaterialId(materialId);
     setAssignmentData({
-      visibility: material.visibility || 'ALL_STUDENTS',
+      visibility: material.visibility ?? 'NONE', // Default to NONE if not set
       groupIds: material.groupAccess?.map((ga: any) => ga.groupId) || [],
       studentIds: material.studentAccess?.map((sa: any) => sa.studentId) || [],
     });
@@ -546,28 +762,39 @@ export default function AdminMaterialsContent() {
 
       {/* Tabs */}
       <div className={`${colors.background.card} rounded-xl shadow-sm`}>
-        <div className="flex border-b border-gray-200 dark:border-gray-700">
+          <div className="flex border-b border-gray-200 dark:border-gray-700 px-2">
           <button
             onClick={() => setActiveTab('subjects')}
-            className={`px-6 py-3 font-medium text-sm flex items-center gap-2 border-b-2 transition-colors ${
+            className={`px-5 py-4 font-medium text-sm flex items-center gap-2.5 border-b-2 transition-all rounded-t-lg ${
               activeTab === 'subjects'
-                ? 'border-indigo-600 text-indigo-600'
-                : `border-transparent ${colors.text.muted} hover:text-gray-700 dark:hover:text-gray-300`
+                ? 'border-[#a8012b] text-[#a8012b] dark:text-[#d1163b] bg-red-50 dark:bg-red-950/30'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-[#a8012b] dark:hover:text-[#d1163b] hover:bg-gray-100 dark:hover:bg-gray-800'
             }`}
           >
-            <Palette className="w-4 h-4" />
+            <BookOpen className={`w-5 h-5 ${activeTab === 'subjects' ? 'text-[#a8012b] dark:text-[#d1163b]' : ''}`} />
             Materie e Argomenti
           </button>
           <button
             onClick={() => setActiveTab('materials')}
-            className={`px-6 py-3 font-medium text-sm flex items-center gap-2 border-b-2 transition-colors ${
+            className={`px-5 py-4 font-medium text-sm flex items-center gap-2.5 border-b-2 transition-all rounded-t-lg ${
               activeTab === 'materials'
-                ? 'border-indigo-600 text-indigo-600'
-                : `border-transparent ${colors.text.muted} hover:text-gray-700 dark:hover:text-gray-300`
+                ? 'border-[#a8012b] text-[#a8012b] dark:text-[#d1163b] bg-red-50 dark:bg-red-950/30'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-[#a8012b] dark:hover:text-[#d1163b] hover:bg-gray-100 dark:hover:bg-gray-800'
             }`}
           >
-            <FolderOpen className="w-4 h-4" />
+            <FileText className={`w-5 h-5 ${activeTab === 'materials' ? 'text-[#a8012b] dark:text-[#d1163b]' : ''}`} />
             Materiali
+          </button>
+          <button
+            onClick={() => setActiveTab('categories')}
+            className={`px-5 py-4 font-medium text-sm flex items-center gap-2.5 border-b-2 transition-all rounded-t-lg ${
+              activeTab === 'categories'
+                ? 'border-[#a8012b] text-[#a8012b] dark:text-[#d1163b] bg-red-50 dark:bg-red-950/30'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-[#a8012b] dark:hover:text-[#d1163b] hover:bg-gray-100 dark:hover:bg-gray-800'
+            }`}
+          >
+            <Folder className={`w-5 h-5 ${activeTab === 'categories' ? 'text-[#a8012b] dark:text-[#d1163b]' : ''}`} />
+            Categorie
           </button>
         </div>
 
@@ -579,7 +806,7 @@ export default function AdminMaterialsContent() {
               {!showSubjectForm && (
                 <button
                   onClick={() => setShowSubjectForm(true)}
-                  className={`px-4 py-2.5 border-2 border-dashed ${colors.border.primary} rounded-xl hover:border-indigo-400 transition-colors ${colors.text.muted} hover:text-indigo-600 flex items-center gap-2`}
+                  className="px-4 py-2.5 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl text-gray-500 dark:text-gray-400 hover:border-[#a8012b] hover:text-[#a8012b] dark:hover:text-[#d1163b] hover:bg-red-50 dark:hover:bg-red-950/30 transition-all flex items-center gap-2"
                 >
                   <Plus className="w-5 h-5" />
                   Nuova Materia
@@ -754,37 +981,56 @@ export default function AdminMaterialsContent() {
                           <span className={`px-2 py-1 rounded-full text-xs ${colors.background.secondary} ${colors.text.muted}`}>
                             {subject._count?.materials || 0} materiali
                           </span>
-                          <button
-                            onClick={() => setTopicsModal({
-                              isOpen: true,
-                              subjectId: subject.id,
-                              subjectName: subject.name,
-                              subjectColor: subject.color,
-                            })}
-                            className="p-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg"
-                            title="Gestisci argomenti"
-                          >
-                            <List className="w-4 h-4 text-blue-500" />
-                          </button>
-                          <button
-                            onClick={() => handleEditSubject(subject)}
-                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-                            title="Modifica"
-                          >
-                            <Edit2 className="w-4 h-4 text-gray-500" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (confirm('Sei sicuro di voler eliminare questa materia?')) {
-                                deleteSubjectMutation.mutate({ id: subject.id });
-                              }
-                            }}
-                            className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
-                            title="Elimina"
-                            disabled={(subject._count?.materials || 0) > 0}
-                          >
-                            <Trash2 className={`w-4 h-4 ${(subject._count?.materials || 0) > 0 ? 'text-gray-300 dark:text-gray-600' : 'text-red-500'}`} />
-                          </button>
+                          {/* Topics button - visible if user can edit this subject */}
+                          {subject.canEdit && (
+                            <button
+                              onClick={() => setTopicsModal({
+                                isOpen: true,
+                                subjectId: subject.id,
+                                subjectName: subject.name,
+                                subjectColor: subject.color,
+                              })}
+                              className="p-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg"
+                              title="Gestisci argomenti"
+                            >
+                              <List className="w-4 h-4 text-blue-500" />
+                            </button>
+                          )}
+                          {/* Edit button - visible if user can edit this subject */}
+                          {subject.canEdit && (
+                            <button
+                              onClick={() => handleEditSubject(subject)}
+                              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                              title="Modifica"
+                            >
+                              <Edit2 className="w-4 h-4 text-gray-500" />
+                            </button>
+                          )}
+                          {/* Delete button - visible only for admins */}
+                          {subject.canDelete && (
+                            <button
+                              onClick={() => {
+                                if (confirm('Sei sicuro di voler eliminare questa materia?')) {
+                                  deleteSubjectMutation.mutate({ id: subject.id });
+                                }
+                              }}
+                              className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                              title="Elimina"
+                              disabled={(subject._count?.materials || 0) > 0}
+                            >
+                              <Trash2 className={`w-4 h-4 ${(subject._count?.materials || 0) > 0 ? 'text-gray-300 dark:text-gray-600' : 'text-red-500'}`} />
+                            </button>
+                          )}
+                          {/* View only indicator for subjects user cannot edit */}
+                          {!subject.canEdit && (
+                            <button
+                              onClick={() => toggleSubject(subject.id)}
+                              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                              title="Visualizza"
+                            >
+                              <Eye className="w-4 h-4 text-gray-400" />
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -797,17 +1043,356 @@ export default function AdminMaterialsContent() {
                 </div>
               )}
             </div>
-          ) : (
+          ) : activeTab === 'materials' ? (
             <div className="space-y-6">
-              {/* Add Material Button */}
-              {!showMaterialForm && (
+              {/* Add Material Button - Unified */}
+              {!showMultiUpload && (
                 <button
-                  onClick={() => setShowMaterialForm(true)}
-                  className={`px-4 py-2.5 border-2 border-dashed ${colors.border.primary} rounded-xl hover:border-indigo-400 transition-colors ${colors.text.muted} hover:text-indigo-600 flex items-center gap-2`}
+                  onClick={() => setShowMultiUpload(true)}
+                  className="px-4 py-2.5 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl text-gray-500 dark:text-gray-400 hover:border-[#a8012b] hover:text-[#a8012b] dark:hover:text-[#d1163b] hover:bg-red-50 dark:hover:bg-red-950/30 transition-all flex items-center gap-2"
                 >
                   <Plus className="w-5 h-5" />
-                  Nuovo Materiale
+                  Aggiungi Materiali
                 </button>
+              )}
+
+              {/* Unified Upload Form */}
+              {showMultiUpload && (
+                <div className={`p-6 rounded-xl border ${colors.border.primary} ${colors.background.secondary}`}>
+                  <h3 className={`text-lg font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
+                    {editingMaterialId ? <Edit2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                    {editingMaterialId ? 'Modifica Materiale' : 'Aggiungi Materiali'}
+                  </h3>
+
+                  <div className="space-y-4">
+                    {/* Type and Classification - Move FIRST */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div>
+                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                          Tipo
+                        </label>
+                        <CustomSelect
+                          value={multiUploadData.type}
+                          onChange={(value) => {
+                            setMultiUploadData({ ...multiUploadData, type: value as MaterialType });
+                            // Reset files when switching to LINK
+                            if (value === 'LINK') {
+                              setMultiUploadFiles([]);
+                            }
+                          }}
+                          options={Object.entries(typeLabels).map(([key, label]) => ({ value: key, label }))}
+                          placeholder="Tipo"
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                          Materia
+                        </label>
+                        <CustomSelect
+                          value={multiUploadData.subjectId}
+                          onChange={(value) => setMultiUploadData({ 
+                            ...multiUploadData, 
+                            subjectId: value,
+                            topicId: '',
+                            subTopicId: ''
+                          })}
+                          options={[
+                            { value: '', label: 'Nessuna' },
+                            ...(subjects?.map((s) => ({ value: s.id, label: s.name })) || [])
+                          ]}
+                          placeholder="Materia"
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                          Argomento
+                        </label>
+                        <CustomSelect
+                          value={multiUploadData.topicId}
+                          onChange={(value) => setMultiUploadData({ 
+                            ...multiUploadData, 
+                            topicId: value,
+                            subTopicId: ''
+                          })}
+                          options={[
+                            { value: '', label: 'Nessuno' },
+                            ...((multiFormTopics as Array<{ id: string; name: string }> | undefined)?.map((c) => ({ 
+                              value: c.id, 
+                              label: c.name 
+                            })) || [])
+                          ]}
+                          placeholder="Argomento"
+                          disabled={!multiUploadData.subjectId}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                          Sottoargomento
+                        </label>
+                        <CustomSelect
+                          value={multiUploadData.subTopicId}
+                          onChange={(value) => setMultiUploadData({ ...multiUploadData, subTopicId: value })}
+                          options={[
+                            { value: '', label: 'Nessuno' },
+                            ...(multiSelectedTopic?.subTopics?.map((sc) => ({ 
+                              value: sc.id, 
+                              label: sc.name 
+                            })) || [])
+                          ]}
+                          placeholder="Sottoargomento"
+                          disabled={!multiUploadData.topicId}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Category Assignment (Optional Container) */}
+                    <div>
+                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                        Categoria (Cartella) 
+                        <span className={`ml-2 text-xs ${colors.text.muted} font-normal`}>Opzionale - Raggruppa i materiali in una cartella</span>
+                      </label>
+                      <CustomSelect
+                        value={multiUploadData.categoryId}
+                        onChange={(value) => setMultiUploadData({ ...multiUploadData, categoryId: value })}
+                        options={[
+                          { value: '', label: 'Nessuna categoria' },
+                          ...(_allCategories?.map((cat: any) => ({ 
+                            value: cat.id, 
+                            label: `${cat.name} (${cat._count?.materials || 0} materiali)` 
+                          })) || [])
+                        ]}
+                        placeholder="Seleziona una categoria..."
+                      />
+                      {multiUploadData.categoryId && _allCategories?.find((c: any) => c.id === multiUploadData.categoryId) && (() => {
+                        const selectedCategory = _allCategories.find((c: any) => c.id === multiUploadData.categoryId);
+                        const categoryMaterials = materials?.filter((m: any) => m.categoryId === multiUploadData.categoryId) || [];
+                        
+                        return (
+                          <div className={`mt-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/30`}>
+                            <div className="flex items-start gap-2">
+                              <Folder className="w-4 h-4 text-amber-600 dark:text-amber-500 mt-0.5" />
+                              <div className="flex-1">
+                                <p className={`text-sm font-medium text-gray-900 dark:text-gray-100`}>
+                                  {selectedCategory?.name}
+                                </p>
+                                <p className={`text-xs text-gray-600 dark:text-gray-400 mt-1`}>
+                                  {selectedCategory?.description || 'Nessuna descrizione'}
+                                </p>
+                                <p className={`text-xs text-amber-700 dark:text-amber-400 mt-2 font-medium`}>
+                                  📁 {categoryMaterials.length} materiali già presenti
+                                </p>
+                                {categoryMaterials.length > 0 && (
+                                  <div className="mt-2 space-y-1">
+                                    {categoryMaterials.slice(0, 5).map((mat: any) => (
+                                      <div key={mat.id} className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+                                        <FileText className="w-3 h-3 text-gray-400" />
+                                        <span className="truncate">{mat.title}</span>
+                                        <span className="text-gray-400">({mat.type})</span>
+                                      </div>
+                                    ))}
+                                    {categoryMaterials.length > 5 && (
+                                      <p className="text-xs text-gray-500 dark:text-gray-400 italic">
+                                        ...e altri {categoryMaterials.length - 5} materiali
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* File Selection - Only show for non-LINK types */}
+                    {multiUploadData.type !== 'LINK' ? (
+                      <div>
+                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                          {editingMaterialId ? 'File Attuale (carica nuovo per sostituire)' : 'Seleziona File'} {!editingMaterialId && <span className="text-red-500">*</span>}
+                        </label>
+                        
+                        {/* Show existing file info when editing */}
+                        {editingMaterialId && (() => {
+                          const material = materials?.find((m: any) => m.id === editingMaterialId);
+                          return material?.fileName ? (
+                            <div className={`rounded-lg border ${colors.border.primary} ${colors.background.input} p-4 mb-4`}>
+                              <div className="flex items-center gap-3">
+                                <FileText className="w-5 h-5 text-indigo-600" />
+                                <div className="flex-1">
+                                  <p className={`text-sm font-medium ${colors.text.primary}`}>{material.fileName}</p>
+                                  <p className={`text-xs ${colors.text.muted}`}>
+                                    {material.fileSize ? formatFileSize(material.fileSize) : 'N/A'}
+                                  </p>
+                                </div>
+                                <span className={`text-xs px-2 py-1 rounded ${colors.background.secondary} ${colors.text.muted}`}>
+                                  File corrente
+                                </span>
+                              </div>
+                            </div>
+                          ) : null;
+                        })()}
+                        
+                        <input
+                          ref={multiFileInputRef}
+                          type="file"
+                          multiple={!editingMaterialId}
+                          onChange={handleMultiFileSelect}
+                          accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.mp4,.mov,.avi"
+                          className="hidden"
+                        />
+                        {multiUploadFiles.length > 0 ? (
+                          <div className={`rounded-lg border ${colors.border.primary} ${colors.background.input} p-4 space-y-2`}>
+                            {multiUploadFiles.map((file, index) => (
+                              <div key={index} className="flex items-center gap-3">
+                                <FileText className="w-5 h-5 text-gray-400" />
+                                <span className={`flex-1 text-sm ${colors.text.primary} truncate`}>{file.name}</span>
+                                <span className={`text-xs ${colors.text.muted}`}>
+                                  {(file.size / 1024 / 1024).toFixed(1)} MB
+                                </span>
+                                {multiUploadProgress[file.name] !== undefined && (
+                                  <div className="w-20 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full bg-indigo-600 transition-all duration-300"
+                                      style={{ width: `${multiUploadProgress[file.name]}%` }}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => multiFileInputRef.current?.click()}
+                              className={`mt-2 text-sm ${colors.text.muted} hover:text-indigo-600 flex items-center gap-1`}
+                            >
+                              <Plus className="w-4 h-4" />
+                              Aggiungi altri file
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => multiFileInputRef.current?.click()}
+                            className={`w-full p-8 border-2 border-dashed ${colors.border.primary} rounded-xl hover:border-indigo-400 transition-colors flex flex-col items-center gap-2 ${colors.text.muted}`}
+                          >
+                            <Upload className="w-10 h-10" />
+                            <span>{editingMaterialId ? 'Clicca per caricare un nuovo file' : 'Clicca per selezionare file'}</span>
+                            <span className="text-xs">{editingMaterialId ? 'Il file corrente verrà sostituito' : 'Puoi selezionare più file contemporaneamente'}</span>
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div>
+                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                          Link Esterni
+                        </label>
+                        
+                        {/* Existing links */}
+                        {multiUploadLinks.length > 0 && (
+                          <div className={`rounded-lg border ${colors.border.primary} ${colors.background.input} p-4 space-y-2 mb-4`}>
+                            {multiUploadLinks.map((link, index) => (
+                              <div key={index} className="flex items-center gap-3">
+                                <LinkIcon className="w-5 h-5 text-indigo-500" />
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-medium ${colors.text.primary} truncate`}>{link.title}</p>
+                                  <p className={`text-xs ${colors.text.muted} truncate`}>{link.url}</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setMultiUploadLinks(multiUploadLinks.filter((_, i) => i !== index))}
+                                  className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                                >
+                                  <X className="w-4 h-4 text-gray-500" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Add new link form */}
+                        <div className={`p-4 rounded-lg border ${colors.border.primary} ${colors.background.input} space-y-3`}>
+                          <div>
+                            <label className={`block text-xs font-medium ${colors.text.muted} mb-1`}>
+                              Titolo
+                            </label>
+                            <input
+                              type="text"
+                              value={newLinkTitle}
+                              onChange={(e) => setNewLinkTitle(e.target.value)}
+                              className={`w-full px-3 py-2 rounded-lg border ${colors.border.primary} ${colors.background.secondary} ${colors.text.primary} text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
+                              placeholder="Es: Video lezione introduttiva"
+                            />
+                          </div>
+                          <div>
+                            <label className={`block text-xs font-medium ${colors.text.muted} mb-1`}>
+                              URL
+                            </label>
+                            <input
+                              type="url"
+                              value={newLinkUrl}
+                              onChange={(e) => setNewLinkUrl(e.target.value)}
+                              className={`w-full px-3 py-2 rounded-lg border ${colors.border.primary} ${colors.background.secondary} ${colors.text.primary} text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
+                              placeholder="https://..."
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (newLinkTitle.trim() && newLinkUrl.trim()) {
+                                setMultiUploadLinks([...multiUploadLinks, { title: newLinkTitle.trim(), url: newLinkUrl.trim() }]);
+                                setNewLinkTitle('');
+                                setNewLinkUrl('');
+                              }
+                            }}
+                            disabled={!newLinkTitle.trim() || !newLinkUrl.trim()}
+                            className={`w-full py-2 text-sm font-medium rounded-lg ${colors.primary.bg} text-white hover:opacity-90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2`}
+                          >
+                            <Plus className="w-4 h-4" />
+                            Aggiungi Link
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <button
+                        type="button"
+                        onClick={resetMultiUpload}
+                        className={`px-4 py-2.5 rounded-lg border ${colors.border.primary} ${colors.text.secondary} hover:bg-gray-50 dark:hover:bg-gray-700`}
+                      >
+                        Annulla
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleMultiUpload}
+                        disabled={
+                          editingMaterialId ? (uploading || updateMaterialMutation.isPending) :
+                          ((multiUploadData.type === 'LINK' ? multiUploadLinks.length === 0 : multiUploadFiles.length === 0) || 
+                          uploading || 
+                          createBatchMaterialsMutation.isPending)
+                        }
+                        className={`px-6 py-2.5 ${editingMaterialId ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-teal-600 hover:bg-teal-700'} text-white rounded-lg transition-colors font-medium flex items-center gap-2 disabled:opacity-50`}
+                      >
+                        {(uploading || createBatchMaterialsMutation.isPending || updateMaterialMutation.isPending) ? (
+                          <>
+                            <Spinner size="xs" variant="white" />
+                            {editingMaterialId ? 'Salvataggio...' : 'Caricamento...'}
+                          </>
+                        ) : editingMaterialId ? (
+                          <>
+                            <Save className="w-4 h-4" />
+                            Salva Modifiche
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-4 h-4" />
+                            Carica {multiUploadData.type === 'LINK' ? multiUploadLinks.length : multiUploadFiles.length} {multiUploadData.type === 'LINK' ? 'link' : 'file'}
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
 
               {/* Material Form */}
@@ -928,21 +1513,73 @@ export default function AdminMaterialsContent() {
                       </div>
                     )}
 
-                    {/* Subject */}
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        Materia
-                      </label>
-                      <CustomSelect
-                        value={materialFormData.subjectId}
-                        onChange={(value) => setMaterialFormData({ ...materialFormData, subjectId: value })}
-                        options={[
-                          { value: '', label: 'Nessuna materia' },
-                          ...(subjects?.map((s) => ({ value: s.id, label: s.name })) || [])
-                        ]}
-                        placeholder="Seleziona materia..."
-                        searchable
-                      />
+                    {/* Hierarchical Selection: Subject > Category > SubCategory */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Subject */}
+                      <div>
+                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                          Materia
+                        </label>
+                        <CustomSelect
+                          value={materialFormData.subjectId}
+                          onChange={(value) => setMaterialFormData({ 
+                            ...materialFormData, 
+                            subjectId: value,
+                            categoryId: '', // Reset category when subject changes
+                            subTopicId: '' // Reset subcategory
+                          })}
+                          options={[
+                            { value: '', label: 'Nessuna materia' },
+                            ...(subjects?.map((s) => ({ value: s.id, label: s.name })) || [])
+                          ]}
+                          placeholder="Seleziona materia..."
+                          searchable
+                        />
+                      </div>
+
+                      {/* Topic */}
+                      <div>
+                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                          Argomento
+                        </label>
+                        <CustomSelect
+                          value={materialFormData.categoryId}
+                          onChange={(value) => setMaterialFormData({ 
+                            ...materialFormData, 
+                            categoryId: value,
+                            subTopicId: '' // Reset subtopic when topic changes
+                          })}
+                          options={[
+                            { value: '', label: 'Nessuno' },
+                            ...((formTopics as Array<{ id: string; name: string }> | undefined)?.map((c) => ({ 
+                              value: c.id, 
+                              label: c.name 
+                            })) || [])
+                          ]}
+                          placeholder={materialFormData.subjectId ? "Seleziona argomento..." : "Prima seleziona materia"}
+                          disabled={!materialFormData.subjectId}
+                        />
+                      </div>
+
+                      {/* SubTopic */}
+                      <div>
+                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                          Sottoargomento
+                        </label>
+                        <CustomSelect
+                          value={materialFormData.subTopicId}
+                          onChange={(value) => setMaterialFormData({ ...materialFormData, subTopicId: value })}
+                          options={[
+                            { value: '', label: 'Nessuno' },
+                            ...(selectedTopic?.subTopics?.map((sc) => ({ 
+                              value: sc.id, 
+                              label: `${sc.name} (${sc.difficulty === 'EASY' ? 'Facile' : sc.difficulty === 'MEDIUM' ? 'Medio' : 'Difficile'})` 
+                            })) || [])
+                          ]}
+                          placeholder={materialFormData.categoryId ? "Seleziona sottoargomento..." : "Prima seleziona argomento"}
+                          disabled={!materialFormData.categoryId}
+                        />
+                      </div>
                     </div>
 
                     {/* Actions */}
@@ -1028,7 +1665,7 @@ export default function AdminMaterialsContent() {
                 <div className="space-y-3">
                   {filteredMaterials.map((material: any) => {
                     const TypeIcon = typeIcons[material.type as MaterialType] || File;
-                    const VisIcon = visibilityIcons[material.visibility as MaterialVisibility] || Globe;
+                    const VisIcon = visibilityIcons[material.visibility as MaterialVisibility] || EyeOff;
                     const groups = material.groupAccess?.map((ga: any) => ga.group).filter(Boolean) || [];
                     const students = material.studentAccess?.map((sa: any) => sa.student).filter(Boolean) || [];
                     const hasAssignments = groups.length > 0 || students.length > 0;
@@ -1036,93 +1673,65 @@ export default function AdminMaterialsContent() {
                     return (
                       <div
                         key={material.id}
-                        className={`p-4 rounded-xl border ${colors.border.primary} hover:shadow-md transition-all ${colors.background.card}`}
+                        className={`p-5 rounded-xl border ${colors.border.primary} hover:shadow-lg transition-all ${colors.background.card}`}
                       >
-                        <div className="flex items-start gap-4">
-                          {/* Icon */}
-                          <div className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                            material.type === 'PDF' ? 'bg-red-100 dark:bg-red-900/30' :
-                            material.type === 'VIDEO' ? 'bg-blue-100 dark:bg-blue-900/30' :
-                            material.type === 'LINK' ? 'bg-purple-100 dark:bg-purple-900/30' :
-                            'bg-gray-100 dark:bg-gray-700'
-                          }`}>
-                            <TypeIcon className={`w-6 h-6 ${
-                              material.type === 'PDF' ? 'text-red-600' :
-                              material.type === 'VIDEO' ? 'text-blue-600' :
-                              material.type === 'LINK' ? 'text-purple-600' :
-                              'text-gray-600'
-                            }`} />
-                          </div>
+                        {/* Header Row */}
+                        <div className="flex items-start justify-between gap-4 mb-3">
+                          <div className="flex items-start gap-3 flex-1 min-w-0">
+                            {/* Icon */}
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                              material.type === 'PDF' ? 'bg-red-100 dark:bg-red-900/30' :
+                              material.type === 'VIDEO' ? 'bg-blue-100 dark:bg-blue-900/30' :
+                              material.type === 'LINK' ? 'bg-purple-100 dark:bg-purple-900/30' :
+                              'bg-gray-100 dark:bg-gray-800'
+                            }`}>
+                              <TypeIcon className={`w-6 h-6 ${
+                                material.type === 'PDF' ? 'text-red-600 dark:text-red-400' :
+                                material.type === 'VIDEO' ? 'text-blue-600 dark:text-blue-400' :
+                                material.type === 'LINK' ? 'text-purple-600 dark:text-purple-400' :
+                                'text-gray-600 dark:text-gray-400'
+                              }`} />
+                            </div>
 
-                          {/* Content */}
-                          <div className="flex-1 min-w-0">
-                            <p className={`font-medium ${colors.text.primary}`}>{material.title}</p>
-                            {material.description && (
-                              <p className={`text-sm ${colors.text.muted} mt-1 line-clamp-1`}>{material.description}</p>
-                            )}
-                            <div className={`flex items-center flex-wrap gap-2 text-sm ${colors.text.muted} mt-2`}>
-                              {/* Subject */}
-                              {material.subject && (
-                                <span 
-                                  className="px-2 py-0.5 rounded-full text-xs font-medium"
-                                  style={{
-                                    backgroundColor: material.subject.color ? `${material.subject.color}20` : '#e5e7eb',
-                                    color: material.subject.color || '#6b7280'
-                                  }}
-                                >
-                                  {material.subject.name}
-                                </span>
+                            {/* Title and Description */}
+                            <div className="flex-1 min-w-0">
+                              <h3 className={`font-semibold text-lg text-gray-900 dark:text-gray-100 truncate`}>
+                                {material.title}
+                              </h3>
+                              {material.description && (
+                                <p className={`text-sm text-gray-600 dark:text-gray-400 mt-1 line-clamp-2`}>
+                                  {material.description}
+                                </p>
                               )}
-                              {/* Visibility */}
-                              <span className="flex items-center gap-1 text-xs">
-                                <VisIcon className="w-3.5 h-3.5" />
-                                {visibilityLabels[material.visibility as MaterialVisibility]}
-                              </span>
-                              {/* Warning if no assignments */}
-                              {!hasAssignments && material.visibility !== 'ALL_STUDENTS' && (
-                                <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
-                                  <AlertCircle className="w-3.5 h-3.5" />
-                                  Nessun assegnatario
-                                </span>
-                              )}
-                              {/* Stats */}
-                              <span className="flex items-center gap-1 text-xs ml-auto">
-                                <Eye className="w-3.5 h-3.5" />
-                                {material.viewCount}
-                              </span>
-                              <span className="flex items-center gap-1 text-xs">
-                                <Download className="w-3.5 h-3.5" />
-                                {material.downloadCount}
-                              </span>
                             </div>
                           </div>
 
                           {/* Actions */}
-                          <div className="flex items-center gap-1 flex-shrink-0">
+                          <div className="flex items-center gap-2 flex-shrink-0">
                             <button
                               onClick={() => openAssignModal(material.id, material)}
-                              className="p-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg"
+                              className="p-2.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
                               title="Gestisci destinatari"
                             >
-                              <Users className="w-4 h-4 text-indigo-500" />
+                              <Users className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                             </button>
                             {(material.fileUrl || material.externalUrl) && (
                               <a
                                 href={material.fileUrl || material.externalUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                                className="p-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                                 title="Apri"
                               >
-                                <ExternalLink className="w-4 h-4 text-gray-500" />
+                                <ExternalLink className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                               </a>
                             )}
                             <button
                               onClick={() => handleEditMaterial(material)}
-                              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                              className="p-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                               title="Modifica"
                             >
-                              <Edit2 className="w-4 h-4 text-gray-500" />
+                              <Edit2 className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                             </button>
                             <button
                               onClick={() => {
@@ -1130,11 +1739,69 @@ export default function AdminMaterialsContent() {
                                   deleteMaterialMutation.mutate({ id: material.id });
                                 }
                               }}
-                              className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                              className="p-2.5 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                               title="Elimina"
                             >
-                              <Trash2 className="w-4 h-4 text-red-500" />
+                              <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
                             </button>
+                          </div>
+                        </div>
+
+                        {/* Info Row */}
+                        <div className="flex items-center flex-wrap gap-3 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                          {/* Subject Badge */}
+                          {material.subject && (
+                            <span 
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
+                              style={{
+                                backgroundColor: material.subject.color ? `${material.subject.color}15` : 'rgb(243 244 246)',
+                                color: material.subject.color || 'rgb(107 114 128)',
+                                border: `1px solid ${material.subject.color ? `${material.subject.color}30` : 'rgb(229 231 235)'}`
+                              }}
+                            >
+                              <BookOpen className="w-3.5 h-3.5" />
+                              {material.subject.name}
+                            </span>
+                          )}
+
+                          {/* Category Badge */}
+                          {material.category && (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/30">
+                              <Folder className="w-3.5 h-3.5" />
+                              {material.category.name}
+                            </span>
+                          )}
+
+                          {/* Visibility Badge */}
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                            material.visibility === 'NONE' 
+                              ? 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
+                              : material.visibility === 'ALL_STUDENTS'
+                              ? 'bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800/30'
+                              : 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/30'
+                          }`}>
+                            <VisIcon className="w-3.5 h-3.5" />
+                            {visibilityLabels[material.visibility as MaterialVisibility]}
+                          </span>
+
+                          {/* Warning if no assignments for SELECTED_STUDENTS */}
+                          {material.visibility === 'SELECTED_STUDENTS' && !hasAssignments && (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/30">
+                              <AlertCircle className="w-3.5 h-3.5" />
+                              Nessun assegnatario
+                            </span>
+                          )}
+
+                          {/* Stats */}
+                          <div className="flex items-center gap-3 ml-auto text-gray-600 dark:text-gray-400">
+                            <span className="inline-flex items-center gap-1.5 text-xs">
+                              <Eye className="w-3.5 h-3.5" />
+                              {material.viewCount}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 text-xs">
+                              <Download className="w-3.5 h-3.5" />
+                              {material.downloadCount}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -1143,6 +1810,9 @@ export default function AdminMaterialsContent() {
                 </div>
               )}
             </div>
+          ) : (
+            /* Categories Tab */
+            <CategoryManager onClose={() => setActiveTab('materials')} role={role} />
           )}
         </div>
       </div>
@@ -1176,7 +1846,21 @@ export default function AdminMaterialsContent() {
                 <label className={`block text-sm font-medium ${colors.text.primary} mb-3`}>
                   Visibilità base
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setAssignmentData({ ...assignmentData, visibility: 'NONE' })}
+                    className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${
+                      assignmentData.visibility === 'NONE'
+                        ? 'border-gray-500 dark:border-gray-400 bg-gray-100 dark:bg-gray-700'
+                        : `${colors.border.primary} hover:border-gray-300 dark:hover:border-gray-600`
+                    }`}
+                  >
+                    <EyeOff className={`w-6 h-6 ${assignmentData.visibility === 'NONE' ? 'text-gray-700 dark:text-gray-200' : colors.text.muted}`} />
+                    <span className={`text-sm font-medium ${assignmentData.visibility === 'NONE' ? 'text-gray-700 dark:text-gray-200' : colors.text.secondary}`}>
+                      Nessuno
+                    </span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setAssignmentData({ ...assignmentData, visibility: 'ALL_STUDENTS' })}
@@ -1195,21 +1879,21 @@ export default function AdminMaterialsContent() {
                     type="button"
                     onClick={() => setAssignmentData({ ...assignmentData, visibility: 'SELECTED_STUDENTS' })}
                     className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${
-                      assignmentData.visibility !== 'ALL_STUDENTS'
+                      assignmentData.visibility === 'SELECTED_STUDENTS'
                         ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20'
                         : `${colors.border.primary} hover:border-gray-300 dark:hover:border-gray-600`
                     }`}
                   >
-                    <UserCheck className={`w-6 h-6 ${assignmentData.visibility !== 'ALL_STUDENTS' ? 'text-indigo-600' : colors.text.muted}`} />
-                    <span className={`text-sm font-medium ${assignmentData.visibility !== 'ALL_STUDENTS' ? 'text-indigo-600' : colors.text.secondary}`}>
+                    <UserCheck className={`w-6 h-6 ${assignmentData.visibility === 'SELECTED_STUDENTS' ? 'text-indigo-600' : colors.text.muted}`} />
+                    <span className={`text-sm font-medium ${assignmentData.visibility === 'SELECTED_STUDENTS' ? 'text-indigo-600' : colors.text.secondary}`}>
                       Gruppi / Studenti specifici
                     </span>
                   </button>
                 </div>
               </div>
 
-              {/* Groups and Students selection - shown when not ALL_STUDENTS */}
-              {assignmentData.visibility !== 'ALL_STUDENTS' && (
+              {/* Groups and Students selection - shown only when SELECTED_STUDENTS */}
+              {assignmentData.visibility === 'SELECTED_STUDENTS' && (
                 <>
                   {/* Group Selection */}
                   <div>
@@ -1291,8 +1975,9 @@ export default function AdminMaterialsContent() {
                       Seleziona studenti aggiuntivi che non fanno parte dei gruppi selezionati
                     </p>
                     <div className={`rounded-xl border ${colors.border.primary} max-h-48 overflow-y-auto`}>
-                      {allStudents?.filter(s => s.student?.id).length ? allStudents.filter(s => s.student?.id).map((student) => {
-                        const studentId = student.student!.id;
+                      {allStudents && allStudents.length > 0 ? allStudents.map((student) => {
+                        const studentId = student.student?.id || student.id;
+                        if (!studentId) return null;
                         const isChecked = assignmentData.studentIds.includes(studentId);
                         return (
                           <label
@@ -1325,7 +2010,7 @@ export default function AdminMaterialsContent() {
                             </div>
                           </label>
                         );
-                      }) : (
+                      }).filter(Boolean) : (
                         <div className="px-4 py-6 text-center">
                           <p className={`text-sm ${colors.text.muted}`}>Nessuno studente disponibile</p>
                         </div>
@@ -1348,9 +2033,11 @@ export default function AdminMaterialsContent() {
               </button>
               <button
                 onClick={() => {
-                  // Determine visibility based on selections
-                  let visibility: MaterialVisibility = 'ALL_STUDENTS';
-                  if (assignmentData.visibility !== 'ALL_STUDENTS') {
+                  // Use the visibility from assignmentData directly
+                  let visibility: MaterialVisibility = assignmentData.visibility;
+                  
+                  // Only auto-detect visibility for SELECTED_STUDENTS mode
+                  if (assignmentData.visibility === 'SELECTED_STUDENTS') {
                     if (assignmentData.groupIds.length > 0 && assignmentData.studentIds.length > 0) {
                       // Both groups and individual students selected
                       visibility = 'SELECTED_STUDENTS';
@@ -1359,16 +2046,16 @@ export default function AdminMaterialsContent() {
                     } else if (assignmentData.studentIds.length > 0) {
                       visibility = 'SELECTED_STUDENTS';
                     } else {
-                      // Nothing selected, default to all
-                      visibility = 'ALL_STUDENTS';
+                      // Nothing selected in SELECTED_STUDENTS mode, default to NONE
+                      visibility = 'NONE';
                     }
                   }
                   
                   updateAssignmentsMutation.mutate({
                     id: assigningMaterialId,
                     visibility,
-                    groupIds: assignmentData.visibility !== 'ALL_STUDENTS' ? assignmentData.groupIds : [],
-                    studentIds: assignmentData.visibility !== 'ALL_STUDENTS' ? assignmentData.studentIds : [],
+                    groupIds: visibility === 'SELECTED_STUDENTS' || visibility === 'GROUP_BASED' ? assignmentData.groupIds : [],
+                    studentIds: visibility === 'SELECTED_STUDENTS' ? assignmentData.studentIds : [],
                   });
                 }}
                 disabled={updateAssignmentsMutation.isPending}

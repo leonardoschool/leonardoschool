@@ -5,32 +5,81 @@ import { TRPCError } from '@trpc/server';
 import * as notificationService from '@/server/services/notificationService';
 
 export const materialsRouter = router({
-  // ==================== CATEGORIES ====================
+  // ==================== MATERIAL CATEGORIES (containers for materials) ====================
 
-  // Get all categories (for students and admins)
-  getCategories: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.prisma.materialCategory.findMany({
-      where: { isActive: true },
-      orderBy: { order: 'asc' },
-      include: {
-        _count: {
-          select: { materials: { where: { isActive: true } } },
-        },
-      },
-    });
-  }),
+  // Get all categories (for students - filtered by visibility)
+  getCategories: protectedProcedure
+    .query(async ({ ctx }) => {
+      const userId = ctx.user.id;
+      const userRole = ctx.user.role;
 
-  // Get all categories including inactive (staff only - admin and collaborator)
-  getAllCategories: staffProcedure.query(async ({ ctx }) => {
-    return ctx.prisma.materialCategory.findMany({
-      orderBy: { order: 'asc' },
-      include: {
-        _count: {
-          select: { materials: true },
+      // If admin/collaborator, return all active categories
+      if (userRole === 'ADMIN' || userRole === 'COLLABORATOR') {
+        return ctx.prisma.materialCategory.findMany({
+          where: { isActive: true },
+          orderBy: { order: 'asc' },
+          include: {
+            _count: {
+              select: { materials: { where: { isActive: true } } },
+            },
+          },
+        });
+      }
+
+      // For students, filter by visibility
+      const student = await ctx.prisma.student.findFirst({
+        where: { userId },
+        include: { groupMemberships: { select: { groupId: true } } },
+      });
+
+      if (!student) {
+        return [];
+      }
+
+      const groupIds = student.groupMemberships.map(m => m.groupId);
+
+      return ctx.prisma.materialCategory.findMany({
+        where: {
+          isActive: true,
+          OR: [
+            { visibility: 'ALL_STUDENTS' },
+            { 
+              visibility: 'GROUP_BASED',
+              groupAccess: { some: { groupId: { in: groupIds } } },
+            },
+            { 
+              visibility: 'SELECTED_STUDENTS',
+              studentAccess: { some: { studentId: student.id } },
+            },
+          ],
         },
-      },
-    });
-  }),
+        orderBy: { order: 'asc' },
+        include: {
+          _count: {
+            select: { materials: { where: { isActive: true } } },
+          },
+        },
+      });
+    }),
+
+  // Get all categories including inactive (staff only)
+  getAllCategories: staffProcedure
+    .query(async ({ ctx }) => {
+      return ctx.prisma.materialCategory.findMany({
+        orderBy: { order: 'asc' },
+        include: {
+          _count: {
+            select: { materials: true },
+          },
+          groupAccess: {
+            include: { group: { select: { id: true, name: true } } },
+          },
+          studentAccess: {
+            include: { student: { include: { user: { select: { id: true, name: true } } } } },
+          },
+        },
+      });
+    }),
 
   // Create category (staff only)
   createCategory: staffProcedure
@@ -39,16 +88,46 @@ export const materialsRouter = router({
       description: z.string().optional(),
       icon: z.string().optional(),
       order: z.number().optional(),
+      visibility: z.enum(['NONE', 'ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).default('ALL_STUDENTS'),
+      groupIds: z.array(z.string()).optional(),
+      studentIds: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      return ctx.prisma.materialCategory.create({
+      // Get max order if not provided
+      const maxOrder = input.order ?? await ctx.prisma.materialCategory.count();
+
+      const category = await ctx.prisma.materialCategory.create({
         data: {
           name: input.name,
           description: input.description,
           icon: input.icon,
-          order: input.order ?? 0,
+          order: maxOrder,
+          visibility: input.visibility,
+          createdBy: ctx.user.id,
         },
       });
+
+      // Add group access if GROUP_BASED
+      if (input.visibility === 'GROUP_BASED' && input.groupIds?.length) {
+        await ctx.prisma.materialCategoryGroupAccess.createMany({
+          data: input.groupIds.map(groupId => ({
+            categoryId: category.id,
+            groupId,
+          })),
+        });
+      }
+
+      // Add student access if SELECTED_STUDENTS
+      if (input.visibility === 'SELECTED_STUDENTS' && input.studentIds?.length) {
+        await ctx.prisma.materialCategoryStudentAccess.createMany({
+          data: input.studentIds.map(studentId => ({
+            categoryId: category.id,
+            studentId,
+          })),
+        });
+      }
+
+      return category;
     }),
 
   // Update category (staff only)
@@ -60,31 +139,62 @@ export const materialsRouter = router({
       icon: z.string().optional().nullable(),
       order: z.number().optional(),
       isActive: z.boolean().optional(),
+      visibility: z.enum(['NONE', 'ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).optional(),
+      groupIds: z.array(z.string()).optional(),
+      studentIds: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { id, ...data } = input;
-      return ctx.prisma.materialCategory.update({
+      const { id, groupIds, studentIds, ...data } = input;
+      
+      const category = await ctx.prisma.materialCategory.update({
         where: { id },
         data,
       });
+
+      // Update group access if provided
+      if (groupIds !== undefined) {
+        await ctx.prisma.materialCategoryGroupAccess.deleteMany({
+          where: { categoryId: id },
+        });
+        if (groupIds.length > 0) {
+          await ctx.prisma.materialCategoryGroupAccess.createMany({
+            data: groupIds.map(groupId => ({
+              categoryId: id,
+              groupId,
+            })),
+          });
+        }
+      }
+
+      // Update student access if provided
+      if (studentIds !== undefined) {
+        await ctx.prisma.materialCategoryStudentAccess.deleteMany({
+          where: { categoryId: id },
+        });
+        if (studentIds.length > 0) {
+          await ctx.prisma.materialCategoryStudentAccess.createMany({
+            data: studentIds.map(studentId => ({
+              categoryId: id,
+              studentId,
+            })),
+          });
+        }
+      }
+
+      return category;
     }),
 
-  // Delete category (staff only)
+  // Delete category (staff only) - unlinks materials but doesn't delete them
   deleteCategory: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      // Check if category has materials
-      const materialsCount = await ctx.prisma.material.count({
+      // First, unlink all materials from this category (set categoryId to null)
+      await ctx.prisma.material.updateMany({
         where: { categoryId: input.id },
+        data: { categoryId: null },
       });
       
-      if (materialsCount > 0) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: `Non puoi eliminare questa categoria. Contiene ${materialsCount} materiali.`,
-        });
-      }
-      
+      // Then delete the category
       return ctx.prisma.materialCategory.delete({
         where: { id: input.id },
       });
@@ -107,7 +217,22 @@ export const materialsRouter = router({
 
   // Get all subjects including inactive (admin and collaborators)
   getAllSubjects: staffProcedure.query(async ({ ctx }) => {
-    return ctx.prisma.customSubject.findMany({
+    const userId = ctx.user.id;
+    const userRole = ctx.user.role;
+
+    // Get collaborator's assigned subjects if not admin
+    let assignedSubjectIds: string[] = [];
+    if (userRole === 'COLLABORATOR') {
+      const collaborator = await ctx.prisma.collaborator.findFirst({
+        where: { userId },
+        include: {
+          subjects: { select: { subjectId: true } },
+        },
+      });
+      assignedSubjectIds = collaborator?.subjects.map(s => s.subjectId) || [];
+    }
+
+    const subjects = await ctx.prisma.customSubject.findMany({
       orderBy: { order: 'asc' },
       include: {
         _count: {
@@ -115,7 +240,57 @@ export const materialsRouter = router({
         },
       },
     });
+
+    // Add canEdit flag for each subject
+    return subjects.map(subject => ({
+      ...subject,
+      canEdit: userRole === 'ADMIN' || assignedSubjectIds.includes(subject.id),
+      canDelete: userRole === 'ADMIN', // Only admins can delete
+    }));
   }),
+
+  // Get full hierarchy: Subjects → Topics → SubTopics (for material classification)
+  getHierarchy: protectedProcedure
+    .input(z.object({
+      includeInactive: z.boolean().optional().default(false),
+    }).optional())
+    .query(async ({ ctx, input }) => {
+      const activeFilter = input?.includeInactive ? {} : { isActive: true };
+      
+      return ctx.prisma.customSubject.findMany({
+        where: activeFilter,
+        orderBy: { order: 'asc' },
+        include: {
+          topics: {
+            where: activeFilter,
+            orderBy: { order: 'asc' },
+            include: {
+              subTopics: {
+                where: activeFilter,
+                orderBy: { order: 'asc' },
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  difficulty: true,
+                  order: true,
+                  isActive: true,
+                  _count: {
+                    select: { materials: true },
+                  },
+                },
+              },
+              _count: {
+                select: { materials: true, subTopics: true },
+              },
+            },
+          },
+          _count: {
+            select: { materials: true, topics: true },
+          },
+        },
+      });
+    }),
 
   // Create subject (staff: admin + collaborator)
   createSubject: staffProcedure
@@ -140,7 +315,7 @@ export const materialsRouter = router({
       });
     }),
 
-  // Update subject (staff: admin + collaborator)
+  // Update subject (staff: admin + collaborator with subject assigned)
   updateSubject: staffProcedure
     .input(z.object({
       id: z.string(),
@@ -153,6 +328,28 @@ export const materialsRouter = router({
       isActive: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      const userRole = ctx.user.role;
+
+      // Check if user can manage this subject
+      if (userRole !== 'ADMIN') {
+        const collaborator = await ctx.prisma.collaborator.findFirst({
+          where: {
+            userId,
+            subjects: {
+              some: { subjectId: input.id },
+            },
+          },
+        });
+        
+        if (!collaborator) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Non hai i permessi per modificare questa materia.',
+          });
+        }
+      }
+
       const { id, ...data } = input;
       return ctx.prisma.customSubject.update({
         where: { id },
@@ -160,10 +357,20 @@ export const materialsRouter = router({
       });
     }),
 
-  // Delete subject (staff: admin + collaborator)
+  // Delete subject (admin only - collaborators cannot delete subjects)
   deleteSubject: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      const userRole = ctx.user.role;
+
+      // Only admins can delete subjects
+      if (userRole !== 'ADMIN') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Solo gli amministratori possono eliminare materie.',
+        });
+      }
+
       // Check if subject has materials
       const materialsCount = await ctx.prisma.material.count({
         where: { subjectId: input.id },
@@ -646,8 +853,10 @@ export const materialsRouter = router({
   getAll: staffProcedure
     .input(z.object({
       type: z.enum(['PDF', 'VIDEO', 'LINK', 'DOCUMENT']).optional(),
-      categoryId: z.string().optional(),
-      visibility: z.enum(['ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).optional(),
+      categoryId: z.string().optional(),  // Container category filter
+      topicId: z.string().optional(),     // Classification filter
+      subTopicId: z.string().optional(),  // Classification filter
+      visibility: z.enum(['NONE', 'ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).optional(),
       isActive: z.boolean().optional(),
       subjectId: z.string().optional(),
     }).optional())
@@ -656,17 +865,22 @@ export const materialsRouter = router({
         where: {
           type: input?.type,
           categoryId: input?.categoryId,
+          topicId: input?.topicId,
+          subTopicId: input?.subTopicId,
           visibility: input?.visibility,
           isActive: input?.isActive,
           subjectId: input?.subjectId,
         },
         orderBy: [
-          { categoryId: 'asc' },
+          { topic: { order: 'asc' } },
+          { subTopic: { order: 'asc' } },
           { order: 'asc' },
           { createdAt: 'desc' },
         ],
         include: {
-          category: true,
+          category: true,  // Container category
+          topic: true,     // Classification
+          subTopic: true,  // Classification
           subject: true,
           groupAccess: {
             include: {
@@ -711,6 +925,8 @@ export const materialsRouter = router({
         where: { id: input.id },
         include: {
           category: true,
+          topic: true,
+          subTopic: true,
           subject: true,
           groupAccess: {
             include: {
@@ -752,9 +968,11 @@ export const materialsRouter = router({
       fileSize: z.number().optional(),
       externalUrl: z.string().optional(),
       thumbnailUrl: z.string().optional(),
-      visibility: z.enum(['ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).default('ALL_STUDENTS'),
-      categoryId: z.string().optional(),
-      subjectId: z.string().optional(),
+      visibility: z.enum(['NONE', 'ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).default('NONE'),
+      categoryId: z.string().optional(),     // Container category (optional)
+      subjectId: z.string().optional(),      // Classification (required for proper organization)
+      topicId: z.string().optional(),        // Classification
+      subTopicId: z.string().optional(),     // Classification
       tags: z.array(z.string()).optional(),
       order: z.number().optional(),
       // For group-based visibility
@@ -763,7 +981,7 @@ export const materialsRouter = router({
       studentIds: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { groupIds, studentIds, categoryId, subjectId, ...materialData } = input;
+      const { groupIds, studentIds, categoryId, subjectId, topicId, subTopicId, ...materialData } = input;
 
       const result = await ctx.prisma.$transaction(async (tx) => {
         // Create material
@@ -781,10 +999,14 @@ export const materialsRouter = router({
             tags: materialData.tags || [],
             order: materialData.order,
             createdBy: ctx.user.id,
-            // Connect category if provided
+            // Connect category (container) if provided
             ...(categoryId ? { category: { connect: { id: categoryId } } } : {}),
             // Connect subject if provided
             ...(subjectId ? { subject: { connect: { id: subjectId } } } : {}),
+            // Connect topic (classification) if provided
+            ...(topicId ? { topic: { connect: { id: topicId } } } : {}),
+            // Connect subtopic (classification) if provided
+            ...(subTopicId ? { subTopic: { connect: { id: subTopicId } } } : {}),
           },
         });
 
@@ -854,6 +1076,124 @@ export const materialsRouter = router({
       return result.material;
     }),
 
+  // Create multiple materials at once (batch upload)
+  createBatch: staffProcedure
+    .input(z.object({
+      // Shared metadata for all materials
+      categoryId: z.string().optional(),     // Container category
+      subjectId: z.string().optional(),      // Classification
+      topicId: z.string().optional(),        // Classification
+      subTopicId: z.string().optional(),     // Classification
+      visibility: z.enum(['NONE', 'ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).default('NONE'),
+      groupIds: z.array(z.string()).optional(),
+      studentIds: z.array(z.string()).optional(),
+      tags: z.array(z.string()).optional(),
+      // Array of files to upload
+      files: z.array(z.object({
+        title: z.string().min(1).max(255),
+        description: z.string().optional(),
+        type: z.enum(['PDF', 'VIDEO', 'LINK', 'DOCUMENT']),
+        fileUrl: z.string().optional(),
+        fileName: z.string().optional(),
+        fileSize: z.number().optional(),
+        externalUrl: z.string().optional(),
+      })).min(1).max(20), // Max 20 files at once
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { files, groupIds, studentIds, categoryId, subjectId, topicId, subTopicId, visibility, tags } = input;
+
+      const createdMaterials = await ctx.prisma.$transaction(async (tx) => {
+        const materials = [];
+
+        for (const file of files) {
+          const material = await tx.material.create({
+            data: {
+              title: file.title,
+              description: file.description,
+              type: file.type,
+              fileUrl: file.fileUrl,
+              fileName: file.fileName,
+              fileSize: file.fileSize,
+              externalUrl: file.externalUrl,
+              visibility,
+              tags: tags || [],
+              createdBy: ctx.user.id,
+              ...(categoryId ? { category: { connect: { id: categoryId } } } : {}),
+              ...(subjectId ? { subject: { connect: { id: subjectId } } } : {}),
+              ...(topicId ? { topic: { connect: { id: topicId } } } : {}),
+              ...(subTopicId ? { subTopic: { connect: { id: subTopicId } } } : {}),
+            },
+          });
+
+          // Create access records for each material
+          if (visibility === 'GROUP_BASED' && groupIds?.length) {
+            await tx.materialGroupAccess.createMany({
+              data: groupIds.map((groupId) => ({
+                materialId: material.id,
+                groupId,
+              })),
+            });
+          }
+
+          if (visibility === 'SELECTED_STUDENTS' && studentIds?.length) {
+            await tx.materialStudentAccess.createMany({
+              data: studentIds.map((studentId) => ({
+                materialId: material.id,
+                studentId,
+                grantedBy: ctx.user.id,
+              })),
+            });
+          }
+
+          materials.push(material);
+        }
+
+        return materials;
+      });
+
+      // Send notifications for new materials (background)
+      let targetUserIds: string[] = [];
+      
+      if (visibility === 'ALL_STUDENTS') {
+        const allStudents = await ctx.prisma.student.findMany({
+          where: { user: { isActive: true } },
+          select: { userId: true },
+        });
+        targetUserIds = allStudents.map(s => s.userId);
+      } else if (visibility === 'GROUP_BASED' && groupIds?.length) {
+        const groupMembers = await ctx.prisma.groupMember.findMany({
+          where: { groupId: { in: groupIds } },
+          select: { student: { select: { userId: true } } },
+        });
+        targetUserIds = groupMembers.map(m => m.student.userId);
+      } else if (visibility === 'SELECTED_STUDENTS' && studentIds?.length) {
+        const students = await ctx.prisma.student.findMany({
+          where: { id: { in: studentIds } },
+          select: { userId: true },
+        });
+        targetUserIds = students.map(s => s.userId);
+      }
+
+      // Send one notification per material
+      if (targetUserIds.length > 0) {
+        const uniqueUserIds = [...new Set(targetUserIds)];
+        for (const material of createdMaterials) {
+          notificationService.notifyMaterialAvailable(ctx.prisma, {
+            materialId: material.id,
+            materialTitle: material.title,
+            targetUserIds: uniqueUserIds,
+          }).catch(err => {
+            console.error('[Materials] Failed to send batch material notification:', err);
+          });
+        }
+      }
+
+      return {
+        created: createdMaterials.length,
+        materials: createdMaterials,
+      };
+    }),
+
   // Update material (staff: admin + collaborator)
   update: staffProcedure
     .input(z.object({
@@ -866,9 +1206,11 @@ export const materialsRouter = router({
       fileSize: z.number().optional().nullable(),
       externalUrl: z.string().optional().nullable(),
       thumbnailUrl: z.string().optional().nullable(),
-      visibility: z.enum(['ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).optional(),
-      categoryId: z.string().optional().nullable(),
-      subjectId: z.string().optional().nullable(),
+      visibility: z.enum(['NONE', 'ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).optional(),
+      categoryId: z.string().optional().nullable(),     // Container category
+      subjectId: z.string().optional().nullable(),      // Classification
+      topicId: z.string().optional().nullable(),        // Classification
+      subTopicId: z.string().optional().nullable(),     // Classification
       tags: z.array(z.string()).optional(),
       order: z.number().optional(),
       isActive: z.boolean().optional(),
@@ -878,7 +1220,7 @@ export const materialsRouter = router({
       studentIds: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { id, groupIds, studentIds, subjectId, categoryId, ...materialData } = input;
+      const { id, groupIds, studentIds, subjectId, categoryId, topicId, subTopicId, ...materialData } = input;
 
       return ctx.prisma.$transaction(async (tx) => {
         // Update material
@@ -893,6 +1235,14 @@ export const materialsRouter = router({
             // Handle subject connection
             ...(subjectId !== undefined ? (
               subjectId ? { subject: { connect: { id: subjectId } } } : { subject: { disconnect: true } }
+            ) : {}),
+            // Handle topic connection
+            ...(topicId !== undefined ? (
+              topicId ? { topic: { connect: { id: topicId } } } : { topic: { disconnect: true } }
+            ) : {}),
+            // Handle subtopic connection
+            ...(subTopicId !== undefined ? (
+              subTopicId ? { subTopic: { connect: { id: subTopicId } } } : { subTopic: { disconnect: true } }
             ) : {}),
           },
         });
@@ -1046,7 +1396,10 @@ export const materialsRouter = router({
   // Get materials accessible to the current student
   getMyMaterials: studentProcedure
     .input(z.object({
-      categoryId: z.string().optional(),
+      categoryId: z.string().optional(),   // Container category filter
+      subjectId: z.string().optional(),    // Classification filter
+      topicId: z.string().optional(),      // Classification filter
+      subTopicId: z.string().optional(),   // Classification filter
       type: z.enum(['PDF', 'VIDEO', 'LINK', 'DOCUMENT']).optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
@@ -1076,6 +1429,9 @@ export const materialsRouter = router({
           isActive: true,
           type: input?.type,
           categoryId: input?.categoryId,
+          subjectId: input?.subjectId,
+          topicId: input?.topicId,
+          subTopicId: input?.subTopicId,
           OR: [
             // All students visibility
             { visibility: 'ALL_STUDENTS' },
@@ -1098,12 +1454,15 @@ export const materialsRouter = router({
           ],
         },
         orderBy: [
-          { category: { order: 'asc' } },
+          { topic: { order: 'asc' } },
+          { subTopic: { order: 'asc' } },
           { order: 'asc' },
           { createdAt: 'desc' },
         ],
         include: {
           category: true,
+          topic: true,
+          subTopic: true,
           subject: true,
         },
       });
@@ -1157,6 +1516,8 @@ export const materialsRouter = router({
         },
         include: {
           category: true,
+          topic: true,
+          subTopic: true,
           subject: true,
         },
       });

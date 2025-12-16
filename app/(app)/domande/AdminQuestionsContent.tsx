@@ -32,6 +32,7 @@ import {
   FileText,
   Eye,
   Tag,
+  Download,
 } from 'lucide-react';
 import {
   questionTypeLabels,
@@ -82,6 +83,9 @@ export default function AdminQuestionsContent() {
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showFilters, setShowFilters] = useState(false);
+
+  // Export state
+  const [isExporting, setIsExporting] = useState(false);
 
   // Action menus state
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -198,6 +202,38 @@ export default function AdminQuestionsContent() {
     onError: handleMutationError,
   });
 
+  // Export function
+  const handleExportCSV = async () => {
+    setIsExporting(true);
+    try {
+      const result = await utils.questions.exportQuestionsCSV.fetch({
+        ids: selectedIds.size > 0 ? Array.from(selectedIds) : undefined,
+        subjectId: subjectId || undefined,
+        status: status || undefined,
+        type: type || undefined,
+        difficulty: difficulty || undefined,
+      });
+
+      // Create and download the CSV file
+      const blob = new Blob([result.csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = result.filename;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      showSuccess(
+        'Esportazione completata',
+        `${result.count} domande esportate in ${result.filename}`
+      );
+    } catch {
+      handleMutationError(new Error('Errore durante l\'esportazione'));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   // Helpers
   const questions = useMemo(() => questionsData?.questions ?? [], [questionsData?.questions]);
   const pagination = questionsData?.pagination ?? { page: 1, pageSize: 20, total: 0, totalPages: 0 };
@@ -284,6 +320,17 @@ export default function AdminQuestionsContent() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleExportCSV}
+            disabled={isExporting}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border ${colors.border.primary} ${colors.text.secondary} hover:${colors.background.secondary} transition-colors disabled:opacity-50`}
+            title={selectedIds.size > 0 ? `Esporta ${selectedIds.size} selezionate` : 'Esporta tutte (filtrate)'}
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">
+              {isExporting ? 'Esportando...' : selectedIds.size > 0 ? `Esporta (${selectedIds.size})` : 'Esporta'}
+            </span>
+          </button>
           <Link
             href="/domande/importa"
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border ${colors.border.primary} ${colors.text.secondary} hover:${colors.background.secondary} transition-colors`}
