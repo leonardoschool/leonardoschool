@@ -5,7 +5,7 @@
 
 ### Route Groups Structure
 - `app/(marketing)/` → Public pages with Header/Footer (SEO-optimized)
-- `app/(app)/` → Protected dashboards: `/admin`, `/studente`, `/collaboratore`
+- `app/(app)/` → Protected pages with unified routes (role-based content via components)
 - `app/auth/` → Standalone auth pages (login, register, complete-profile)
 - `proxy.ts` → Middleware for auth & role-based routing (NOT middleware.ts)
 

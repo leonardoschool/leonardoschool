@@ -432,7 +432,7 @@ export async function sendProfileCompletedAdminNotification(data: ProfileComplet
     return { success: false, error: 'No admin email configured' };
   }
 
-  const adminUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}/admin`;
+  const adminUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}/utenti`;
 
   const content = `
     <p class="greeting">Nuovo studente registrato!</p>
@@ -486,7 +486,7 @@ export async function sendContractSignedAdminNotification(data: {
     return { success: false, error: 'No admin email configured' };
   }
 
-  const adminUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}/admin`;
+  const adminUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}/contratti`;
   
   const formattedSignDate = new Intl.DateTimeFormat('it-IT', {
     weekday: 'long',

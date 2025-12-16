@@ -687,7 +687,7 @@ export default function CollaboratorQuestionsContent() {
               return (
                 <>
                   <Link
-                    href={`/collaboratore/domande/${question.id}`}
+                    href={`/domande/${question.id}`}
                     className={`flex items-center gap-2 px-4 py-2 text-sm ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
                     onClick={() => setOpenMenuId(null)}
                   >
@@ -697,7 +697,7 @@ export default function CollaboratorQuestionsContent() {
                   {isOwner && (
                     <>
                       <Link
-                        href={`/collaboratore/domande/${question.id}/modifica`}
+                        href={`/domande/${question.id}/modifica`}
                         className={`flex items-center gap-2 px-4 py-2 text-sm ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
                         onClick={() => setOpenMenuId(null)}
                       >

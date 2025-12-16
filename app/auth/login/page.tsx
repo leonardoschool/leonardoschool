@@ -45,15 +45,11 @@ export default function LoginPage() {
           
           if (response.ok) {
             const dbUser = await response.json();
-            // Redirect based on role
+            // Redirect based on profile completion status
             if ((dbUser.role === 'STUDENT' || dbUser.role === 'COLLABORATOR') && !dbUser.profileCompleted) {
               router.push('/auth/complete-profile');
-            } else if (dbUser.role === 'ADMIN') {
-              window.location.href = '/admin';
-            } else if (dbUser.role === 'COLLABORATOR') {
-              window.location.href = '/collaboratore';
             } else {
-              window.location.href = '/studente';
+              window.location.href = '/dashboard';
             }
             return;
           }
@@ -112,16 +108,12 @@ export default function LoginPage() {
         name: dbUser.name,
       }));
       
-      // 5. Redirect in base a completamento profilo e ruolo
+      // 5. Redirect in base a completamento profilo
       // Use hard navigation for protected routes to ensure cookies are properly read by middleware
       if ((dbUser.role === 'STUDENT' || dbUser.role === 'COLLABORATOR') && !dbUser.profileCompleted) {
         router.push('/auth/complete-profile');
-      } else if (dbUser.role === 'ADMIN') {
-        window.location.href = '/admin';
-      } else if (dbUser.role === 'COLLABORATOR') {
-        window.location.href = '/collaboratore';
       } else {
-        window.location.href = '/studente';
+        window.location.href = '/dashboard';
       }
     } catch (err) {
       console.error('Login error:', err);

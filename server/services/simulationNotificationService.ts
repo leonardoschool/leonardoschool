@@ -55,7 +55,7 @@ export async function createSimulationCalendarEvent(
         isAllDay: false,
         locationType: (simulation.locationType as 'ONLINE' | 'IN_PERSON' | 'HYBRID') || 'ONLINE',
         locationDetails: simulation.locationDetails,
-        onlineLink: `${BASE_URL}/studente/simulazioni/${simulation.id}`,
+        onlineLink: `${BASE_URL}/simulazioni/${simulation.id}`,
         createdById: createdByUser.id,
         isPublic: simulation.isPublic,
         sendEmailInvites: true,
@@ -336,7 +336,7 @@ export async function sendSimulationNotifications(
       locationDetails: simulation.locationDetails,
       createdByName: simulation.createdBy?.name || createdByUser.name,
       dueDate: assignments[0]?.dueDate || null,
-      platformUrl: `${BASE_URL}/studente/simulazioni/${simulation.id}`,
+      platformUrl: `${BASE_URL}/simulazioni/${simulation.id}`,
     };
 
     // 5. Send emails

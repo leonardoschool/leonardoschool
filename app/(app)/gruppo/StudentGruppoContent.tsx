@@ -170,7 +170,7 @@ export default function StudentGruppoContent() {
                         </div>
                       </div>
                       <Link
-                        href={`/studente/messaggi?nuovo=${group.referenceCollaborator.userId}`}
+                        href={`/messaggi?nuovo=${group.referenceCollaborator.userId}`}
                         className="p-2 rounded-lg bg-purple-100 dark:bg-purple-800/50 hover:bg-purple-200 dark:hover:bg-purple-700/50 transition-colors"
                         title={`Scrivi a ${group.referenceCollaborator.name}`}
                       >
@@ -196,7 +196,7 @@ export default function StudentGruppoContent() {
                       </div>
                       {!group.referenceStudent.isCurrentUser && (
                         <Link
-                          href={`/studente/messaggi?nuovo=${group.referenceStudent.userId}`}
+                          href={`/messaggi?nuovo=${group.referenceStudent.userId}`}
                           className="p-2 rounded-lg bg-blue-100 dark:bg-blue-800/50 hover:bg-blue-200 dark:hover:bg-blue-700/50 transition-colors"
                           title={`Scrivi a ${group.referenceStudent.name}`}
                         >
@@ -259,7 +259,7 @@ export default function StudentGruppoContent() {
                         </div>
                         {!member.isCurrentUser && member.type === 'COLLABORATOR' && (
                           <Link
-                            href={`/studente/messaggi?nuovo=${member.userId}`}
+                            href={`/messaggi?nuovo=${member.userId}`}
                             className="p-2 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-800/50 transition-colors"
                             title={`Scrivi a ${member.name}`}
                           >

@@ -653,7 +653,7 @@ export default function AppHeader() {
             <nav className="hidden lg:flex items-center gap-1">
               {studentNavItems.map((item) => {
                 const isActive = pathname === item.href || 
-                  (item.href !== '/studente' && pathname.startsWith(item.href));
+                  (item.href !== '/dashboard' && pathname.startsWith(item.href));
                 return (
                   <Link
                     key={item.href}
@@ -1019,7 +1019,7 @@ export default function AppHeader() {
           <nav className="flex items-center gap-1 px-4 py-2">
             {studentNavItems.map((item) => {
               const isActive = pathname === item.href || 
-                (item.href !== '/studente' && pathname.startsWith(item.href));
+                (item.href !== '/dashboard' && pathname.startsWith(item.href));
               return (
                 <Link
                   key={item.href}

@@ -85,17 +85,13 @@ export default function CompleteProfilePage() {
       
       // Admin users should never see this page - redirect immediately
       if (role === 'ADMIN') {
-        window.location.href = '/admin';
+        window.location.href = '/dashboard';
         return;
       }
       
       // Redirect users with completed profiles to their dashboard
       if (user.profileCompleted) {
-        if (role === 'COLLABORATOR') {
-          window.location.href = '/collaboratore';
-        } else {
-          window.location.href = '/studente';
-        }
+        window.location.href = '/dashboard';
       }
     }
   }, [user, router]);
@@ -239,9 +235,8 @@ export default function CompleteProfilePage() {
       }
 
       // Use hard navigation to ensure new cookies are used by middleware
-      const dashboardUrl = isCollaborator ? '/collaboratore' : '/studente';
       showSuccess('Profilo completato', 'In attesa di attivazione da parte dell\'amministratore.');
-      window.location.href = dashboardUrl;
+      window.location.href = '/dashboard';
     } catch (err) {
       const parsed = parseError(err);
       setError(parsed.message);

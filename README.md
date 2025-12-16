@@ -50,10 +50,12 @@ app/
 │   ├── contattaci/   → Contact
 │   ├── didattica/    → Courses
 │   └── ...
-├── (app)/            → Dashboard protette
-│   ├── admin/        → Pannello amministratore
-│   ├── studente/     → Pannello studente
-│   └── collaboratore/→ Pannello tutor
+├── (app)/            → Dashboard protette (route unificate)
+│   ├── dashboard/    → Dashboard (Admin/Collaboratore/Studente)
+│   ├── simulazioni/  → Simulazioni test
+│   ├── calendario/   → Calendario eventi
+│   ├── messaggi/     → Messaggistica
+│   └── ...           → Altre pagine con contenuto role-based
 ├── auth/             → Pagine autenticazione
 │   ├── login/
 │   ├── registrati/

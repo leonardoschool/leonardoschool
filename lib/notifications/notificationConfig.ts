@@ -435,15 +435,15 @@ export function getNotificationRoute(
     case 'ACCOUNT_ACTIVATED':
       // Lo studente va alla dashboard, l'admin alla lista utenti
       return userRole === 'ADMIN' && params?.studentId 
-        ? `/admin/studenti/${params.studentId}` 
+        ? `/utenti/${params.studentId}` 
         : basePath;
     
     case 'NEW_REGISTRATION':
     case 'PROFILE_COMPLETED':
       if (userRole === 'ADMIN') {
         return params?.studentId 
-          ? `/admin/studenti/${params.studentId}` 
-          : '/admin/utenti';
+          ? `/utenti/${params.studentId}` 
+          : '/utenti';
       }
       return null;
 
@@ -453,8 +453,8 @@ export function getNotificationRoute(
       // Se è admin, va alla lista contratti
       if (userRole === 'ADMIN') {
         return params?.contractId 
-          ? `/admin/contratti?highlight=${params.contractId}` 
-          : '/admin/contratti';
+          ? `/contratti?highlight=${params.contractId}` 
+          : '/contratti';
       }
       // Student/Collaborator: usa il link diretto dalla notifica
       return null; // Il link sarà nel linkUrl della notifica
@@ -465,8 +465,8 @@ export function getNotificationRoute(
     case 'CONTRACT_CANCELLED':
       if (userRole === 'ADMIN') {
         return params?.contractId 
-          ? `/admin/contratti?highlight=${params.contractId}` 
-          : '/admin/contratti';
+          ? `/contratti?highlight=${params.contractId}` 
+          : '/contratti';
       }
       return `${basePath}/contratti`;
 
@@ -486,8 +486,8 @@ export function getNotificationRoute(
     case 'SIMULATION_STARTED':
       if (userRole === 'STUDENT') {
         return params?.simulationId 
-          ? `/studente/simulazioni/${params.simulationId}` 
-          : '/studente/simulazioni';
+          ? `/simulazioni/${params.simulationId}` 
+          : '/simulazioni';
       }
       return params?.simulationId 
         ? `${basePath}/simulazioni/${params.simulationId}` 
@@ -495,8 +495,8 @@ export function getNotificationRoute(
 
     case 'SIMULATION_RESULTS':
       return params?.simulationId 
-        ? `/studente/simulazioni/${params.simulationId}/risultati` 
-        : '/studente/simulazioni';
+        ? `/simulazioni/${params.simulationId}/risultati` 
+        : '/simulazioni';
 
     case 'SIMULATION_COMPLETED':
       if (userRole === 'ADMIN' || userRole === 'COLLABORATOR') {
@@ -504,7 +504,7 @@ export function getNotificationRoute(
           ? `${basePath}/simulazioni/${params.simulationId}` 
           : `${basePath}/simulazioni`;
       }
-      return '/studente/simulazioni';
+      return '/simulazioni';
 
     // === ABSENCES ===
     case 'STAFF_ABSENCE':
@@ -513,10 +513,10 @@ export function getNotificationRoute(
     case 'ABSENCE_REJECTED':
     case 'SUBSTITUTION_ASSIGNED':
       if (userRole === 'ADMIN') {
-        return '/admin/presenze';
+        return '/presenze';
       }
       if (userRole === 'COLLABORATOR') {
-        return '/collaboratore/presenze';
+        return '/presenze';
       }
       return `${basePath}/calendario`;
 
@@ -551,16 +551,16 @@ export function getNotificationRoute(
     case 'JOB_APPLICATION':
       if (userRole === 'ADMIN') {
         return params?.applicationId 
-          ? `/admin/candidature?highlight=${params.applicationId}` 
-          : '/admin/candidature';
+          ? `/candidature?highlight=${params.applicationId}` 
+          : '/candidature';
       }
       return null;
 
     case 'CONTACT_REQUEST':
       if (userRole === 'ADMIN') {
         return params?.requestId 
-          ? `/admin/richieste?highlight=${params.requestId}` 
-          : '/admin/richieste';
+          ? `/richieste?highlight=${params.requestId}` 
+          : '/richieste';
       }
       return null;
 
@@ -580,16 +580,11 @@ export function getNotificationRoute(
 
 /**
  * Ottiene il basePath per un ruolo
+ * Con la nuova struttura unificata, tutti i ruoli usano lo stesso basePath vuoto
  */
-function getBasePath(role: UserRole): string {
-  switch (role) {
-    case 'ADMIN':
-      return '/admin';
-    case 'COLLABORATOR':
-      return '/collaboratore';
-    case 'STUDENT':
-      return '/studente';
-  }
+function getBasePath(_role: UserRole): string {
+  // Unified routes - no role prefix needed
+  return '';
 }
 
 // ==================== HELPER FUNCTIONS ====================

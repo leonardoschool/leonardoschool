@@ -74,9 +74,9 @@ Questo file contiene le credenziali degli utenti di test creati dallo script di 
 3. Usa la password `TestPassword123!`
 
 ### Ruoli e permessi
-- **Admin**: Accesso completo a `/admin/*`
-- **Collaboratore**: Accesso a `/collaboratore/*`, può creare domande e materiali
-- **Studente**: Accesso a `/studente/*`, può fare simulazioni e vedere materiali
+- **Admin**: Accesso completo a tutte le pagine, gestione utenti, contratti, candidature
+- **Collaboratore**: Accesso a domande, tags, materiali, presenze, studenti assegnati
+- **Studente**: Accesso a simulazioni, materiali, calendario, statistiche personali
 
 ### Rigenerare gli utenti
 ```bash

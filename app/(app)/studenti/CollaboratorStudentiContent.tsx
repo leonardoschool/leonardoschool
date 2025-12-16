@@ -311,7 +311,7 @@ function StudentDetailModal({
             {student && (
               <button
                 onClick={() => {
-                  router.push(`/collaboratore/messaggi?nuovo=${student.id}`);
+                  router.push(`/messaggi?nuovo=${student.id}`);
                   onClose();
                 }}
                 className={`flex-1 px-4 py-3 rounded-xl ${colors.primary.gradient} text-white font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2`}
@@ -469,7 +469,7 @@ export default function CollaboratorStudentiContent() {
                       </button>
                       {student.isActive && (
                         <button
-                          onClick={() => router.push(`/collaboratore/messaggi?nuovo=${student.id}`)}
+                          onClick={() => router.push(`/messaggi?nuovo=${student.id}`)}
                           className={`flex-1 px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2`}
                         >
                           <MessageSquare className="w-4 h-4" />
@@ -560,7 +560,7 @@ export default function CollaboratorStudentiContent() {
                             </button>
                             {student.isActive && (
                               <button
-                                onClick={() => router.push(`/collaboratore/messaggi?nuovo=${student.id}`)}
+                                onClick={() => router.push(`/messaggi?nuovo=${student.id}`)}
                                 className={`p-2 rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:opacity-80 transition-opacity`}
                                 title="Contatta studente"
                               >

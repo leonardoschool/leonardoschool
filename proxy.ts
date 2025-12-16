@@ -86,16 +86,8 @@ export function proxy(request: NextRequest) {
   const userRole = request.cookies.get('user-role')?.value;
   const profileCompleted = request.cookies.get('profile-completed')?.value === 'true';
   
-  // Define legacy protected routes (to be deprecated)
-  const isLegacyAdminRoute = pathname.startsWith('/admin');
-  const isLegacyCollaboratorRoute = pathname.startsWith('/collaboratore');
-  const isLegacyStudentRoute = pathname.startsWith('/studente');
-  const isLegacyProtectedRoute = isLegacyAdminRoute || isLegacyCollaboratorRoute || isLegacyStudentRoute;
-  
-  // Check if it's a new unified protected route
-  const isUnifiedRoute = isUnifiedProtectedRoute(pathname);
-  const isProtectedRoute = isLegacyProtectedRoute || isUnifiedRoute;
-  
+  // Check if it's a protected route
+  const isProtectedRoute = isUnifiedProtectedRoute(pathname);
   const isContractSignRoute = pathname.startsWith('/contratto');
   
   // Protect private application routes
@@ -113,34 +105,10 @@ export function proxy(request: NextRequest) {
       return NextResponse.redirect(new URL('/auth/complete-profile', request.url));
     }
     
-    // For unified routes, check role-based access using PAGE_PERMISSIONS
-    if (isUnifiedRoute && !hasAccess(pathname, userRole)) {
+    // Check role-based access using PAGE_PERMISSIONS
+    if (!hasAccess(pathname, userRole)) {
       // User doesn't have access to this route, redirect to dashboard
       return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-    
-    // Legacy role-based access checks (to be removed after migration)
-    if (isLegacyAdminRoute && userRole !== 'ADMIN') {
-      if (userRole === 'COLLABORATOR') {
-        return NextResponse.redirect(new URL('/collaboratore', request.url));
-      }
-      return NextResponse.redirect(new URL('/studente', request.url));
-    }
-    
-    if (isLegacyCollaboratorRoute && userRole !== 'COLLABORATOR') {
-      if (userRole === 'ADMIN') {
-        return NextResponse.redirect(new URL('/admin', request.url));
-      }
-      return NextResponse.redirect(new URL('/studente', request.url));
-    }
-    
-    if (isLegacyStudentRoute && userRole !== 'STUDENT') {
-      if (userRole === 'ADMIN') {
-        return NextResponse.redirect(new URL('/admin', request.url));
-      }
-      if (userRole === 'COLLABORATOR') {
-        return NextResponse.redirect(new URL('/collaboratore', request.url));
-      }
     }
   }
   
@@ -177,17 +145,15 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Legacy routes (to be deprecated)
-    '/admin/:path*',
-    '/collaboratore/:path*',
-    '/studente/:path*',
-    // New unified routes
+    // Unified routes (role-based content via components)
     '/dashboard/:path*',
     '/simulazioni/:path*',
     '/calendario/:path*',
     '/messaggi/:path*',
     '/notifiche/:path*',
     '/materiali/:path*',
+    '/profilo/:path*',
+    '/impostazioni/:path*',
     '/domande/:path*',
     '/tags/:path*',
     '/presenze/:path*',

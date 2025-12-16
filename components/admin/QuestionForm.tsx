@@ -38,7 +38,7 @@ import {
 
 interface QuestionFormProps {
   questionId?: string; // If provided, we're editing
-  basePath?: string; // Base path for redirects (default: /admin/domande)
+  basePath?: string; // Base path for redirects (default: /domande)
   initialData?: {
     type: QuestionType;
     status: QuestionStatus;
@@ -86,7 +86,7 @@ const defaultKeyword: QuestionKeywordInput = {
   synonyms: [],
 };
 
-export default function QuestionForm({ questionId, basePath = '/admin/domande', initialData }: QuestionFormProps) {
+export default function QuestionForm({ questionId, basePath = '/domande', initialData }: QuestionFormProps) {
   const router = useRouter();
   const { handleMutationError } = useApiError();
   const { showSuccess, showError } = useToast();

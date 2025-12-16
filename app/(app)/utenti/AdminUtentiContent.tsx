@@ -1521,7 +1521,7 @@ export default function AdminUtentiContent() {
                       {/* Contact user - available for all active users except self and admins */}
                       {!isSelf && user.isActive && user.role !== 'ADMIN' && (
                         <button
-                          onClick={() => router.push(`/admin/messaggi?nuovo=${user.id}`)}
+                          onClick={() => router.push(`/messaggi?nuovo=${user.id}`)}
                           className={`p-2 rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400`}
                           title="Contatta utente"
                         >
@@ -1745,7 +1745,7 @@ export default function AdminUtentiContent() {
                             {/* Contact user - available for all active users except admins */}
                             {user.isActive && user.role !== 'ADMIN' && (
                               <button
-                                onClick={() => router.push(`/admin/messaggi?nuovo=${user.id}`)}
+                                onClick={() => router.push(`/messaggi?nuovo=${user.id}`)}
                                 className={`p-1.5 rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:opacity-80 transition-opacity`}
                                 title="Contatta utente"
                               >

@@ -260,7 +260,7 @@ export const notifications = {
       type: 'NEW_REGISTRATION',
       title: 'Nuova registrazione',
       message: `${params.userName} (${params.userEmail}) si è registrato`,
-      linkUrl: `/admin/studenti/${params.userId}`,
+      linkUrl: `/utenti/${params.userId}`,
       linkType: 'user',
       linkEntityId: params.userId,
     });
@@ -280,7 +280,7 @@ export const notifications = {
       type: 'PROFILE_COMPLETED',
       title: 'Profilo completato',
       message: `${params.studentName} ha completato il profilo anagrafico`,
-      linkUrl: `/admin/studenti/${params.studentUserId}`,
+      linkUrl: `/utenti/${params.studentUserId}`,
       linkType: 'student',
       linkEntityId: params.studentUserId,
     });
@@ -319,7 +319,7 @@ export const notifications = {
       type: 'CONTRACT_ASSIGNED',
       title: 'Contratto assegnato',
       message: `Contratto "${params.contractName}" assegnato a ${params.recipientName}`,
-      linkUrl: `/admin/contratti?highlight=${params.contractId}`,
+      linkUrl: `/contratti?highlight=${params.contractId}`,
       linkType: 'contract',
       linkEntityId: params.contractId,
     });
@@ -353,7 +353,7 @@ export const notifications = {
       type: 'CONTRACT_SIGNED',
       title: 'Contratto firmato',
       message: `${params.signerName} ha firmato il contratto "${params.contractName}"`,
-      linkUrl: `/admin/contratti?highlight=${params.contractId}`,
+      linkUrl: `/contratti?highlight=${params.contractId}`,
       linkType: 'contract',
       linkEntityId: params.contractId,
       isUrgent: true,
@@ -508,7 +508,7 @@ export const notifications = {
       type: 'SIMULATION_ASSIGNED',
       title: 'Nuova simulazione assegnata',
       message,
-      linkUrl: `/studente/simulazioni/${params.simulationId}`,
+      linkUrl: `/simulazioni/${params.simulationId}`,
       linkType: 'simulation',
       linkEntityId: params.simulationId,
     });
@@ -534,7 +534,7 @@ export const notifications = {
       type: 'SIMULATION_RESULTS',
       title: 'Risultati disponibili',
       message: `I risultati della simulazione "${params.simulationTitle}" sono ora disponibili. Punteggio: ${params.score}${rankingText}`,
-      linkUrl: `/studente/simulazioni/${params.simulationId}/risultati`,
+      linkUrl: `/simulazioni/${params.simulationId}/risultati`,
       linkType: 'simulation_result',
       linkEntityId: params.simulationId,
       channel: 'BOTH',
@@ -556,7 +556,7 @@ export const notifications = {
       type: 'SIMULATION_COMPLETED',
       title: 'Simulazione completata',
       message: `La simulazione "${params.simulationTitle}" è stata completata da ${params.completedCount} studenti`,
-      linkUrl: `/admin/simulazioni/${params.simulationId}`,
+      linkUrl: `/simulazioni/${params.simulationId}`,
       linkType: 'simulation',
       linkEntityId: params.simulationId,
     });
@@ -636,7 +636,7 @@ export const notifications = {
       type: 'JOB_APPLICATION',
       title: 'Nuova candidatura',
       message: `${params.applicantName} ha inviato una candidatura per ${params.subject}`,
-      linkUrl: `/admin/candidature?highlight=${params.applicationId}`,
+      linkUrl: `/candidature?highlight=${params.applicationId}`,
       linkType: 'job_application',
       linkEntityId: params.applicationId,
     });
@@ -657,7 +657,7 @@ export const notifications = {
       type: 'CONTACT_REQUEST',
       title: 'Nuova richiesta di contatto',
       message: `${params.senderName}: ${params.subject}`,
-      linkUrl: `/admin/richieste?highlight=${params.requestId}`,
+      linkUrl: `/richieste?highlight=${params.requestId}`,
       linkType: 'contact_request',
       linkEntityId: params.requestId,
     });
@@ -689,7 +689,7 @@ export const notifications = {
       type: 'ABSENCE_REQUEST',
       title: params.isUrgent ? 'Richiesta assenza urgente' : 'Nuova richiesta assenza',
       message: `${params.requesterName} ha richiesto un'assenza ${dateRange}`,
-      linkUrl: '/admin/assenze',
+      linkUrl: '/assenze',
       linkType: 'absence',
       linkEntityId: params.absenceId,
       isUrgent: params.isUrgent,
@@ -720,7 +720,7 @@ export const notifications = {
       type: 'ABSENCE_CONFIRMED',
       title: 'Assenza confermata',
       message: `La tua richiesta di assenza ${dateRange} è stata confermata.`,
-      linkUrl: '/collaboratore/assenze',
+      linkUrl: '/le-mie-assenze',
       linkType: 'absence',
       linkEntityId: params.absenceId,
     });
@@ -756,7 +756,7 @@ export const notifications = {
       type: 'ABSENCE_REJECTED',
       title: 'Assenza rifiutata',
       message,
-      linkUrl: '/collaboratore/assenze',
+      linkUrl: '/le-mie-assenze',
       linkType: 'absence',
       linkEntityId: params.absenceId,
     });
@@ -817,7 +817,7 @@ export const notifications = {
       type: 'QUESTION_FEEDBACK',
       title: 'Segnalazione su domanda',
       message: `${params.reporterName} ha segnalato un problema (${params.feedbackType}) sulla domanda: "${params.questionTitle}"`,
-      linkUrl: `/admin/domande/${params.questionId}`,
+      linkUrl: `/domande/${params.questionId}`,
       linkType: 'question',
       linkEntityId: params.questionId,
     });
@@ -839,7 +839,7 @@ export const notifications = {
       type: 'OPEN_ANSWER_TO_REVIEW',
       title: 'Risposte da correggere',
       message: `${params.studentName} ha completato la simulazione "${params.simulationTitle}" con ${params.answersCount} risposte aperte da valutare`,
-      linkUrl: `/admin/simulazioni/${params.simulationId}/correzioni`,
+      linkUrl: `/simulazioni/${params.simulationId}/correzioni`,
       linkType: 'simulation',
       linkEntityId: params.simulationId,
     });
@@ -1027,7 +1027,7 @@ export const notifications = {
       type: 'SIMULATION_REMINDER',
       title: 'Promemoria simulazione',
       message: `La simulazione "${params.simulationTitle}" scade il ${formattedDate}. Non dimenticare di completarla!`,
-      linkUrl: `/studente/simulazioni/${params.simulationId}`,
+      linkUrl: `/simulazioni/${params.simulationId}`,
       linkType: 'simulation',
       linkEntityId: params.simulationId,
       isUrgent: true,
@@ -1050,7 +1050,7 @@ export const notifications = {
       type: 'SIMULATION_READY',
       title: 'Simulazione disponibile',
       message: `La simulazione "${params.simulationTitle}" è ora disponibile. Puoi iniziarla quando vuoi.`,
-      linkUrl: `/studente/simulazioni/${params.simulationId}`,
+      linkUrl: `/simulazioni/${params.simulationId}`,
       linkType: 'simulation',
       linkEntityId: params.simulationId,
     });
@@ -1071,7 +1071,7 @@ export const notifications = {
       type: 'SIMULATION_STARTED',
       title: 'Simulazione iniziata',
       message: `${params.studentName} ha iniziato la simulazione "${params.simulationTitle}"`,
-      linkUrl: `/admin/simulazioni/${params.simulationId}`,
+      linkUrl: `/simulazioni/${params.simulationId}`,
       linkType: 'simulation',
       linkEntityId: params.simulationId,
     });
