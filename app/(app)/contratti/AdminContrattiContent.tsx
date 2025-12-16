@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
+import { Portal } from '@/components/ui/Portal';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
@@ -577,7 +578,7 @@ Email: {{EMAIL}}</p>
                       className={`flex-1 min-w-[150px] px-4 py-3 rounded-xl border-2 font-medium flex items-center justify-center gap-2 transition-all ${
                         formData.targetRole === 'STUDENT'
                           ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                          : `${colors.border.primary} ${colors.background.secondary} hover:border-blue-300`
+                          : `${colors.border.primary} ${colors.background.secondary} ${colors.text.primary} hover:border-blue-300`
                       }`}
                     >
                       <GraduationCap className="w-5 h-5" />
@@ -600,7 +601,7 @@ Email: {{EMAIL}}</p>
                       className={`flex-1 min-w-[150px] px-4 py-3 rounded-xl border-2 font-medium flex items-center justify-center gap-2 transition-all ${
                         formData.targetRole === 'COLLABORATOR'
                           ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
-                          : `${colors.border.primary} ${colors.background.secondary} hover:border-purple-300`
+                          : `${colors.border.primary} ${colors.background.secondary} ${colors.text.primary} hover:border-purple-300`
                       }`}
                     >
                       <UserCog className="w-5 h-5" />
@@ -685,7 +686,7 @@ Email: {{EMAIL}}</p>
               <button
                 type="button"
                 onClick={resetForm}
-                className={`px-6 py-3 rounded-xl ${colors.background.secondary} font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors`}
+                className={`px-6 py-3 rounded-xl ${colors.background.secondary} ${colors.text.primary} font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors`}
               >
                 Annulla
               </button>
@@ -794,7 +795,7 @@ Email: {{EMAIL}}</p>
                   <div className="flex gap-2 self-end lg:self-center">
                     <button
                       onClick={() => setPreviewContent(template.content)}
-                      className={`px-4 py-2 rounded-lg ${colors.background.secondary} hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-2 text-sm font-medium`}
+                      className={`px-4 py-2 rounded-lg ${colors.background.secondary} ${colors.text.primary} hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-2 text-sm font-medium`}
                       title="Anteprima"
                     >
                       <Eye className="w-4 h-4" />
@@ -825,39 +826,38 @@ Email: {{EMAIL}}</p>
 
       {/* Preview Modal */}
       {previewContent && (
-        <div 
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
-          onClick={() => setPreviewContent(null)}
-        >
-          <div 
-            className={`${colors.background.card} rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className={`flex items-center justify-between px-6 py-4 border-b ${colors.border.primary}`}>
-              <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-lg ${colors.primary.bg} flex items-center justify-center`}>
-                  <Eye className="w-4 h-4 text-white" />
+        <Portal>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+            <div 
+              className={`${colors.background.card} rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className={`flex items-center justify-between px-6 py-4 border-b ${colors.border.primary}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-lg ${colors.primary.bg} flex items-center justify-center`}>
+                    <Eye className="w-4 h-4 text-white" />
+                  </div>
+                  <h3 className={`font-semibold ${colors.text.primary}`}>Anteprima Contratto</h3>
                 </div>
-                <h3 className={`font-semibold ${colors.text.primary}`}>Anteprima Contratto</h3>
+                <button
+                  onClick={() => setPreviewContent(null)}
+                  className={`p-2 rounded-lg ${colors.background.secondary} ${colors.text.secondary} hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors`}
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <button
-                onClick={() => setPreviewContent(null)}
-                className={`p-2 rounded-lg ${colors.background.secondary} hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-400`}
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            {/* Modal Content */}
-            <div className="p-6 lg:p-8 overflow-y-auto max-h-[calc(90vh-80px)]">
-              <div 
-                className="contract-preview"
-                dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewContent) }}
-              />
+              
+              {/* Modal Content */}
+              <div className="p-6 lg:p-8 overflow-y-auto max-h-[calc(90vh-80px)]">
+                <div 
+                  className={`contract-preview ${colors.text.primary}`}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewContent) }}
+                />
+              </div>
             </div>
           </div>
-        </div>
+        </Portal>
       )}
 
       {/* Custom styles for contract preview */}
@@ -928,7 +928,7 @@ Email: {{EMAIL}}</p>
               <button
                 onClick={() => setDeleteModal({ isOpen: false, templateId: '', templateName: '' })}
                 disabled={deleteMutation.isPending}
-                className={`flex-1 px-4 py-3 rounded-xl ${colors.background.secondary} font-medium hover:opacity-80 transition-opacity disabled:opacity-50`}
+                className={`flex-1 px-4 py-3 rounded-xl ${colors.background.secondary} ${colors.text.primary} font-medium hover:opacity-80 transition-opacity disabled:opacity-50`}
               >
                 Annulla
               </button>

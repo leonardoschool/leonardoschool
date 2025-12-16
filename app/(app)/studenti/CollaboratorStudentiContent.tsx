@@ -433,7 +433,9 @@ export default function CollaboratorStudentiContent() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className={`font-semibold ${colors.text.primary} truncate`}>{student.name}</h3>
-                        <p className={`text-sm ${colors.text.secondary} truncate`}>{student.email}</p>
+                        {student.matricola && (
+                          <p className={`text-sm ${colors.text.muted} truncate`}>{student.matricola}</p>
+                        )}
                         
                         {/* Groups badges */}
                         {student.groups && student.groups.length > 0 && (
@@ -518,7 +520,9 @@ export default function CollaboratorStudentiContent() {
                             </div>
                             <div>
                               <p className={`font-medium ${colors.text.primary}`}>{student.name}</p>
-                              <p className={`text-xs ${colors.text.muted}`}>ID: {student.studentId}</p>
+                              {student.matricola && (
+                                <p className={`text-xs ${colors.text.muted}`}>{student.matricola}</p>
+                              )}
                             </div>
                           </div>
                         </td>

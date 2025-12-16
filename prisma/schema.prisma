@@ -158,6 +158,10 @@ enum NotificationType {
   // === MATERIALS ===
   MATERIAL_AVAILABLE // Nuovo materiale disponibile
 
+  // === GROUPS ===
+  GROUP_MEMBER_ADDED // Aggiunto come membro di un gruppo
+  GROUP_REFERENT_ASSIGNED // Assegnato come referente di un gruppo
+
   // === MESSAGING ===
   MESSAGE_RECEIVED // Nuovo messaggio ricevuto
 

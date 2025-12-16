@@ -1005,7 +1005,9 @@ function GroupDetailsModal({ group, isLoading, onClose, onRemoveMember, isRemovi
                             </div>
                           )}
                         </div>
-                        <p className={`text-xs ${colors.text.muted} truncate`}>{user.email}</p>
+                        <p className={`text-xs ${colors.text.muted} truncate`}>
+                          {user.type === 'STUDENT' && 'matricola' in user ? user.matricola : user.email}
+                        </p>
                       </div>
                       <div className="flex items-center gap-1 ml-2">
                         <button
@@ -1051,6 +1053,7 @@ function GroupDetailsModal({ group, isLoading, onClose, onRemoveMember, isRemovi
               {group.members.map((member) => {
                 const user = member.student?.user || member.collaborator?.user;
                 const isStudent = !!member.student;
+                const matricola = (member.student as { matricola?: string })?.matricola;
                 const userId = (member.student?.user as { id?: string })?.id || (member.collaborator?.user as { id?: string })?.id;
 
                 return (
@@ -1074,7 +1077,9 @@ function GroupDetailsModal({ group, isLoading, onClose, onRemoveMember, isRemovi
                       </div>
                       <div>
                         <p className={`font-medium ${colors.text.primary}`}>{user?.name}</p>
-                        <p className={`text-sm ${colors.text.muted}`}>{user?.email}</p>
+                        <p className={`text-sm ${colors.text.muted}`}>
+                          {isStudent ? matricola : user?.email}
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-1">

@@ -1023,9 +1023,14 @@ async function main() {
 
   console.log('\n👨‍🎓 Creating students...');
   const createdStudents: SeedStudent = [];
+  const currentYear = new Date().getFullYear();
+  let studentIndex = 1;
   for (const student of SEED_USERS.studenti) {
     const firebaseUid = await createFirebaseUser(student.email, student.name);
     if (!firebaseUid) continue;
+
+    // Generate matricola: LS{year}{4-digit-progressive}
+    const matricola = `LS${currentYear}${String(studentIndex).padStart(4, '0')}`;
 
     const user = await prisma.user.create({
       data: {
@@ -1045,13 +1050,15 @@ async function main() {
             postalCode: student.cap,
             city: student.citta,
             province: student.provincia,
+            matricola: matricola,
           },
         },
       },
       include: { student: true },
     });
     if (user.student) createdStudents.push({ id: user.student.id });
-    console.log(`   ✓ ${student.name}`);
+    console.log(`   ✓ ${student.name} - Matricola: ${matricola}`);
+    studentIndex++;
   }
 
   // 4) Seed content

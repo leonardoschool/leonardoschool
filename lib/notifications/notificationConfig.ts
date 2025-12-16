@@ -77,6 +77,9 @@ export type NotificationType =
   | 'OPEN_ANSWER_TO_REVIEW'
   // Materials
   | 'MATERIAL_AVAILABLE'
+  // Groups
+  | 'GROUP_MEMBER_ADDED'
+  | 'GROUP_REFERENT_ASSIGNED'
   // Messaging
   | 'MESSAGE_RECEIVED'
   // Applications & Contacts
@@ -96,6 +99,7 @@ export type NotificationCategory =
   | 'absence'
   | 'question'
   | 'material'
+  | 'group'
   | 'message'
   | 'application'
   | 'attendance'
@@ -360,6 +364,24 @@ export const notificationConfigs: Record<NotificationType, NotificationConfig> =
     defaultSendEmail: false,
   },
 
+  // === GROUPS ===
+  GROUP_MEMBER_ADDED: {
+    category: 'group',
+    icon: Users,
+    iconBgClass: 'bg-indigo-100 dark:bg-indigo-900/30',
+    iconColorClass: 'text-indigo-600 dark:text-indigo-400',
+    canBeUrgent: false,
+    defaultSendEmail: false,
+  },
+  GROUP_REFERENT_ASSIGNED: {
+    category: 'group',
+    icon: Users,
+    iconBgClass: 'bg-violet-100 dark:bg-violet-900/30',
+    iconColorClass: 'text-violet-600 dark:text-violet-400',
+    canBeUrgent: false,
+    defaultSendEmail: false,
+  },
+
   // === MESSAGING ===
   MESSAGE_RECEIVED: {
     category: 'message',
@@ -541,6 +563,15 @@ export function getNotificationRoute(
     case 'MATERIAL_AVAILABLE':
       return `${basePath}/materiali`;
 
+    // === GROUPS ===
+    case 'GROUP_MEMBER_ADDED':
+    case 'GROUP_REFERENT_ASSIGNED':
+      // Per studenti va al gruppo, per admin/staff va alla gestione gruppi
+      if (userRole === 'STUDENT') {
+        return `${basePath}/gruppo`;
+      }
+      return `${basePath}/gruppi`;
+
     // === MESSAGES ===
     case 'MESSAGE_RECEIVED':
       return params?.conversationId 
@@ -608,6 +639,7 @@ export function getCategoryLabels(): Record<NotificationCategory, string> {
     absence: 'Assenze',
     question: 'Domande',
     material: 'Materiali',
+    group: 'Gruppi',
     message: 'Messaggi',
     application: 'Candidature',
     attendance: 'Presenze',

@@ -80,8 +80,18 @@ export async function createNotification(
   prisma: PrismaClient,
   params: CreateNotificationParams
 ): Promise<NotificationResult> {
+  console.log('📨 [CREATE_NOTIFICATION] Chiamata con parametri:', {
+    userId: params.userId,
+    type: params.type,
+    title: params.title,
+    message: params.message,
+    linkType: params.linkType,
+    linkEntityId: params.linkEntityId,
+  });
+  
   try {
     const config = getNotificationConfig(params.type);
+    console.log('📨 [CREATE_NOTIFICATION] Config trovata:', config);
     
     const notification = await prisma.notification.create({
       data: {
@@ -99,9 +109,11 @@ export async function createNotification(
       },
     });
 
+    console.log('✅ [CREATE_NOTIFICATION] Notifica creata nel DB con ID:', notification.id);
     return { success: true, notificationId: notification.id };
   } catch (error) {
-    console.error('[Notifications] Failed to create notification:', error);
+    console.error('❌ [CREATE_NOTIFICATION] Errore creazione notifica:', error);
+    console.error('❌ [CREATE_NOTIFICATION] Stack trace:', error instanceof Error ? error.stack : 'N/A');
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -352,10 +364,10 @@ export const notifications = {
     await notifyAdmins(prisma, {
       type: 'CONTRACT_SIGNED',
       title: 'Contratto firmato',
-      message: `${params.signerName} ha firmato il contratto "${params.contractName}"`,
-      linkUrl: `/contratti?highlight=${params.contractId}`,
-      linkType: 'contract',
-      linkEntityId: params.contractId,
+      message: `${params.signerName} ha firmato il contratto "${params.contractName}". Attiva l'account se non l'hai già fatto.`,
+      linkUrl: `/utenti?search=${encodeURIComponent(params.signerName)}`,
+      linkType: 'user',
+      linkEntityId: params.signerUserId,
       isUrgent: true,
     });
   },
@@ -1107,6 +1119,54 @@ export const notifications = {
       linkEntityId: params.eventId,
       isUrgent: true,
       channel: 'BOTH',
+    });
+  },
+
+  // ==================== GROUP NOTIFICATIONS ====================
+
+  /**
+   * Notifica quando un utente viene aggiunto come membro di un gruppo
+   */
+  async groupMemberAdded(
+    prisma: PrismaClient,
+    params: {
+      recipientUserId: string;
+      groupId: string;
+      groupName: string;
+    }
+  ) {
+    return createNotification(prisma, {
+      userId: params.recipientUserId,
+      type: 'GROUP_MEMBER_ADDED',
+      title: 'Aggiunto al gruppo',
+      message: `Sei stato aggiunto al gruppo "${params.groupName}"`,
+      linkUrl: '/gruppo',
+      linkType: 'group',
+      linkEntityId: params.groupId,
+      channel: 'IN_APP',
+    });
+  },
+
+  /**
+   * Notifica quando un utente viene assegnato come referente di un gruppo
+   */
+  async groupReferentAssigned(
+    prisma: PrismaClient,
+    params: {
+      recipientUserId: string;
+      groupId: string;
+      groupName: string;
+    }
+  ) {
+    return createNotification(prisma, {
+      userId: params.recipientUserId,
+      type: 'GROUP_REFERENT_ASSIGNED',
+      title: 'Assegnato come referente',
+      message: `Sei stato assegnato come referente del gruppo "${params.groupName}"`,
+      linkUrl: '/gruppi',
+      linkType: 'group',
+      linkEntityId: params.groupId,
+      channel: 'IN_APP',
     });
   },
 };

@@ -3,6 +3,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
@@ -41,7 +42,6 @@ import {
   MessageSquare,
   FolderOpen,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 
@@ -409,7 +409,7 @@ function AssignContractModal({
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredTemplates.map((template) => (
                   <button
                     key={template.id}
@@ -417,7 +417,7 @@ function AssignContractModal({
                     className={`p-5 rounded-xl border-2 text-left transition-all hover:scale-[1.02] ${colors.border.primary} hover:border-red-400`}
                   >
                     <div className="flex items-center justify-between">
-                      <p className="font-semibold text-lg">{template.name}</p>
+                      <p className={`font-semibold text-lg ${colors.text.primary}`}>{template.name}</p>
                       <span className={`text-xs px-2 py-0.5 rounded-full ${
                         template.targetRole === 'STUDENT' 
                           ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
@@ -442,9 +442,7 @@ function AssignContractModal({
                       )}
                     </div>
                   </button>
-                ))}
-
-                {!filteredTemplates.length && (
+                ))}                {!filteredTemplates.length && (
                   <div className="col-span-2 text-center py-12">
                     <FileText className={`w-12 h-12 mx-auto ${colors.text.muted} mb-4`} />
                     <p className={colors.text.muted}>
@@ -464,26 +462,26 @@ function AssignContractModal({
                 <>
                   {/* User Info Summary */}
                   <div className={`p-4 rounded-xl ${colors.background.secondary}`}>
-                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                    <h4 className={`font-semibold mb-3 flex items-center gap-2 ${colors.text.primary}`}>
                       <User className="w-4 h-4" />
                       Dati Utente
                     </h4>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                       <div>
                         <span className={colors.text.muted}>Nome:</span>
-                        <p className="font-medium">{preview.user.name}</p>
+                        <p className={`font-medium ${colors.text.primary}`}>{preview.user.name}</p>
                       </div>
                       <div>
                         <span className={colors.text.muted}>Email:</span>
-                        <p className="font-medium truncate">{preview.user.email}</p>
+                        <p className={`font-medium truncate ${colors.text.primary}`}>{preview.user.email}</p>
                       </div>
                       <div>
                         <span className={colors.text.muted}>Cod. Fiscale:</span>
-                        <p className="font-medium">{preview.user.fiscalCode || '-'}</p>
+                        <p className={`font-medium ${colors.text.primary}`}>{preview.user.fiscalCode || '-'}</p>
                       </div>
                       <div>
                         <span className={colors.text.muted}>Telefono:</span>
-                        <p className="font-medium">{preview.user.phone || '-'}</p>
+                        <p className={`font-medium ${colors.text.primary}`}>{preview.user.phone || '-'}</p>
                       </div>
                     </div>
                   </div>
@@ -491,13 +489,13 @@ function AssignContractModal({
                   {/* Contract Content Editor */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <label className="font-semibold flex items-center gap-2">
+                      <label className={`font-semibold flex items-center gap-2 ${colors.text.primary}`}>
                         <FileEdit className="w-4 h-4" />
                         Contenuto Contratto
                       </label>
                       <button
                         onClick={() => setShowPreview(!showPreview)}
-                        className={`text-sm px-3 py-1 rounded-lg ${colors.background.secondary}`}
+                        className={`text-sm px-3 py-1 rounded-lg ${colors.background.secondary} ${colors.text.primary}`}
                       >
                         {showPreview ? 'Modifica' : 'Anteprima'}
                       </button>
@@ -512,7 +510,7 @@ function AssignContractModal({
                         value={customContent}
                         onChange={(e) => setCustomContent(e.target.value)}
                         rows={10}
-                        className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.border.primary} border focus:ring-2 focus:ring-red-500 focus:border-transparent font-mono text-sm`}
+                        className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.text.primary} ${colors.border.primary} border focus:ring-2 focus:ring-red-500 focus:border-transparent font-mono text-sm`}
                         placeholder="Contenuto del contratto..."
                       />
                     )}
@@ -533,7 +531,7 @@ function AssignContractModal({
                         min="0"
                         value={customPrice}
                         onChange={(e) => setCustomPrice(e.target.value)}
-                        className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.border.primary} border focus:ring-2 focus:ring-red-500`}
+                        className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.text.primary} ${colors.border.primary} border focus:ring-2 focus:ring-red-500`}
                         placeholder="Es: 1500.00"
                       />
                     </div>
@@ -544,7 +542,7 @@ function AssignContractModal({
                       <select
                         value={expiresInDays}
                         onChange={(e) => setExpiresInDays(Number(e.target.value))}
-                        className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.border.primary} border focus:ring-2 focus:ring-red-500`}
+                        className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.text.primary} ${colors.border.primary} border focus:ring-2 focus:ring-red-500`}
                       >
                         <option value={3}>3 giorni</option>
                         <option value={7}>7 giorni</option>
@@ -560,7 +558,7 @@ function AssignContractModal({
                         type="text"
                         value={preview.template.duration || ''}
                         disabled
-                        className={`w-full px-4 py-3 rounded-xl ${colors.background.secondary} ${colors.border.primary} border cursor-not-allowed`}
+                        className={`w-full px-4 py-3 rounded-xl ${colors.background.secondary} ${colors.text.primary} ${colors.border.primary} border cursor-not-allowed`}
                         placeholder="Es: 12 mesi"
                       />
                     </div>
@@ -575,7 +573,7 @@ function AssignContractModal({
                       value={adminNotes}
                       onChange={(e) => setAdminNotes(e.target.value)}
                       rows={2}
-                      className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.border.primary} border focus:ring-2 focus:ring-red-500`}
+                      className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.text.primary} ${colors.border.primary} border focus:ring-2 focus:ring-red-500`}
                       placeholder="Note interne..."
                     />
                   </div>
@@ -590,14 +588,14 @@ function AssignContractModal({
           {step === 'customize' && (
             <button
               onClick={handleBack}
-              className={`px-6 py-3 rounded-xl ${colors.background.secondary} font-medium`}
+              className={`px-6 py-3 rounded-xl ${colors.background.secondary} ${colors.text.primary} font-medium`}
             >
               ← Indietro
             </button>
           )}
           <button
             onClick={handleClose}
-            className={`flex-1 px-4 py-3 rounded-xl ${colors.background.secondary} font-medium`}
+            className={`flex-1 px-4 py-3 rounded-xl ${colors.background.secondary} ${colors.text.primary} font-medium`}
           >
             Annulla
           </button>
@@ -861,7 +859,7 @@ function ManageSubjectsModal({
           <div className={`p-6 border-t ${colors.border.primary} flex gap-3`}>
             <button
               onClick={onClose}
-              className={`flex-1 px-4 py-3 rounded-xl ${colors.background.secondary} font-medium`}
+              className={`flex-1 px-4 py-3 rounded-xl ${colors.background.secondary} ${colors.text.primary} font-medium`}
             >
               Annulla
             </button>
@@ -888,10 +886,19 @@ function ManageSubjectsModal({
 
 export default function AdminUtentiContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<RoleFilter>('ALL');
   const [status, setStatus] = useState<StatusFilter>('all');
   const [page, setPage] = useState(1);
+
+  // Initialize search from URL params on mount
+  useEffect(() => {
+    const searchParam = searchParams.get('search');
+    if (searchParam) {
+      setSearch(decodeURIComponent(searchParam));
+    }
+  }, [searchParams]);
 
   // Modal states
   const [confirmModal, setConfirmModal] = useState<{
@@ -1574,7 +1581,7 @@ export default function AdminUtentiContent() {
                 <thead className={`${colors.background.secondary} border-b ${colors.border.primary}`}>
                   <tr>
                     <th className={`text-left px-4 py-4 font-semibold text-sm ${colors.text.primary}`}>Utente</th>
-                    <th className={`text-left px-4 py-4 font-semibold text-sm ${colors.text.primary}`}>Email</th>
+                    <th className={`text-left px-4 py-4 font-semibold text-sm ${colors.text.primary}`}>Gruppi</th>
                     <th className={`text-left px-4 py-4 font-semibold text-sm ${colors.text.primary}`} style={{ overflow: 'visible' }}>Ruolo</th>
                     <th className={`text-left px-4 py-4 font-semibold text-sm whitespace-nowrap ${colors.text.primary}`}>Registrazione</th>
                     <th className={`text-left px-4 py-4 font-semibold text-sm ${colors.text.primary}`}>Stato</th>
@@ -1612,9 +1619,15 @@ export default function AdminUtentiContent() {
                             </div>
                             <div className="min-w-0">
                               <p className={`font-medium ${colors.text.primary} truncate max-w-[140px]`}>{user.name}</p>
-                              {(user.student?.fiscalCode || user.collaborator?.fiscalCode) && (
+                              {/* Show matricola for students, fiscal code for collaborators */}
+                              {user.role === 'STUDENT' && user.student?.matricola && (
                                 <p className={`text-xs ${colors.text.muted} truncate max-w-[140px]`}>
-                                  {user.student?.fiscalCode || user.collaborator?.fiscalCode}
+                                  {user.student.matricola}
+                                </p>
+                              )}
+                              {user.role === 'COLLABORATOR' && user.collaborator?.fiscalCode && (
+                                <p className={`text-xs ${colors.text.muted} truncate max-w-[140px]`}>
+                                  {user.collaborator.fiscalCode}
                                 </p>
                               )}
                               {/* Show collaborator subjects */}
@@ -1645,10 +1658,59 @@ export default function AdminUtentiContent() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <div className={`flex items-center gap-2 text-sm ${colors.text.secondary}`}>
-                            <Mail className="w-4 h-4 flex-shrink-0" />
-                            <span className="truncate max-w-[160px]">{user.email}</span>
-                          </div>
+                          {/* For students/collaborators: show groups; for admins: show email */}
+                          {user.role === 'ADMIN' ? (
+                            <div className={`flex items-center gap-2 text-sm ${colors.text.secondary}`}>
+                              <Mail className="w-4 h-4 flex-shrink-0" />
+                              <span className="truncate max-w-[160px]">{user.email}</span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-1 max-w-[180px]">
+                              {(() => {
+                                const groups = user.role === 'STUDENT' 
+                                  ? user.student?.groupMemberships?.map((g: any) => g.group) || []
+                                  : user.collaborator?.groupMemberships?.map((g: any) => g.group) || [];
+                                
+                                if (groups.length === 0) {
+                                  return (
+                                    <span className={`text-xs ${colors.text.muted} italic`}>
+                                      Nessun gruppo
+                                    </span>
+                                  );
+                                }
+                                
+                                const sortedGroups = [...groups].sort((a: any, b: any) => a.name.localeCompare(b.name));
+                                const displayGroups = sortedGroups.slice(0, 3);
+                                const remaining = sortedGroups.length - 3;
+                                
+                                return (
+                                  <>
+                                    {displayGroups.map((group: any) => (
+                                      <span
+                                        key={group.id}
+                                        className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                                        style={{
+                                          backgroundColor: (group.color || '#6b7280') + '20',
+                                          color: group.color || '#6b7280',
+                                        }}
+                                        title={group.name}
+                                      >
+                                        {group.name.length > 12 ? group.name.substring(0, 10) + '...' : group.name}
+                                      </span>
+                                    ))}
+                                    {remaining > 0 && (
+                                      <span 
+                                        className={`text-[10px] px-1.5 py-0.5 rounded-full ${colors.background.secondary} ${colors.text.muted}`}
+                                        title={sortedGroups.slice(3).map((g: any) => g.name).join(', ')}
+                                      >
+                                        +{remaining}
+                                      </span>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 overflow-visible">
                           {/* Role dropdown - disabled for self */}
@@ -1891,6 +1953,7 @@ export default function AdminUtentiContent() {
               {/* Profile Data */}
               {(() => {
                 const profile = viewUserModal.user.student || viewUserModal.user.collaborator;
+                const isStudent = viewUserModal.user.role === 'STUDENT';
                 if (!profile) {
                   return (
                     <div className={`p-4 rounded-xl ${colors.background.secondary}`}>
@@ -1900,6 +1963,8 @@ export default function AdminUtentiContent() {
                 }
 
                 const fields = [
+                  // Show matricola for students as first field
+                  ...(isStudent ? [{ label: 'Matricola', value: (profile as any).matricola }] : []),
                   { label: 'Codice Fiscale', value: profile.fiscalCode },
                   { label: 'Data di Nascita', value: profile.dateOfBirth ? new Date(profile.dateOfBirth).toLocaleDateString('it-IT') : null },
                   { label: 'Telefono', value: profile.phone },

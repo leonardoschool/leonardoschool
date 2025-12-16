@@ -6,6 +6,7 @@ import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import Preloader from '@/components/ui/Preloader';
 import { ButtonLoader } from '@/components/ui/loaders';
+import Checkbox from '@/components/ui/Checkbox';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import { useToast } from '@/components/ui/Toast';
 import { parseError } from '@/lib/utils/errorHandler';
@@ -312,7 +313,7 @@ export default function ContractSignPage() {
           <div className={`w-16 h-16 rounded-full ${colors.status.error.softBg} flex items-center justify-center mx-auto mb-4`}>
             <AlertCircle className={`w-8 h-8 ${colors.status.error.text}`} />
           </div>
-          <h1 className="text-2xl font-bold mb-2">Contratto non trovato</h1>
+          <h1 className={`text-2xl font-bold mb-2 ${colors.text.primary}`}>Contratto non trovato</h1>
           <p className={`${colors.text.secondary} mb-6`}>
             {fetchError?.message || 'Il link non è valido o è scaduto. Contatta l\'amministrazione per assistenza.'}
           </p>
@@ -335,7 +336,7 @@ export default function ContractSignPage() {
           <div className={`w-16 h-16 rounded-full ${colors.status.success.softBg} flex items-center justify-center mx-auto mb-4`}>
             <CheckCircle className={`w-8 h-8 ${colors.status.success.text}`} />
           </div>
-          <h1 className="text-2xl font-bold mb-2">Contratto firmato!</h1>
+          <h1 className={`text-2xl font-bold mb-2 ${colors.text.primary}`}>Contratto firmato!</h1>
           <p className={`${colors.text.secondary} mb-6`}>
             Grazie per aver firmato il contratto. Riceverai una email di conferma.
             Il tuo account sarà attivato a breve dall&apos;amministrazione.
@@ -400,7 +401,7 @@ export default function ContractSignPage() {
                 <FileText className={`w-6 h-6 ${colors.primary.text}`} />
               </div>
               <div>
-                <h2 className="text-xl font-semibold">{contract.template?.name}</h2>
+                <h2 className={`text-xl font-semibold ${colors.text.primary}`}>{contract.template?.name}</h2>
                 <p className={`text-sm ${colors.text.secondary}`}>
                   {contract.template?.description || 'Contratto di iscrizione'}
                 </p>
@@ -408,7 +409,7 @@ export default function ContractSignPage() {
             </div>
             <button
               onClick={handleDownloadPDF}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${colors.background.secondary} hover:${colors.background.tertiary} border ${colors.border.primary} transition-colors`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${colors.background.secondary} ${colors.text.primary} hover:${colors.background.tertiary} border ${colors.border.primary} transition-colors`}
               title="Scarica contratto in PDF"
             >
               <Download className="w-4 h-4" />
@@ -422,21 +423,21 @@ export default function ContractSignPage() {
                 <Euro className={`w-4 h-4 ${colors.text.secondary}`} />
                 <span className={`text-sm ${colors.text.secondary}`}>Importo</span>
               </div>
-              <p className="font-semibold text-lg">{formatPrice(contract.template?.price ?? null)}</p>
+              <p className={`font-semibold text-lg ${colors.text.primary}`}>{formatPrice(contract.template?.price ?? null)}</p>
             </div>
             <div className={`p-4 rounded-xl ${colors.background.secondary}`}>
               <div className="flex items-center gap-2 mb-1">
                 <Calendar className={`w-4 h-4 ${colors.text.secondary}`} />
                 <span className={`text-sm ${colors.text.secondary}`}>Durata</span>
               </div>
-              <p className="font-semibold text-lg">{contract.template?.duration || '-'}</p>
+              <p className={`font-semibold text-lg ${colors.text.primary}`}>{contract.template?.duration || '-'}</p>
             </div>
             <div className={`p-4 rounded-xl ${daysRemaining && daysRemaining <= 3 ? colors.status.warning.softBg : colors.background.secondary}`}>
               <div className="flex items-center gap-2 mb-1">
                 <Clock className={`w-4 h-4 ${colors.text.secondary}`} />
                 <span className={`text-sm ${colors.text.secondary}`}>Scadenza firma</span>
               </div>
-              <p className={`font-semibold text-lg ${daysRemaining && daysRemaining <= 3 ? colors.status.warning.text : ''}`}>
+              <p className={`font-semibold text-lg ${daysRemaining && daysRemaining <= 3 ? colors.status.warning.text : colors.text.primary}`}>
                 {daysRemaining ? `${daysRemaining} giorni` : '-'}
               </p>
             </div>
@@ -447,7 +448,7 @@ export default function ContractSignPage() {
         <div className={`${colors.background.card} rounded-2xl shadow-lg p-6 mb-6`}>
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="w-full flex items-center justify-between text-left"
+            className={`w-full flex items-center justify-between text-left ${colors.text.primary}`}
           >
             <h3 className="text-lg font-semibold">Testo del Contratto</h3>
             {isExpanded ? (
@@ -482,7 +483,7 @@ export default function ContractSignPage() {
 
         {/* Signature Section */}
         <div className={`${colors.background.card} rounded-2xl shadow-lg p-6 mb-6`}>
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${colors.text.primary}`}>
             <Pen className="w-5 h-5" />
             Firma
           </h3>
@@ -514,7 +515,7 @@ export default function ContractSignPage() {
           <div className="flex justify-end mt-3">
             <button
               onClick={clearSignature}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm ${colors.background.secondary} hover:${colors.background.tertiary} transition-colors`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm ${colors.background.secondary} ${colors.text.primary} hover:${colors.background.tertiary} transition-colors`}
             >
               <RotateCcw className="w-4 h-4" />
               Cancella firma
@@ -523,19 +524,20 @@ export default function ContractSignPage() {
 
           {/* Terms Checkbox */}
           <div className={`mt-6 p-4 rounded-xl ${colors.background.secondary}`}>
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
+            <div className="flex items-start gap-3">
+              <Checkbox
                 checked={acceptedTerms}
                 onChange={(e) => setAcceptedTerms(e.target.checked)}
-                className={`mt-1 w-5 h-5 rounded border-2 ${colors.border.primary} focus:ring-2 focus:ring-offset-2`}
               />
-              <span className={`text-sm ${colors.text.secondary}`}>
+              <label 
+                className={`text-sm ${colors.text.secondary} flex-1 cursor-pointer select-none`}
+                onClick={() => setAcceptedTerms(!acceptedTerms)}
+              >
                 Dichiaro di aver letto e compreso integralmente il contenuto del presente contratto 
                 e di accettare tutti i termini e le condizioni in esso contenuti. 
                 La firma digitale apposta ha valore legale ai sensi del D.Lgs. 82/2005.
-              </span>
-            </label>
+              </label>
+            </div>
           </div>
         </div>
 

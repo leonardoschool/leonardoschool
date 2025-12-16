@@ -186,6 +186,7 @@ export const usersRouter = router({
             student: {
               select: {
                 id: true,
+                matricola: true,
                 fiscalCode: true,
                 dateOfBirth: true,
                 phone: true,

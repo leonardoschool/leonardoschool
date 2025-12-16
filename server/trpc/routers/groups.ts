@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { adminProcedure, protectedProcedure, router, staffProcedure } from '../init';
+import { notifications } from '@/lib/notifications';
 
 // Group Types
 const GroupTypeEnum = z.enum(['STUDENTS', 'COLLABORATORS', 'MIXED']);
@@ -149,7 +150,9 @@ export const groupsRouter = router({
           members: {
             include: {
               student: {
-                include: {
+                select: {
+                  id: true,
+                  matricola: true,
                   user: { select: { id: true, name: true, email: true } },
                 },
               },
@@ -395,17 +398,79 @@ export const groupsRouter = router({
         },
         include: {
           referenceStudent: {
-            include: { user: { select: { name: true } } },
+            include: { user: { select: { id: true, name: true } } },
           },
           referenceCollaborator: {
-            include: { user: { select: { name: true } } },
+            include: { user: { select: { id: true, name: true } } },
           },
           referenceAdmin: {
-            include: { user: { select: { name: true } } },
+            include: { user: { select: { id: true, name: true } } },
           },
           _count: { select: { members: true } },
         },
       });
+
+      // Send notifications to newly assigned referents
+      // Only if the referent changed (compare with existing)
+      console.log('🔔 [REFERENT NOTIFICATION] Controllo cambiamenti referenti:', {
+        newCollaboratorId: referenceCollaboratorId,
+        oldCollaboratorId: existing.referenceCollaboratorId,
+        newAdminId: referenceAdminId,
+        oldAdminId: existing.referenceAdminId,
+        newStudentId: data.referenceStudentId,
+        oldStudentId: existing.referenceStudentId,
+      });
+      
+      if (referenceCollaboratorId && referenceCollaboratorId !== existing.referenceCollaboratorId) {
+        const collaboratorUserId = group.referenceCollaborator?.user.id;
+        console.log('🔔 [REFERENT NOTIFICATION] Invio notifica a collaboratore:', collaboratorUserId);
+        if (collaboratorUserId) {
+          try {
+            await notifications.groupReferentAssigned(ctx.prisma, {
+              recipientUserId: collaboratorUserId,
+              groupId: group.id,
+              groupName: group.name,
+            });
+            console.log('✅ [REFERENT NOTIFICATION] Notifica collaboratore inviata');
+          } catch (error) {
+            console.error('❌ [REFERENT NOTIFICATION] Errore notifica collaboratore:', error);
+          }
+        }
+      }
+
+      if (referenceAdminId && referenceAdminId !== existing.referenceAdminId) {
+        const adminUserId = group.referenceAdmin?.user.id;
+        console.log('🔔 [REFERENT NOTIFICATION] Invio notifica ad admin:', adminUserId);
+        if (adminUserId) {
+          try {
+            await notifications.groupReferentAssigned(ctx.prisma, {
+              recipientUserId: adminUserId,
+              groupId: group.id,
+              groupName: group.name,
+            });
+            console.log('✅ [REFERENT NOTIFICATION] Notifica admin inviata');
+          } catch (error) {
+            console.error('❌ [REFERENT NOTIFICATION] Errore notifica admin:', error);
+          }
+        }
+      }
+
+      if (data.referenceStudentId && data.referenceStudentId !== existing.referenceStudentId) {
+        const studentUserId = group.referenceStudent?.user.id;
+        console.log('🔔 [REFERENT NOTIFICATION] Invio notifica a studente referente:', studentUserId);
+        if (studentUserId) {
+          try {
+            await notifications.groupReferentAssigned(ctx.prisma, {
+              recipientUserId: studentUserId,
+              groupId: group.id,
+              groupName: group.name,
+            });
+            console.log('✅ [REFERENT NOTIFICATION] Notifica studente referente inviata');
+          } catch (error) {
+            console.error('❌ [REFERENT NOTIFICATION] Errore notifica studente referente:', error);
+          }
+        }
+      }
 
       return group;
     }),
@@ -534,10 +599,38 @@ export const groupsRouter = router({
           collaboratorId: input.collaboratorId,
         },
         include: {
-          student: { include: { user: { select: { name: true, email: true } } } },
-          collaborator: { include: { user: { select: { name: true, email: true } } } },
+          student: { include: { user: { select: { id: true, name: true, email: true } } } },
+          collaborator: { include: { user: { select: { id: true, name: true, email: true } } } },
         },
       });
+
+      // Send notification to the added member
+      const recipientUserId = member.student?.user.id || member.collaborator?.user.id;
+      console.log('🔔 [GROUP NOTIFICATION] Tentativo invio notifica:', {
+        recipientUserId,
+        groupId: group.id,
+        groupName: group.name,
+        hasMember: !!member,
+        hasStudent: !!member.student,
+        hasCollaborator: !!member.collaborator,
+        studentUserId: member.student?.user.id,
+        collaboratorUserId: member.collaborator?.user.id,
+      });
+      
+      if (recipientUserId) {
+        try {
+          await notifications.groupMemberAdded(ctx.prisma, {
+            recipientUserId,
+            groupId: group.id,
+            groupName: group.name,
+          });
+          console.log('✅ [GROUP NOTIFICATION] Notifica inviata con successo a user:', recipientUserId);
+        } catch (error) {
+          console.error('❌ [GROUP NOTIFICATION] Errore invio notifica:', error);
+        }
+      } else {
+        console.warn('⚠️ [GROUP NOTIFICATION] recipientUserId è undefined, notifica non inviata');
+      }
 
       return member;
     }),
@@ -805,11 +898,16 @@ export const groupsRouter = router({
                 ],
               }),
             },
+            ...(input.search && {
+              matricola: { contains: input.search, mode: 'insensitive' },
+            }),
           },
-          include: {
+          select: {
+            id: true,
+            matricola: true,
             user: { select: { id: true, name: true, email: true } },
             groupMemberships: {
-              include: {
+              select: {
                 group: { select: { id: true, name: true, color: true } },
               },
             },
@@ -822,6 +920,7 @@ export const groupsRouter = router({
           userId: s.user.id,
           name: s.user.name,
           email: s.user.email,
+          matricola: s.matricola,
           type: 'STUDENT' as const,
           groups: s.groupMemberships.map((gm) => ({
             id: gm.group.id,

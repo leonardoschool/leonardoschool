@@ -86,25 +86,26 @@ export async function notifyContractAssigned(
     recipientEmail: string;
     recipientType: 'STUDENT' | 'COLLABORATOR';
     recipientProfileId: string;
-    signLink: string;
+    signLink: string; // Relative link for in-app navigation
+    signLinkAbsolute: string; // Absolute link for emails
     price: number;
     expiresAt: Date;
   }
 ): Promise<void> {
-  // Create notifications
+  // Create notifications with relative link for in-app navigation
   await notifications.contractAssigned(prisma, {
     recipientUserId: params.recipientUserId,
     recipientName: params.recipientName,
     contractId: params.contractId,
     contractName: params.templateName,
-    signLink: params.signLink,
+    signLink: params.signLink, // Use relative link for notifications
   });
 
-  // Send email to recipient
+  // Send email to recipient with absolute link
   await emailService.sendContractAssignedEmail({
     studentName: params.recipientName,
     studentEmail: params.recipientEmail,
-    signLink: params.signLink,
+    signLink: params.signLinkAbsolute, // Use absolute link for emails
     contractName: params.templateName,
     price: params.price,
     expiresAt: params.expiresAt,
