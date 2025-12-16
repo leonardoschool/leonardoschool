@@ -166,6 +166,25 @@ export const materialsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { id, groupIds, studentIds, ...data } = input;
       
+      // Get old category state to compare for notifications
+      const oldCategory = await ctx.prisma.materialCategory.findUnique({
+        where: { id },
+        include: {
+          groupAccess: true,
+          studentAccess: true,
+          materials: {
+            include: {
+              material: {
+                select: { id: true, title: true }
+              }
+            }
+          }
+        },
+      });
+      const oldVisibility = oldCategory?.visibility;
+      const oldGroupIds = oldCategory?.groupAccess?.map(g => g.groupId) || [];
+      const oldStudentIds = oldCategory?.studentAccess?.map(s => s.studentId) || [];
+      
       const category = await ctx.prisma.materialCategory.update({
         where: { id },
         data,
@@ -198,6 +217,56 @@ export const materialsRouter = router({
               studentId,
             })),
           });
+        }
+      }
+
+      // Send notifications for category visibility changes
+      // Only notify if category has materials and visibility changed to include new students
+      const categoryMaterials = oldCategory?.materials || [];
+      if (categoryMaterials.length > 0) {
+        let targetUserIds: string[] = [];
+
+        if (input.visibility === 'ALL_STUDENTS' && oldVisibility !== 'ALL_STUDENTS') {
+          // Category is now visible to all students
+          const allStudents = await ctx.prisma.student.findMany({
+            where: { user: { isActive: true } },
+            select: { userId: true },
+          });
+          targetUserIds = allStudents.map(s => s.userId);
+        } else if (input.visibility === 'GROUP_BASED' && groupIds?.length) {
+          // Find newly added groups
+          const newGroupIds = groupIds.filter(g => !oldGroupIds.includes(g));
+          if (newGroupIds.length > 0) {
+            const groupMembers = await ctx.prisma.groupMember.findMany({
+              where: { groupId: { in: newGroupIds } },
+              select: { student: { select: { userId: true } } },
+            });
+            targetUserIds = groupMembers.map(m => m.student.userId);
+          }
+        } else if (input.visibility === 'SELECTED_STUDENTS' && studentIds?.length) {
+          // Find newly added students
+          const newStudentIds = studentIds.filter(s => !oldStudentIds.includes(s));
+          if (newStudentIds.length > 0) {
+            const students = await ctx.prisma.student.findMany({
+              where: { id: { in: newStudentIds } },
+              select: { userId: true },
+            });
+            targetUserIds = students.map(s => s.userId);
+          }
+        }
+
+        // Send notification for each material in the category
+        if (targetUserIds.length > 0) {
+          const uniqueUserIds = [...new Set(targetUserIds)];
+          for (const catMaterial of categoryMaterials) {
+            notificationService.notifyMaterialAvailable(ctx.prisma, {
+              materialId: catMaterial.material.id,
+              materialTitle: catMaterial.material.title,
+              targetUserIds: uniqueUserIds,
+            }).catch(err => {
+              console.error('[Materials] Failed to send category update notification:', err);
+            });
+          }
         }
       }
 
@@ -1278,7 +1347,25 @@ export const materialsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { id, groupIds, studentIds, subjectId, categoryIds, topicId, subTopicId, ...materialData } = input;
 
-      return ctx.prisma.$transaction(async (tx) => {
+      // Get the current material to compare visibility changes
+      const currentMaterial = await ctx.prisma.material.findUnique({
+        where: { id },
+        select: { 
+          title: true, 
+          visibility: true,
+          groupAccess: { select: { groupId: true } },
+          studentAccess: { select: { studentId: true } },
+        },
+      });
+
+      if (!currentMaterial) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Materiale non trovato',
+        });
+      }
+
+      const result = await ctx.prisma.$transaction(async (tx) => {
         // Update material
         const material = await tx.material.update({
           where: { id },
@@ -1354,8 +1441,67 @@ export const materialsRouter = router({
           }
         }
 
-        return material;
+        return { material, groupIds, studentIds };
       });
+
+      // Send notifications for visibility changes (background, outside transaction)
+      const newVisibility = input.visibility || currentMaterial.visibility;
+      const oldVisibility = currentMaterial.visibility;
+      const materialTitle = currentMaterial.title;
+      
+      // Determine which students should be notified (new recipients only)
+      let targetUserIds: string[] = [];
+
+      // Case 1: Visibility changed to ALL_STUDENTS
+      if (newVisibility === 'ALL_STUDENTS' && oldVisibility !== 'ALL_STUDENTS') {
+        const allStudents = await ctx.prisma.student.findMany({
+          where: { user: { isActive: true } },
+          select: { userId: true },
+        });
+        targetUserIds = allStudents.map(s => s.userId);
+      }
+      
+      // Case 2: Visibility is GROUP_BASED and new groups were added
+      if (newVisibility === 'GROUP_BASED' && groupIds !== undefined && groupIds.length > 0) {
+        const oldGroupIds = currentMaterial.groupAccess.map(g => g.groupId);
+        const newGroupIds = groupIds.filter(gid => !oldGroupIds.includes(gid));
+        
+        if (newGroupIds.length > 0) {
+          const groupMembers = await ctx.prisma.groupMember.findMany({
+            where: { groupId: { in: newGroupIds } },
+            select: { student: { select: { userId: true } } },
+          });
+          targetUserIds = groupMembers.map(m => m.student.userId);
+        }
+      }
+      
+      // Case 3: Visibility is SELECTED_STUDENTS and new students were added
+      if (newVisibility === 'SELECTED_STUDENTS' && studentIds !== undefined && studentIds.length > 0) {
+        const oldStudentIds = currentMaterial.studentAccess.map(s => s.studentId);
+        const newStudentIds = studentIds.filter(sid => !oldStudentIds.includes(sid));
+        
+        if (newStudentIds.length > 0) {
+          const students = await ctx.prisma.student.findMany({
+            where: { id: { in: newStudentIds } },
+            select: { userId: true },
+          });
+          targetUserIds = students.map(s => s.userId);
+        }
+      }
+
+      // Send notifications to new recipients
+      if (targetUserIds.length > 0) {
+        const uniqueUserIds = [...new Set(targetUserIds)];
+        notificationService.notifyMaterialAvailable(ctx.prisma, {
+          materialId: id,
+          materialTitle: materialTitle,
+          targetUserIds: uniqueUserIds,
+        }).catch(err => {
+          console.error('[Materials] Failed to send material update notification:', err);
+        });
+      }
+
+      return result.material;
     }),
 
   // Delete material (staff: admin + collaborator)

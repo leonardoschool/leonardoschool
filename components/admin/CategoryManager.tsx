@@ -43,11 +43,25 @@ interface CategoryData {
   studentAccess?: Array<{ student: { user: { id: string; name: string } } }>;
 }
 
-interface _MaterialData {
-  id: string;
-  title: string;
-  type: string;
-  categoryId?: string | null;
+interface MaterialData {
+  id?: string;
+  title?: string;
+  type?: string;
+  subjectId?: string | null;
+  categories?: Array<{
+    id?: string;
+    categoryId?: string;
+    materialId?: string;
+    createdAt?: string;
+    category?: {
+      id?: string;
+      name?: string;
+      description?: string;
+      visibility?: MaterialVisibility;
+      order?: number;
+      icon?: string;
+    };
+  }>;
 }
 
 interface CategoryManagerProps {
@@ -155,19 +169,19 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
   const categories = (categoriesRaw || []) as CategoryData[];
 
   // Get materials for the selected category
-  const categoryMaterials = (allMaterials || []).filter((m: any) => {
+  const categoryMaterials = (allMaterials || []).filter((m: MaterialData) => {
     if (!m.id) return false;
     // Check if material has this category in its categories array
-    const hasCategory = m.categories?.some((c: any) => c.categoryId === managingCategoryId);
+    const hasCategory = m.categories?.some((c) => c.categoryId === managingCategoryId);
     if (!hasCategory) return false;
     if (filterSubjectId && m.subjectId !== filterSubjectId) return false;
     return true;
   });
   // Get materials NOT in this specific category (but can be in other categories)
-  const unassignedMaterials = (allMaterials || []).filter((m: any) => {
+  const unassignedMaterials = (allMaterials || []).filter((m: MaterialData) => {
     if (!m.id) return false;
     // Material is available if it's NOT already in THIS category
-    const hasThisCategory = m.categories?.some((c: any) => c.categoryId === managingCategoryId);
+    const hasThisCategory = m.categories?.some((c) => c.categoryId === managingCategoryId);
     if (hasThisCategory) return false;
     if (filterSubjectId && m.subjectId !== filterSubjectId) return false;
     return true;
@@ -302,8 +316,8 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
     if (!managingCategoryId) return;
     
     // Get current material to preserve existing categories
-    const material = allMaterials?.find((m: any) => m.id === materialId);
-    const currentCategoryIds = material?.categories?.map((c: any) => c.categoryId) || [];
+    const material = allMaterials?.find((m: MaterialData) => m.id === materialId);
+    const currentCategoryIds = material?.categories?.map((c) => c.categoryId) || [];
     
     // Add the new category if not already present
     if (!currentCategoryIds.includes(managingCategoryId)) {
@@ -318,8 +332,8 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
     if (!managingCategoryId) return;
     
     // Get current material categories
-    const material = allMaterials?.find((m: any) => m.id === materialId);
-    const currentCategoryIds = material?.categories?.map((c: any) => c.categoryId) || [];
+    const material = allMaterials?.find((m: MaterialData) => m.id === materialId);
+    const currentCategoryIds = material?.categories?.map((c) => c.categoryId) || [];
     
     // Remove the current category
     const newCategoryIds = currentCategoryIds.filter((id: string) => id !== managingCategoryId);
