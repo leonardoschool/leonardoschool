@@ -298,6 +298,7 @@ model User {
 model Student {
   id          String    @id @default(cuid())
   userId      String    @unique
+  matricola   String?   @unique // Matricola studente (es: LS2025001) - nullable per migrazione, poi rendere required
   fiscalCode  String?   @unique
   dateOfBirth DateTime?
   phone       String?

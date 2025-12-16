@@ -96,7 +96,7 @@ export function ConfirmModal({
           <button
             onClick={handleClose}
             disabled={isLoading}
-            className="flex-1 px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+            className="flex-1 px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-500 text-gray-700 dark:text-white font-medium bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
           >
             {cancelButtonText}
           </button>

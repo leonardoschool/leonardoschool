@@ -261,6 +261,7 @@ export const studentsRouter = router({
           isActive: true,
           student: {
             select: {
+              matricola: true,
               phone: true,
               enrollmentDate: true,
               class: {
@@ -325,6 +326,7 @@ export const studentsRouter = router({
         student: {
           select: {
             id: true,
+            matricola: true,
             enrollmentDate: true,
             class: {
               select: {
@@ -362,6 +364,7 @@ export const studentsRouter = router({
       email: s.email,
       isActive: s.isActive,
       studentId: s.student?.id,
+      matricola: s.student?.matricola,
       enrollmentDate: s.student?.enrollmentDate,
       className: s.student?.class?.name,
       stats: s.student?.stats,
@@ -465,6 +468,7 @@ export const studentsRouter = router({
           student: {
             select: {
               id: true,
+              matricola: true,
               class: {
                 select: {
                   id: true,
@@ -484,6 +488,7 @@ export const studentsRouter = router({
           email: s.email,
           isActive: s.isActive,
           studentId: s.student?.id,
+          matricola: s.student?.matricola,
           classId: s.student?.class?.id,
           className: s.student?.class?.name,
         })),
@@ -783,6 +788,7 @@ export const studentsRouter = router({
         isActive: user.isActive,
         createdAt: user.createdAt,
         studentId: user.student.id,
+        matricola: user.student.matricola,
         enrollmentDate: user.student.enrollmentDate,
         graduationYear: user.student.graduationYear,
         className: user.student.class?.name ?? null,

@@ -215,6 +215,9 @@ export default function AppHeader() {
     ? user?.isActive && (hasSignedContract || (hasNoContract && !hasPendingContract))
     : true;
 
+  // Student can navigate only if account is active
+  const studentCanNavigate = isStudent ? user?.isActive : true;
+
   // Theme application function (defined before useEffect to avoid hoisting issues)
   const applyTheme = (theme: Theme) => {
     const root = document.documentElement;
@@ -648,8 +651,8 @@ export default function AppHeader() {
             </nav>
           )}
 
-          {/* Student Navigation (desktop) */}
-          {isStudent && (
+          {/* Student Navigation (desktop) - only visible when account is active */}
+          {isStudent && studentCanNavigate && (
             <nav className="hidden lg:flex items-center gap-1">
               {studentNavItems.map((item) => {
                 const isActive = pathname === item.href || 
@@ -844,6 +847,12 @@ export default function AppHeader() {
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-white truncate">{user?.name}</p>
                         <p className="text-sm text-white/80 truncate">{user?.email}</p>
+                        {/* Show matricola for students */}
+                        {isStudent && user?.student?.matricola && (
+                          <p className="text-xs text-white/70 mt-0.5 font-mono">
+                            Matricola: {user.student.matricola}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="mt-3">
@@ -1013,8 +1022,8 @@ export default function AppHeader() {
         </div>
       )}
 
-      {/* Mobile Navigation (Student) */}
-      {isStudent && (
+      {/* Mobile Navigation (Student) - only visible when account is active */}
+      {isStudent && studentCanNavigate && (
         <div className={`lg:hidden border-t ${colors.border.primary} overflow-x-auto`}>
           <nav className="flex items-center gap-1 px-4 py-2">
             {studentNavItems.map((item) => {

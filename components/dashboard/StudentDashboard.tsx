@@ -279,7 +279,7 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
         </div>
       )}
 
-      {/* Contract Section */}
+      {/* Contract Section - visible only if has contract */}
       {contract && (
         <div className={`${colors.background.card} rounded-2xl ${colors.effects.shadow.xl} overflow-hidden`}>
           <div className={`px-6 py-4 border-b ${colors.border.primary} flex items-center justify-between`}>

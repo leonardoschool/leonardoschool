@@ -19,6 +19,7 @@ import {
   Target,
   Award,
   X,
+  Hash,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -101,6 +102,17 @@ function StudentDetailModal({
                     Informazioni Studente
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Matricola */}
+                    {student.matricola && (
+                      <div className={`p-4 rounded-lg ${colors.background.secondary}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Hash className={`w-4 h-4 ${colors.text.muted}`} />
+                          <span className={`text-sm ${colors.text.muted}`}>Matricola</span>
+                        </div>
+                        <p className={`font-medium font-mono ${colors.text.primary}`}>{student.matricola}</p>
+                      </div>
+                    )}
+                    
                     <div className={`p-4 rounded-lg ${colors.background.secondary}`}>
                       <div className="flex items-center gap-2 mb-1">
                         <Mail className={`w-4 h-4 ${colors.text.muted}`} />

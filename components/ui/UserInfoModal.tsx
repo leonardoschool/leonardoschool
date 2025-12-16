@@ -16,6 +16,7 @@ import {
   Users,
   BookOpen,
   Crown,
+  Hash,
 } from 'lucide-react';
 
 export interface UserInfoModalProps {
@@ -34,6 +35,7 @@ interface SubjectData {
 }
 
 interface UserProfile {
+  matricola?: string | null; // Matricola studente
   fiscalCode?: string | null;
   phone?: string | null;
   dateOfBirth?: Date | string | null;
@@ -272,12 +274,19 @@ export function UserInfoModal({ userId, userType, isOpen, onClose }: UserInfoMod
               </section>
 
               {/* Info specifiche per tipo */}
-              {userType === 'STUDENT' && (profile?.enrollmentDate || profile?.class) && (
+              {userType === 'STUDENT' && (profile?.matricola || profile?.enrollmentDate || profile?.class) && (
                 <section>
                   <h3 className={`text-sm font-semibold ${colors.text.secondary} uppercase tracking-wide mb-3`}>
                     Informazioni Scolastiche
                   </h3>
                   <div className="space-y-3">
+                    {profile?.matricola && (
+                      <InfoRow 
+                        icon={<Hash className="w-4 h-4" />}
+                        label="Matricola"
+                        value={profile.matricola}
+                      />
+                    )}
                     {profile?.class && (
                       <InfoRow 
                         icon={<GraduationCap className="w-4 h-4" />}

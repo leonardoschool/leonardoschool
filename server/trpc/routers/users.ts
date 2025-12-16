@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { adminAuth } from '@/lib/firebase/admin';
 import { Prisma } from '@prisma/client';
+import { generateMatricola } from '@/lib/utils/matricolaUtils';
 
 export const usersRouter = router({
   /**
@@ -17,7 +18,7 @@ export const usersRouter = router({
       z.object({
         search: z.string().optional(),
         role: z.enum(['ALL', 'ADMIN', 'COLLABORATOR', 'STUDENT']).default('ALL'),
-        status: z.enum(['ALL', 'ACTIVE', 'INACTIVE', 'PENDING_PROFILE', 'PENDING_CONTRACT', 'PENDING_SIGN', 'PENDING_ACTIVATION']).default('ALL'),
+        status: z.enum(['ALL', 'ACTIVE', 'INACTIVE', 'PENDING_PROFILE', 'PENDING_CONTRACT', 'PENDING_SIGN', 'PENDING_ACTIVATION', 'NO_SIGNED_CONTRACT']).default('ALL'),
         page: z.number().min(1).default(1),
         limit: z.number().min(1).max(100).default(20),
       }).optional()
@@ -157,6 +158,23 @@ export const usersRouter = router({
                 some: { signedAt: { not: null } }
               }
             }
+          }
+        ];
+      } else if (status === 'NO_SIGNED_CONTRACT') {
+        // All users (active or not) without a signed contract - excludes admins
+        where.role = { in: ['STUDENT', 'COLLABORATOR'] };
+        where.AND = [
+          {
+            OR: [
+              { student: null },
+              { student: { contracts: { none: { signedAt: { not: null } } } } }
+            ]
+          },
+          {
+            OR: [
+              { collaborator: null },
+              { collaborator: { contracts: { none: { signedAt: { not: null } } } } }
+            ]
           }
         ];
       }
@@ -365,6 +383,27 @@ export const usersRouter = router({
       });
     }
 
+    // Count users without any signed contract (regardless of active status)
+    const noSignedContractCount = roleFilter === 'ADMIN' ? 0 : await ctx.prisma.user.count({
+      where: {
+        role: roleFilter !== 'ALL' ? roleFilter : { in: ['STUDENT', 'COLLABORATOR'] },
+        AND: [
+          {
+            OR: [
+              { student: null },
+              { student: { contracts: { none: { signedAt: { not: null } } } } }
+            ]
+          },
+          {
+            OR: [
+              { collaborator: null },
+              { collaborator: { contracts: { none: { signedAt: { not: null } } } } }
+            ]
+          }
+        ]
+      } as any
+    });
+
     return {
       total,
       students,
@@ -377,6 +416,7 @@ export const usersRouter = router({
       pendingSign,
       pendingActivation,
       inactive: inactiveCount,
+      noSignedContract: noSignedContractCount,
     };
   }),
 
@@ -471,9 +511,12 @@ export const usersRouter = router({
 
         // 2. Create NEW profile record with common data
         if (newRole === 'STUDENT') {
+          // Generate new matricola for the student
+          const matricola = await generateMatricola(ctx.prisma);
           const newStudent = await tx.student.create({
             data: {
               userId,
+              matricola,
               fiscalCode: commonData.fiscalCode,
               dateOfBirth: commonData.dateOfBirth,
               phone: commonData.phone,

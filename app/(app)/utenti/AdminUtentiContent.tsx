@@ -46,7 +46,7 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 
 type RoleFilter = 'ALL' | 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
-type StatusFilter = 'all' | 'active' | 'inactive' | 'pending_profile' | 'pending_contract' | 'pending_sign' | 'pending_activation';
+type StatusFilter = 'all' | 'active' | 'inactive' | 'pending_profile' | 'pending_contract' | 'pending_sign' | 'pending_activation' | 'no_signed_contract';
 
 const statusOptions: { value: StatusFilter; label: string; shortLabel: string; icon: any; color: string; bg: string; activeColor: string }[] = [
   { value: 'all', label: 'Tutti', shortLabel: 'Tutti', icon: Users, color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-100 dark:bg-gray-800', activeColor: 'bg-gray-600' },
@@ -56,6 +56,7 @@ const statusOptions: { value: StatusFilter; label: string; shortLabel: string; i
   { value: 'pending_activation', label: 'Attesa attivazione', shortLabel: 'Attivaz.', icon: Hourglass, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-100 dark:bg-purple-900/30', activeColor: 'bg-purple-600' },
   { value: 'active', label: 'Attivi', shortLabel: 'Attivi', icon: CheckCircle, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-100 dark:bg-green-900/30', activeColor: 'bg-green-600' },
   { value: 'inactive', label: 'Disattivati', shortLabel: 'Disatt.', icon: Ban, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-100 dark:bg-red-900/30', activeColor: 'bg-red-600' },
+  { value: 'no_signed_contract', label: 'Senza contratto firmato', shortLabel: 'No Firma', icon: FileX, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-100 dark:bg-rose-900/30', activeColor: 'bg-rose-600' },
 ];
 
 // Role dropdown component
@@ -191,7 +192,7 @@ function ConfirmModal({
           <button
             onClick={onClose}
             disabled={isLoading}
-            className={`flex-1 px-4 py-3 rounded-xl ${colors.background.secondary} font-medium hover:opacity-80 transition-opacity disabled:opacity-50`}
+            className="flex-1 px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-500 text-gray-700 dark:text-white font-medium bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
           >
             Annulla
           </button>
@@ -1319,7 +1320,7 @@ export default function AdminUtentiContent() {
           </div>
 
           {/* Status Filter Row */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
             {statusOptions.map((option) => {
               const Icon = option.icon;
               const getCount = () => {
@@ -1331,6 +1332,7 @@ export default function AdminUtentiContent() {
                   case 'pending_activation': return stats?.pendingActivation || 0;
                   case 'active': return stats?.active || 0;
                   case 'inactive': return stats?.inactive || 0;
+                  case 'no_signed_contract': return stats?.noSignedContract || 0;
                   default: return 0;
                 }
               };
@@ -1792,14 +1794,14 @@ export default function AdminUtentiContent() {
                   <button
                     onClick={() => setPage(p => Math.max(1, p - 1))}
                     disabled={page === 1}
-                    className={`p-2 rounded-lg ${colors.background.secondary} disabled:opacity-50 disabled:cursor-not-allowed`}
+                    className={`p-2 rounded-lg border ${colors.border.primary} ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
                   >
                     <ChevronLeft className="w-5 h-5" />
                   </button>
                   <button
                     onClick={() => setPage(p => Math.min(usersData.pagination.totalPages, p + 1))}
                     disabled={page === usersData.pagination.totalPages}
-                    className={`p-2 rounded-lg ${colors.background.secondary} disabled:opacity-50 disabled:cursor-not-allowed`}
+                    className={`p-2 rounded-lg border ${colors.border.primary} ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
                   >
                     <ChevronRight className="w-5 h-5" />
                   </button>

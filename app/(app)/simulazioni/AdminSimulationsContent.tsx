@@ -446,14 +446,14 @@ export default function AdminSimulationsContent() {
                   <button
                     onClick={() => setPage(Math.max(1, page - 1))}
                     disabled={page === 1}
-                    className={`p-2 rounded-lg ${colors.background.hover} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+                    className={`p-2 rounded-lg border ${colors.border.primary} ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setPage(Math.min(pagination.totalPages, page + 1))}
                     disabled={page === pagination.totalPages}
-                    className={`p-2 rounded-lg ${colors.background.hover} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+                    className={`p-2 rounded-lg border ${colors.border.primary} ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
@@ -642,14 +642,14 @@ export default function AdminSimulationsContent() {
                     <button
                       onClick={() => setAssignmentPage(Math.max(1, assignmentPage - 1))}
                       disabled={assignmentPage === 1}
-                      className={`p-2 rounded-lg ${colors.background.hover} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+                      className={`p-2 rounded-lg border ${colors.border.primary} ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => setAssignmentPage(Math.min(assignmentsData.pagination.totalPages, assignmentPage + 1))}
                       disabled={assignmentPage === assignmentsData.pagination.totalPages}
-                      className={`p-2 rounded-lg ${colors.background.hover} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+                      className={`p-2 rounded-lg border ${colors.border.primary} ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
                     >
                       <ChevronRight className="w-4 h-4" />
                     </button>

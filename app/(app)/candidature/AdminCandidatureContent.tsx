@@ -299,14 +299,14 @@ export default function AdminCandidatureContent() {
                   <button
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
-                    className={`p-2 rounded-lg ${colors.background.secondary} disabled:opacity-50`}
+                    className={`p-2 rounded-lg border ${colors.border.primary} ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
                   >
                     <ChevronLeft className="w-5 h-5" />
                   </button>
                   <button
                     onClick={() => setCurrentPage((p) => Math.min(data.pagination.totalPages, p + 1))}
                     disabled={currentPage === data.pagination.totalPages}
-                    className={`p-2 rounded-lg ${colors.background.secondary} disabled:opacity-50`}
+                    className={`p-2 rounded-lg border ${colors.border.primary} ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
                   >
                     <ChevronRight className="w-5 h-5" />
                   </button>

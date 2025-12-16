@@ -3,6 +3,7 @@ import { router, publicProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { notifications } from '@/lib/notifications';
+import { generateMatricola } from '@/lib/utils/matricolaUtils';
 
 export const authRouter = router({
   /**
@@ -60,6 +61,9 @@ export const authRouter = router({
         });
       }
 
+      // Generate matricola for new student
+      const matricola = await generateMatricola(ctx.prisma);
+
       // Create new user with associated profile
       user = await ctx.prisma.user.create({
         data: {
@@ -68,7 +72,7 @@ export const authRouter = router({
           name,
           role: enforcedRole,
           ...(enforcedRole === 'STUDENT' && {
-            student: { create: {} },
+            student: { create: { matricola } },
           }),
         },
         include: {
