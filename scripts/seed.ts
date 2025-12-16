@@ -874,10 +874,18 @@ async function seedMaterials(
         description: matData.description,
         type: matData.type,
         externalUrl: matData.externalUrl,
-        subjectId: matData.subjectId,
-        topicId: matData.topicId,
-        subTopicId: matData.subTopicId,
-        categoryId: matData.categoryId,
+        subject: matData.subjectId ? { connect: { id: matData.subjectId } } : undefined,
+        topic: matData.topicId ? { connect: { id: matData.topicId } } : undefined,
+        subTopic: matData.subTopicId ? { connect: { id: matData.subTopicId } } : undefined,
+        categories: matData.categoryId
+          ? {
+              create: {
+                category: {
+                  connect: { id: matData.categoryId },
+                },
+              },
+            }
+          : undefined,
         visibility: 'ALL_STUDENTS',
         order: index,
         createdBy: creatorId,

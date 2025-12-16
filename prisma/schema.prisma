@@ -1607,7 +1607,7 @@ model MaterialCategory {
   updatedAt DateTime @updatedAt
   createdBy String? // userId who created it
 
-  materials     Material[]
+  materials     MaterialCategoryLink[]
   groupAccess   MaterialCategoryGroupAccess[]
   studentAccess MaterialCategoryStudentAccess[]
 
@@ -1645,6 +1645,22 @@ model MaterialCategoryStudentAccess {
   @@index([categoryId])
   @@index([studentId])
   @@map("material_category_student_access")
+}
+
+// Junction table for Material <-> Category many-to-many relationship
+model MaterialCategoryLink {
+  id         String @id @default(cuid())
+  materialId String
+  categoryId String
+  createdAt  DateTime @default(now())
+
+  material Material         @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  category MaterialCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([materialId, categoryId])
+  @@index([materialId])
+  @@index([categoryId])
+  @@map("material_category_links")
 }
 
 // Custom subjects managed by admin (for materials AND questions)
@@ -1745,9 +1761,6 @@ model Material {
   topicId    String?
   subTopicId String?
 
-  // Container category (for grouping materials)
-  categoryId String?
-
   // Metadata
   tags     String[]
   order    Int      @default(0)
@@ -1762,10 +1775,10 @@ model Material {
   createdBy String? // Admin userId
 
   // Relations
-  subject       CustomSubject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
-  topic         Topic?                  @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  subTopic      SubTopic?               @relation(fields: [subTopicId], references: [id], onDelete: SetNull)
-  category      MaterialCategory?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  subject       CustomSubject?            @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  topic         Topic?                    @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  subTopic      SubTopic?                 @relation(fields: [subTopicId], references: [id], onDelete: SetNull)
+  categories    MaterialCategoryLink[]
   groupAccess   MaterialGroupAccess[]
   studentAccess MaterialStudentAccess[]
 
@@ -1774,7 +1787,6 @@ model Material {
   @@index([subjectId])
   @@index([topicId])
   @@index([subTopicId])
-  @@index([categoryId])
   @@index([isActive])
   @@map("materials")
 }

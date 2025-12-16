@@ -12,6 +12,7 @@ import CustomSelect from '@/components/ui/CustomSelect';
 import TopicsManager from '@/components/admin/TopicsManager';
 import CategoryManager from '@/components/admin/CategoryManager';
 import { GroupInfoModal } from '@/components/ui/GroupInfoModal';
+import { EditMaterialModal } from '@/components/ui/EditMaterialModal';
 import { 
   Folder,
   FolderOpen, 
@@ -180,6 +181,10 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assigningMaterialId, setAssigningMaterialId] = useState<string | null>(null);
   
+  // Edit material modal
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingMaterial, setEditingMaterial] = useState<any>(null);
+  
   // Group info modal
   const [selectedGroupInfo, setSelectedGroupInfo] = useState<string | null>(null);
   
@@ -279,6 +284,12 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
     { enabled: !!multiUploadData.subjectId }
   );
 
+  // Topics for edit modal
+  const { data: editModalTopics } = trpc.materials.getTopics.useQuery(
+    { subjectId: editingMaterial?.subjectId || '' },
+    { enabled: !!editingMaterial?.subjectId }
+  );
+
   // Find selected topic to get its subtopics (for single form)
   const selectedTopic = formTopics?.find((t: { id: string }) => t.id === materialFormData.topicId) as {
     id: string;
@@ -288,6 +299,13 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
 
   // Find selected topic for multi-upload
   const multiSelectedTopic = multiFormTopics?.find((t: { id: string }) => t.id === multiUploadData.topicId) as {
+    id: string;
+    name: string;
+    subTopics?: Array<{ id: string; name: string; difficulty: string }>;
+  } | undefined;
+
+  // Find selected topic for edit modal
+  const editModalSelectedTopic = editModalTopics?.find((t: { id: string }) => t.id === editingMaterial?.topicId) as {
     id: string;
     name: string;
     subTopics?: Array<{ id: string; name: string; difficulty: string }>;
@@ -342,6 +360,16 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
     onError: handleMutationError,
   });
 
+  const updateMaterialFromModalMutation = trpc.materials.update.useMutation({
+    onSuccess: () => {
+      utils.materials.getAll.invalidate();
+      showSuccess('Materiale aggiornato', 'Le modifiche sono state salvate.');
+      setShowEditModal(false);
+      setEditingMaterial(null);
+    },
+    onError: handleMutationError,
+  });
+
   const deleteMaterialMutation = trpc.materials.delete.useMutation({
     onSuccess: () => {
       utils.materials.getAll.invalidate();
@@ -374,6 +402,10 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
 
   // ==================== MATERIAL HANDLERS ====================
 
+  const handleSaveMaterialFromModal = (data: any) => {
+    updateMaterialFromModalMutation.mutate(data);
+  };
+
   const resetMaterialForm = () => {
     setMaterialFormData({
       title: '',
@@ -394,24 +426,8 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
   };
 
   const handleEditMaterial = (material: any) => {
-    // Use multi-upload form for editing (same as creation)
-    setMultiUploadData({
-      subjectId: material.subjectId || '',
-      topicId: material.topicId || '',
-      subTopicId: material.subTopicId || '',
-      categoryId: material.categoryId || '',
-      type: material.type,
-    });
-    
-    // For LINK type, populate multiUploadLinks
-    if (material.type === 'LINK') {
-      setMultiUploadLinks([{ title: material.title, url: material.externalUrl || '' }]);
-    }
-    // For file types, we'll show the existing file info but won't pre-populate files
-    // User can keep existing or upload new
-    
-    setEditingMaterialId(material.id);
-    setShowMultiUpload(true);
+    setEditingMaterial(material);
+    setShowEditModal(true);
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1764,12 +1780,16 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                             </span>
                           )}
 
-                          {/* Category Badge */}
-                          {material.category && (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/30">
-                              <Folder className="w-3.5 h-3.5" />
-                              {material.category.name}
-                            </span>
+                          {/* Category Badges (Multiple) */}
+                          {material.categories && material.categories.length > 0 && (
+                            <>
+                              {material.categories.map((cat: any) => (
+                                <span key={cat.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/30">
+                                  <Folder className="w-3.5 h-3.5" />
+                                  {cat.category?.name || 'Categoria'}
+                                </span>
+                              ))}
+                            </>
                           )}
 
                           {/* Visibility Badge */}
@@ -2094,6 +2114,24 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
           groupId={selectedGroupInfo}
           isOpen={true}
           onClose={() => setSelectedGroupInfo(null)}
+        />
+      )}
+
+      {/* Edit Material Modal */}
+      {editingMaterial && (
+        <EditMaterialModal
+          isOpen={showEditModal}
+          onClose={() => {
+            setShowEditModal(false);
+            setEditingMaterial(null);
+          }}
+          material={editingMaterial}
+          subjects={subjects || []}
+          topics={editModalTopics || []}
+          selectedTopic={editModalSelectedTopic}
+          categories={_allCategories || []}
+          onSave={handleSaveMaterialFromModal}
+          isLoading={updateMaterialFromModalMutation.isPending}
         />
       )}
     </div>

@@ -155,14 +155,20 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
   const categories = (categoriesRaw || []) as CategoryData[];
 
   // Get materials for the selected category
-  const categoryMaterials = (allMaterials || []).filter((m) => {
-    if (!m.id || m.categoryId !== managingCategoryId) return false;
+  const categoryMaterials = (allMaterials || []).filter((m: any) => {
+    if (!m.id) return false;
+    // Check if material has this category in its categories array
+    const hasCategory = m.categories?.some((c: any) => c.categoryId === managingCategoryId);
+    if (!hasCategory) return false;
     if (filterSubjectId && m.subjectId !== filterSubjectId) return false;
     return true;
   });
-  // Get materials not in any category
-  const unassignedMaterials = (allMaterials || []).filter((m) => {
-    if (!m.id || m.categoryId) return false;
+  // Get materials NOT in this specific category (but can be in other categories)
+  const unassignedMaterials = (allMaterials || []).filter((m: any) => {
+    if (!m.id) return false;
+    // Material is available if it's NOT already in THIS category
+    const hasThisCategory = m.categories?.some((c: any) => c.categoryId === managingCategoryId);
+    if (hasThisCategory) return false;
     if (filterSubjectId && m.subjectId !== filterSubjectId) return false;
     return true;
   });
@@ -294,16 +300,33 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
 
   const handleAddMaterialToCategory = (materialId: string) => {
     if (!managingCategoryId) return;
-    updateMaterialMutation.mutate({
-      id: materialId,
-      categoryId: managingCategoryId,
-    });
+    
+    // Get current material to preserve existing categories
+    const material = allMaterials?.find((m: any) => m.id === materialId);
+    const currentCategoryIds = material?.categories?.map((c: any) => c.categoryId) || [];
+    
+    // Add the new category if not already present
+    if (!currentCategoryIds.includes(managingCategoryId)) {
+      updateMaterialMutation.mutate({
+        id: materialId,
+        categoryIds: [...currentCategoryIds, managingCategoryId],
+      });
+    }
   };
 
   const handleRemoveMaterialFromCategory = (materialId: string) => {
+    if (!managingCategoryId) return;
+    
+    // Get current material categories
+    const material = allMaterials?.find((m: any) => m.id === materialId);
+    const currentCategoryIds = material?.categories?.map((c: any) => c.categoryId) || [];
+    
+    // Remove the current category
+    const newCategoryIds = currentCategoryIds.filter((id: string) => id !== managingCategoryId);
+    
     updateMaterialMutation.mutate({
       id: materialId,
-      categoryId: null,
+      categoryIds: newCategoryIds,
     });
   };
 
@@ -609,7 +632,7 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
                 )}
               </div>
 
-              {/* Available materials (not in any category) */}
+              {/* Available materials (not in this category) */}
               <div>
                 <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
                   <Plus className="h-4 w-4 text-teal-500" />
@@ -617,7 +640,7 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
                 </h3>
                 {unassignedMaterials.length === 0 ? (
                   <p className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                    Tutti i materiali sono già assegnati a una categoria
+                    Tutti i materiali sono già in questa categoria
                   </p>
                 ) : (
                   <div className="space-y-2 max-h-48 overflow-y-auto">

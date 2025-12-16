@@ -20,7 +20,15 @@ export const materialsRouter = router({
           orderBy: { order: 'asc' },
           include: {
             _count: {
-              select: { materials: { where: { isActive: true } } },
+              select: { 
+                materials: { 
+                  where: { 
+                    material: { 
+                      isActive: true 
+                    } 
+                  } 
+                } 
+              },
             },
           },
         });
@@ -56,7 +64,13 @@ export const materialsRouter = router({
         orderBy: { order: 'asc' },
         include: {
           _count: {
-            select: { materials: { where: { isActive: true } } },
+            select: { 
+              materials: { 
+                where: { 
+                  material: { isActive: true } 
+                } 
+              } 
+            },
           },
         },
       });
@@ -69,7 +83,13 @@ export const materialsRouter = router({
         orderBy: { order: 'asc' },
         include: {
           _count: {
-            select: { materials: true },
+            select: { 
+              materials: { 
+                where: { 
+                  material: { isActive: true } 
+                } 
+              } 
+            },
           },
           groupAccess: {
             include: { group: { select: { id: true, name: true } } },
@@ -188,10 +208,10 @@ export const materialsRouter = router({
   deleteCategory: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      // First, unlink all materials from this category (set categoryId to null)
-      await ctx.prisma.material.updateMany({
+      // First, delete all MaterialCategoryLink records for this category
+      // This will unlink all materials from this category
+      await ctx.prisma.materialCategoryLink.deleteMany({
         where: { categoryId: input.id },
-        data: { categoryId: null },
       });
       
       // Then delete the category
@@ -864,7 +884,11 @@ export const materialsRouter = router({
       return ctx.prisma.material.findMany({
         where: {
           type: input?.type,
-          categoryId: input?.categoryId,
+          ...(input?.categoryId && {
+            categories: {
+              some: { categoryId: input.categoryId }
+            }
+          }),
           topicId: input?.topicId,
           subTopicId: input?.subTopicId,
           visibility: input?.visibility,
@@ -878,7 +902,20 @@ export const materialsRouter = router({
           { createdAt: 'desc' },
         ],
         include: {
-          category: true,  // Container category
+          categories: {
+            include: {
+              category: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  icon: true,
+                  order: true,
+                  visibility: true,
+                },
+              },
+            },
+          },
           topic: true,     // Classification
           subTopic: true,  // Classification
           subject: true,
@@ -924,7 +961,20 @@ export const materialsRouter = router({
       const material = await ctx.prisma.material.findUnique({
         where: { id: input.id },
         include: {
-          category: true,
+          categories: {
+            include: {
+              category: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  icon: true,
+                  order: true,
+                  visibility: true,
+                },
+              },
+            },
+          },
           topic: true,
           subTopic: true,
           subject: true,
@@ -969,7 +1019,7 @@ export const materialsRouter = router({
       externalUrl: z.string().optional(),
       thumbnailUrl: z.string().optional(),
       visibility: z.enum(['NONE', 'ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).default('NONE'),
-      categoryId: z.string().optional(),     // Container category (optional)
+      categoryIds: z.array(z.string()).optional(),  // Multiple container categories
       subjectId: z.string().optional(),      // Classification (required for proper organization)
       topicId: z.string().optional(),        // Classification
       subTopicId: z.string().optional(),     // Classification
@@ -981,7 +1031,7 @@ export const materialsRouter = router({
       studentIds: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { groupIds, studentIds, categoryId, subjectId, topicId, subTopicId, ...materialData } = input;
+      const { groupIds, studentIds, categoryIds, subjectId, topicId, subTopicId, ...materialData } = input;
 
       const result = await ctx.prisma.$transaction(async (tx) => {
         // Create material
@@ -999,8 +1049,14 @@ export const materialsRouter = router({
             tags: materialData.tags || [],
             order: materialData.order,
             createdBy: ctx.user.id,
-            // Connect category (container) if provided
-            ...(categoryId ? { category: { connect: { id: categoryId } } } : {}),
+            // Connect multiple categories if provided
+            ...(categoryIds?.length ? {
+              categories: {
+                create: categoryIds.map(categoryId => ({
+                  category: { connect: { id: categoryId } }
+                }))
+              }
+            } : {}),
             // Connect subject if provided
             ...(subjectId ? { subject: { connect: { id: subjectId } } } : {}),
             // Connect topic (classification) if provided
@@ -1207,7 +1263,7 @@ export const materialsRouter = router({
       externalUrl: z.string().optional().nullable(),
       thumbnailUrl: z.string().optional().nullable(),
       visibility: z.enum(['NONE', 'ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).optional(),
-      categoryId: z.string().optional().nullable(),     // Container category
+      categoryIds: z.array(z.string()).optional(),     // Multiple container categories
       subjectId: z.string().optional().nullable(),      // Classification
       topicId: z.string().optional().nullable(),        // Classification
       subTopicId: z.string().optional().nullable(),     // Classification
@@ -1220,7 +1276,7 @@ export const materialsRouter = router({
       studentIds: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { id, groupIds, studentIds, subjectId, categoryId, topicId, subTopicId, ...materialData } = input;
+      const { id, groupIds, studentIds, subjectId, categoryIds, topicId, subTopicId, ...materialData } = input;
 
       return ctx.prisma.$transaction(async (tx) => {
         // Update material
@@ -1228,10 +1284,6 @@ export const materialsRouter = router({
           where: { id },
           data: {
             ...materialData,
-            // Handle category connection
-            ...(categoryId !== undefined ? (
-              categoryId ? { category: { connect: { id: categoryId } } } : { category: { disconnect: true } }
-            ) : {}),
             // Handle subject connection
             ...(subjectId !== undefined ? (
               subjectId ? { subject: { connect: { id: subjectId } } } : { subject: { disconnect: true } }
@@ -1246,6 +1298,24 @@ export const materialsRouter = router({
             ) : {}),
           },
         });
+
+        // Handle categories - replace all if provided
+        if (categoryIds !== undefined) {
+          // Remove all existing category links
+          await tx.materialCategoryLink.deleteMany({
+            where: { materialId: id },
+          });
+          
+          // Add new category links
+          if (categoryIds.length) {
+            await tx.materialCategoryLink.createMany({
+              data: categoryIds.map((categoryId) => ({
+                materialId: id,
+                categoryId,
+              })),
+            });
+          }
+        }
 
         // If visibility changed to GROUP_BASED, update group access
         if (input.visibility === 'GROUP_BASED' && groupIds !== undefined) {
@@ -1452,7 +1522,11 @@ export const materialsRouter = router({
         where: {
           isActive: true,
           type: input?.type,
-          categoryId: input?.categoryId,
+          ...(input?.categoryId && {
+            categories: {
+              some: { categoryId: input.categoryId },
+            },
+          }),
           subjectId: input?.subjectId,
           topicId: input?.topicId,
           subTopicId: input?.subTopicId,
@@ -1475,7 +1549,11 @@ export const materialsRouter = router({
             },
             // Materials in visible categories (category acts as visibility container)
             visibleCategoryIds.length > 0
-              ? { categoryId: { in: visibleCategoryIds } }
+              ? {
+                  categories: {
+                    some: { categoryId: { in: visibleCategoryIds } },
+                  },
+                }
               : { id: 'never' },
           ],
         },
@@ -1486,7 +1564,20 @@ export const materialsRouter = router({
           { createdAt: 'desc' },
         ],
         include: {
-          category: true,
+          categories: {
+            include: {
+              category: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  icon: true,
+                  order: true,
+                  visibility: true,
+                },
+              },
+            },
+          },
           topic: true,
           subTopic: true,
           subject: true,
@@ -1541,7 +1632,20 @@ export const materialsRouter = router({
           ],
         },
         include: {
-          category: true,
+          categories: {
+            include: {
+              category: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  icon: true,
+                  order: true,
+                  visibility: true,
+                },
+              },
+            },
+          },
           topic: true,
           subTopic: true,
           subject: true,
