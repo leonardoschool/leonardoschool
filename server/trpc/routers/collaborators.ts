@@ -73,6 +73,7 @@ export const collaboratorsRouter = router({
         isActive: true,
         collaborator: {
           select: {
+            id: true,
             specialization: true,
             subjects: {
               include: {

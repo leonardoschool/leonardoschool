@@ -143,23 +143,23 @@ export default function AdminCandidatureContent() {
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <div className={`${colors.background.card} rounded-xl p-4 shadow-sm`}>
             <p className={`text-sm ${colors.text.secondary}`}>Totali</p>
-            <p className="text-2xl font-bold">{stats.total}</p>
+            <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.total}</p>
           </div>
           <div className={`${colors.background.card} rounded-xl p-4 shadow-sm border-l-4`} style={{ borderColor: '#f59e0b' }}>
             <p className={`text-sm ${colors.text.secondary}`}>In Attesa</p>
-            <p className="text-2xl font-bold">{stats.pending}</p>
+            <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.pending}</p>
           </div>
           <div className={`${colors.background.card} rounded-xl p-4 shadow-sm border-l-4`} style={{ borderColor: '#3b82f6' }}>
             <p className={`text-sm ${colors.text.secondary}`}>In Revisione</p>
-            <p className="text-2xl font-bold">{stats.reviewing}</p>
+            <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.reviewing}</p>
           </div>
           <div className={`${colors.background.card} rounded-xl p-4 shadow-sm border-l-4`} style={{ borderColor: '#22c55e' }}>
             <p className={`text-sm ${colors.text.secondary}`}>Approvate</p>
-            <p className="text-2xl font-bold">{stats.approved}</p>
+            <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.approved}</p>
           </div>
           <div className={`${colors.background.card} rounded-xl p-4 shadow-sm border-l-4`} style={{ borderColor: '#ef4444' }}>
             <p className={`text-sm ${colors.text.secondary}`}>Rifiutate</p>
-            <p className="text-2xl font-bold">{stats.rejected}</p>
+            <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.rejected}</p>
           </div>
         </div>
       )}

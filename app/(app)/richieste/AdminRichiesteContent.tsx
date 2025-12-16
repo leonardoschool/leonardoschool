@@ -158,23 +158,23 @@ export default function AdminRichiesteContent() {
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <div className={`${colors.background.card} rounded-xl p-4 shadow-sm`}>
             <p className={`text-sm ${colors.text.secondary}`}>Totali</p>
-            <p className="text-2xl font-bold">{stats.total}</p>
+            <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.total}</p>
           </div>
           <div className={`${colors.background.card} rounded-xl p-4 shadow-sm border-l-4`} style={{ borderColor: '#f59e0b' }}>
             <p className={`text-sm ${colors.text.secondary}`}>Da Leggere</p>
-            <p className="text-2xl font-bold">{stats.pending}</p>
+            <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.pending}</p>
           </div>
           <div className={`${colors.background.card} rounded-xl p-4 shadow-sm border-l-4`} style={{ borderColor: '#3b82f6' }}>
             <p className={`text-sm ${colors.text.secondary}`}>Lette</p>
-            <p className="text-2xl font-bold">{stats.read}</p>
+            <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.read}</p>
           </div>
           <div className={`${colors.background.card} rounded-xl p-4 shadow-sm border-l-4`} style={{ borderColor: '#22c55e' }}>
             <p className={`text-sm ${colors.text.secondary}`}>Risposte</p>
-            <p className="text-2xl font-bold">{stats.replied}</p>
+            <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.replied}</p>
           </div>
           <div className={`${colors.background.card} rounded-xl p-4 shadow-sm border-l-4`} style={{ borderColor: '#6b7280' }}>
             <p className={`text-sm ${colors.text.secondary}`}>Archiviate</p>
-            <p className="text-2xl font-bold">{stats.archived}</p>
+            <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.archived}</p>
           </div>
         </div>
       )}

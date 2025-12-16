@@ -20,10 +20,10 @@ const PAGE_PERMISSIONS: Record<string, string[]> = {
   '/domande': ['ADMIN', 'COLLABORATOR'],
   '/tags': ['ADMIN', 'COLLABORATOR'],
   '/presenze': ['ADMIN', 'COLLABORATOR'],
-  '/studenti': ['COLLABORATOR'],
+  '/studenti': ['ADMIN', 'COLLABORATOR'],
+  '/gruppi': ['ADMIN', 'COLLABORATOR'],
   
   // Admin only pages
-  '/gruppi': ['ADMIN'],
   '/utenti': ['ADMIN'],
   '/collaboratori': ['ADMIN'],
   '/contratti': ['ADMIN'],

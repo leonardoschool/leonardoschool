@@ -292,6 +292,7 @@ export const groupsRouter = router({
           description: input.description,
           color: input.color,
           type: input.type,
+          isActive: true, // Set active by default
           referenceStudentId: input.referenceStudentId,
           referenceCollaboratorId,
           referenceAdminId,
@@ -412,18 +413,8 @@ export const groupsRouter = router({
 
       // Send notifications to newly assigned referents
       // Only if the referent changed (compare with existing)
-      console.log('🔔 [REFERENT NOTIFICATION] Controllo cambiamenti referenti:', {
-        newCollaboratorId: referenceCollaboratorId,
-        oldCollaboratorId: existing.referenceCollaboratorId,
-        newAdminId: referenceAdminId,
-        oldAdminId: existing.referenceAdminId,
-        newStudentId: data.referenceStudentId,
-        oldStudentId: existing.referenceStudentId,
-      });
-      
       if (referenceCollaboratorId && referenceCollaboratorId !== existing.referenceCollaboratorId) {
         const collaboratorUserId = group.referenceCollaborator?.user.id;
-        console.log('🔔 [REFERENT NOTIFICATION] Invio notifica a collaboratore:', collaboratorUserId);
         if (collaboratorUserId) {
           try {
             await notifications.groupReferentAssigned(ctx.prisma, {
@@ -431,16 +422,14 @@ export const groupsRouter = router({
               groupId: group.id,
               groupName: group.name,
             });
-            console.log('✅ [REFERENT NOTIFICATION] Notifica collaboratore inviata');
           } catch (error) {
-            console.error('❌ [REFERENT NOTIFICATION] Errore notifica collaboratore:', error);
+            console.error('[Groups] Failed to send referent notification:', error);
           }
         }
       }
 
       if (referenceAdminId && referenceAdminId !== existing.referenceAdminId) {
         const adminUserId = group.referenceAdmin?.user.id;
-        console.log('🔔 [REFERENT NOTIFICATION] Invio notifica ad admin:', adminUserId);
         if (adminUserId) {
           try {
             await notifications.groupReferentAssigned(ctx.prisma, {
@@ -448,16 +437,14 @@ export const groupsRouter = router({
               groupId: group.id,
               groupName: group.name,
             });
-            console.log('✅ [REFERENT NOTIFICATION] Notifica admin inviata');
           } catch (error) {
-            console.error('❌ [REFERENT NOTIFICATION] Errore notifica admin:', error);
+            console.error('[Groups] Failed to send referent notification:', error);
           }
         }
       }
 
       if (data.referenceStudentId && data.referenceStudentId !== existing.referenceStudentId) {
         const studentUserId = group.referenceStudent?.user.id;
-        console.log('🔔 [REFERENT NOTIFICATION] Invio notifica a studente referente:', studentUserId);
         if (studentUserId) {
           try {
             await notifications.groupReferentAssigned(ctx.prisma, {
@@ -465,9 +452,8 @@ export const groupsRouter = router({
               groupId: group.id,
               groupName: group.name,
             });
-            console.log('✅ [REFERENT NOTIFICATION] Notifica studente referente inviata');
           } catch (error) {
-            console.error('❌ [REFERENT NOTIFICATION] Errore notifica studente referente:', error);
+            console.error('[Groups] Failed to send referent notification:', error);
           }
         }
       }
@@ -475,13 +461,12 @@ export const groupsRouter = router({
       return group;
     }),
 
-  // Delete a group (soft delete by setting isActive = false, or hard delete if no members)
+  // Delete a group (hard delete - removes group and all members)
   delete: adminProcedure
-    .input(z.object({ id: z.string(), force: z.boolean().optional() }))
+    .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const group = await ctx.prisma.group.findUnique({
         where: { id: input.id },
-        include: { _count: { select: { members: true } } },
       });
 
       if (!group) {
@@ -491,27 +476,19 @@ export const groupsRouter = router({
         });
       }
 
-      if (group._count.members > 0 && !input.force) {
-        // Soft delete - deactivate
-        await ctx.prisma.group.update({
-          where: { id: input.id },
-          data: { isActive: false },
-        });
-        return { deleted: false, deactivated: true };
-      } else {
-        // Hard delete - remove members first, then group
-        await ctx.prisma.$transaction([
-          ctx.prisma.groupMember.deleteMany({ where: { groupId: input.id } }),
-          ctx.prisma.group.delete({ where: { id: input.id } }),
-        ]);
-        return { deleted: true, deactivated: false };
-      }
+      // Hard delete - remove all members first, then group
+      await ctx.prisma.$transaction([
+        ctx.prisma.groupMember.deleteMany({ where: { groupId: input.id } }),
+        ctx.prisma.group.delete({ where: { id: input.id } }),
+      ]);
+      
+      return { deleted: true };
     }),
 
   // ==================== MEMBER MANAGEMENT ====================
 
-  // Add a member to a group
-  addMember: adminProcedure
+  // Add a member to a group (Admin or Referent Collaborator)
+  addMember: staffProcedure
     .input(
       z.object({
         groupId: z.string(),
@@ -533,6 +510,20 @@ export const groupsRouter = router({
           code: 'NOT_FOUND',
           message: 'Gruppo non trovato',
         });
+      }
+
+      // If collaborator, check if they are the referent
+      if (ctx.user?.role === 'COLLABORATOR') {
+        const collaborator = await ctx.prisma.collaborator.findUnique({
+          where: { userId: ctx.user.id },
+        });
+        
+        if (!collaborator || group.referenceCollaboratorId !== collaborator.id) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Solo il collaboratore referente può aggiungere membri a questo gruppo',
+          });
+        }
       }
 
       // Validate group type allows this member type
@@ -606,17 +597,6 @@ export const groupsRouter = router({
 
       // Send notification to the added member
       const recipientUserId = member.student?.user.id || member.collaborator?.user.id;
-      console.log('🔔 [GROUP NOTIFICATION] Tentativo invio notifica:', {
-        recipientUserId,
-        groupId: group.id,
-        groupName: group.name,
-        hasMember: !!member,
-        hasStudent: !!member.student,
-        hasCollaborator: !!member.collaborator,
-        studentUserId: member.student?.user.id,
-        collaboratorUserId: member.collaborator?.user.id,
-      });
-      
       if (recipientUserId) {
         try {
           await notifications.groupMemberAdded(ctx.prisma, {
@@ -624,9 +604,8 @@ export const groupsRouter = router({
             groupId: group.id,
             groupName: group.name,
           });
-          console.log('✅ [GROUP NOTIFICATION] Notifica inviata con successo a user:', recipientUserId);
         } catch (error) {
-          console.error('❌ [GROUP NOTIFICATION] Errore invio notifica:', error);
+          console.error('[Groups] Failed to send notification:', error);
         }
       } else {
         console.warn('⚠️ [GROUP NOTIFICATION] recipientUserId è undefined, notifica non inviata');
@@ -763,11 +742,12 @@ export const groupsRouter = router({
     }),
 
   // Remove a member from a group
-  removeMember: adminProcedure
+  removeMember: staffProcedure
     .input(z.object({ memberId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const member = await ctx.prisma.groupMember.findUnique({
         where: { id: input.memberId },
+        include: { group: true },
       });
 
       if (!member) {
@@ -775,6 +755,20 @@ export const groupsRouter = router({
           code: 'NOT_FOUND',
           message: 'Membro non trovato',
         });
+      }
+
+      // If collaborator, check if they are the referent
+      if (ctx.user?.role === 'COLLABORATOR') {
+        const collaborator = await ctx.prisma.collaborator.findUnique({
+          where: { userId: ctx.user.id },
+        });
+        
+        if (!collaborator || member.group.referenceCollaboratorId !== collaborator.id) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Solo il collaboratore referente può rimuovere membri da questo gruppo',
+          });
+        }
       }
 
       await ctx.prisma.groupMember.delete({
@@ -1001,7 +995,7 @@ export const groupsRouter = router({
     };
   }),
 
-  // Get groups managed by the current collaborator
+  // Get groups managed by the current collaborator (as referent or member)
   getMyGroups: protectedProcedure.query(async ({ ctx }) => {
     if (!ctx.user) {
       throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Utente non autenticato' });
@@ -1012,20 +1006,56 @@ export const groupsRouter = router({
       where: { userId: ctx.user.id },
     });
 
-    if (!collaborator) {
+    // Also check if user is admin (they can be referents too)
+    const admin = await ctx.prisma.admin.findUnique({
+      where: { userId: ctx.user.id },
+    });
+
+    if (!collaborator && !admin) {
       return [];
     }
 
-    // Get groups where this collaborator is the reference
+    // Get groups where this user is the reference (as collaborator or admin)
+    // OR where they are a member
     const groups = await ctx.prisma.group.findMany({
       where: {
-        referenceCollaboratorId: collaborator.id,
         isActive: true,
+        OR: [
+          // Referent as collaborator
+          ...(collaborator ? [{ referenceCollaboratorId: collaborator.id }] : []),
+          // Referent as admin
+          ...(admin ? [{ referenceAdminId: admin.id }] : []),
+          // Member as collaborator
+          ...(collaborator ? [{ members: { some: { collaboratorId: collaborator.id } } }] : []),
+        ],
       },
       orderBy: { name: 'asc' },
       include: {
         _count: {
           select: { members: true },
+        },
+        referenceCollaborator: {
+          include: { user: { select: { id: true, name: true } } },
+        },
+        referenceAdmin: {
+          include: { user: { select: { id: true, name: true } } },
+        },
+        referenceStudent: {
+          include: { user: { select: { id: true, name: true } } },
+        },
+        members: {
+          include: {
+            student: {
+              include: { 
+                user: { select: { id: true, name: true, email: true } },
+              },
+            },
+            collaborator: {
+              include: { 
+                user: { select: { id: true, name: true, email: true } },
+              },
+            },
+          },
         },
       },
     });
@@ -1037,6 +1067,13 @@ export const groupsRouter = router({
       color: g.color,
       type: g.type,
       memberCount: g._count.members,
+      isReferent: 
+        (collaborator && g.referenceCollaboratorId === collaborator.id) ||
+        (admin && g.referenceAdminId === admin.id),
+      referenceCollaborator: g.referenceCollaborator,
+      referenceAdmin: g.referenceAdmin,
+      referenceStudent: g.referenceStudent,
+      members: g.members,
     }));
   }),
 });

@@ -80,18 +80,8 @@ export async function createNotification(
   prisma: PrismaClient,
   params: CreateNotificationParams
 ): Promise<NotificationResult> {
-  console.log('📨 [CREATE_NOTIFICATION] Chiamata con parametri:', {
-    userId: params.userId,
-    type: params.type,
-    title: params.title,
-    message: params.message,
-    linkType: params.linkType,
-    linkEntityId: params.linkEntityId,
-  });
-  
   try {
     const config = getNotificationConfig(params.type);
-    console.log('📨 [CREATE_NOTIFICATION] Config trovata:', config);
     
     const notification = await prisma.notification.create({
       data: {
@@ -109,11 +99,9 @@ export async function createNotification(
       },
     });
 
-    console.log('✅ [CREATE_NOTIFICATION] Notifica creata nel DB con ID:', notification.id);
     return { success: true, notificationId: notification.id };
   } catch (error) {
-    console.error('❌ [CREATE_NOTIFICATION] Errore creazione notifica:', error);
-    console.error('❌ [CREATE_NOTIFICATION] Stack trace:', error instanceof Error ? error.stack : 'N/A');
+    console.error('[Notifications] Failed to create notification:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',

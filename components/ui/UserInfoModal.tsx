@@ -17,6 +17,7 @@ import {
   BookOpen,
   Crown,
   Hash,
+  MessageSquare,
 } from 'lucide-react';
 
 export interface UserInfoModalProps {
@@ -428,13 +429,20 @@ export function UserInfoModal({ userId, userType, isOpen, onClose }: UserInfoMod
 
           {/* Footer - solo quando non c'è errore */}
           {!errorMessage && (
-            <div className={`p-4 border-t ${colors.border.primary}`}>
+            <div className={`p-4 border-t ${colors.border.primary} flex gap-3`}>
               <button
                 onClick={onClose}
-                className={`w-full py-2.5 rounded-lg ${colors.background.secondary} ${colors.text.primary} font-medium hover:opacity-80 transition-colors`}
+                className={`flex-1 py-2.5 rounded-lg ${colors.background.secondary} ${colors.text.primary} font-medium hover:opacity-80 transition-colors`}
               >
                 Chiudi
               </button>
+              <a
+                href={`/messaggi?nuovo=${userId}`}
+                className={`flex-1 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors flex items-center justify-center gap-2`}
+              >
+                <MessageSquare className="w-4 h-4" />
+                Contatta
+              </a>
             </div>
           )}
         </div>

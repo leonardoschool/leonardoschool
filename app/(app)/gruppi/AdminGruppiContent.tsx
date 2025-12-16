@@ -19,9 +19,12 @@ import {
   AlertTriangle,
   Eye,
   UsersRound,
+  MessageSquare,
+  Send,
 } from 'lucide-react';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
+import { useUserRole } from '@/lib/hooks/useUserRole';
 import CustomSelect from '@/components/ui/CustomSelect';
 
 type GroupType = 'STUDENTS' | 'COLLABORATORS' | 'MIXED';
@@ -94,6 +97,7 @@ export default function AdminGruppiContent() {
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [messageGroupId, setMessageGroupId] = useState<string | null>(null);
 
   // Parse reference filter
   const isAdminFilter = referenceFilter.startsWith('admin:');
@@ -450,6 +454,13 @@ export default function AdminGruppiContent() {
                   Modifica
                 </button>
                 <button
+                  onClick={() => setMessageGroupId(group.id)}
+                  className={`p-2 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition`}
+                  title="Invia messaggio al gruppo"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                </button>
+                <button
                   onClick={() => setDeleteConfirmId(group.id)}
                   className="p-2 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
                 >
@@ -533,6 +544,14 @@ export default function AdminGruppiContent() {
           </div>
         </Portal>
       )}
+
+      {/* Message Group Modal */}
+      {messageGroupId && (
+        <MessageGroupModal
+          groupId={messageGroupId}
+          onClose={() => setMessageGroupId(null)}
+        />
+      )}
     </div>
   );
 }
@@ -575,6 +594,7 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
     type: 'MIXED' as GroupType,
     referenceStudentId: '',
     referenceCollaboratorId: '',
+    isActive: true,
   });
 
   // Load existing data when it arrives
@@ -595,6 +615,7 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
         color: group.color || '#6366f1',
         type: group.type,
         referenceStudentId: group.referenceStudentId || '',
+        isActive: group.isActive,
         referenceCollaboratorId: referenceCollaboratorValue,
       });
     }
@@ -611,12 +632,18 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
       type: GroupType;
       referenceStudentId?: string | null;
       referenceCollaboratorId?: string | null;
+      isActive?: boolean;
     } = {
       name: formData.name,
       description: formData.description || undefined,
       color: formData.color || undefined,
       type: formData.type,
     };
+
+    // Aggiungi isActive solo se siamo in modifica (groupId esiste)
+    if (groupId) {
+      submitData.isActive = formData.isActive;
+    }
 
     // Aggiungi riferimenti solo se pertinenti al tipo
     if (formData.type !== 'STUDENTS') {
@@ -813,6 +840,32 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
               </div>
             )}
 
+            {/* Stato attivo/inattivo - solo in modifica */}
+            {groupId && (
+              <div className={`flex items-center justify-between p-3 rounded-lg ${colors.background.secondary} border ${colors.border.primary}`}>
+                <div>
+                  <label className={`text-sm font-medium ${colors.text.primary}`}>
+                    Gruppo attivo
+                  </label>
+                  <p className={`text-xs ${colors.text.muted} mt-0.5`}>
+                    {formData.isActive 
+                      ? 'Il gruppo è visibile e utilizzabile' 
+                      : 'Il gruppo è nascosto e non utilizzabile'
+                    }
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.isActive}
+                    onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+            )}
+
             <div className="flex gap-3 pt-4">
               <button
                 type="button"
@@ -848,7 +901,9 @@ interface GroupDetailsModalProps {
 
 function GroupDetailsModal({ group, isLoading, onClose, onRemoveMember, isRemovingMember }: GroupDetailsModalProps) {
   const [showAddMember, setShowAddMember] = useState(false);
-  const [memberType, setMemberType] = useState<'STUDENT' | 'COLLABORATOR'>('STUDENT');
+  // Set default memberType based on group type
+  const defaultMemberType = group?.type === 'COLLABORATORS' ? 'COLLABORATOR' : 'STUDENT';
+  const [memberType, setMemberType] = useState<'STUDENT' | 'COLLABORATOR'>(defaultMemberType);
   const [searchMember, setSearchMember] = useState('');
   const [selectedUserInfo, setSelectedUserInfo] = useState<{
     id: string;
@@ -1084,16 +1139,25 @@ function GroupDetailsModal({ group, isLoading, onClose, onRemoveMember, isRemovi
                     </div>
                     <div className="flex items-center gap-1">
                       {userId && (
-                        <button
-                          onClick={() => setSelectedUserInfo({
-                            id: userId,
-                            type: isStudent ? 'STUDENT' : 'COLLABORATOR',
-                          })}
-                          className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 ${colors.text.secondary}`}
-                          title="Info utente"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
+                        <>
+                          <a
+                            href={`/messaggi?nuovo=${userId}`}
+                            className={`p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500`}
+                            title="Invia messaggio"
+                          >
+                            <MessageSquare className="w-4 h-4" />
+                          </a>
+                          <button
+                            onClick={() => setSelectedUserInfo({
+                              id: userId,
+                              type: isStudent ? 'STUDENT' : 'COLLABORATOR',
+                            })}
+                            className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 ${colors.text.secondary}`}
+                            title="Info utente"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </>
                       )}
                       <button
                         onClick={() => onRemoveMember(member.id)}
@@ -1136,6 +1200,272 @@ function GroupDetailsModal({ group, isLoading, onClose, onRemoveMember, isRemovi
           onClose={() => setSelectedUserInfo(null)}
         />
       )}
+    </Portal>
+  );
+}
+
+// ==================== MESSAGE GROUP MODAL ====================
+interface MessageGroupModalProps {
+  groupId: string;
+  onClose: () => void;
+}
+
+function MessageGroupModal({ groupId, onClose }: MessageGroupModalProps) {
+  const { handleMutationError } = useApiError();
+  const { showSuccess } = useToast();
+  const { user } = useUserRole();
+  
+  const [subject, setSubject] = useState('');
+  const [content, setContent] = useState('');
+  const [isSending, setIsSending] = useState(false);
+
+  // Get group details with members
+  const { data: group, isLoading } = trpc.groups.getById.useQuery({ id: groupId });
+
+  // Create conversation mutation
+  const createConversationMutation = trpc.messages.createConversation.useMutation({
+    onError: handleMutationError,
+  });
+
+  // Get ALL member user IDs including reference student/collaborator/admin
+  const allMemberUserIds = (() => {
+    const ids: string[] = [];
+    const currentUserId = user?.id;
+
+    // Add reference student
+    if (group?.referenceStudent?.user) {
+      const userId = (group.referenceStudent.user as { id?: string })?.id;
+      if (userId && userId !== currentUserId) ids.push(userId);
+    }
+
+    // Add reference collaborator
+    if (group?.referenceCollaborator?.user) {
+      const userId = (group.referenceCollaborator.user as { id?: string })?.id;
+      if (userId && userId !== currentUserId) ids.push(userId);
+    }
+
+    // Add reference admin
+    if (group?.referenceAdmin?.user) {
+      const userId = (group.referenceAdmin.user as { id?: string })?.id;
+      if (userId && userId !== currentUserId) ids.push(userId);
+    }
+
+    // Add group members
+    group?.members?.forEach((member) => {
+      const user = member.student?.user || member.collaborator?.user;
+      const userId = (user as { id?: string })?.id;
+      if (userId && userId !== currentUserId && !ids.includes(userId)) {
+        ids.push(userId);
+      }
+    });
+
+    return ids;
+  })();
+
+  const handleSend = async () => {
+    if (allMemberUserIds.length === 0 || !subject.trim() || !content.trim()) return;
+
+    setIsSending(true);
+    try {
+      // Send to all group members (excluding current user)
+      for (const recipientId of allMemberUserIds) {
+        await createConversationMutation.mutateAsync({
+          recipientId,
+          subject: subject.trim(),
+          content: content.trim(),
+        });
+      }
+      showSuccess(
+        'Messaggio inviato',
+        `Messaggio inviato a ${allMemberUserIds.length} membri del gruppo.`
+      );
+      onClose();
+    } catch {
+      // Error handled by mutation
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <Portal>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Spinner size="lg" />
+        </div>
+      </Portal>
+    );
+  }
+
+  return (
+    <Portal>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className={`${colors.background.card} rounded-xl w-full max-w-lg shadow-xl`}>
+          {/* Header */}
+          <div className={`p-6 border-b ${colors.border.primary}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center"
+                  style={{
+                    backgroundColor: group?.color ? `${group.color}20` : 'rgba(99,102,241,0.1)',
+                    color: group?.color || '#6366f1',
+                  }}
+                >
+                  <Send className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className={`text-lg font-semibold ${colors.text.primary}`}>
+                    Invia messaggio al gruppo
+                  </h2>
+                  <p className={`text-sm ${colors.text.muted}`}>
+                    {group?.name} ({allMemberUserIds.length} destinatari)
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 ${colors.text.secondary}`}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="p-6 space-y-4">
+            {allMemberUserIds.length === 0 ? (
+              <div className={`text-center py-8 ${colors.text.muted}`}>
+                <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>Il gruppo non ha membri</p>
+              </div>
+            ) : (
+              <>
+                {/* Recipients preview */}
+                <div>
+                  <label className={`block text-sm font-medium ${colors.text.secondary} mb-2`}>
+                    Destinatari
+                  </label>
+                  <div className={`flex flex-wrap gap-2 p-3 rounded-lg ${colors.background.secondary} border ${colors.border.primary}`}>
+                    {/* Reference Student */}
+                    {group?.referenceStudent?.user && (group.referenceStudent.user as { id?: string })?.id !== user?.id && (
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-300 dark:border-blue-700"
+                      >
+                        <GraduationCap className="w-3 h-3" />
+                        {group.referenceStudent.user.name} (Riferimento)
+                      </span>
+                    )}
+                    
+                    {/* Reference Collaborator */}
+                    {group?.referenceCollaborator?.user && (group.referenceCollaborator.user as { id?: string })?.id !== user?.id && (
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-300 dark:border-purple-700"
+                      >
+                        <UserCog className="w-3 h-3" />
+                        {group.referenceCollaborator.user.name} (Riferimento)
+                      </span>
+                    )}
+                    
+                    {/* Reference Admin */}
+                    {group?.referenceAdmin?.user && (group.referenceAdmin.user as { id?: string })?.id !== user?.id && (
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-300 dark:border-purple-700"
+                      >
+                        <UserCog className="w-3 h-3" />
+                        {group.referenceAdmin.user.name} (Riferimento)
+                      </span>
+                    )}
+                    
+                    {/* Group Members */}
+                    {group?.members.slice(0, 5).map((member) => {
+                      const memberUser = member.student?.user || member.collaborator?.user;
+                      const memberUserId = (memberUser as { id?: string })?.id;
+                      if (memberUserId === user?.id) return null; // Skip current user
+                      
+                      const isStudent = !!member.student;
+                      return (
+                        <span
+                          key={member.id}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                            isStudent
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                              : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                          }`}
+                        >
+                          {isStudent ? (
+                            <GraduationCap className="w-3 h-3" />
+                          ) : (
+                            <UserCog className="w-3 h-3" />
+                          )}
+                          {memberUser?.name}
+                        </span>
+                      );
+                    })}
+                    {allMemberUserIds.length > 5 && (
+                      <span className={`px-2.5 py-1 rounded-full text-xs ${colors.text.muted}`}>
+                        +{allMemberUserIds.length - 5} altri
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Subject */}
+                <div>
+                  <label className={`block text-sm font-medium ${colors.text.secondary} mb-2`}>
+                    Oggetto
+                  </label>
+                  <input
+                    type="text"
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    placeholder="Inserisci l'oggetto del messaggio..."
+                    className={`w-full px-4 py-2.5 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary}`}
+                  />
+                </div>
+
+                {/* Message */}
+                <div>
+                  <label className={`block text-sm font-medium ${colors.text.secondary} mb-2`}>
+                    Messaggio
+                  </label>
+                  <textarea
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Scrivi il tuo messaggio..."
+                    rows={5}
+                    className={`w-full px-4 py-2.5 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} resize-none`}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className={`p-4 border-t ${colors.border.primary} flex gap-3`}>
+            <button
+              onClick={onClose}
+              className={`flex-1 py-2.5 rounded-lg ${colors.text.secondary} border ${colors.border.primary} hover:bg-gray-100 dark:hover:bg-gray-800`}
+            >
+              Annulla
+            </button>
+            <button
+              onClick={handleSend}
+              disabled={isSending || allMemberUserIds.length === 0 || !subject.trim() || !content.trim()}
+              className={`flex-1 ${colors.primary.gradient} text-white py-2.5 rounded-lg disabled:opacity-50 flex items-center justify-center gap-2`}
+            >
+              {isSending ? (
+                <Spinner size="sm" variant="white" />
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  Invia a tutti
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
     </Portal>
   );
 }

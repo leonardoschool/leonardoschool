@@ -25,9 +25,9 @@ export const PAGE_PERMISSIONS: Record<string, PermissionRole[]> = {
   '/tags': ['ADMIN', 'COLLABORATOR'],
   '/presenze': ['ADMIN', 'COLLABORATOR'],
   '/studenti': ['ADMIN', 'COLLABORATOR'],
+  '/gruppi': ['ADMIN', 'COLLABORATOR'],
   
   // Admin only pages
-  '/gruppi': ['ADMIN'],
   '/utenti': ['ADMIN'],
   '/collaboratori': ['ADMIN'],
   '/contratti': ['ADMIN'],
@@ -102,6 +102,13 @@ export function isAdmin(role: UserRole | string | undefined): boolean {
 }
 
 /**
+ * Check if a role is collaborator
+ */
+export function isCollaborator(role: UserRole | string | undefined): boolean {
+  return role === 'COLLABORATOR';
+}
+
+/**
  * Navigation items with role-based visibility
  */
 export interface NavItem {
@@ -124,9 +131,9 @@ export const NAVIGATION_ITEMS: NavItem[] = [
   { label: 'Tags', href: '/tags', icon: 'Tags', roles: ['ADMIN', 'COLLABORATOR'] },
   { label: 'Presenze', href: '/presenze', icon: 'ClipboardCheck', roles: ['ADMIN', 'COLLABORATOR'] },
   { label: 'Studenti', href: '/studenti', icon: 'Users', roles: ['ADMIN', 'COLLABORATOR'] },
+  { label: 'Gruppi', href: '/gruppi', icon: 'UsersRound', roles: ['ADMIN', 'COLLABORATOR'] },
   
   // Admin items
-  { label: 'Gruppi', href: '/gruppi', icon: 'Users', roles: ['ADMIN'] },
   { label: 'Utenti', href: '/utenti', icon: 'UserCog', roles: ['ADMIN'] },
   { label: 'Collaboratori', href: '/collaboratori', icon: 'Briefcase', roles: ['ADMIN'] },
   { label: 'Contratti', href: '/contratti', icon: 'FileSignature', roles: ['ADMIN'] },

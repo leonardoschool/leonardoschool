@@ -304,13 +304,19 @@ export default function AppHeader() {
     { value: 'system' as Theme, label: 'Sistema', icon: Monitor },
   ];
 
-  // Menu Gestione (dropdown) - Admin only: Utenti, Gruppi, Contratti, Candidature, Richieste
-  const gestioneItems = [
+  // Menu Gestione (dropdown) - Admin: Utenti, Gruppi, Contratti, Candidature, Richieste
+  const gestioneItemsAdmin = [
     { href: '/utenti', label: 'Utenti', icon: Users },
     { href: '/gruppi', label: 'Gruppi', icon: UsersRound },
     { href: '/contratti', label: 'Contratti', icon: FileSignature },
     { href: '/candidature', label: 'Candidature', icon: Briefcase },
     { href: '/richieste', label: 'Richieste', icon: Mail },
+  ];
+
+  // Menu Gestione (dropdown) - Collaboratore: Studenti, Gruppi
+  const gestioneItemsCollaborator = [
+    { href: '/studenti', label: 'Studenti', icon: GraduationCap },
+    { href: '/gruppi', label: 'Gruppi', icon: UsersRound },
   ];
 
   // Menu Registro (dropdown) - Admin: Registro Elettronico, Assenze Staff
@@ -340,6 +346,9 @@ export default function AppHeader() {
     { href: '/materiali', label: 'Materiali', icon: FolderOpen },
   ];
 
+  // Get gestione items based on role
+  const gestioneItems = isAdmin ? gestioneItemsAdmin : gestioneItemsCollaborator;
+
   // Get registro items based on role
   const registroItems = isAdmin ? registroItemsAdmin : registroItemsCollaborator;
 
@@ -353,11 +362,10 @@ export default function AppHeader() {
     { href: '/statistiche', label: 'Statistiche', icon: BarChart3 },
   ];
 
-  // Collaborator: Dashboard, Calendario (standalone), Studenti (standalone)
+  // Collaborator: Dashboard, Calendario (standalone)
   const collaboratorNavItems = [
     { href: '/dashboard', label: 'Dashboard', icon: Home },
     { href: '/calendario', label: 'Calendario', icon: Calendar },
-    { href: '/studenti', label: 'Studenti', icon: Users },
   ];
 
   // Student: simulazioni, calendario, materiale didattico, statistiche, il mio gruppo
@@ -494,8 +502,8 @@ export default function AppHeader() {
                 Dashboard
               </Link>
 
-              {/* Gestione Dropdown (Admin only) */}
-              {isAdmin && (
+              {/* Gestione Dropdown (Admin & Collaborator) */}
+              {isStaff && (
                 <div ref={gestioneMenuRef} className="relative">
                     <button
                       onClick={() => setGestioneMenuOpen(!gestioneMenuOpen)}
@@ -507,7 +515,7 @@ export default function AppHeader() {
                     >
                       <ClipboardList className="w-4 h-4" />
                       Gestione
-                      {totalGestionePending > 0 && (
+                      {isAdmin && totalGestionePending > 0 && (
                         <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold leading-none flex items-center justify-center ${colors.primary.gradient} text-white`}>
                           {totalGestionePending > 99 ? '99+' : totalGestionePending}
                         </span>
@@ -517,11 +525,12 @@ export default function AppHeader() {
                     <div className={`absolute left-0 top-full mt-1 w-56 ${colors.background.card} rounded-xl shadow-lg border ${colors.border.primary} py-1 z-50`}>
                       {gestioneItems.map((item) => {
                         const isItemActive = pathname.startsWith(item.href);
-                        // Show badge for Utenti, Candidature and Richieste
-                        const badgeCount = 
+                        // Show badge for Utenti, Candidature and Richieste (Admin only)
+                        const badgeCount = isAdmin ? (
                           item.href === '/utenti' ? pendingContractUsersCount :
                           item.href === '/candidature' ? pendingApplicationsCount :
-                          item.href === '/richieste' ? pendingContactRequestsCount : 0;
+                          item.href === '/richieste' ? pendingContactRequestsCount : 0
+                        ) : 0;
                         return (
                           <Link
                             key={item.href}
@@ -935,12 +944,14 @@ export default function AppHeader() {
               );
             })}
             
-            {/* Gestione items for admin mobile */}
-            {isAdmin && gestioneItems.map((item) => {
+            {/* Gestione items for mobile (Admin & Collaborator) */}
+            {isStaff && gestioneItems.map((item) => {
               const isActive = pathname.startsWith(item.href);
-              const badgeCount = 
+              const badgeCount = isAdmin ? (
+                item.href === '/utenti' ? pendingContractUsersCount :
                 item.href === '/candidature' ? pendingApplicationsCount :
-                item.href === '/richieste' ? pendingContactRequestsCount : 0;
+                item.href === '/richieste' ? pendingContactRequestsCount : 0
+              ) : 0;
               return (
                 <Link
                   key={item.href}
