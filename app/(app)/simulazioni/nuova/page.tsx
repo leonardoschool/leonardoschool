@@ -8,7 +8,6 @@ import { useToast } from '@/components/ui/Toast';
 import { Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import Checkbox from '@/components/ui/Checkbox';
-import DateTimePicker from '@/components/ui/DateTimePicker';
 import { previewSimulationPdf } from '@/lib/utils/simulationPdfGenerator';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -92,7 +91,6 @@ const paperBasedOption = {
 // Visibility options (kept for future visibility dropdown feature)
 const _visibilityOptions = [
   { value: 'PRIVATE', label: 'Privata', description: 'Solo studenti assegnati' },
-  { value: 'CLASS', label: 'Classe', description: 'Tutti gli studenti della classe selezionata' },
   { value: 'GROUP', label: 'Gruppo', description: 'Tutti gli studenti dei gruppi assegnati' },
   { value: 'PUBLIC', label: 'Pubblica', description: 'Tutti gli studenti attivi' },
 ];
@@ -132,11 +130,8 @@ export default function NewSimulationPage() {
   const [description, setDescription] = useState('');
   const [isOfficial, setIsOfficial] = useState(false);
   
-  // Timing
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  // Timing - dates are now set during assignment, not creation
   const [durationMinutes, setDurationMinutes] = useState(60);
-  const [useTimeWindow, setUseTimeWindow] = useState(false); // false = single date, true = time window
   
   // Configuration
   const [showResults, setShowResults] = useState(true);
@@ -499,8 +494,7 @@ export default function NewSimulationPage() {
       case 2: // Questions
         return selectedQuestions.length > 0;
       case 3: // Scheduling (calendar, attendance, location)
-        // Scheduling step is optional but if scheduled, needs dates
-        if (isScheduled && (!startDate || !endDate)) return false;
+        // Scheduling step is optional - dates are now set during assignment
         // If tracking attendance and in-person, need location details
         if (trackAttendance && locationType === 'IN_PERSON' && !locationDetails) return false;
         return true;
@@ -515,25 +509,15 @@ export default function NewSimulationPage() {
   const handleSubmit = async (_publishImmediately: boolean) => {
     setIsSaving(true);
     try {
-      // Convert datetime-local format to ISO string or undefined
-      const formatDate = (dateStr: string): string | undefined => {
-        if (!dateStr) return undefined;
-        try {
-          const date = new Date(dateStr);
-          return date.toISOString();
-        } catch {
-          return undefined;
-        }
-      };
-
       await createWithQuestionsMutation.mutateAsync({
         title,
         description: description || undefined,
         type: simulationType,
         visibility: 'PRIVATE', // Always private until published with assignments
         isOfficial,
-        startDate: formatDate(startDate),
-        endDate: formatDate(endDate),
+        // startDate and endDate are now set during assignment
+        startDate: undefined,
+        endDate: undefined,
         durationMinutes,
         totalQuestions: selectedQuestions.length,
         showResults,
@@ -717,228 +701,44 @@ export default function NewSimulationPage() {
 
             {/* Timing */}
             <div className="space-y-4">
-              <h3 className={`text-lg font-medium ${colors.text.primary}`}>Tempistiche</h3>
+              <h3 className={`text-lg font-medium ${colors.text.primary}`}>Durata</h3>
               
-              {/* For OFFICIAL simulations: only start date + duration */}
-              {simulationType === 'OFFICIAL' ? (
-                <div className="space-y-4">
-                  <div className={`p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800`}>
-                    <p className="text-sm text-blue-700 dark:text-blue-300">
-                      <strong>Simulazione Ufficiale:</strong> Inserisci data e ora di inizio. La fine verrà calcolata automaticamente in base alla durata.
+              {/* Info banner about date selection at assignment */}
+              <div className={`p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800`}>
+                <div className="flex items-start gap-3">
+                  <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                  <div className={`text-sm text-blue-700 dark:text-blue-300`}>
+                    <p className="font-medium">La data si sceglie al momento dell&apos;assegnazione</p>
+                    <p className="mt-1 opacity-80">
+                      Quando assegnerai questa simulazione a studenti, gruppi o classi, potrai specificare la data e l&apos;orario di svolgimento.
+                      {simulationType === 'OFFICIAL' 
+                        ? ' Per le simulazioni ufficiali sceglierai data e ora di inizio specifici.'
+                        : ' Potrai scegliere tra una data singola o una finestra temporale.'}
                     </p>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                        Data e ora inizio
-                      </label>
-                      <DateTimePicker
-                        id="startDate"
-                        value={startDate}
-                        onChange={(val) => {
-                          setStartDate(val);
-                          // Auto-calculate end date based on duration
-                          if (val && durationMinutes > 0) {
-                            const start = new Date(val);
-                            start.setMinutes(start.getMinutes() + durationMinutes);
-                            setEndDate(start.toISOString().slice(0, 16));
-                          }
-                        }}
-                        placeholder="Seleziona data e ora"
-                      />
-                    </div>
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                        Durata (minuti)
-                      </label>
-                      <input
-                        type="number"
-                        value={durationMinutes}
-                        onChange={(e) => {
-                          const newDuration = parseInt(e.target.value) || 0;
-                          setDurationMinutes(newDuration);
-                          // Recalculate end date
-                          if (startDate && newDuration > 0) {
-                            const start = new Date(startDate);
-                            start.setMinutes(start.getMinutes() + newDuration);
-                            setEndDate(start.toISOString().slice(0, 16));
-                          }
-                        }}
-                        min={1}
-                        className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
-                      />
-                    </div>
-                  </div>
-                  {startDate && durationMinutes > 0 && (
-                    <div className={`p-3 rounded-lg ${colors.background.secondary} border ${colors.border.light}`}>
-                      <p className={`text-sm ${colors.text.secondary}`}>
-                        <Clock className="w-4 h-4 inline mr-2" />
-                        La simulazione terminerà alle{' '}
-                        <strong className={colors.text.primary}>
-                          {new Date(new Date(startDate).getTime() + durationMinutes * 60000).toLocaleString('it-IT', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </strong>
-                      </p>
-                    </div>
-                  )}
                 </div>
-              ) : (
-                /* For other simulation types: choice between single date or time window */
-                <div className="space-y-4">
-                  {/* Mode selector */}
-                  <div className="flex gap-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUseTimeWindow(false);
-                        setEndDate('');
-                      }}
-                      className={`flex-1 p-4 rounded-xl border-2 text-left transition-all ${
-                        !useTimeWindow
-                          ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
-                          : `border-gray-200 dark:border-gray-700 ${colors.background.hover}`
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Clock className={`w-5 h-5 ${!useTimeWindow ? 'text-red-500' : colors.text.muted}`} />
-                        <div>
-                          <p className={`font-medium ${colors.text.primary}`}>Data singola</p>
-                          <p className={`text-sm ${colors.text.muted}`}>Inizio specifico + durata</p>
-                        </div>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setUseTimeWindow(true)}
-                      className={`flex-1 p-4 rounded-xl border-2 text-left transition-all ${
-                        useTimeWindow
-                          ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
-                          : `border-gray-200 dark:border-gray-700 ${colors.background.hover}`
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Calendar className={`w-5 h-5 ${useTimeWindow ? 'text-red-500' : colors.text.muted}`} />
-                        <div>
-                          <p className={`font-medium ${colors.text.primary}`}>Finestra temporale</p>
-                          <p className={`text-sm ${colors.text.muted}`}>Disponibile dal giorno X al Y</p>
-                        </div>
-                      </div>
-                    </button>
-                  </div>
+              </div>
 
-                  {/* Single date mode */}
-                  {!useTimeWindow ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                          Data e ora inizio
-                        </label>
-                        <DateTimePicker
-                          id="startDate"
-                          value={startDate}
-                          onChange={(val) => {
-                            setStartDate(val);
-                            // Auto-calculate end date based on duration
-                            if (val && durationMinutes > 0) {
-                              const start = new Date(val);
-                              start.setMinutes(start.getMinutes() + durationMinutes);
-                              setEndDate(start.toISOString().slice(0, 16));
-                            }
-                          }}
-                          placeholder="Seleziona data e ora"
-                        />
-                        <p className={`text-xs ${colors.text.muted} mt-1`}>
-                          Se non svolgi entro questa data → scaduta
-                        </p>
-                      </div>
-                      <div>
-                        <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                          Durata (minuti)
-                        </label>
-                        <input
-                          type="number"
-                          value={durationMinutes}
-                          onChange={(e) => {
-                            const newDuration = parseInt(e.target.value) || 0;
-                            setDurationMinutes(newDuration);
-                            // Recalculate end date
-                            if (startDate && newDuration > 0) {
-                              const start = new Date(startDate);
-                              start.setMinutes(start.getMinutes() + newDuration);
-                              setEndDate(start.toISOString().slice(0, 16));
-                            }
-                          }}
-                          min={0}
-                          className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
-                        />
-                        <p className={`text-xs ${colors.text.muted} mt-1`}>0 = tempo illimitato</p>
-                      </div>
-                    </div>
-                  ) : (
-                    /* Time window mode */
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                            Disponibile dal
-                          </label>
-                          <DateTimePicker
-                            id="startDate"
-                            value={startDate}
-                            onChange={setStartDate}
-                            placeholder="Seleziona data e ora"
-                          />
-                        </div>
-                        <div>
-                          <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                            Disponibile fino al
-                          </label>
-                          <DateTimePicker
-                            id="endDate"
-                            value={endDate}
-                            onChange={setEndDate}
-                            placeholder="Seleziona data e ora"
-                            minDate={startDate ? startDate.split('T')[0] : undefined}
-                          />
-                        </div>
-                      </div>
-                      <div className="max-w-xs">
-                        <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                          Durata singolo tentativo (minuti)
-                        </label>
-                        <input
-                          type="number"
-                          value={durationMinutes}
-                          onChange={(e) => setDurationMinutes(parseInt(e.target.value) || 0)}
-                          min={0}
-                          className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
-                        />
-                        <p className={`text-xs ${colors.text.muted} mt-1`}>0 = tempo illimitato</p>
-                      </div>
-                      {startDate && endDate && (
-                        <div className={`p-3 rounded-lg ${colors.background.secondary} border ${colors.border.light}`}>
-                          <p className={`text-sm ${colors.text.secondary}`}>
-                            <Calendar className="w-4 h-4 inline mr-2" />
-                            Gli studenti potranno svolgere la simulazione{' '}
-                            <strong className={colors.text.primary}>
-                              dal {new Date(startDate).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}
-                              {' '}al {new Date(endDate).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
-                            </strong>
-                            {durationMinutes > 0 && (
-                              <span> con un tempo massimo di <strong>{durationMinutes} minuti</strong> per tentativo</span>
-                            )}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* Duration field only */}
+              <div className="max-w-xs">
+                <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+                  Durata (minuti) {simulationType !== 'OFFICIAL' && <span className={colors.text.muted}>(0 = illimitata)</span>}
+                </label>
+                <input
+                  type="number"
+                  value={durationMinutes}
+                  onChange={(e) => setDurationMinutes(parseInt(e.target.value) || 0)}
+                  min={simulationType === 'OFFICIAL' ? 1 : 0}
+                  className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
+                />
+                {durationMinutes > 0 && (
+                  <p className={`text-xs ${colors.text.muted} mt-1`}>
+                    <Clock className="w-3 h-3 inline mr-1" />
+                    {Math.floor(durationMinutes / 60) > 0 && `${Math.floor(durationMinutes / 60)} ore `}
+                    {durationMinutes % 60 > 0 && `${durationMinutes % 60} minuti`}
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Scoring */}
@@ -1554,29 +1354,24 @@ export default function NewSimulationPage() {
               </div>
             )}
 
-            {/* Time settings reminder */}
+            {/* Duration info */}
             <div className={`p-4 rounded-xl ${colors.background.secondary} border ${colors.border.light}`}>
               <div className="flex items-start gap-3">
                 <Clock className="w-5 h-5 text-orange-600 dark:text-orange-400 mt-0.5" />
                 <div>
-                  <h4 className={`font-medium ${colors.text.primary}`}>Finestra temporale</h4>
+                  <h4 className={`font-medium ${colors.text.primary}`}>Durata simulazione</h4>
                   <p className={`text-sm ${colors.text.muted} mt-1`}>
-                    {startDate && endDate ? (
+                    {durationMinutes > 0 ? (
                       <>
-                        Dal <strong>{new Date(startDate).toLocaleDateString('it-IT', { dateStyle: 'medium' })}</strong> al{' '}
-                        <strong>{new Date(endDate).toLocaleDateString('it-IT', { dateStyle: 'medium' })}</strong>
+                        <strong>{Math.floor(durationMinutes / 60) > 0 && `${Math.floor(durationMinutes / 60)} ore `}{durationMinutes % 60 > 0 && `${durationMinutes % 60} minuti`}</strong>
                       </>
-                    ) : startDate ? (
-                      <>Inizio: <strong>{new Date(startDate).toLocaleDateString('it-IT', { dateStyle: 'medium' })}</strong></>
                     ) : (
-                      'Nessuna data impostata. Puoi modificarle nel passo "Configurazione".'
+                      <strong>Tempo illimitato</strong>
                     )}
                   </p>
-                  {durationMinutes > 0 && (
-                    <p className={`text-sm ${colors.text.muted} mt-1`}>
-                      Durata: <strong>{durationMinutes} minuti</strong>
-                    </p>
-                  )}
+                  <p className={`text-xs ${colors.text.muted} mt-2`}>
+                    La data e l&apos;orario di svolgimento verranno definiti al momento dell&apos;assegnazione.
+                  </p>
                 </div>
               </div>
             </div>

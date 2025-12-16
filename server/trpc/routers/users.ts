@@ -218,13 +218,6 @@ export const usersRouter = router({
                     },
                   },
                 },
-                // Class the student belongs to (single class relation)
-                class: {
-                  select: {
-                    id: true,
-                    name: true,
-                  },
-                },
               },
             },
             admin: {

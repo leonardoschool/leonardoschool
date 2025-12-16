@@ -56,7 +56,6 @@ const statusLabels: Record<SimulationStatus, string> = {
 // Visibility labels
 const visibilityLabels: Record<SimulationVisibility, string> = {
   PRIVATE: 'Privata',
-  CLASS: 'Classe',
   GROUP: 'Gruppo',
   PUBLIC: 'Pubblica',
 };
@@ -106,7 +105,7 @@ export default function AdminSimulationsContent() {
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
   const [archiveConfirm, setArchiveConfirm] = useState<{ id: string; title: string } | null>(null);
-  const [assignModal, setAssignModal] = useState<{ id: string; title: string } | null>(null);
+  const [assignModal, setAssignModal] = useState<{ id: string; title: string; isOfficial: boolean; durationMinutes: number; locationType?: string | null } | null>(null);
 
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -384,11 +383,6 @@ export default function AdminSimulationsContent() {
                             <div>
                               <p className={`font-medium ${colors.text.primary}`}>{simulation.title}</p>
                               <div className="flex items-center gap-2 mt-1">
-                                {simulation.class && (
-                                  <span className={`text-xs ${colors.text.muted}`}>
-                                    📚 {simulation.class.name}
-                                  </span>
-                                )}
                                 {simulation.durationMinutes > 0 && (
                                   <span className={`text-xs ${colors.text.muted} flex items-center gap-1`}>
                                     <Clock className="w-3 h-3" />
@@ -564,7 +558,7 @@ export default function AdminSimulationsContent() {
                             <span className={colors.text.secondary}>
                               {assignment.student?.user?.name 
                                 || assignment.group?.name 
-                                || (assignment.class ? `${assignment.class.name} - ${assignment.class.year}${assignment.class.section}` : '-')}
+                                || '-'}
                             </span>
                           </div>
                         </td>
@@ -697,7 +691,13 @@ export default function AdminSimulationsContent() {
               onClick={() => {
                 const sim = simulations.find(s => s.id === openMenuId);
                 if (sim) {
-                  setAssignModal({ id: sim.id, title: sim.title });
+                  setAssignModal({ 
+                    id: sim.id, 
+                    title: sim.title,
+                    isOfficial: sim.isOfficial,
+                    durationMinutes: sim.durationMinutes,
+                    locationType: sim.locationType 
+                  });
                 }
                 setOpenMenuId(null);
               }}
@@ -788,6 +788,9 @@ export default function AdminSimulationsContent() {
           onClose={() => setAssignModal(null)}
           simulationId={assignModal.id}
           simulationTitle={assignModal.title}
+          isOfficial={assignModal.isOfficial}
+          durationMinutes={assignModal.durationMinutes}
+          defaultLocationType={(assignModal.locationType as 'ONLINE' | 'IN_PERSON' | 'HYBRID') || null}
         />
       )}
     </div>

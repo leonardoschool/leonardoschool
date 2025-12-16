@@ -9,7 +9,7 @@ export type SimulationType = z.infer<typeof SimulationTypeEnum>;
 export const SimulationStatusEnum = z.enum(['DRAFT', 'PUBLISHED', 'CLOSED', 'ARCHIVED']);
 export type SimulationStatus = z.infer<typeof SimulationStatusEnum>;
 
-export const SimulationVisibilityEnum = z.enum(['PRIVATE', 'CLASS', 'GROUP', 'PUBLIC']);
+export const SimulationVisibilityEnum = z.enum(['PRIVATE', 'GROUP', 'PUBLIC']);
 export type SimulationVisibility = z.infer<typeof SimulationVisibilityEnum>;
 
 export const CreatorRoleEnum = z.enum(['ADMIN', 'COLLABORATOR', 'STUDENT']);
@@ -62,7 +62,6 @@ export type SimulationQuestionInput = z.infer<typeof simulationQuestionSchema>;
 export const assignmentTargetSchema = z.object({
   studentId: z.string().optional().nullable(),
   groupId: z.string().optional().nullable(),
-  classId: z.string().optional().nullable(),
   dueDate: z.string().datetime().optional().nullable(),
   notes: z.string().optional().nullable(),
   // Schedule for this assignment
@@ -70,8 +69,8 @@ export const assignmentTargetSchema = z.object({
   endDate: z.string().datetime().optional().nullable(),
   locationType: z.enum(['ONLINE', 'IN_PERSON', 'HYBRID']).optional().nullable(),
 }).refine(
-  data => data.studentId || data.groupId || data.classId,
-  { message: 'Devi selezionare almeno uno tra studente, gruppo o classe' }
+  data => data.studentId || data.groupId,
+  { message: 'Devi selezionare almeno uno tra studente o gruppo' }
 );
 
 export type AssignmentTargetInput = z.infer<typeof assignmentTargetSchema>;
@@ -150,7 +149,6 @@ const simulationBaseSchema = z.object({
   topicIds: z.array(z.string()).optional().nullable(),
   
   // Assignment
-  classId: z.string().optional().nullable(),
   isPublic: z.boolean().default(false),
 });
 
@@ -219,7 +217,6 @@ export const simulationFilterSchema = z.object({
   status: SimulationStatusEnum.optional(),
   visibility: SimulationVisibilityEnum.optional(),
   isOfficial: z.boolean().optional(),
-  classId: z.string().optional(),
   groupId: z.string().optional(),
   createdById: z.string().optional(),
   creatorRole: CreatorRoleEnum.optional(),

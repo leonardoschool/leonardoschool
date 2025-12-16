@@ -21,7 +21,7 @@ import * as notificationService from '@/server/services/notificationService';
 async function getStudentFromUser(prisma: PrismaClient, userId: string) {
   const student = await prisma.student.findUnique({
     where: { userId },
-    select: { id: true, classId: true, userId: true },
+    select: { id: true, userId: true },
   });
   if (!student) {
     throw new TRPCError({
@@ -47,7 +47,6 @@ export const simulationsRouter = router({
         status,
         visibility,
         isOfficial,
-        classId,
         groupId,
         createdById,
         creatorRole,
@@ -78,7 +77,6 @@ export const simulationsRouter = router({
       if (status) where.status = status;
       if (visibility) where.visibility = visibility;
       if (typeof isOfficial === 'boolean') where.isOfficial = isOfficial;
-      if (classId) where.classId = classId;
       if (createdById) where.createdById = createdById;
       if (creatorRole) where.creatorRole = creatorRole;
       
@@ -132,9 +130,6 @@ export const simulationsRouter = router({
           createdBy: {
             select: { id: true, name: true, role: true },
           },
-          class: {
-            select: { id: true, name: true, year: true, section: true },
-          },
           _count: {
             select: {
               questions: true,
@@ -166,9 +161,6 @@ export const simulationsRouter = router({
           createdBy: {
             select: { id: true, name: true, role: true, email: true },
           },
-          class: {
-            select: { id: true, name: true, year: true, section: true },
-          },
           questions: {
             orderBy: { order: 'asc' },
             include: {
@@ -187,7 +179,6 @@ export const simulationsRouter = router({
                 include: { user: { select: { id: true, name: true, email: true } } },
               },
               group: { select: { id: true, name: true, color: true } },
-              class: { select: { id: true, name: true, year: true, section: true } },
               assignedBy: { select: { id: true, name: true } },
             },
           },
@@ -263,12 +254,6 @@ export const simulationsRouter = router({
               message: 'Non puoi assegnare a studenti che non sono nei tuoi gruppi',
             });
           }
-          if (target.classId) {
-            throw new TRPCError({
-              code: 'FORBIDDEN',
-              message: 'I collaboratori non possono assegnare a intere classi',
-            });
-          }
         }
       }
 
@@ -295,8 +280,6 @@ export const simulationsRouter = router({
       }
 
       // Create simulation with questions and assignments
-      const simClassId = simulationData.classId;
-      
       const simulation = await ctx.prisma.simulation.create({
         data: {
           title: simulationData.title,
@@ -341,7 +324,6 @@ export const simulationsRouter = router({
           logSuspiciousEvents: simulationData.logSuspiciousEvents ?? false,
           createdBy: { connect: { id: ctx.user.id } },
           creatorRole: ctx.user.role,
-          class: simClassId ? { connect: { id: simClassId } } : undefined,
           questions: {
             create: questions.map((q, index) => ({
               question: { connect: { id: q.questionId } },
@@ -354,7 +336,6 @@ export const simulationsRouter = router({
             create: assignments.map(a => ({
               student: a.studentId ? { connect: { id: a.studentId } } : undefined,
               group: a.groupId ? { connect: { id: a.groupId } } : undefined,
-              class: a.classId ? { connect: { id: a.classId } } : undefined,
               dueDate: a.dueDate ? new Date(a.dueDate) : null,
               notes: a.notes,
               assignedBy: { connect: { id: ctx.user.id } },
@@ -422,12 +403,6 @@ export const simulationsRouter = router({
             throw new TRPCError({
               code: 'FORBIDDEN',
               message: 'Non puoi assegnare a studenti che non sono nei tuoi gruppi',
-            });
-          }
-          if (target.classId) {
-            throw new TRPCError({
-              code: 'FORBIDDEN',
-              message: 'I collaboratori non possono assegnare a intere classi',
             });
           }
         }
@@ -502,8 +477,6 @@ export const simulationsRouter = router({
       }
 
       // Create simulation
-      const simClassId = simulationData.classId;
-      
       const simulation = await ctx.prisma.simulation.create({
         data: {
           title: simulationData.title,
@@ -548,7 +521,6 @@ export const simulationsRouter = router({
           logSuspiciousEvents: simulationData.logSuspiciousEvents ?? false,
           createdBy: { connect: { id: ctx.user.id } },
           creatorRole: ctx.user.role,
-          class: simClassId ? { connect: { id: simClassId } } : undefined,
           questions: {
             create: selectedQuestions.map(q => ({
               question: { connect: { id: q.id } },
@@ -559,7 +531,6 @@ export const simulationsRouter = router({
             create: assignments.map(a => ({
               student: a.studentId ? { connect: { id: a.studentId } } : undefined,
               group: a.groupId ? { connect: { id: a.groupId } } : undefined,
-              class: a.classId ? { connect: { id: a.classId } } : undefined,
               dueDate: a.dueDate ? new Date(a.dueDate) : null,
               notes: a.notes,
               assignedBy: { connect: { id: ctx.user.id } },
@@ -629,7 +600,6 @@ export const simulationsRouter = router({
         },
         include: {
           createdBy: { select: { id: true, name: true } },
-          class: { select: { id: true, name: true } },
           _count: { select: { questions: true, results: true, assignments: true } },
         },
       });
@@ -887,12 +857,6 @@ export const simulationsRouter = router({
               message: 'Non puoi assegnare a studenti che non sono nei tuoi gruppi',
             });
           }
-          if (target.classId) {
-            throw new TRPCError({
-              code: 'FORBIDDEN',
-              message: 'I collaboratori non possono assegnare a intere classi',
-            });
-          }
         }
       }
 
@@ -906,7 +870,6 @@ export const simulationsRouter = router({
                 simulationId,
                 studentId: target.studentId,
                 groupId: target.groupId,
-                classId: target.classId,
                 dueDate: target.dueDate ? new Date(target.dueDate) : null,
                 notes: target.notes,
                 assignedById: ctx.user.id,
@@ -976,7 +939,6 @@ export const simulationsRouter = router({
 
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
       const studentId = student.id;
-      const classId = student.classId;
       const now = new Date();
 
       // Get student's groups
@@ -992,11 +954,6 @@ export const simulationsRouter = router({
         { isPublic: true },
         // Assigned to student directly
         { assignments: { some: { studentId } } },
-        // Assigned to student's class
-        ...(classId ? [
-          { classId },
-          { assignments: { some: { classId } } },
-        ] : []),
         // Assigned to student's groups
         ...(groupIds.length > 0 ? [
           { assignments: { some: { groupId: { in: groupIds } } } },
@@ -1051,13 +1008,11 @@ export const simulationsRouter = router({
         orderBy: { [sortBy]: sortOrder },
         include: {
           createdBy: { select: { name: true } },
-          class: { select: { id: true, name: true } },
           _count: { select: { questions: true } },
           assignments: {
             where: {
               OR: [
                 { studentId },
-                ...(classId ? [{ classId }] : []),
                 ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
               ],
             },
@@ -1106,7 +1061,6 @@ export const simulationsRouter = router({
     .query(async ({ ctx, input }) => {
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
       const studentId = student.id;
-      const classId = student.classId;
       const now = new Date();
 
       // Get student's groups
@@ -1147,7 +1101,6 @@ export const simulationsRouter = router({
             where: {
               OR: [
                 { studentId },
-                ...(classId ? [{ classId }] : []),
                 ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
               ],
             },
@@ -1161,10 +1114,9 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
       }
 
-      // Check access
+      // Check access: public or has assignment
       const hasAccess = 
         simulation.isPublic ||
-        simulation.classId === classId ||
         simulation.assignments.length > 0;
 
       if (!hasAccess) {
@@ -2119,9 +2071,6 @@ export const simulationsRouter = router({
           group: {
             select: { id: true, name: true, color: true, _count: { select: { members: true } } },
           },
-          class: {
-            select: { id: true, name: true, year: true, section: true },
-          },
           assignedBy: { select: { id: true, name: true } },
         },
       });
@@ -2158,25 +2107,6 @@ export const simulationsRouter = router({
                 where: {
                   simulationId: assignment.simulationId,
                   studentId: { in: members.map(m => m.studentId) },
-                  completedAt: { not: null },
-                },
-                select: { id: true },
-              });
-              completedCount = results.length;
-            }
-          } else if (assignment.classId) {
-            // Class assignment
-            const students = await ctx.prisma.student.findMany({
-              where: { classId: assignment.classId },
-              select: { id: true },
-            });
-            totalTargeted = students.length;
-
-            if (students.length > 0) {
-              const results = await ctx.prisma.simulationResult.findMany({
-                where: {
-                  simulationId: assignment.simulationId,
-                  studentId: { in: students.map(s => s.id) },
                   completedAt: { not: null },
                 },
                 select: { id: true },
@@ -2261,7 +2191,6 @@ export const simulationsRouter = router({
           student: {
             include: {
               user: { select: { id: true, name: true, email: true } },
-              class: { select: { id: true, name: true, year: true, section: true } },
             },
           },
         },
@@ -2303,11 +2232,6 @@ export const simulationsRouter = router({
           studentId: showRealName ? result.studentId : null,
           studentName: showRealName ? result.student.user.name : anonymousName,
           studentEmail: showRealName ? result.student.user.email : null,
-          className: showRealName 
-            ? (result.student.class 
-                ? `${result.student.class.year}${result.student.class.section} - ${result.student.class.name}`
-                : null)
-            : null,
           isCurrentUser: isCurrentStudent,
           totalScore: result.totalScore,
           percentageScore: result.percentageScore,
@@ -2518,13 +2442,6 @@ export const simulationsRouter = router({
                   },
                 },
               },
-              class: {
-                include: {
-                  students: {
-                    include: { user: { select: { id: true, name: true, email: true } } },
-                  },
-                },
-              },
             },
           },
           results: {
@@ -2575,18 +2492,6 @@ export const simulationsRouter = router({
               name: member.student.user.name,
               email: member.student.user.email,
               hasResult: simulation.results.some(r => r.studentId === member.student.id),
-            });
-          }
-        }
-
-        // Class assignment
-        if (assignment.class) {
-          for (const student of assignment.class.students) {
-            studentsMap.set(student.id, {
-              id: student.id,
-              name: student.user.name,
-              email: student.user.email,
-              hasResult: simulation.results.some(r => r.studentId === student.id),
             });
           }
         }

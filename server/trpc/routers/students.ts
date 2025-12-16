@@ -193,7 +193,6 @@ export const studentsRouter = router({
       include: {
         user: true,
         stats: true,
-        class: true,
       },
     });
 
@@ -218,7 +217,6 @@ export const studentsRouter = router({
         include: {
           student: {
             include: {
-              class: true,
               groupMemberships: {
                 include: {
                   group: {
@@ -264,12 +262,6 @@ export const studentsRouter = router({
               matricola: true,
               phone: true,
               enrollmentDate: true,
-              class: {
-                select: {
-                  id: true,
-                  name: true,
-                },
-              },
               groupMemberships: {
                 include: {
                   group: {
@@ -328,12 +320,6 @@ export const studentsRouter = router({
             id: true,
             matricola: true,
             enrollmentDate: true,
-            class: {
-              select: {
-                id: true,
-                name: true,
-              }
-            },
             stats: {
               select: {
                 totalSimulations: true,
@@ -366,30 +352,9 @@ export const studentsRouter = router({
       studentId: s.student?.id,
       matricola: s.student?.matricola,
       enrollmentDate: s.student?.enrollmentDate,
-      className: s.student?.class?.name,
       stats: s.student?.stats,
       groups: s.student?.groupMemberships?.map(gm => gm.group) || [],
     }));
-  }),
-
-  /**
-   * Get all classes for simulation assignment
-   */
-  getClasses: staffProcedure.query(async ({ ctx }) => {
-    return ctx.prisma.class.findMany({
-      select: {
-        id: true,
-        name: true,
-        year: true,
-        section: true,
-        _count: {
-          select: {
-            students: true,
-          },
-        },
-      },
-      orderBy: [{ year: 'desc' }, { name: 'asc' }],
-    });
   }),
 
   /**
@@ -400,12 +365,11 @@ export const studentsRouter = router({
       page: z.number().int().min(1).default(1),
       pageSize: z.number().int().min(1).max(500).default(50),
       search: z.string().optional(),
-      classId: z.string().optional(),
       isActive: z.boolean().optional(),
       onlyMyGroups: z.boolean().optional().default(false), // For collaborators: only students in their groups
     }))
     .query(async ({ ctx, input }) => {
-      const { page, pageSize, search, classId, isActive, onlyMyGroups } = input;
+      const { page, pageSize, search, isActive, onlyMyGroups } = input;
 
       const where: Record<string, unknown> = {
         role: 'STUDENT',
@@ -420,10 +384,6 @@ export const studentsRouter = router({
           { name: { contains: search, mode: 'insensitive' } },
           { email: { contains: search, mode: 'insensitive' } },
         ];
-      }
-
-      if (classId) {
-        where.student = { classId };
       }
 
       // For collaborators: filter students to those in groups they manage
@@ -469,12 +429,6 @@ export const studentsRouter = router({
             select: {
               id: true,
               matricola: true,
-              class: {
-                select: {
-                  id: true,
-                  name: true,
-                },
-              },
             },
           },
         },
@@ -489,8 +443,6 @@ export const studentsRouter = router({
           isActive: s.isActive,
           studentId: s.student?.id,
           matricola: s.student?.matricola,
-          classId: s.student?.class?.id,
-          className: s.student?.class?.name,
         })),
         pagination: {
           page,
@@ -694,7 +646,6 @@ export const studentsRouter = router({
         include: {
           student: {
             include: {
-              class: true,
               stats: true,
               groupMemberships: {
                 include: {
@@ -791,7 +742,6 @@ export const studentsRouter = router({
         matricola: user.student.matricola,
         enrollmentDate: user.student.enrollmentDate,
         graduationYear: user.student.graduationYear,
-        className: user.student.class?.name ?? null,
         stats: user.student.stats,
         groups: user.student.groupMemberships.map(gm => ({
           id: gm.group.id,

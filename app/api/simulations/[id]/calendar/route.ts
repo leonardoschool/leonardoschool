@@ -50,9 +50,6 @@ export async function GET(
             name: true,
           },
         },
-        class: {
-          select: { name: true },
-        },
       },
     });
 
@@ -76,7 +73,7 @@ export async function GET(
       }
 
       // Check if student has access to this simulation
-      const hasAccess = await checkStudentAccess(student.id, student.classId, simulation.id);
+      const hasAccess = await checkStudentAccess(student.id, simulation.id);
       if (!hasAccess && !simulation.isPublic) {
         return NextResponse.json({ error: 'Accesso non autorizzato' }, { status: 403 });
       }
@@ -112,9 +109,6 @@ export async function GET(
     description += `\nDurata: ${simulation.durationMinutes} minuti`;
     if (simulation.isOfficial) {
       description += '\n\n⚠️ SIMULAZIONE UFFICIALE';
-    }
-    if (simulation.class) {
-      description += `\nClasse: ${simulation.class.name}`;
     }
 
     const eventData: EventEmailData = {
@@ -161,21 +155,17 @@ export async function GET(
 // Helper function to check student access
 async function checkStudentAccess(
   studentId: string,
-  classId: string | null,
   simulationId: string
 ): Promise<boolean> {
   // Check direct assignment
-  const assignment = await prisma.simulationAssignment.findFirst({
+  const directAssignment = await prisma.simulationAssignment.findFirst({
     where: {
       simulationId,
-      OR: [
-        { studentId },
-        ...(classId ? [{ classId }] : []),
-      ],
+      studentId,
     },
   });
 
-  if (assignment) return true;
+  if (directAssignment) return true;
 
   // Check group assignment
   const groupMemberships = await prisma.groupMember.findMany({

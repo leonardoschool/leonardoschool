@@ -17,6 +17,7 @@ import {
   MapPin,
   Send,
   Info,
+  Clock,
 } from 'lucide-react';
 import type { LocationType } from '@/lib/validations/simulationValidation';
 
@@ -25,6 +26,9 @@ interface SimulationAssignModalProps {
   onClose: () => void;
   simulationId: string;
   simulationTitle: string;
+  isOfficial?: boolean;
+  durationMinutes?: number;
+  defaultLocationType?: LocationType | null;
   onSuccess?: () => void;
 }
 
@@ -33,6 +37,9 @@ export function SimulationAssignModal({
   onClose,
   simulationId,
   simulationTitle,
+  isOfficial = false,
+  durationMinutes = 60,
+  defaultLocationType = null,
   onSuccess,
 }: SimulationAssignModalProps) {
   const [mounted, setMounted] = useState(false);
@@ -43,19 +50,15 @@ export function SimulationAssignModal({
   // Form state
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
-  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [locationType, setLocationType] = useState<LocationType | ''>('');
+  const [useTimeWindow, setUseTimeWindow] = useState(false); // false = single date, true = time window
+  const [locationType, setLocationType] = useState<LocationType | ''>(defaultLocationType || '');
   const [notes, setNotes] = useState('');
 
   // Fetch data
   const { data: groupsData } = trpc.groups.getGroups.useQuery(
     { page: 1, pageSize: 100 },
-    { enabled: isOpen }
-  );
-  const { data: classesData } = trpc.students.getClasses.useQuery(
-    undefined,
     { enabled: isOpen }
   );
   const { data: studentsData } = trpc.students.getAllForAdmin.useQuery(
@@ -85,9 +88,9 @@ export function SimulationAssignModal({
   const handleClose = () => {
     setSelectedStudents([]);
     setSelectedGroups([]);
-    setSelectedClasses([]);
     setStartDate('');
     setEndDate('');
+    setUseTimeWindow(false);
     setLocationType('');
     setNotes('');
     onClose();
@@ -99,7 +102,6 @@ export function SimulationAssignModal({
     const targets: Array<{
       studentId?: string | null;
       groupId?: string | null;
-      classId?: string | null;
       startDate?: string | null;
       endDate?: string | null;
       locationType?: LocationType | null;
@@ -128,17 +130,6 @@ export function SimulationAssignModal({
       });
     }
 
-    // Add class targets
-    for (const classId of selectedClasses) {
-      targets.push({
-        classId,
-        startDate: startDate || null,
-        endDate: endDate || null,
-        locationType: locationType || null,
-        notes: notes || null,
-      });
-    }
-
     if (targets.length === 0) {
       return;
     }
@@ -149,12 +140,11 @@ export function SimulationAssignModal({
     });
   };
 
-  const hasSelection = selectedStudents.length > 0 || selectedGroups.length > 0 || selectedClasses.length > 0;
+  const hasSelection = selectedStudents.length > 0 || selectedGroups.length > 0;
 
   if (!isOpen || !mounted) return null;
 
   const groups = groupsData?.groups || [];
-  const classes = classesData || [];
   const students = (studentsData || []).filter(u => u.student);
 
   const modalContent = (
@@ -203,29 +193,176 @@ export function SimulationAssignModal({
               <h3 className={`font-medium ${colors.text.primary}`}>Programmazione</h3>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                  Data/ora inizio
-                </label>
-                <DateTimePicker
-                  value={startDate}
-                  onChange={setStartDate}
-                  placeholder="Seleziona data/ora"
-                />
+            {/* For OFFICIAL simulations: only start date + auto-calculated end */}
+            {isOfficial ? (
+              <div className="space-y-4">
+                <div className={`p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800`}>
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    <strong>Simulazione Ufficiale:</strong> Inserisci data e ora di inizio. La fine verrà calcolata automaticamente in base alla durata ({durationMinutes} minuti).
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+                      Data e ora inizio
+                    </label>
+                    <DateTimePicker
+                      value={startDate}
+                      onChange={(val) => {
+                        setStartDate(val);
+                        // Auto-calculate end date based on duration
+                        if (val && durationMinutes > 0) {
+                          const start = new Date(val);
+                          start.setMinutes(start.getMinutes() + durationMinutes);
+                          setEndDate(start.toISOString().slice(0, 16));
+                        }
+                      }}
+                      placeholder="Seleziona data e ora"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    {startDate && durationMinutes > 0 && (
+                      <div className={`p-3 rounded-lg ${colors.background.secondary} border ${colors.border.light} w-full`}>
+                        <p className={`text-sm ${colors.text.secondary}`}>
+                          <Clock className="w-4 h-4 inline mr-2" />
+                          Termina alle{' '}
+                          <strong className={colors.text.primary}>
+                            {new Date(new Date(startDate).getTime() + durationMinutes * 60000).toLocaleString('it-IT', {
+                              day: '2-digit',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </strong>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                  Data/ora fine
-                </label>
-                <DateTimePicker
-                  value={endDate}
-                  onChange={setEndDate}
-                  placeholder="Seleziona data/ora"
-                  minDate={startDate ? startDate.split('T')[0] : undefined}
-                />
+            ) : (
+              /* For other simulation types: choice between single date or time window */
+              <div className="space-y-4">
+                {/* Mode selector */}
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUseTimeWindow(false);
+                      setEndDate('');
+                    }}
+                    className={`flex-1 p-3 rounded-xl border-2 text-left transition-all ${
+                      !useTimeWindow
+                        ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
+                        : `border-gray-200 dark:border-gray-700 ${colors.background.hover}`
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Clock className={`w-4 h-4 ${!useTimeWindow ? 'text-red-500' : colors.text.muted}`} />
+                      <div>
+                        <p className={`text-sm font-medium ${colors.text.primary}`}>Data singola</p>
+                        <p className={`text-xs ${colors.text.muted}`}>Inizio specifico + durata</p>
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUseTimeWindow(true)}
+                    className={`flex-1 p-3 rounded-xl border-2 text-left transition-all ${
+                      useTimeWindow
+                        ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
+                        : `border-gray-200 dark:border-gray-700 ${colors.background.hover}`
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Calendar className={`w-4 h-4 ${useTimeWindow ? 'text-red-500' : colors.text.muted}`} />
+                      <div>
+                        <p className={`text-sm font-medium ${colors.text.primary}`}>Finestra temporale</p>
+                        <p className={`text-xs ${colors.text.muted}`}>Disponibile dal giorno X al Y</p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Single date mode */}
+                {!useTimeWindow ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+                        Data e ora inizio
+                      </label>
+                      <DateTimePicker
+                        value={startDate}
+                        onChange={(val) => {
+                          setStartDate(val);
+                          // Auto-calculate end date based on duration
+                          if (val && durationMinutes > 0) {
+                            const start = new Date(val);
+                            start.setMinutes(start.getMinutes() + durationMinutes);
+                            setEndDate(start.toISOString().slice(0, 16));
+                          }
+                        }}
+                        placeholder="Seleziona data e ora"
+                      />
+                      <p className={`text-xs ${colors.text.muted} mt-1`}>
+                        Se non svolgi entro questa data → scaduta
+                      </p>
+                    </div>
+                    {startDate && durationMinutes > 0 && (
+                      <div className={`p-3 rounded-lg ${colors.background.secondary} border ${colors.border.light}`}>
+                        <p className={`text-sm ${colors.text.secondary}`}>
+                          <Clock className="w-4 h-4 inline mr-2" />
+                          Durata: <strong className={colors.text.primary}>{durationMinutes} minuti</strong>
+                          {durationMinutes === 0 && <span className={colors.text.muted}> (illimitata)</span>}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Time window mode */
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+                          Disponibile dal
+                        </label>
+                        <DateTimePicker
+                          value={startDate}
+                          onChange={setStartDate}
+                          placeholder="Seleziona data e ora"
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+                          Disponibile fino al
+                        </label>
+                        <DateTimePicker
+                          value={endDate}
+                          onChange={setEndDate}
+                          placeholder="Seleziona data e ora"
+                          minDate={startDate ? startDate.split('T')[0] : undefined}
+                        />
+                      </div>
+                    </div>
+                    {startDate && endDate && (
+                      <div className={`p-3 rounded-lg ${colors.background.secondary} border ${colors.border.light}`}>
+                        <p className={`text-sm ${colors.text.secondary}`}>
+                          <Calendar className="w-4 h-4 inline mr-2" />
+                          Gli studenti potranno svolgere la simulazione{' '}
+                          <strong className={colors.text.primary}>
+                            dal {new Date(startDate).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}
+                            {' '}al {new Date(endDate).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </strong>
+                          {durationMinutes > 0 && (
+                            <span> con un tempo massimo di <strong>{durationMinutes} minuti</strong> per tentativo</span>
+                          )}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
+            )}
           </div>
 
           {/* Location Section */}
@@ -234,6 +371,21 @@ export function SimulationAssignModal({
               <MapPin className="w-5 h-5 text-orange-600 dark:text-orange-400" />
               <h3 className={`font-medium ${colors.text.primary}`}>Modalità</h3>
             </div>
+
+            {defaultLocationType && (
+              <div className={`p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800`}>
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  <Info className="w-4 h-4 inline mr-2" />
+                  Modalità predefinita della simulazione:{' '}
+                  <strong>
+                    {defaultLocationType === 'IN_PERSON' && '🏢 In presenza'}
+                    {defaultLocationType === 'ONLINE' && '💻 Online'}
+                    {defaultLocationType === 'HYBRID' && '🔄 Ibrida'}
+                  </strong>
+                  {' '}(puoi modificarla per questa assegnazione specifica)
+                </p>
+              </div>
+            )}
 
             <CustomSelect
               value={locationType}
@@ -294,42 +446,6 @@ export function SimulationAssignModal({
               </div>
             )}
 
-            {/* Classes */}
-            {classes.length > 0 && (
-              <div>
-                <label className={`block text-sm font-medium ${colors.text.secondary} mb-2`}>
-                  Classi
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto">
-                  {classes.map((cls) => (
-                    <label
-                      key={cls.id}
-                      className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
-                        selectedClasses.includes(cls.id)
-                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                          : `${colors.border.light} ${colors.background.hover}`
-                      }`}
-                    >
-                      <Checkbox
-                        id={`class-${cls.id}`}
-                        checked={selectedClasses.includes(cls.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedClasses([...selectedClasses, cls.id]);
-                          } else {
-                            setSelectedClasses(selectedClasses.filter(id => id !== cls.id));
-                          }
-                        }}
-                      />
-                      <span className={`text-sm font-medium truncate ${colors.text.primary}`}>
-                        {cls.name}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Students */}
             {students.length > 0 && (
               <div>
@@ -372,7 +488,7 @@ export function SimulationAssignModal({
             )}
 
             {/* No data message */}
-            {groups.length === 0 && classes.length === 0 && students.length === 0 && (
+            {groups.length === 0 && students.length === 0 && (
               <div className={`text-center py-8 ${colors.text.muted}`}>
                 <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
                 <p>Nessun destinatario disponibile</p>
@@ -401,9 +517,7 @@ export function SimulationAssignModal({
             {hasSelection ? (
               <>
                 Selezionati: {selectedGroups.length > 0 && `${selectedGroups.length} gruppi`}
-                {selectedGroups.length > 0 && (selectedClasses.length > 0 || selectedStudents.length > 0) && ', '}
-                {selectedClasses.length > 0 && `${selectedClasses.length} classi`}
-                {selectedClasses.length > 0 && selectedStudents.length > 0 && ', '}
+                {selectedGroups.length > 0 && selectedStudents.length > 0 && ', '}
                 {selectedStudents.length > 0 && `${selectedStudents.length} studenti`}
               </>
             ) : (

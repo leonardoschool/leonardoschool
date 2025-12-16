@@ -496,7 +496,6 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
               {(() => {
                 const groupAssignments = simulation.assignments.filter(a => a.group);
                 const studentAssignments = simulation.assignments.filter(a => a.student);
-                const classAssignments = simulation.assignments.filter(a => a.class);
 
                 return (
                   <div className="space-y-4">
@@ -545,25 +544,6 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
                               +{studentAssignments.length - 5} altri
                             </p>
                           )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Classes */}
-                    {classAssignments.length > 0 && (
-                      <div>
-                        <h4 className={`text-xs font-medium ${colors.text.muted} uppercase mb-2`}>
-                          Classi ({classAssignments.length})
-                        </h4>
-                        <div className="flex flex-wrap gap-2">
-                          {classAssignments.map((a) => (
-                            <span
-                              key={a.id}
-                              className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-                            >
-                              {a.class?.name}
-                            </span>
-                          ))}
                         </div>
                       </div>
                     )}

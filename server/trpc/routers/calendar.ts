@@ -99,7 +99,6 @@ export const calendarRouter = router({
                   include: {
                     user: { select: { id: true, name: true, email: true } },
                     group: { select: { id: true, name: true } },
-                    class: { select: { id: true, name: true } },
                   },
                 }
               : false,
@@ -142,7 +141,6 @@ export const calendarRouter = router({
             include: {
               user: { select: { id: true, name: true, email: true } },
               group: { select: { id: true, name: true } },
-              class: { select: { id: true, name: true } },
             },
           },
           attendances: {
@@ -213,14 +211,12 @@ export const calendarRouter = router({
         // Invitations
         inviteUserIds: z.array(z.string()).optional(),
         inviteGroupIds: z.array(z.string()).optional(),
-        inviteClassIds: z.array(z.string()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const {
         inviteUserIds,
         inviteGroupIds,
-        inviteClassIds,
         onlineLink,
         ...eventData
       } = input;
@@ -257,7 +253,6 @@ export const calendarRouter = router({
             create: [
               ...(inviteUserIds?.map((userId) => ({ user: { connect: { id: userId } } })) || []),
               ...(inviteGroupIds?.map((groupId) => ({ group: { connect: { id: groupId } } })) || []),
-              ...(inviteClassIds?.map((classId) => ({ class: { connect: { id: classId } } })) || []),
             ],
           },
         },
@@ -280,15 +275,6 @@ export const calendarRouter = router({
                           user: { select: { id: true, email: true, name: true } } 
                         } 
                       },
-                    } 
-                  } 
-                } 
-              },
-              class: { 
-                include: { 
-                  students: { 
-                    include: { 
-                      user: { select: { id: true, email: true, name: true } } 
                     } 
                   } 
                 } 
@@ -335,20 +321,6 @@ export const calendarRouter = router({
                   name: member.collaborator.user.name || 'Utente',
                 });
                 seenIds.add(member.collaborator.user.id);
-              }
-            }
-          }
-
-          // Class students
-          if (invitation.class?.students) {
-            for (const student of invitation.class.students) {
-              if (student.user?.id && !seenIds.has(student.user.id)) {
-                invitees.push({
-                  id: student.user.id,
-                  email: student.user.email || '',
-                  name: student.user.name || 'Utente',
-                });
-                seenIds.add(student.user.id);
               }
             }
           }
@@ -474,15 +446,6 @@ export const calendarRouter = router({
                   }
                 }
               },
-              class: {
-                include: {
-                  students: {
-                    include: {
-                      user: { select: { id: true, email: true, name: true } }
-                    }
-                  }
-                }
-              },
             },
           },
         },
@@ -520,19 +483,6 @@ export const calendarRouter = router({
                   name: member.collaborator.user.name || 'Utente',
                 });
                 seenIds.add(member.collaborator.user.id);
-              }
-            }
-          }
-
-          if (invitation.class?.students) {
-            for (const student of invitation.class.students) {
-              if (student.user?.id && !seenIds.has(student.user.id)) {
-                invitees.push({
-                  id: student.user.id,
-                  email: student.user.email || '',
-                  name: student.user.name || 'Utente',
-                });
-                seenIds.add(student.user.id);
               }
             }
           }
@@ -631,15 +581,6 @@ export const calendarRouter = router({
                   }
                 }
               },
-              class: {
-                include: {
-                  students: {
-                    include: {
-                      user: { select: { id: true, email: true, name: true } }
-                    }
-                  }
-                }
-              },
             },
           },
         },
@@ -687,19 +628,6 @@ export const calendarRouter = router({
                   name: member.collaborator.user.name || 'Utente',
                 });
                 seenIds.add(member.collaborator.user.id);
-              }
-            }
-          }
-
-          if (invitation.class?.students) {
-            for (const student of invitation.class.students) {
-              if (student.user?.id && !seenIds.has(student.user.id)) {
-                invitees.push({
-                  id: student.user.id,
-                  email: student.user.email || '',
-                  name: student.user.name || 'Utente',
-                });
-                seenIds.add(student.user.id);
               }
             }
           }
@@ -775,11 +703,10 @@ export const calendarRouter = router({
         eventId: z.string(),
         userIds: z.array(z.string()).optional(),
         groupIds: z.array(z.string()).optional(),
-        classIds: z.array(z.string()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { eventId, userIds, groupIds, classIds } = input;
+      const { eventId, userIds, groupIds } = input;
 
       const event = await ctx.prisma.calendarEvent.findUnique({
         where: { id: eventId },
@@ -812,13 +739,6 @@ export const calendarRouter = router({
           ctx.prisma.eventInvitation.upsert({
             where: { eventId_groupId: { eventId, groupId } },
             create: { eventId, groupId },
-            update: {},
-          })
-        ) || []),
-        ...(classIds?.map((classId) =>
-          ctx.prisma.eventInvitation.upsert({
-            where: { eventId_classId: { eventId, classId } },
-            create: { eventId, classId },
             update: {},
           })
         ) || []),
@@ -937,20 +857,6 @@ export const calendarRouter = router({
                   },
                 },
               },
-              class: {
-                select: {
-                  id: true,
-                  name: true,
-                  students: {
-                    select: {
-                      id: true,
-                      user: {
-                        select: { id: true, name: true, email: true },
-                      },
-                    },
-                  },
-                },
-              },
             },
           },
         },
@@ -1010,19 +916,6 @@ export const calendarRouter = router({
                 id: member.student.id,
                 name: member.student.user.name,
                 email: member.student.user.email,
-              });
-            }
-          });
-        }
-
-        // Class invitation - expand all students in class
-        if (inv.class?.students) {
-          inv.class.students.forEach((student) => {
-            if (student.user) {
-              studentsMap.set(student.id, {
-                id: student.id,
-                name: student.user.name,
-                email: student.user.email,
               });
             }
           });
@@ -1396,7 +1289,6 @@ export const calendarRouter = router({
                 select: {
                   userId: true,
                   groupId: true,
-                  classId: true,
                 },
               },
             },
@@ -1454,15 +1346,6 @@ export const calendarRouter = router({
               select: { studentId: true },
             });
             groupMembers.forEach((m) => m.studentId && studentIdsToNotify.add(m.studentId));
-          }
-          
-          // Expand class students
-          if (inv.classId) {
-            const classStudents = await ctx.prisma.student.findMany({
-              where: { classId: inv.classId },
-              select: { id: true },
-            });
-            classStudents.forEach((s) => studentIdsToNotify.add(s.id));
           }
         }
         

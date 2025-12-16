@@ -90,7 +90,7 @@ export default function CollaboratorSimulationsContent() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
-  const [assignModal, setAssignModal] = useState<{ id: string; title: string } | null>(null);
+  const [assignModal, setAssignModal] = useState<{ id: string; title: string; isOfficial: boolean; durationMinutes: number; locationType?: string | null } | null>(null);
 
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -523,7 +523,7 @@ export default function CollaboratorSimulationsContent() {
                             <span className={colors.text.secondary}>
                               {assignment.student?.user?.name 
                                 || assignment.group?.name 
-                                || (assignment.class ? `${assignment.class.name} - ${assignment.class.year}${assignment.class.section}` : '-')}
+                                || '-'}
                             </span>
                           </div>
                         </td>
@@ -648,7 +648,13 @@ export default function CollaboratorSimulationsContent() {
               onClick={() => {
                 const sim = simulations.find(s => s.id === openMenuId);
                 if (sim) {
-                  setAssignModal({ id: sim.id, title: sim.title });
+                  setAssignModal({ 
+                    id: sim.id, 
+                    title: sim.title,
+                    isOfficial: sim.isOfficial,
+                    durationMinutes: sim.durationMinutes,
+                    locationType: sim.locationType 
+                  });
                 }
                 setOpenMenuId(null);
               }}
@@ -709,6 +715,9 @@ export default function CollaboratorSimulationsContent() {
           onClose={() => setAssignModal(null)}
           simulationId={assignModal.id}
           simulationTitle={assignModal.title}
+          isOfficial={assignModal.isOfficial}
+          durationMinutes={assignModal.durationMinutes}
+          defaultLocationType={(assignModal.locationType as 'ONLINE' | 'IN_PERSON' | 'HYBRID') || null}
         />
       )}
     </div>

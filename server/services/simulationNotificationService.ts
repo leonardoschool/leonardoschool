@@ -14,7 +14,6 @@ interface SimulationWithRelations extends Simulation {
   assignments?: Array<{
     studentId?: string | null;
     groupId?: string | null;
-    classId?: string | null;
     dueDate?: Date | null;
   }>;
 }
@@ -86,14 +85,12 @@ export async function createSimulationEventInvitations(
   assignments: Array<{
     studentId?: string | null;
     groupId?: string | null;
-    classId?: string | null;
   }>
 ): Promise<void> {
   const invitationsToCreate: Array<{
     eventId: string;
     userId?: string;
     groupId?: string;
-    classId?: string;
   }> = [];
 
   for (const assignment of assignments) {
@@ -117,13 +114,6 @@ export async function createSimulationEventInvitations(
         groupId: assignment.groupId,
       });
     }
-    
-    if (assignment.classId) {
-      invitationsToCreate.push({
-        eventId: calendarEventId,
-        classId: assignment.classId,
-      });
-    }
   }
 
   if (invitationsToCreate.length > 0) {
@@ -142,7 +132,6 @@ export async function getAssignedStudentEmails(
   assignments: Array<{
     studentId?: string | null;
     groupId?: string | null;
-    classId?: string | null;
   }>
 ): Promise<InviteeData[]> {
   const studentUserIds = new Set<string>();
@@ -184,23 +173,6 @@ export async function getAssignedStudentEmails(
         }
       }
     }
-
-    // Class assignment - get all students in the class
-    if (assignment.classId) {
-      const classStudents = await prisma.student.findMany({
-        where: { classId: assignment.classId },
-        include: { user: { select: { id: true, email: true, name: true } } },
-      });
-      for (const student of classStudents) {
-        if (student.user && !studentUserIds.has(student.user.id)) {
-          studentUserIds.add(student.user.id);
-          invitees.push({
-            email: student.user.email,
-            name: student.user.name,
-          });
-        }
-      }
-    }
   }
 
   return invitees;
@@ -214,7 +186,6 @@ export async function getAssignedStudentUserIds(
   assignments: Array<{
     studentId?: string | null;
     groupId?: string | null;
-    classId?: string | null;
   }>
 ): Promise<string[]> {
   const userIds = new Set<string>();
@@ -243,19 +214,6 @@ export async function getAssignedStudentUserIds(
         }
       }
     }
-
-    // Class assignment - get all students in the class
-    if (assignment.classId) {
-      const classStudents = await prisma.student.findMany({
-        where: { classId: assignment.classId },
-        select: { userId: true },
-      });
-      for (const student of classStudents) {
-        if (student.userId) {
-          userIds.add(student.userId);
-        }
-      }
-    }
   }
 
   return Array.from(userIds);
@@ -271,7 +229,6 @@ export async function sendSimulationNotifications(
   assignments: Array<{
     studentId?: string | null;
     groupId?: string | null;
-    classId?: string | null;
     dueDate?: Date | null;
   }>
 ): Promise<NotificationResult> {
@@ -376,7 +333,6 @@ export async function notifySimulationCreated(
           select: {
             studentId: true,
             groupId: true,
-            classId: true,
             dueDate: true,
           },
         },

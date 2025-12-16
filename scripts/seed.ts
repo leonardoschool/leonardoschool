@@ -18,9 +18,6 @@ import {
   PrismaClient,
   QuestionStatus,
   QuestionType,
-  SimulationStatus,
-  SimulationType,
-  SimulationVisibility,
   UserRole,
 } from '@prisma/client';
 import { existsSync, readFileSync } from 'fs';
@@ -535,14 +532,6 @@ const SEED_QUESTIONS = [
 type CreatedQuestion = { id: string; subjectCode: string; correctLabel: string };
 type SeedStudent = Array<{ id: string }>;
 
-function addDays(base: Date, days: number) {
-  return new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
-}
-
-function addMinutes(base: Date, minutes: number) {
-  return new Date(base.getTime() + minutes * 60 * 1000);
-}
-
 async function deleteFirebaseSeedUsers() {
   for (const email of [
     ...SEED_USERS.admins.map((u) => u.email),
@@ -615,10 +604,6 @@ async function cleanSeedData() {
   // Tags - DELETE ALL
   await prisma.questionTag.deleteMany({});
   await prisma.questionTagCategory.deleteMany({});
-
-  // Classes detach and delete
-  await prisma.student.updateMany({ data: { classId: null } });
-  await prisma.class.deleteMany({});
 
   // Subjects hierarchy - DELETE ALL
   await prisma.subTopic.deleteMany({});
@@ -905,201 +890,6 @@ async function seedMaterials(
   console.log(`✅ Created ${materialCount} materials in 2 categories`);
 }
 
-async function seedClasses(students: SeedStudent) {
-  console.log('\n🏫 Creating classes and assigning students...');
-  const classA = await prisma.class.create({
-    data: {
-      name: 'Seed - Classe A',
-      description: 'Classe demo per test',
-      year: 2024,
-      section: 'A',
-      isActive: true,
-    },
-  });
-
-  const classB = await prisma.class.create({
-    data: {
-      name: 'Seed - Classe B',
-      description: 'Classe demo per test',
-      year: 2024,
-      section: 'B',
-      isActive: true,
-    },
-  });
-
-  if (!students.length) {
-    console.log('⚠️  No students to assign to classes.');
-    return [classA, classB];
-  }
-
-  const half = Math.ceil(students.length / 2);
-  const firstHalf = students.slice(0, half);
-  const secondHalf = students.slice(half);
-
-  await Promise.all(
-    firstHalf.map((student) =>
-      prisma.student.update({ where: { id: student.id }, data: { classId: classA.id } }),
-    ),
-  );
-
-  await Promise.all(
-    secondHalf.map((student) =>
-      prisma.student.update({ where: { id: student.id }, data: { classId: classB.id } }),
-    ),
-  );
-
-  console.log(`✅ Assigned ${firstHalf.length} students to ${classA.name} and ${secondHalf.length} to ${classB.name}`);
-  return [classA, classB];
-}
-
-async function seedSimulations(
-  creatorId: string | undefined,
-  creatorRole: 'ADMIN' | 'COLLABORATOR',
-  classes: Awaited<ReturnType<typeof seedClasses>>,
-  students: SeedStudent,
-  questions: CreatedQuestion[],
-) {
-  console.log('\n🧪 Creating simulations...');
-
-  if (!questions.length) {
-    console.log('⚠️  Skipping simulations because there are no questions.');
-    return;
-  }
-
-  const now = new Date();
-  const sim1Questions = questions.slice(0, Math.min(12, questions.length));
-  const sim1 = await prisma.simulation.create({
-    data: {
-      title: 'Seed - Simulazione TOLC-MED Base',
-      description: 'Simulazione di pratica con domande miste.',
-      type: SimulationType.PRACTICE,
-      status: SimulationStatus.PUBLISHED,
-      visibility: SimulationVisibility.CLASS,
-  createdById: creatorId ?? null,
-      creatorRole,
-      durationMinutes: 60,
-      totalQuestions: sim1Questions.length,
-      startDate: now,
-      endDate: addDays(now, 14),
-      randomizeOrder: true,
-      randomizeAnswers: true,
-      allowReview: true,
-      showResults: true,
-      showCorrectAnswers: true,
-      classId: classes[0]?.id,
-      questions: {
-        create: sim1Questions.map((question, index) => ({ questionId: question.id, order: index + 1 })),
-      },
-    },
-  });
-
-  if (classes[0]) {
-    await prisma.simulationAssignment.create({
-      data: {
-        simulationId: sim1.id,
-        classId: classes[0].id,
-        assignedById: creatorId ?? null,
-        dueDate: addDays(now, 14),
-        notes: 'Assegnata automaticamente dal seed',
-      },
-    });
-  }
-
-  if (students[0]) {
-    const answers = sim1Questions.map((question, index) => ({
-      questionId: question.id,
-      answer: question.correctLabel,
-      isCorrect: true,
-      timeSpent: 20 + index * 2,
-    }));
-
-    await prisma.simulationResult.create({
-      data: {
-        simulationId: sim1.id,
-        studentId: students[0].id,
-        totalQuestions: sim1Questions.length,
-        correctAnswers: answers.length,
-        wrongAnswers: 0,
-        blankAnswers: 0,
-        totalScore: answers.length * 1.5,
-        percentageScore: 100,
-        answers,
-        subjectScores: {},
-        startedAt: now,
-        completedAt: addMinutes(now, 55),
-        durationSeconds: 55 * 60,
-      },
-    });
-  }
-
-  const sim2Questions = questions.slice(-Math.min(10, questions.length));
-  const sim2 = await prisma.simulation.create({
-    data: {
-      title: 'Seed - Quiz rapido 10 domande',
-      description: 'Quiz rapido misto per esercitazione immediata.',
-      type: SimulationType.QUICK_QUIZ,
-      status: SimulationStatus.PUBLISHED,
-      visibility: SimulationVisibility.PUBLIC,
-  createdById: creatorId ?? null,
-      creatorRole,
-      durationMinutes: 20,
-      totalQuestions: sim2Questions.length,
-      startDate: now,
-      endDate: addDays(now, 30),
-      randomizeOrder: true,
-      randomizeAnswers: true,
-      isPublic: true,
-      questions: {
-        create: sim2Questions.map((question, index) => ({ questionId: question.id, order: index + 1 })),
-      },
-    },
-  });
-
-  if (classes[1]) {
-    await prisma.simulationAssignment.create({
-      data: {
-        simulationId: sim2.id,
-        classId: classes[1].id,
-        assignedById: creatorId ?? null,
-        dueDate: addDays(now, 7),
-        notes: 'Quiz rapido assegnato dal seed',
-      },
-    });
-  }
-
-  if (students[1]) {
-    const answers = sim2Questions.map((question, index) => ({
-      questionId: question.id,
-      answer: index % 2 === 0 ? question.correctLabel : 'A',
-      isCorrect: index % 2 === 0,
-      timeSpent: 15 + index,
-    }));
-
-    const correct = answers.filter((ans) => ans.isCorrect).length;
-    const wrong = answers.length - correct;
-
-    await prisma.simulationResult.create({
-      data: {
-        simulationId: sim2.id,
-        studentId: students[1].id,
-        totalQuestions: sim2Questions.length,
-        correctAnswers: correct,
-        wrongAnswers: wrong,
-        blankAnswers: 0,
-        totalScore: correct * 1.5 + wrong * -0.4,
-        percentageScore: (correct / sim2Questions.length) * 100,
-        answers,
-        subjectScores: {},
-        startedAt: now,
-        completedAt: addMinutes(now, 18),
-        durationSeconds: 18 * 60,
-      },
-    });
-  }
-
-  console.log(`✅ Created simulations: ${sim1.title} and ${sim2.title}`);
-}
-
 // ===================== MAIN =====================
 async function main() {
   console.log('\n' + '═'.repeat(60));
@@ -1213,10 +1003,7 @@ async function main() {
   const adminUserId = createdAdmins[0]?.userId;
   const collaboratorUserId = createdCollabs[0]?.userId;
   const { questions, subjectMap, topicMap, subTopicMap } = await seedSubjectsAndQuestions(adminUserId, collaboratorUserId);
-  const classes = await seedClasses(createdStudents);
   const creatorId = adminUserId ?? collaboratorUserId;
-  const creatorRole: 'ADMIN' | 'COLLABORATOR' = adminUserId ? 'ADMIN' : 'COLLABORATOR';
-  await seedSimulations(creatorId, creatorRole, classes, createdStudents, questions);
   await seedMaterials(creatorId, subjectMap, topicMap, subTopicMap);
 
   // Summary
@@ -1229,8 +1016,6 @@ async function main() {
   console.log(`📚 Subjects:       ${SEED_SUBJECTS.length}`);
   console.log(`❓ Questions:      ${questions.length}`);
   console.log('📁 Materials:      6');
-  console.log('🏫 Classes:        2');
-  console.log('🧪 Simulations:    2');
   console.log('═'.repeat(60));
   console.log(`\n🔐 Test password: ${TEST_PASSWORD}`);
   console.log('🔗 Login: http://localhost:3000/auth/login\n');

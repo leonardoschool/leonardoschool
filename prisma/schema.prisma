@@ -86,7 +86,6 @@ enum SimulationStatus {
 
 enum SimulationVisibility {
   PRIVATE // Solo assegnati specifici
-  CLASS // Visibile a tutta la classe
   GROUP // Visibile a gruppi specifici
   PUBLIC // Visibile a tutti gli studenti attivi
 }
@@ -312,13 +311,11 @@ model Student {
   postalCode  String?
 
   // School info
-  classId        String?
   enrollmentDate DateTime @default(now())
   graduationYear Int?
 
   // Relations
   user                   User                            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  class                  Class?                          @relation(fields: [classId], references: [id], onDelete: SetNull)
   simulationResults      SimulationResult[]
   stats                  StudentStats?
   contracts              Contract[]
@@ -342,7 +339,6 @@ model Student {
   attendanceRecords Attendance[] // Presenze registrate
 
   @@index([userId])
-  @@index([classId])
   @@map("students")
 }
 
@@ -398,33 +394,6 @@ model Collaborator {
 
   @@index([userId])
   @@map("collaborators")
-}
-
-// ==================== CLASSES ====================
-
-model Class {
-  id          String  @id @default(cuid())
-  name        String
-  description String?
-  year        Int
-  section     String?
-  isActive    Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  students    Student[]
-  simulations Simulation[]
-
-  // Simulation assignments
-  simulationAssignments SimulationAssignment[] @relation("AssignmentClass")
-
-  // Event invitations
-  eventInvitations EventInvitation[]
-
-  @@unique([year, section])
-  @@index([year])
-  @@map("classes")
 }
 
 // ==================== QUESTIONS ====================
@@ -866,7 +835,6 @@ model Simulation {
   topicIds               Json? // Array of topic IDs to include
 
   // Assignment - flexible targeting
-  classId  String? // Assign to specific class
   isPublic Boolean @default(false) // Available to all active students
 
   // Timestamps
@@ -875,7 +843,6 @@ model Simulation {
 
   // Relations
   createdBy     User?                  @relation("SimulationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  class         Class?                 @relation(fields: [classId], references: [id], onDelete: SetNull)
   questions     SimulationQuestion[]
   results       SimulationResult[]
   assignments   SimulationAssignment[] // Specific student/group assignments
@@ -885,7 +852,6 @@ model Simulation {
   @@index([status])
   @@index([startDate])
   @@index([endDate])
-  @@index([classId])
   @@index([isPublic])
   @@index([createdById])
   @@index([visibility])
@@ -897,7 +863,7 @@ model Simulation {
   @@map("simulations")
 }
 
-// Flexible assignment to students, groups, or classes
+// Flexible assignment to students, groups
 model SimulationAssignment {
   id           String @id @default(cuid())
   simulationId String
@@ -905,7 +871,6 @@ model SimulationAssignment {
   // Target (one of these should be set)
   studentId String? // Assign to specific student
   groupId   String? // Assign to student group
-  classId   String? // Assign to class (alternative to simulation.classId)
 
   // Assignment metadata
   assignedById String? // Who assigned it
@@ -922,16 +887,13 @@ model SimulationAssignment {
   simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
   student    Student?   @relation(fields: [studentId], references: [id], onDelete: Cascade)
   group      Group?     @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  class      Class?     @relation("AssignmentClass", fields: [classId], references: [id], onDelete: Cascade)
   assignedBy User?      @relation("AssignmentCreator", fields: [assignedById], references: [id], onDelete: SetNull)
 
   @@unique([simulationId, studentId])
   @@unique([simulationId, groupId])
-  @@unique([simulationId, classId])
   @@index([simulationId])
   @@index([studentId])
   @@index([groupId])
-  @@index([classId])
   @@index([startDate])
   @@index([endDate])
   @@map("simulation_assignments")
@@ -1207,7 +1169,6 @@ model EventInvitation {
   // Invite target (one of these should be set)
   userId  String? // Invite specific user (admin/collaborator/student)
   groupId String? // Invite entire group
-  classId String? // Invite entire class
 
   // Response
   status       EventInviteStatus @default(PENDING)
@@ -1224,15 +1185,12 @@ model EventInvitation {
   event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user  User?         @relation("EventInvitee", fields: [userId], references: [id], onDelete: Cascade)
   group Group?        @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  class Class?        @relation(fields: [classId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, userId])
   @@unique([eventId, groupId])
-  @@unique([eventId, classId])
   @@index([eventId])
   @@index([userId])
   @@index([groupId])
-  @@index([classId])
   @@index([status])
   @@map("event_invitations")
 }

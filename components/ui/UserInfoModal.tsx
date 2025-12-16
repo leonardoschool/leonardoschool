@@ -46,11 +46,6 @@ interface UserProfile {
   postalCode?: string | null;
   specialization?: string | null;
   enrollmentDate?: Date | string | null;
-  // Per studenti - classe come relazione
-  class?: {
-    id: string;
-    name: string;
-  } | null;
   groupMemberships?: Array<{
     group: {
       id: string;
@@ -275,7 +270,7 @@ export function UserInfoModal({ userId, userType, isOpen, onClose }: UserInfoMod
               </section>
 
               {/* Info specifiche per tipo */}
-              {userType === 'STUDENT' && (profile?.matricola || profile?.enrollmentDate || profile?.class) && (
+              {userType === 'STUDENT' && (profile?.matricola || profile?.enrollmentDate) && (
                 <section>
                   <h3 className={`text-sm font-semibold ${colors.text.secondary} uppercase tracking-wide mb-3`}>
                     Informazioni Scolastiche
@@ -286,13 +281,6 @@ export function UserInfoModal({ userId, userType, isOpen, onClose }: UserInfoMod
                         icon={<Hash className="w-4 h-4" />}
                         label="Matricola"
                         value={profile.matricola}
-                      />
-                    )}
-                    {profile?.class && (
-                      <InfoRow 
-                        icon={<GraduationCap className="w-4 h-4" />}
-                        label="Classe"
-                        value={profile.class.name}
                       />
                     )}
                     {profile?.enrollmentDate && (
