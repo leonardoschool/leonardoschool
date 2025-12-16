@@ -511,12 +511,22 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
       )}
 
       {/* Info */}
-      <div className="flex items-start gap-2 text-sm text-gray-500 dark:text-gray-400 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
-        <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-        <p>
-          Le categorie sono contenitori per raggruppare i materiali. Usa il pulsante materiali per aggiungere o rimuovere file, 
-          e il pulsante utenti per gestire chi può vedere ogni categoria. Eliminando una categoria, i materiali associati verranno scollegati ma non eliminati.
-        </p>
+      <div className="flex items-start gap-2 text-sm p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+        <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-600 dark:text-blue-400" />
+        <div className="space-y-2">
+          <p className="text-blue-900 dark:text-blue-100 font-medium">
+            📁 Come funzionano le categorie:
+          </p>
+          <ul className="list-disc list-inside space-y-1 text-blue-800 dark:text-blue-200 text-sm">
+            <li>Le categorie sono <strong>cartelle</strong> che raggruppano materiali per argomento o tipo</li>
+            <li>Quando rendi una categoria visibile agli studenti, <strong>tutti i materiali al suo interno</strong> diventano automaticamente accessibili</li>
+            <li>Non serve impostare la visibilità dei singoli materiali se sono dentro una categoria visibile</li>
+            <li>Gli studenti vedranno le categorie come cartelle nella loro sezione materiali</li>
+          </ul>
+          <p className="text-orange-600 dark:text-orange-400 text-sm font-medium pt-1">
+            ⚠️ Le categorie con visibilità &quot;Nessuno&quot; non sono visibili agli studenti. Usa l&apos;icona 👥 per modificare chi può vederle.
+          </p>
+        </div>
       </div>
 
       {/* Materials Management Modal */}

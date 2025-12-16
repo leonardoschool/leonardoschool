@@ -20,21 +20,22 @@ import {
   X,
 } from 'lucide-react';
 
-// Helper per generare colore di sfondo chiaro da hex
-const getSubjectBgStyle = (hexColor: string | null | undefined) => {
-  if (!hexColor) return { backgroundColor: '#f3f4f6' };
+// Helper per generare colore di sfondo chiaro da hex (solo se c'è un colore custom)
+const getSubjectBgStyle = (hexColor: string | null | undefined, isDark: boolean = false) => {
+  if (!hexColor) return {}; // No inline style, use Tailwind classes
   // Rimuovi # se presente
   const hex = hexColor.replace('#', '');
   const r = parseInt(hex.substring(0, 2), 16);
   const g = parseInt(hex.substring(2, 4), 16);
   const b = parseInt(hex.substring(4, 6), 16);
-  // Sfondo molto chiaro (15% opacità)
-  return { backgroundColor: `rgba(${r}, ${g}, ${b}, 0.15)` };
+  // Sfondo con opacità diversa per light/dark mode
+  const opacity = isDark ? 0.2 : 0.15;
+  return { backgroundColor: `rgba(${r}, ${g}, ${b}, ${opacity})` };
 };
 
-// Helper per generare colore testo da hex
+// Helper per generare colore testo da hex (solo se c'è un colore custom)
 const getSubjectTextStyle = (hexColor: string | null | undefined) => {
-  if (!hexColor) return { color: '#374151' };
+  if (!hexColor) return {}; // No inline style, use Tailwind classes
   return { color: hexColor };
 };
 
@@ -406,21 +407,21 @@ export default function StudentMaterialsContent() {
           return (
             <div
               key={subjectNode.subject.id}
-              className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden"
+              className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-800/30"
             >
               {/* Subject Header */}
               <button
                 onClick={() => toggleSubject(subjectNode.subject.id)}
-                style={getSubjectBgStyle(subjectColor)}
-                className="w-full flex items-center gap-3 p-4 transition-colors"
+                style={subjectColor ? getSubjectBgStyle(subjectColor) : undefined}
+                className={`w-full flex items-center gap-3 p-4 transition-colors ${!subjectColor ? 'bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700' : 'hover:opacity-80'}`}
               >
                 {isSubjectExpanded ? (
-                  <ChevronDown style={getSubjectTextStyle(subjectColor)} className="w-5 h-5" />
+                  <ChevronDown style={getSubjectTextStyle(subjectColor)} className={`w-5 h-5 ${!subjectColor ? 'text-gray-600 dark:text-gray-300' : ''}`} />
                 ) : (
-                  <ChevronRight style={getSubjectTextStyle(subjectColor)} className="w-5 h-5" />
+                  <ChevronRight style={getSubjectTextStyle(subjectColor)} className={`w-5 h-5 ${!subjectColor ? 'text-gray-600 dark:text-gray-300' : ''}`} />
                 )}
-                <Book style={getSubjectTextStyle(subjectColor)} className="w-5 h-5" />
-                <span style={getSubjectTextStyle(subjectColor)} className="font-semibold">{subjectNode.subject.name}</span>
+                <Book style={getSubjectTextStyle(subjectColor)} className={`w-5 h-5 ${!subjectColor ? 'text-gray-600 dark:text-gray-300' : ''}`} />
+                <span style={getSubjectTextStyle(subjectColor)} className={`font-semibold ${!subjectColor ? 'text-gray-800 dark:text-gray-100' : ''}`}>{subjectNode.subject.name}</span>
                 <span className="ml-auto text-sm text-gray-600 dark:text-gray-400">
                   {totalMaterialsInSubject} materiali
                 </span>
@@ -428,7 +429,7 @@ export default function StudentMaterialsContent() {
 
               {/* Topics */}
               {isSubjectExpanded && (
-                <div className="bg-white dark:bg-gray-800">
+                <div className="bg-gray-50/50 dark:bg-gray-800/30">
                   {/* Materiali diretti del subject (senza topic) */}
                   {subjectNode.directMaterials.length > 0 && (
                     <div className="border-t border-gray-100 dark:border-gray-700 pl-8 pr-4 py-3 space-y-2">
@@ -581,8 +582,16 @@ function MaterialCard({
     }
   };
 
+  // Get action icon based on type
+  const getActionIcon = () => {
+    if (material.type === 'LINK') {
+      return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>;
+    }
+    return <Download className="w-4 h-4" />;
+  };
+
   return (
-    <div className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:shadow-sm transition-shadow">
+    <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
       <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
         {getFileIcon(getIconType())}
       </div>
@@ -600,8 +609,9 @@ function MaterialCard({
         onClick={handleOpen}
         disabled={!material.fileUrl && !material.externalUrl}
         className={`p-2 rounded-lg ${colors.primary.bg} text-white hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed`}
+        title={material.type === 'LINK' ? 'Apri link' : 'Scarica'}
       >
-        <Download className="w-4 h-4" />
+        {getActionIcon()}
       </button>
     </div>
   );

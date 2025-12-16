@@ -1423,7 +1423,31 @@ export const materialsRouter = router({
       // Get the group IDs the student belongs to
       const groupIds = student.groupMemberships.map(m => m.groupId);
 
+      // Get visible categories for this student
+      const visibleCategories = await ctx.prisma.materialCategory.findMany({
+        where: {
+          isActive: true,
+          OR: [
+            { visibility: 'ALL_STUDENTS' },
+            { 
+              visibility: 'GROUP_BASED',
+              groupAccess: { some: { groupId: { in: groupIds } } },
+            },
+            { 
+              visibility: 'SELECTED_STUDENTS',
+              studentAccess: { some: { studentId: student.id } },
+            },
+          ],
+        },
+        select: { id: true },
+      });
+
+      const visibleCategoryIds = visibleCategories.map(c => c.id);
+
       // Get materials visible to this student
+      // A material is visible if:
+      // 1. It has explicit visibility (ALL_STUDENTS, GROUP_BASED, SELECTED_STUDENTS)
+      // 2. OR it belongs to a visible category (regardless of material visibility)
       const materials = await ctx.prisma.material.findMany({
         where: {
           isActive: true,
@@ -1433,9 +1457,8 @@ export const materialsRouter = router({
           topicId: input?.topicId,
           subTopicId: input?.subTopicId,
           OR: [
-            // All students visibility
+            // Materials with explicit visibility
             { visibility: 'ALL_STUDENTS' },
-            // Group-based (if student belongs to groups)
             groupIds.length > 0
               ? {
                   visibility: 'GROUP_BASED',
@@ -1443,14 +1466,17 @@ export const materialsRouter = router({
                     some: { groupId: { in: groupIds } },
                   },
                 }
-              : { id: 'never' }, // No match if not in any group
-            // Individual access
+              : { id: 'never' },
             {
               visibility: 'SELECTED_STUDENTS',
               studentAccess: {
                 some: { studentId: student.id },
               },
             },
+            // Materials in visible categories (category acts as visibility container)
+            visibleCategoryIds.length > 0
+              ? { categoryId: { in: visibleCategoryIds } }
+              : { id: 'never' },
           ],
         },
         orderBy: [
