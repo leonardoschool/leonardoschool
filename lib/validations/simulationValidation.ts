@@ -6,7 +6,7 @@ import { z } from 'zod';
 export const SimulationTypeEnum = z.enum(['OFFICIAL', 'PRACTICE', 'CUSTOM', 'QUICK_QUIZ']);
 export type SimulationType = z.infer<typeof SimulationTypeEnum>;
 
-export const SimulationStatusEnum = z.enum(['DRAFT', 'PUBLISHED', 'CLOSED', 'ARCHIVED']);
+export const SimulationStatusEnum = z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']);
 export type SimulationStatus = z.infer<typeof SimulationStatusEnum>;
 
 export const SimulationVisibilityEnum = z.enum(['PRIVATE', 'GROUP', 'PUBLIC']);

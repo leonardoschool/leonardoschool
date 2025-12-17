@@ -40,7 +40,6 @@ const typeLabels: Record<SimulationType, string> = {
 const statusLabels: Record<SimulationStatus, string> = {
   DRAFT: 'Bozza',
   PUBLISHED: 'Pubblicata',
-  CLOSED: 'Chiusa',
   ARCHIVED: 'Archiviata',
 };
 
@@ -48,7 +47,6 @@ const statusLabels: Record<SimulationStatus, string> = {
 const statusColors: Record<SimulationStatus, string> = {
   DRAFT: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
   PUBLISHED: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-  CLOSED: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
   ARCHIVED: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
 };
 
@@ -189,24 +187,25 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
           className={`inline-flex items-center gap-2 text-sm ${colors.text.muted} hover:${colors.text.primary} mb-4`}
         >
           <ArrowLeft className="w-4 h-4" />
-          Torna alle simulazioni
+          <span className="hidden sm:inline">Torna alle simulazioni</span>
+          <span className="sm:hidden">Indietro</span>
         </Link>
         
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start gap-3">
               {simulation.isOfficial && (
-                <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
+                <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30 flex-shrink-0">
                   <Award className="w-5 h-5 text-red-600 dark:text-red-400" />
                 </div>
               )}
-              <div>
-                <h1 className={`text-2xl font-bold ${colors.text.primary}`}>{simulation.title}</h1>
-                <div className="flex items-center gap-3 mt-1">
+              <div className="min-w-0 flex-1">
+                <h1 className={`text-xl sm:text-2xl font-bold ${colors.text.primary} break-words`}>{simulation.title}</h1>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1.5">
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[simulation.status as SimulationStatus]}`}>
                     {statusLabels[simulation.status as SimulationStatus]}
                   </span>
-                  <span className={`text-sm ${colors.text.muted}`}>
+                  <span className={`text-xs sm:text-sm ${colors.text.muted}`}>
                     {typeLabels[simulation.type as SimulationType]}
                   </span>
                 </div>
@@ -215,71 +214,71 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
           </div>
 
           {/* Actions */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 lg:flex-shrink-0">
             {simulation.status === 'DRAFT' && (
               <button
                 onClick={() => publishMutation.mutate({ id })}
                 disabled={publishMutation.isPending}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white ${colors.primary.bg} hover:opacity-90 disabled:opacity-50`}
+                className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg text-white ${colors.primary.bg} hover:opacity-90 disabled:opacity-50`}
               >
                 {publishMutation.isPending ? <Spinner size="sm" variant="white" /> : <Send className="w-4 h-4" />}
-                Pubblica
+                <span className="hidden sm:inline">Pubblica</span>
               </button>
             )}
             <Link
               href={`/simulazioni/${id}/modifica`}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border ${colors.border.light} ${colors.text.secondary} ${colors.background.hover}`}
+              className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg border ${colors.border.light} ${colors.text.secondary} ${colors.background.hover}`}
             >
               <Edit2 className="w-4 h-4" />
-              Modifica
+              <span className="hidden sm:inline">Modifica</span>
             </Link>
             <Link
               href={`/simulazioni/${id}/statistiche`}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border ${colors.border.light} ${colors.text.secondary} ${colors.background.hover}`}
+              className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg border ${colors.border.light} ${colors.text.secondary} ${colors.background.hover}`}
             >
               <BarChart3 className="w-4 h-4" />
-              Statistiche
+              <span className="hidden lg:inline">Statistiche</span>
             </Link>
             {isAdmin && simulation.isPaperBased && (
               <Link
                 href={`/simulazioni/${id}/risultati-cartacei`}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-300 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20`}
+                className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg border border-blue-300 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20`}
               >
                 <Edit2 className="w-4 h-4" />
-                Inserisci Risultati
+                <span className="hidden xl:inline">Inserisci Risultati</span>
               </Link>
             )}
             <button
               onClick={handleDownloadPdf}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-purple-300 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20`}
+              className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg border border-purple-300 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20`}
             >
               <FileDown className="w-4 h-4" />
-              Scarica PDF
+              <span className="hidden xl:inline">PDF</span>
             </button>
             {isAdmin && (
               <button
                 onClick={() => setArchiveConfirm(true)}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-orange-300 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20`}
+                className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg border border-orange-300 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20`}
               >
                 <Archive className="w-4 h-4" />
-                Archivia
+                <span className="hidden xl:inline">Archivia</span>
               </button>
             )}
             <button
               onClick={() => setDeleteConfirm(true)}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20`}
+              className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20`}
             >
               <Trash2 className="w-4 h-4" />
-              Elimina
+              <span className="hidden xl:inline">Elimina</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main content */}
-        <div className="lg:col-span-2 space-y-6">
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+        {/* Main content - Wider on desktop */}
+        <div className="xl:col-span-3 space-y-6">
           {/* Description */}
           {simulation.description && (
             <div className={`p-6 rounded-xl ${colors.background.card} border ${colors.border.light}`}>
@@ -290,42 +289,42 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
 
           {/* Questions */}
           <div className={`rounded-xl ${colors.background.card} border ${colors.border.light} overflow-hidden`}>
-            <div className={`px-6 py-4 border-b ${colors.border.light} flex items-center justify-between`}>
+            <div className={`px-4 sm:px-6 py-4 border-b ${colors.border.light} flex flex-col sm:flex-row sm:items-center justify-between gap-2`}>
               <h2 className={`text-lg font-semibold ${colors.text.primary}`}>
                 Domande ({simulation.questions.length})
               </h2>
               <Link
                 href={`/simulazioni/${id}/domande`}
-                className={`text-sm ${colors.primary.text} hover:underline`}
+                className={`text-sm ${colors.primary.text} hover:underline self-start sm:self-auto`}
               >
                 Modifica domande
               </Link>
             </div>
-            <div className="max-h-96 overflow-y-auto">
+            <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 400px)' }}>
               {simulation.questions.map((sq, index) => (
                 <div
                   key={sq.id}
-                  className={`px-6 py-4 border-b ${colors.border.light} last:border-b-0 ${colors.background.hover}`}
+                  className={`px-4 sm:px-6 py-3 sm:py-4 border-b ${colors.border.light} last:border-b-0 ${colors.background.hover}`}
                 >
-                  <div className="flex items-start gap-4">
-                    <span className={`w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-sm font-medium ${colors.text.primary}`}>
+                  <div className="flex items-start gap-3 sm:gap-4">
+                    <span className={`w-7 h-7 sm:w-8 sm:h-8 flex-shrink-0 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs sm:text-sm font-medium ${colors.text.primary}`}>
                       {index + 1}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm ${colors.text.primary} line-clamp-2`}>
+                      <p className={`text-sm ${colors.text.primary} line-clamp-2 leading-relaxed`}>
                         {sq.question.text.replace(/<[^>]*>/g, '')}
                       </p>
-                      <div className="flex items-center gap-2 mt-2">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-2">
                         {sq.question.subject && (
                           <span 
-                            className="px-2 py-0.5 rounded text-xs font-medium"
+                            className="px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap"
                             style={{ backgroundColor: sq.question.subject.color + '20', color: sq.question.subject.color }}
                           >
                             {sq.question.subject.name}
                           </span>
                         )}
                         {sq.question.topic && (
-                          <span className={`text-xs ${colors.text.muted}`}>{sq.question.topic.name}</span>
+                          <span className={`text-xs ${colors.text.muted} truncate`}>{sq.question.topic.name}</span>
                         )}
                       </div>
                     </div>
@@ -404,13 +403,6 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
               </div>
               <div className="flex items-center justify-between">
                 <dt className={`flex items-center gap-2 ${colors.text.muted}`}>
-                  <Users className="w-4 h-4" />
-                  Partecipanti
-                </dt>
-                <dd className={`font-semibold ${colors.text.primary}`}>{simulation.results.length}</dd>
-              </div>
-              <div className="flex items-center justify-between">
-                <dt className={`flex items-center gap-2 ${colors.text.muted}`}>
                   <Clock className="w-4 h-4" />
                   Durata
                 </dt>
@@ -438,6 +430,20 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
               <div className="flex items-center justify-between">
                 <dt className={colors.text.muted}>Ordine casuale</dt>
                 <dd>{simulation.randomizeOrder ? <CheckCircle className="w-5 h-5 text-green-500" /> : <XCircle className="w-5 h-5 text-gray-400" />}</dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className={colors.text.muted}>Sistema anticheat</dt>
+                <dd>
+                  {simulation.enableAntiCheat ? (
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle className="w-5 h-5 text-green-500" />
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <XCircle className="w-5 h-5 text-gray-400" />
+                    </div>
+                  )}
+                </dd>
               </div>
             </dl>
           </div>
@@ -472,14 +478,6 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
             <h2 className={`text-lg font-semibold ${colors.text.primary} mb-4`}>Date</h2>
             <dl className="space-y-3">
               <div>
-                <dt className={`text-xs ${colors.text.muted} uppercase`}>Data inizio</dt>
-                <dd className={`font-medium ${colors.text.primary}`}>{formatDate(simulation.startDate)}</dd>
-              </div>
-              <div>
-                <dt className={`text-xs ${colors.text.muted} uppercase`}>Data fine</dt>
-                <dd className={`font-medium ${colors.text.primary}`}>{formatDate(simulation.endDate)}</dd>
-              </div>
-              <div>
                 <dt className={`text-xs ${colors.text.muted} uppercase`}>Creata il</dt>
                 <dd className={`font-medium ${colors.text.primary}`}>{formatDate(simulation.createdAt)}</dd>
               </div>
@@ -495,7 +493,6 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
               {/* Group assignments by type */}
               {(() => {
                 const groupAssignments = simulation.assignments.filter(a => a.group);
-                const studentAssignments = simulation.assignments.filter(a => a.student);
 
                 return (
                   <div className="space-y-4">
@@ -518,32 +515,6 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
                               {a.group?.name}
                             </span>
                           ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Individual Students */}
-                    {studentAssignments.length > 0 && (
-                      <div>
-                        <h4 className={`text-xs font-medium ${colors.text.muted} uppercase mb-2`}>
-                          Studenti individuali ({studentAssignments.length})
-                        </h4>
-                        <div className="space-y-1">
-                          {studentAssignments.slice(0, 5).map((a) => (
-                            <div key={a.id} className="flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-                                <Users className="w-3 h-3 text-gray-500" />
-                              </div>
-                              <span className={`text-sm ${colors.text.primary}`}>
-                                {a.student?.user?.name || 'Studente'}
-                              </span>
-                            </div>
-                          ))}
-                          {studentAssignments.length > 5 && (
-                            <p className={`text-xs ${colors.text.muted} ml-8`}>
-                              +{studentAssignments.length - 5} altri
-                            </p>
-                          )}
                         </div>
                       </div>
                     )}

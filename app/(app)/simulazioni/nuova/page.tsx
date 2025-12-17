@@ -59,7 +59,7 @@ const typeOptions: { value: SimulationType; label: string; description: string; 
     label: 'Simulazione Ufficiale',
     description: 'Test con grafica TOLC, timer per sezione, anti-cheat attivo. Conta per la classifica.',
     icon: <Award className="w-6 h-6" />,
-    badge: 'Consigliato',
+    badge: 'Ufficiale',
   },
   {
     value: 'PRACTICE',
@@ -1296,64 +1296,6 @@ export default function NewSimulationPage() {
               </div>
             </div>
 
-            {/* Location settings (visible when scheduled or paper-based) */}
-            {(isScheduled || isPaperBased) && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                  <h3 className={`text-lg font-medium ${colors.text.primary}`}>Luogo</h3>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                      Tipo di luogo
-                    </label>
-                    <CustomSelect
-                      value={locationType}
-                      onChange={(value) => setLocationType(value as LocationType)}
-                      options={[
-                        { value: 'IN_PERSON', label: '🏢 In presenza' },
-                        { value: 'ONLINE', label: '💻 Online' },
-                        { value: 'HYBRID', label: '🔄 Ibrida' },
-                      ]}
-                      placeholder="Seleziona tipo"
-                    />
-                  </div>
-                  {locationType === 'IN_PERSON' || locationType === 'HYBRID' ? (
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                        Indirizzo / Aula
-                      </label>
-                      <input
-                        type="text"
-                        value={locationDetails}
-                        onChange={(e) => setLocationDetails(e.target.value)}
-                        placeholder="Es: Aula 3, Via Roma 10"
-                        className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
-                      />
-                    </div>
-                  ) : locationType === 'ONLINE' ? (
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                        Link meeting (opzionale)
-                      </label>
-                      <input
-                        type="text"
-                        value={locationDetails}
-                        onChange={(e) => setLocationDetails(e.target.value)}
-                        placeholder="Es: Link Zoom, Meet (opzionale)"
-                        className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
-                      />
-                      <p className={`text-xs ${colors.text.muted} mt-1`}>
-                        Lascia vuoto se la simulazione si svolge sulla piattaforma
-                      </p>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            )}
-
             {/* Duration info */}
             <div className={`p-4 rounded-xl ${colors.background.secondary} border ${colors.border.light}`}>
               <div className="flex items-start gap-3">
@@ -1453,15 +1395,15 @@ export default function NewSimulationPage() {
                 <h3 className={`font-medium ${colors.text.primary} mb-4`}>Modalità e Sicurezza</h3>
                 <dl className="space-y-3">
                   <div className="flex justify-between">
-                    <dt className={colors.text.muted}>Modalità</dt>
+                    <dt className={colors.text.muted}>Modalità Cartacea</dt>
                     <dd className={`font-medium ${colors.text.primary}`}>
                       {isPaperBased ? (
                         <span className="flex items-center gap-1">
-                          <Printer className="w-4 h-4" /> Cartacea
+                          <Printer className="w-4 h-4" /> Si
                         </span>
                       ) : (
                         <span className="flex items-center gap-1">
-                          💻 Online
+                          No
                         </span>
                       )}
                     </dd>

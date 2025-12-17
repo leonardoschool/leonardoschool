@@ -81,7 +81,11 @@ enum SimulationStatus {
   DRAFT // Bozza
   PUBLISHED // Pubblicato e disponibile
   ARCHIVED // Archiviato
-  CLOSED // Chiuso
+}
+
+enum AssignmentStatus {
+  ACTIVE // Assegnazione attiva, studenti possono accedere
+  CLOSED // Chiusa manualmente o automaticamente, studenti non possono più accedere
 }
 
 enum SimulationVisibility {
@@ -872,6 +876,9 @@ model SimulationAssignment {
   studentId String? // Assign to specific student
   groupId   String? // Assign to student group
 
+  // Assignment status
+  status AssignmentStatus @default(ACTIVE) // ACTIVE or CLOSED
+
   // Assignment metadata
   assignedById String? // Who assigned it
   assignedAt   DateTime  @default(now())
@@ -896,6 +903,7 @@ model SimulationAssignment {
   @@index([groupId])
   @@index([startDate])
   @@index([endDate])
+  @@index([status])
   @@map("simulation_assignments")
 }
 

@@ -689,9 +689,9 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex">
+      <div className="flex-1 flex overflow-hidden">
         {/* Question panel */}
-        <div className="flex-1 px-4 py-6">
+        <div className="flex-1 px-4 py-6 overflow-y-auto">
           <div className="max-w-3xl mx-auto">
             {/* Question header */}
             <div className="flex items-center justify-between mb-4">
@@ -777,120 +777,122 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
 
         {/* Navigation sidebar */}
         {showNavigation && (
-          <div className={`w-64 border-l ${colors.border.light} ${colors.background.secondary} p-4 overflow-y-auto`}>
-            <h3 className={`font-medium ${colors.text.primary} mb-4`}>Navigazione</h3>
+          <div className={`w-full sm:w-80 lg:w-96 border-l ${colors.border.light} ${colors.background.secondary} overflow-y-auto`}>
+            <div className="p-4">
+              <h3 className={`font-medium ${colors.text.primary} mb-4`}>Navigazione</h3>
             
-            {/* Section tabs for TOLC-style */}
-            {hasSectionsMode && (
-              <div className="mb-4 space-y-2">
-                <p className={`text-xs font-medium ${colors.text.muted} uppercase`}>Sezioni</p>
-                {sections.map((section, index) => {
-                  const isCurrent = index === currentSectionIndex;
-                  const isCompleted = completedSections.has(index);
-                  const isLocked = !isCurrent && !isCompleted && index > currentSectionIndex;
+              {/* Section tabs for TOLC-style */}
+              {hasSectionsMode && (
+                <div className="mb-4 space-y-2">
+                  <p className={`text-xs font-medium ${colors.text.muted} uppercase`}>Sezioni</p>
+                  {sections.map((section, index) => {
+                    const isCurrent = index === currentSectionIndex;
+                    const isCompleted = completedSections.has(index);
+                    const isLocked = !isCurrent && !isCompleted && index > currentSectionIndex;
+                    
+                    return (
+                      <button
+                        key={index}
+                        disabled={isLocked}
+                        onClick={() => {
+                          if (!isLocked && (isCurrent || isCompleted)) {
+                            setCurrentSectionIndex(index);
+                            // Move to first question of this section
+                            const firstQIndex = simulation.questions.findIndex(
+                              q => section.questionIds.includes(q.questionId)
+                            );
+                            if (firstQIndex >= 0) setCurrentQuestionIndex(firstQIndex);
+                          }
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-all ${
+                          isCurrent 
+                            ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 ring-2 ring-red-500'
+                            : isCompleted
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                            : isLocked
+                            ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                            : colors.background.card
+                        }`}
+                      >
+                        {isLocked ? (
+                          <Lock className="w-4 h-4 flex-shrink-0" />
+                        ) : isCompleted ? (
+                          <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                        ) : (
+                          <Layers className="w-4 h-4 flex-shrink-0" />
+                        )}
+                        <span className="flex-1 truncate">{section.name}</span>
+                        <span className="text-xs opacity-70">{section.durationMinutes}m</span>
+                      </button>
+                    );
+                  })}
                   
+                  {/* Complete section button */}
+                  {currentSectionIndex < sections.length - 1 && (
+                    <button
+                      onClick={handleRequestSectionComplete}
+                      className={`w-full mt-2 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-white ${colors.primary.bg} hover:opacity-90 text-sm`}
+                    >
+                      Completa Sezione
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              )}
+              
+              {/* Legend */}
+              <div className={`mb-4 text-xs space-y-1 ${colors.text.muted}`}>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded bg-green-500" />
+                  <span>Risposta data</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded bg-yellow-500" />
+                  <span>Contrassegnata</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded bg-gray-300 dark:bg-gray-600" />
+                  <span>Non risposta</span>
+                </div>
+              </div>
+
+              {/* Question grid */}
+              <div className="grid grid-cols-5 gap-2">
+                {simulation.questions.map((sq, index) => {
+                  const answer = answers.find((a) => a.questionId === sq.questionId);
+                  const isCurrent = index === currentQuestionIndex;
+                  const isAnswered = answer?.answerId !== null;
+                  const isFlagged = answer?.flagged;
+
+                  let bgColor = 'bg-gray-200 dark:bg-gray-700';
+                  if (isAnswered) bgColor = 'bg-green-500 text-white';
+                  if (isFlagged) bgColor = 'bg-yellow-500 text-white';
+
                   return (
                     <button
-                      key={index}
-                      disabled={isLocked}
-                      onClick={() => {
-                        if (!isLocked && (isCurrent || isCompleted)) {
-                          setCurrentSectionIndex(index);
-                          // Move to first question of this section
-                          const firstQIndex = simulation.questions.findIndex(
-                            q => section.questionIds.includes(q.questionId)
-                          );
-                          if (firstQIndex >= 0) setCurrentQuestionIndex(firstQIndex);
-                        }
-                      }}
-                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-all ${
-                        isCurrent 
-                          ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 ring-2 ring-red-500'
-                          : isCompleted
-                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                          : isLocked
-                          ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-                          : colors.background.card
+                      key={sq.questionId}
+                      onClick={() => goToQuestion(index)}
+                      className={`w-full aspect-square rounded flex items-center justify-center text-sm font-medium transition-all ${bgColor} ${
+                        isCurrent ? 'ring-2 ring-red-500 ring-offset-2' : ''
                       }`}
                     >
-                      {isLocked ? (
-                        <Lock className="w-4 h-4 flex-shrink-0" />
-                      ) : isCompleted ? (
-                        <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                      ) : (
-                        <Layers className="w-4 h-4 flex-shrink-0" />
-                      )}
-                      <span className="flex-1 truncate">{section.name}</span>
-                      <span className="text-xs opacity-70">{section.durationMinutes}m</span>
+                      {index + 1}
                     </button>
                   );
                 })}
-                
-                {/* Complete section button */}
-                {currentSectionIndex < sections.length - 1 && (
-                  <button
-                    onClick={handleRequestSectionComplete}
-                    className={`w-full mt-2 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-white ${colors.primary.bg} hover:opacity-90 text-sm`}
-                  >
-                    Completa Sezione
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                )}
               </div>
-            )}
-            
-            {/* Legend */}
-            <div className={`mb-4 text-xs space-y-1 ${colors.text.muted}`}>
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded bg-green-500" />
-                <span>Risposta data</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded bg-yellow-500" />
-                <span>Contrassegnata</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded bg-gray-300 dark:bg-gray-600" />
-                <span>Non risposta</span>
-              </div>
-            </div>
 
-            {/* Question grid */}
-            <div className="grid grid-cols-5 gap-2">
-              {simulation.questions.map((sq, index) => {
-                const answer = answers.find((a) => a.questionId === sq.questionId);
-                const isCurrent = index === currentQuestionIndex;
-                const isAnswered = answer?.answerId !== null;
-                const isFlagged = answer?.flagged;
-
-                let bgColor = 'bg-gray-200 dark:bg-gray-700';
-                if (isAnswered) bgColor = 'bg-green-500 text-white';
-                if (isFlagged) bgColor = 'bg-yellow-500 text-white';
-
-                return (
-                  <button
-                    key={sq.questionId}
-                    onClick={() => goToQuestion(index)}
-                    className={`w-full aspect-square rounded flex items-center justify-center text-sm font-medium transition-all ${bgColor} ${
-                      isCurrent ? 'ring-2 ring-red-500 ring-offset-2' : ''
-                    }`}
-                  >
-                    {index + 1}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Stats */}
-            <div className={`mt-6 pt-4 border-t ${colors.border.light}`}>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className={colors.text.muted}>Risposte date:</span>
-                  <span className={`font-medium ${colors.text.primary}`}>{answeredCount}/{simulation.totalQuestions}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className={colors.text.muted}>Contrassegnate:</span>
-                  <span className={`font-medium ${colors.text.primary}`}>{flaggedCount}</span>
+              {/* Stats */}
+              <div className={`mt-6 pt-4 border-t ${colors.border.light}`}>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className={colors.text.muted}>Risposte date:</span>
+                    <span className={`font-medium ${colors.text.primary}`}>{answeredCount}/{simulation.totalQuestions}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className={colors.text.muted}>Contrassegnate:</span>
+                    <span className={`font-medium ${colors.text.primary}`}>{flaggedCount}</span>
+                  </div>
                 </div>
               </div>
             </div>

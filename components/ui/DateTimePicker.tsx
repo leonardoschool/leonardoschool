@@ -55,7 +55,7 @@ export default function DateTimePicker({
   
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Close on click outside
+  // Close on click outside and prevent body scroll on mobile
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -66,9 +66,18 @@ export default function DateTimePicker({
 
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
+      
+      // Prevent body scroll on mobile when picker is open
+      const isMobile = window.innerWidth < 640; // sm breakpoint
+      if (isMobile) {
+        document.body.style.overflow = 'hidden';
+      }
     }
 
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.body.style.overflow = '';
+    };
   }, [isOpen, onBlur]);
 
   // Get days in month
@@ -229,7 +238,7 @@ export default function DateTimePicker({
         disabled={disabled}
         onClick={() => !disabled && setIsOpen(!isOpen)}
         className={`
-          w-full px-4 py-2 rounded-lg border text-left flex items-center gap-2 transition-all
+          w-full px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg border text-left flex items-center gap-2 transition-all
           ${hasError 
             ? 'border-red-500 focus:ring-red-500/30' 
             : `${colors.border.light} focus:border-[#a8012b] focus:ring-2 focus:ring-[#a8012b]/20`
@@ -238,8 +247,8 @@ export default function DateTimePicker({
           ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-[#a8012b]/50'}
         `}
       >
-        <Calendar className={`w-4 h-4 flex-shrink-0 ${value ? colors.text.primary : colors.text.muted}`} />
-        <span className={`flex-1 truncate ${value ? colors.text.primary : colors.text.muted}`}>
+        <Calendar className={`w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 ${value ? colors.text.primary : colors.text.muted}`} />
+        <span className={`flex-1 truncate text-sm sm:text-base ${value ? colors.text.primary : colors.text.muted}`}>
           {value ? formatDisplayValue() : placeholder}
         </span>
         {value && !disabled && (
@@ -248,7 +257,7 @@ export default function DateTimePicker({
             tabIndex={0}
             onClick={handleClear}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleClear(e as unknown as React.MouseEvent); }}
-            className={`p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 ${colors.text.muted} cursor-pointer`}
+            className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 ${colors.text.muted} cursor-pointer`}
           >
             <X className="w-4 h-4" />
           </span>
@@ -257,30 +266,42 @@ export default function DateTimePicker({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className={`absolute z-50 mt-1 w-80 ${colors.background.card} rounded-xl shadow-xl border ${colors.border.primary} overflow-hidden`}>
-          {/* Calendar Header */}
-          <div className={`flex items-center justify-between px-4 py-3 border-b ${colors.border.light}`}>
+        <>
+          {/* Mobile overlay */}
+          <div 
+            className="fixed inset-0 bg-black/50 z-40 sm:hidden"
+            onClick={() => setIsOpen(false)}
+          />
+          
+          <div className={`
+            fixed sm:absolute z-50 
+            inset-x-4 bottom-4 sm:inset-x-auto sm:bottom-auto sm:left-0 sm:mt-1 sm:w-80
+            max-w-sm sm:max-w-none mx-auto sm:mx-0
+            ${colors.background.card} rounded-xl shadow-xl border ${colors.border.primary} overflow-hidden
+          `}>
+            {/* Calendar Header */}
+          <div className={`flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 border-b ${colors.border.light}`}>
             <button
               type="button"
               onClick={goToPreviousMonth}
-              className={`p-1 rounded-lg ${colors.effects.hover.bgSubtle}`}
+              className={`p-1.5 sm:p-1 rounded-lg ${colors.effects.hover.bgSubtle} touch-manipulation`}
             >
-              <ChevronLeft className={`w-5 h-5 ${colors.text.primary}`} />
+              <ChevronLeft className={`w-5 h-5 sm:w-5 sm:h-5 ${colors.text.primary}`} />
             </button>
-            <span className={`font-semibold ${colors.text.primary}`}>
+            <span className={`font-semibold text-sm sm:text-base ${colors.text.primary}`}>
               {MESI[viewDate.getMonth()]} {viewDate.getFullYear()}
             </span>
             <button
               type="button"
               onClick={goToNextMonth}
-              className={`p-1 rounded-lg ${colors.effects.hover.bgSubtle}`}
+              className={`p-1.5 sm:p-1 rounded-lg ${colors.effects.hover.bgSubtle} touch-manipulation`}
             >
-              <ChevronRight className={`w-5 h-5 ${colors.text.primary}`} />
+              <ChevronRight className={`w-5 h-5 sm:w-5 sm:h-5 ${colors.text.primary}`} />
             </button>
           </div>
 
           {/* Weekday headers */}
-          <div className="grid grid-cols-7 gap-1 px-2 py-2">
+          <div className="grid grid-cols-7 gap-0.5 sm:gap-1 px-2 py-2">
             {GIORNI_SETTIMANA.map((giorno) => (
               <div key={giorno} className={`text-center text-xs font-medium ${colors.text.muted}`}>
                 {giorno}
@@ -289,7 +310,7 @@ export default function DateTimePicker({
           </div>
 
           {/* Calendar days */}
-          <div className="grid grid-cols-7 gap-1 px-2 pb-2">
+          <div className="grid grid-cols-7 gap-0.5 sm:gap-1 px-2 pb-2">
             {days.map((day, index) => (
               <button
                 key={index}
@@ -297,7 +318,8 @@ export default function DateTimePicker({
                 onClick={() => handleDayClick(day.date)}
                 disabled={day.isDisabled}
                 className={`
-                  w-9 h-9 rounded-lg text-sm font-medium transition-colors flex items-center justify-center
+                  aspect-square min-h-[40px] sm:w-9 sm:h-9 rounded-lg text-sm font-medium transition-colors flex items-center justify-center
+                  touch-manipulation active:scale-95
                   ${day.isDisabled 
                     ? 'opacity-30 cursor-not-allowed' 
                     : 'cursor-pointer hover:bg-[#a8012b]/10'
@@ -317,15 +339,21 @@ export default function DateTimePicker({
           </div>
 
           {/* Time picker */}
-          <div className={`border-t ${colors.border.light} px-4 py-3`}>
-            <div className="flex items-center gap-2">
-              <Clock className={`w-4 h-4 ${colors.text.muted}`} />
-              <span className={`text-sm font-medium ${colors.text.secondary}`}>Orario:</span>
-              <div className="flex items-center gap-1 flex-1 justify-end">
+          <div className={`border-t ${colors.border.light} px-3 sm:px-4 py-3`}>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-2">
+              <div className="flex items-center gap-2">
+                <Clock className={`w-4 h-4 ${colors.text.muted}`} />
+                <span className={`text-sm font-medium ${colors.text.secondary}`}>Orario:</span>
+              </div>
+              <div className="flex items-center gap-2 flex-1 w-full sm:w-auto sm:justify-end">
                 <select
                   value={selectedHour}
                   onChange={(e) => handleTimeChange(parseInt(e.target.value), selectedMinute)}
-                  className={`px-2 py-1 rounded border ${colors.border.light} ${colors.background.input} ${colors.text.primary} text-sm`}
+                  className={`
+                    flex-1 sm:flex-initial px-3 py-2 sm:px-2 sm:py-1 rounded border 
+                    ${colors.border.light} ${colors.background.input} ${colors.text.primary} 
+                    text-sm touch-manipulation
+                  `}
                 >
                   {Array.from({ length: 24 }, (_, i) => (
                     <option key={i} value={i}>
@@ -333,11 +361,15 @@ export default function DateTimePicker({
                     </option>
                   ))}
                 </select>
-                <span className={colors.text.muted}>:</span>
+                <span className={`${colors.text.muted} font-semibold`}>:</span>
                 <select
                   value={selectedMinute}
                   onChange={(e) => handleTimeChange(selectedHour, parseInt(e.target.value))}
-                  className={`px-2 py-1 rounded border ${colors.border.light} ${colors.background.input} ${colors.text.primary} text-sm`}
+                  className={`
+                    flex-1 sm:flex-initial px-3 py-2 sm:px-2 sm:py-1 rounded border 
+                    ${colors.border.light} ${colors.background.input} ${colors.text.primary} 
+                    text-sm touch-manipulation
+                  `}
                 >
                   {Array.from({ length: 12 }, (_, i) => i * 5).map((minute) => (
                     <option key={minute} value={minute}>
@@ -350,26 +382,36 @@ export default function DateTimePicker({
           </div>
 
           {/* Actions */}
-          <div className={`border-t ${colors.border.light} px-4 py-2 flex justify-between`}>
+          <div className={`border-t ${colors.border.light} px-3 sm:px-4 py-3 sm:py-2 flex gap-2 sm:gap-0 sm:justify-between`}>
             <button
               type="button"
               onClick={() => {
                 const now = new Date();
                 onChange(formatDateTimeLocal(now));
               }}
-              className={`text-sm ${colors.primary.text} hover:underline`}
+              className={`
+                flex-1 sm:flex-initial px-4 py-2 sm:px-0 sm:py-0 rounded-lg sm:rounded-none
+                text-sm font-medium sm:font-normal ${colors.primary.text} 
+                border border-[#a8012b] sm:border-0 hover:bg-[#a8012b]/10 sm:hover:bg-transparent
+                sm:hover:underline transition-colors touch-manipulation
+              `}
             >
               Adesso
             </button>
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className={`px-3 py-1 text-sm font-medium rounded-lg ${colors.primary.gradient} text-white`}
+              className={`
+                flex-1 sm:flex-initial px-4 py-2 sm:px-3 sm:py-1 text-sm font-medium 
+                rounded-lg ${colors.primary.gradient} text-white 
+                touch-manipulation active:scale-95 transition-transform
+              `}
             >
               Conferma
             </button>
           </div>
-        </div>
+          </div>
+        </>
       )}
     </div>
   );

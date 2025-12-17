@@ -13,7 +13,6 @@
 ```bash
 pnpm dev                 # Start dev server (localhost:3000)
 pnpm prisma:generate     # REQUIRED after schema changes
-pnpm prisma:migrate      # Run DB migrations
 pnpm prisma:studio       # DB GUI (localhost:5555)
 ```
 

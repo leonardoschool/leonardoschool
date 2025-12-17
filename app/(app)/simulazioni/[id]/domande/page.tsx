@@ -170,7 +170,7 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
   };
 
   // Check if simulation can be edited
-  const canEdit = simulation && simulation.status !== 'CLOSED' && simulation.status !== 'ARCHIVED';
+  const canEdit = simulation && simulation.status !== 'ARCHIVED';
 
   // Authorization check
   if (!hasAccess) {
@@ -250,17 +250,16 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
         <div className="mb-6 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
           <p className="text-amber-700 dark:text-amber-300">
-            Questa simulazione è {simulation.status === 'CLOSED' ? 'chiusa' : 'archiviata'} e non può
-            essere modificata.
+            Questa simulazione è archiviata e non può essere modificata.
           </p>
         </div>
       )}
 
       {/* Questions grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-280px)]">
         {/* Available questions */}
-        <div className={`rounded-xl border ${colors.border.light} overflow-hidden`}>
-          <div className={`p-4 ${colors.background.secondary} border-b ${colors.border.light}`}>
+        <div className={`rounded-xl border ${colors.border.light} overflow-hidden flex flex-col`}>
+          <div className={`p-4 ${colors.background.secondary} border-b ${colors.border.light} flex-shrink-0`}>
             <h3 className={`font-medium ${colors.text.primary} mb-3`}>Domande disponibili</h3>
             <div className="flex flex-col gap-2">
               <div className="relative">
@@ -301,7 +300,7 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
               </div>
             </div>
           </div>
-          <div className="max-h-[500px] overflow-y-auto">
+          <div className="flex-1 overflow-y-auto">
             {questionsLoading ? (
               <div className="p-8 text-center">
                 <Spinner size="md" />
@@ -371,8 +370,8 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
         </div>
 
         {/* Selected questions */}
-        <div className={`rounded-xl border ${colors.border.light} overflow-hidden`}>
-          <div className={`p-4 ${colors.background.secondary} border-b ${colors.border.light}`}>
+        <div className={`rounded-xl border ${colors.border.light} overflow-hidden flex flex-col`}>
+          <div className={`p-4 ${colors.background.secondary} border-b ${colors.border.light} flex-shrink-0`}>
             <h3 className={`font-medium ${colors.text.primary}`}>
               Domande nella simulazione ({selectedQuestions.length})
             </h3>
@@ -382,7 +381,7 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
               </p>
             )}
           </div>
-          <div className="max-h-[500px] overflow-y-auto">
+          <div className="flex-1 overflow-y-auto">
             {selectedQuestions.length === 0 ? (
               <div className="p-8 text-center">
                 <Target className={`w-12 h-12 mx-auto mb-2 ${colors.text.muted} opacity-50`} />
@@ -425,7 +424,7 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                       <p className={`text-sm ${colors.text.primary} line-clamp-2`}>
                         {sq.question?.text?.replace(/<[^>]*>/g, '') || 'Domanda'}
                       </p>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
                         {sq.question?.subject && (
                           <span
                             className="px-2 py-0.5 rounded text-xs font-medium"
@@ -444,6 +443,11 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                               : sq.question.difficulty === 'MEDIUM'
                                 ? 'Media'
                                 : 'Difficile'}
+                          </span>
+                        )}
+                        {sq.question?.topic && (
+                          <span className={`text-xs ${colors.text.muted}`}>
+                            • {sq.question.topic.name}
                           </span>
                         )}
                       </div>

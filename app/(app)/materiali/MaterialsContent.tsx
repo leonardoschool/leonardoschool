@@ -13,6 +13,8 @@ import TopicsManager from '@/components/admin/TopicsManager';
 import CategoryManager from '@/components/admin/CategoryManager';
 import { GroupInfoModal } from '@/components/ui/GroupInfoModal';
 import { EditMaterialModal } from '@/components/ui/EditMaterialModal';
+import { SubjectEditModal } from '@/components/ui/SubjectEditModal';
+import type { SubjectFormData } from '@/components/ui/SubjectEditModal';
 import { 
   Folder,
   FolderOpen, 
@@ -163,8 +165,8 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
   const [activeTab, setActiveTab] = useState<'subjects' | 'materials' | 'categories'>('subjects');
   
   // Subject management
-  const [showSubjectForm, setShowSubjectForm] = useState(false);
-  const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
+  const [showSubjectModal, setShowSubjectModal] = useState(false);
+  const [editingSubject, setEditingSubject] = useState<any>(null);
   const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
   
   // Topics modal
@@ -215,15 +217,6 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
   });
 
   // Form states
-  const [subjectFormData, setSubjectFormData] = useState({
-    name: '',
-    code: '',
-    description: '',
-    color: '#6366f1',
-    icon: '',
-    order: 0,
-  });
-
   const [materialFormData, setMaterialFormData] = useState({
     title: '',
     description: '',
@@ -317,7 +310,8 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
     onSuccess: () => {
       utils.materials.getAllSubjects.invalidate();
       showSuccess('Materia creata', 'La nuova materia è stata aggiunta.');
-      resetSubjectForm();
+      setShowSubjectModal(false);
+      setEditingSubject(null);
     },
     onError: handleMutationError,
   });
@@ -326,7 +320,8 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
     onSuccess: () => {
       utils.materials.getAllSubjects.invalidate();
       showSuccess('Materia aggiornata', 'Le modifiche sono state salvate.');
-      resetSubjectForm();
+      setShowSubjectModal(false);
+      setEditingSubject(null);
     },
     onError: handleMutationError,
   });
@@ -662,21 +657,9 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
 
   // ==================== SUBJECT HANDLERS ====================
 
-  const resetSubjectForm = () => {
-    setSubjectFormData({
-      name: '',
-      code: '',
-      description: '',
-      color: '#6366f1',
-      icon: '',
-      order: 0,
-    });
-    setShowSubjectForm(false);
-    setEditingSubjectId(null);
-  };
-
   const handleEditSubject = (subject: any) => {
-    setSubjectFormData({
+    setEditingSubject({
+      id: subject.id,
       name: subject.name,
       code: subject.code || '',
       description: subject.description || '',
@@ -684,21 +667,28 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
       icon: subject.icon || '',
       order: subject.order || 0,
     });
-    setEditingSubjectId(subject.id);
-    setShowSubjectForm(true);
+    setShowSubjectModal(true);
   };
 
-  const handleSubjectSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (editingSubjectId) {
+  const handleCreateSubject = () => {
+    setEditingSubject(null);
+    setShowSubjectModal(true);
+  };
+
+  const handleSubjectSave = (data: SubjectFormData) => {
+    if (editingSubject?.id) {
       updateSubjectMutation.mutate({
-        id: editingSubjectId,
-        ...subjectFormData,
+        id: editingSubject.id,
+        ...data,
       });
     } else {
-      createSubjectMutation.mutate(subjectFormData);
+      createSubjectMutation.mutate(data);
     }
+  };
+
+  const handleSubjectModalClose = () => {
+    setShowSubjectModal(false);
+    setEditingSubject(null);
   };
 
   const toggleSubject = (subjectId: string) => {
@@ -819,134 +809,15 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
           {activeTab === 'subjects' ? (
             <div className="space-y-6">
               {/* Add Subject Button */}
-              {!showSubjectForm && (
-                <button
-                  onClick={() => setShowSubjectForm(true)}
-                  className="px-4 py-2.5 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl text-gray-500 dark:text-gray-400 hover:border-[#a8012b] hover:text-[#a8012b] dark:hover:text-[#d1163b] hover:bg-red-50 dark:hover:bg-red-950/30 transition-all flex items-center gap-2"
-                >
-                  <Plus className="w-5 h-5" />
-                  Nuova Materia
-                </button>
-              )}
+              <button
+                onClick={handleCreateSubject}
+                className="px-4 py-2.5 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl text-gray-500 dark:text-gray-400 hover:border-[#a8012b] hover:text-[#a8012b] dark:hover:text-[#d1163b] hover:bg-red-50 dark:hover:bg-red-950/30 transition-all flex items-center gap-2"
+              >
+                <Plus className="w-5 h-5" />
+                Nuova Materia
+              </button>
 
-              {/* Subject Form */}
-              {showSubjectForm && (
-                <div className={`p-6 rounded-xl border ${colors.border.primary} ${colors.background.secondary}`}>
-                  <h3 className={`text-lg font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
-                    {editingSubjectId ? <Edit2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-                    {editingSubjectId ? 'Modifica Materia' : 'Nuova Materia'}
-                  </h3>
 
-                  <form onSubmit={handleSubjectSubmit} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                          Nome <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={subjectFormData.name}
-                          onChange={(e) => setSubjectFormData({ ...subjectFormData, name: e.target.value })}
-                          className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
-                          placeholder="Es: Biologia"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                          Codice <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={subjectFormData.code}
-                          onChange={(e) => setSubjectFormData({ ...subjectFormData, code: e.target.value.toUpperCase() })}
-                          className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-indigo-500 focus:border-transparent uppercase`}
-                          placeholder="Es: BIO"
-                          maxLength={10}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                          Ordine
-                        </label>
-                        <input
-                          type="number"
-                          value={subjectFormData.order}
-                          onChange={(e) => setSubjectFormData({ ...subjectFormData, order: parseInt(e.target.value) || 0 })}
-                          className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                          Colore
-                        </label>
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="color"
-                            value={subjectFormData.color}
-                            onChange={(e) => setSubjectFormData({ ...subjectFormData, color: e.target.value })}
-                            className="w-12 h-12 rounded-lg border-0 cursor-pointer"
-                          />
-                          <input
-                            type="text"
-                            value={subjectFormData.color}
-                            onChange={(e) => setSubjectFormData({ ...subjectFormData, color: e.target.value })}
-                            className={`flex-1 px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono`}
-                            placeholder="#6366f1"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                          Icona (nome o emoji)
-                        </label>
-                        <input
-                          type="text"
-                          value={subjectFormData.icon}
-                          onChange={(e) => setSubjectFormData({ ...subjectFormData, icon: e.target.value })}
-                          className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
-                          placeholder="Es: 🧬 o dna"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        Descrizione
-                      </label>
-                      <textarea
-                        value={subjectFormData.description}
-                        onChange={(e) => setSubjectFormData({ ...subjectFormData, description: e.target.value })}
-                        rows={2}
-                        className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
-                        placeholder="Descrizione opzionale..."
-                      />
-                    </div>
-
-                    <div className="flex justify-end gap-3 pt-4">
-                      <button
-                        type="button"
-                        onClick={resetSubjectForm}
-                        className={`px-4 py-2.5 rounded-lg border ${colors.border.primary} ${colors.text.secondary} hover:bg-gray-50 dark:hover:bg-gray-700`}
-                      >
-                        Annulla
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={createSubjectMutation.isPending || updateSubjectMutation.isPending}
-                        className={`px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50`}
-                      >
-                        <Save className="w-4 h-4" />
-                        {editingSubjectId ? 'Salva' : 'Crea Materia'}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              )}
 
               {/* Subjects List */}
               {subjectsLoading ? (
@@ -2098,6 +1969,15 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
         </div>,
         document.body
       )}
+
+      {/* Subject Edit Modal */}
+      <SubjectEditModal
+        isOpen={showSubjectModal}
+        onClose={handleSubjectModalClose}
+        subject={editingSubject}
+        onSave={handleSubjectSave}
+        isLoading={createSubjectMutation.isPending || updateSubjectMutation.isPending}
+      />
 
       {/* Topics Manager Modal */}
       <TopicsManager

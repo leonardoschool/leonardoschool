@@ -583,11 +583,11 @@ export const simulationsRouter = router({
         });
       }
 
-      // Can't edit closed simulations
-      if (existing.status === 'CLOSED' || existing.status === 'ARCHIVED') {
+      // Can't edit archived simulations
+      if (existing.status === 'ARCHIVED') {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'Non puoi modificare una simulazione chiusa o archiviata',
+          message: 'Non puoi modificare una simulazione archiviata',
         });
       }
 
@@ -627,8 +627,8 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi' });
       }
 
-      if (existing.status === 'CLOSED' || existing.status === 'ARCHIVED') {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Non puoi modificare le domande di una simulazione chiusa' });
+      if (existing.status === 'ARCHIVED') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Non puoi modificare le domande di una simulazione archiviata' });
       }
 
       // Validate questions exist
@@ -801,6 +801,88 @@ export const simulationsRouter = router({
       });
 
       return simulation;
+    }),
+
+  // Close assignment(s) manually - students/groups can no longer access
+  closeAssignment: staffProcedure
+    .input(z.object({ 
+      assignmentIds: z.array(z.string()).min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Get assignments with simulation info for permission check
+      const assignments = await ctx.prisma.simulationAssignment.findMany({
+        where: { id: { in: input.assignmentIds } },
+        include: { 
+          simulation: { select: { createdById: true } },
+        },
+      });
+
+      if (assignments.length === 0) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Assegnazioni non trovate' });
+      }
+
+      // Check permissions for collaborators
+      if (ctx.user.role === 'COLLABORATOR') {
+        const hasPermission = assignments.every(
+          (a) => a.simulation.createdById === ctx.user.id
+        );
+        if (!hasPermission) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi per chiudere queste assegnazioni' });
+        }
+      }
+
+      // Close all assignments
+      const result = await ctx.prisma.simulationAssignment.updateMany({
+        where: { id: { in: input.assignmentIds } },
+        data: { status: 'CLOSED' },
+      });
+
+      return { 
+        success: true, 
+        closedCount: result.count,
+        message: `${result.count} assegnazione/i chiusa/e con successo`,
+      };
+    }),
+
+  // Reopen assignment(s) - students/groups can access again
+  reopenAssignment: staffProcedure
+    .input(z.object({ 
+      assignmentIds: z.array(z.string()).min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Get assignments with simulation info for permission check
+      const assignments = await ctx.prisma.simulationAssignment.findMany({
+        where: { id: { in: input.assignmentIds } },
+        include: { 
+          simulation: { select: { createdById: true } },
+        },
+      });
+
+      if (assignments.length === 0) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Assegnazioni non trovate' });
+      }
+
+      // Check permissions for collaborators
+      if (ctx.user.role === 'COLLABORATOR') {
+        const hasPermission = assignments.every(
+          (a) => a.simulation.createdById === ctx.user.id
+        );
+        if (!hasPermission) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi per riaprire queste assegnazioni' });
+        }
+      }
+
+      // Reopen all assignments
+      const result = await ctx.prisma.simulationAssignment.updateMany({
+        where: { id: { in: input.assignmentIds } },
+        data: { status: 'ACTIVE' },
+      });
+
+      return { 
+        success: true, 
+        reopenedCount: result.count,
+        message: `${result.count} assegnazione/i riaperta/e con successo`,
+      };
     }),
 
   // ==================== ASSIGNMENTS ====================
@@ -2014,10 +2096,11 @@ export const simulationsRouter = router({
       pageSize: z.number().int().min(1).max(100).default(20),
       simulationId: z.string().optional(),
       groupId: z.string().optional(),
-      status: z.enum(['PENDING', 'COMPLETED', 'ALL']).default('ALL'),
+      completionStatus: z.enum(['PENDING', 'COMPLETED', 'ALL']).default('ALL'),
+      assignmentStatus: z.enum(['ACTIVE', 'CLOSED', 'ALL']).default('ALL'),
     }))
     .query(async ({ ctx, input }) => {
-      const { page, pageSize, simulationId, groupId, status } = input;
+      const { page, pageSize, simulationId, groupId, completionStatus, assignmentStatus } = input;
       const skip = (page - 1) * pageSize;
 
       // Build where clause
@@ -2037,6 +2120,11 @@ export const simulationsRouter = router({
 
       if (groupId) {
         where.groupId = groupId;
+      }
+
+      // Filter by assignment status (ACTIVE/CLOSED)
+      if (assignmentStatus !== 'ALL') {
+        where.status = assignmentStatus;
       }
 
       // Get total count
@@ -2124,11 +2212,11 @@ export const simulationsRouter = router({
         })
       );
 
-      // Filter by status if needed
+      // Filter by completion status if needed
       let filteredAssignments = enrichedAssignments;
-      if (status === 'COMPLETED') {
+      if (completionStatus === 'COMPLETED') {
         filteredAssignments = enrichedAssignments.filter(a => a.completedCount === a.totalTargeted && a.totalTargeted > 0);
-      } else if (status === 'PENDING') {
+      } else if (completionStatus === 'PENDING') {
         filteredAssignments = enrichedAssignments.filter(a => a.completedCount < a.totalTargeted);
       }
 
