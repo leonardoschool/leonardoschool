@@ -666,6 +666,29 @@ export const usersRouter = router({
           await tx.contract.deleteMany({ where: { studentId } });
           // Delete simulation results
           await tx.simulationResult.deleteMany({ where: { studentId } });
+          
+          // Delete quick quiz simulations created by this user (QUICK_QUIZ type)
+          // First get the IDs to delete related records
+          const quickQuizzes = await tx.simulation.findMany({
+            where: { 
+              createdById: userId,
+              type: 'QUICK_QUIZ',
+            },
+            select: { id: true },
+          });
+          
+          if (quickQuizzes.length > 0) {
+            const quizIds = quickQuizzes.map(q => q.id);
+            // Delete related simulation questions
+            await tx.simulationQuestion.deleteMany({ where: { simulationId: { in: quizIds } } });
+            // Delete related assignments
+            await tx.simulationAssignment.deleteMany({ where: { simulationId: { in: quizIds } } });
+            // Delete related results
+            await tx.simulationResult.deleteMany({ where: { simulationId: { in: quizIds } } });
+            // Delete the quick quizzes themselves
+            await tx.simulation.deleteMany({ where: { id: { in: quizIds } } });
+          }
+          
           // Delete student
           await tx.student.delete({ where: { id: studentId } });
         }

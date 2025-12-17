@@ -478,6 +478,10 @@ export const simulationsRouter = router({
         console.warn('Creating simulation with unpublished questions');
       }
 
+      // Calculate maxScore if not provided
+      const correctPts = simulationData.correctPoints ?? 1.5;
+      const calculatedMaxScore = simulationData.maxScore ?? (questions.length * correctPts);
+
       // Create simulation with questions and assignments
       const simulation = await ctx.prisma.simulation.create({
         data: {
@@ -497,7 +501,7 @@ export const simulationsRouter = router({
           correctPoints: simulationData.correctPoints ?? 1.5,
           wrongPoints: simulationData.wrongPoints ?? -0.4,
           blankPoints: simulationData.blankPoints ?? 0,
-          maxScore: simulationData.maxScore,
+          maxScore: calculatedMaxScore,
           passingScore: simulationData.passingScore,
           isRepeatable: simulationData.isRepeatable ?? false,
           maxAttempts: simulationData.maxAttempts,
@@ -667,6 +671,10 @@ export const simulationsRouter = router({
         }
       }
 
+      // Calculate maxScore if not provided
+      const correctPts = simulationData.correctPoints ?? 1.5;
+      const calculatedMaxScore = simulationData.maxScore ?? (selectedQuestions.length * correctPts);
+
       // Create simulation
       const simulation = await ctx.prisma.simulation.create({
         data: {
@@ -686,7 +694,7 @@ export const simulationsRouter = router({
           correctPoints: simulationData.correctPoints ?? 1.5,
           wrongPoints: simulationData.wrongPoints ?? -0.4,
           blankPoints: simulationData.blankPoints ?? 0,
-          maxScore: simulationData.maxScore,
+          maxScore: calculatedMaxScore,
           passingScore: simulationData.passingScore,
           isRepeatable: simulationData.isRepeatable ?? false,
           maxAttempts: simulationData.maxAttempts,
@@ -1993,7 +2001,46 @@ export const simulationsRouter = router({
 
       // Return existing in-progress attempt
       if (inProgressAttempt) {
-        return { resultId: inProgressAttempt.id, resumed: true };
+        // Parse saved answers - handle both old format (array) and new format (object with metadata)
+        const savedData = inProgressAttempt.answers as unknown;
+        let savedAnswers: Array<{
+          questionId: string;
+          answerId: string | null;
+          answerText: string | null;
+          timeSpent: number;
+          flagged: boolean;
+        }> = [];
+        let savedSectionTimes: Record<number, number> = {};
+        let savedCurrentSectionIndex = 0;
+
+        if (Array.isArray(savedData)) {
+          // Old format: just an array of answers
+          savedAnswers = savedData as typeof savedAnswers;
+        } else if (savedData && typeof savedData === 'object' && 'items' in savedData) {
+          // New format: object with items, sectionTimes, currentSectionIndex
+          const meta = savedData as {
+            items: typeof savedAnswers;
+            sectionTimes?: Record<string, number>;
+            currentSectionIndex?: number;
+          };
+          savedAnswers = meta.items || [];
+          // Convert string keys to number keys for sectionTimes
+          if (meta.sectionTimes) {
+            savedSectionTimes = Object.fromEntries(
+              Object.entries(meta.sectionTimes).map(([k, v]) => [Number(k), v])
+            );
+          }
+          savedCurrentSectionIndex = meta.currentSectionIndex ?? 0;
+        }
+
+        return { 
+          resultId: inProgressAttempt.id, 
+          resumed: true,
+          savedTimeSpent: inProgressAttempt.durationSeconds || 0,
+          savedAnswers,
+          savedSectionTimes,
+          savedCurrentSectionIndex,
+        };
       }
 
       // Check if can start new attempt
@@ -2030,9 +2077,12 @@ export const simulationsRouter = router({
         flagged: z.boolean().optional(),
       })),
       timeSpent: z.number().int().min(0),
+      // TOLC section progress
+      sectionTimes: z.record(z.number()).optional(),
+      currentSectionIndex: z.number().int().min(0).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { resultId, answers, timeSpent } = input;
+      const { resultId, answers, timeSpent, sectionTimes, currentSectionIndex } = input;
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
 
       const result = await ctx.prisma.simulationResult.findUnique({
@@ -2052,10 +2102,17 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Tentativo già completato' });
       }
 
+      // Prepare answers with section progress metadata
+      const answersWithMeta = {
+        items: answers,
+        sectionTimes: sectionTimes || {},
+        currentSectionIndex: currentSectionIndex ?? 0,
+      };
+
       await ctx.prisma.simulationResult.update({
         where: { id: resultId },
         data: {
-          answers: answers as Prisma.JsonArray,
+          answers: answersWithMeta as unknown as Prisma.JsonArray,
           durationSeconds: timeSpent,
         },
       });
@@ -2291,12 +2348,17 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai accesso a questo risultato' });
       }
 
+      // Calculate maxScore if not set (for backwards compatibility)
+      const effectiveMaxScore = result.simulation.maxScore && result.simulation.maxScore > 0
+        ? result.simulation.maxScore
+        : (result.simulation.totalQuestions ?? 0) * (result.simulation.correctPoints ?? 1.5);
+
       // Check if review is allowed
       if (!result.simulation.allowReview) {
         return {
           simulation: result.simulation,
           score: result.totalScore ?? 0,
-          totalScore: result.simulation.maxScore ?? 0,
+          totalScore: effectiveMaxScore,
           correctAnswers: result.correctAnswers ?? 0,
           wrongAnswers: result.wrongAnswers ?? 0,
           blankAnswers: result.blankAnswers ?? 0,
@@ -2358,7 +2420,7 @@ export const simulationsRouter = router({
       return {
         simulation: result.simulation,
         score: result.totalScore ?? 0,
-        totalScore: result.simulation.maxScore ?? 0,
+        totalScore: effectiveMaxScore,
         correctAnswers: result.correctAnswers ?? 0,
         wrongAnswers: result.wrongAnswers ?? 0,
         blankAnswers: result.blankAnswers ?? 0,
@@ -2919,6 +2981,8 @@ export const simulationsRouter = router({
   getLeaderboard: protectedProcedure
     .input(z.object({ 
       simulationId: z.string(),
+      assignmentId: z.string().optional(),
+      groupId: z.string().optional(),
       limit: z.number().int().min(1).max(100).default(50),
     }))
     .query(async ({ ctx, input }) => {
@@ -2942,8 +3006,9 @@ export const simulationsRouter = router({
       // Determine if current user can see all names
       const userRole = ctx.user?.role;
       const isAdmin = userRole === 'ADMIN';
+      const isCollaborator = userRole === 'COLLABORATOR';
       const isCreator = ctx.user?.id === simulation.createdById;
-      const canSeeAllNames = isAdmin || isCreator;
+      const canSeeAllNames = isAdmin || isCollaborator || isCreator;
       
       // Get current student's ID if user is a student
       let currentStudentId: string | null = null;
@@ -2951,12 +3016,53 @@ export const simulationsRouter = router({
         currentStudentId = ctx.user.student.id;
       }
 
+      // Build where clause for filtering results
+      const whereClause: {
+        simulationId: string;
+        completedAt: { not: null };
+        studentId?: string | { in: string[] };
+      } = {
+        simulationId: input.simulationId,
+        completedAt: { not: null }
+      };
+
+      // If assignmentId is provided, filter by students in that assignment
+      if (input.assignmentId) {
+        const assignment = await ctx.prisma.simulationAssignment.findUnique({
+          where: { id: input.assignmentId },
+          select: { studentId: true },
+        });
+        if (assignment?.studentId) {
+          whereClause.studentId = assignment.studentId;
+        }
+      }
+
+      // If groupId is provided, filter by students in that group assignment
+      if (input.groupId) {
+        const groupAssignment = await ctx.prisma.simulationAssignment.findUnique({
+          where: { id: input.groupId },
+          select: { groupId: true },
+        });
+        if (groupAssignment?.groupId) {
+          const groupMembers = await ctx.prisma.groupMember.findMany({
+            where: { 
+              groupId: groupAssignment.groupId,
+              studentId: { not: null }
+            },
+            select: { studentId: true },
+          });
+          const studentIds = groupMembers.map(m => m.studentId).filter((id): id is string => id !== null);
+          if (studentIds.length > 0) {
+            whereClause.studentId = {
+              in: studentIds
+            };
+          }
+        }
+      }
+
       // Get all completed results ordered by score
       const results = await ctx.prisma.simulationResult.findMany({
-        where: { 
-          simulationId: input.simulationId, 
-          completedAt: { not: null } 
-        },
+        where: whereClause,
         include: {
           student: {
             include: {
@@ -3002,6 +3108,7 @@ export const simulationsRouter = router({
           studentId: showRealName ? result.studentId : null,
           studentName: showRealName ? result.student.user.name : anonymousName,
           studentEmail: showRealName ? result.student.user.email : null,
+          studentMatricola: showRealName && canSeeAllNames ? result.student.matricola : null,
           isCurrentUser: isCurrentStudent,
           totalScore: result.totalScore,
           percentageScore: result.percentageScore,
@@ -3293,4 +3400,513 @@ export const simulationsRouter = router({
         totalStudents: students.length,
       };
     }),
+
+  // ==================== ENHANCED TEMPLATE STATISTICS ====================
+
+  /**
+   * Get comprehensive template statistics
+   * Includes: score distribution, time analysis, difficulty breakdown, top performers
+   */
+  getTemplateStatistics: staffProcedure
+    .input(z.object({ simulationId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const simulation = await ctx.prisma.simulation.findUnique({
+        where: { id: input.simulationId },
+        select: {
+          id: true,
+          title: true,
+          createdById: true,
+          passingScore: true,
+          maxScore: true,
+          totalQuestions: true,
+          durationMinutes: true,
+          correctPoints: true,
+          wrongPoints: true,
+          blankPoints: true,
+          _count: { select: { assignments: true } },
+        },
+      });
+
+      if (!simulation) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
+      }
+
+      if (ctx.user.role === 'COLLABORATOR' && simulation.createdById !== ctx.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai accesso alle statistiche' });
+      }
+
+      // Get all completed results with full details
+      const results = await ctx.prisma.simulationResult.findMany({
+        where: { 
+          simulationId: input.simulationId, 
+          completedAt: { not: null } 
+        },
+        select: {
+          id: true,
+          totalScore: true,
+          percentageScore: true,
+          correctAnswers: true,
+          wrongAnswers: true,
+          blankAnswers: true,
+          durationSeconds: true,
+          completedAt: true,
+          answers: true,
+          student: {
+            include: { user: { select: { id: true, name: true, email: true } } },
+          },
+        },
+        orderBy: { percentageScore: 'desc' },
+      });
+
+      // Check if there are any results
+      const hasData = results.length > 0;
+
+      if (!hasData) {
+        return {
+          hasData: false,
+          simulation: {
+            id: simulation.id,
+            title: simulation.title,
+            totalQuestions: simulation.totalQuestions,
+            durationMinutes: simulation.durationMinutes,
+            passingScore: simulation.passingScore,
+            assignmentsCount: simulation._count.assignments,
+          },
+          overview: null,
+          scoreDistribution: [],
+          timeAnalysis: null,
+          topPerformers: [],
+          strugglingStudents: [],
+          completionTrend: [],
+        };
+      }
+
+      // Calculate overview stats
+      const scores = results.map(r => r.percentageScore ?? 0);
+      const times = results.filter(r => r.durationSeconds && r.durationSeconds > 0).map(r => r.durationSeconds!);
+      const passedCount = simulation.passingScore 
+        ? results.filter(r => (r.percentageScore ?? 0) >= simulation.passingScore!).length
+        : null;
+
+      const overview = {
+        totalAttempts: results.length,
+        averageScore: scores.reduce((a, b) => a + b, 0) / scores.length,
+        medianScore: scores.sort((a, b) => a - b)[Math.floor(scores.length / 2)],
+        highestScore: Math.max(...scores),
+        lowestScore: Math.min(...scores),
+        standardDeviation: calculateStandardDeviation(scores),
+        passedCount,
+        passRate: passedCount !== null && results.length > 0 
+          ? (passedCount / results.length) * 100 
+          : null,
+        averageCorrect: results.reduce((sum, r) => sum + (r.correctAnswers ?? 0), 0) / results.length,
+        averageWrong: results.reduce((sum, r) => sum + (r.wrongAnswers ?? 0), 0) / results.length,
+        averageBlank: results.reduce((sum, r) => sum + (r.blankAnswers ?? 0), 0) / results.length,
+      };
+
+      // Score distribution (buckets of 10%)
+      const scoreDistribution = [
+        { range: '0-10%', count: 0 },
+        { range: '10-20%', count: 0 },
+        { range: '20-30%', count: 0 },
+        { range: '30-40%', count: 0 },
+        { range: '40-50%', count: 0 },
+        { range: '50-60%', count: 0 },
+        { range: '60-70%', count: 0 },
+        { range: '70-80%', count: 0 },
+        { range: '80-90%', count: 0 },
+        { range: '90-100%', count: 0 },
+      ];
+
+      scores.forEach(score => {
+        const bucketIndex = Math.min(Math.floor(score / 10), 9);
+        scoreDistribution[bucketIndex].count++;
+      });
+
+      // Time analysis
+      const timeAnalysis = times.length > 0 ? {
+        averageTime: times.reduce((a, b) => a + b, 0) / times.length,
+        medianTime: times.sort((a, b) => a - b)[Math.floor(times.length / 2)],
+        fastestTime: Math.min(...times),
+        slowestTime: Math.max(...times),
+        expectedTime: simulation.durationMinutes * 60,
+        completedInTime: simulation.durationMinutes > 0 
+          ? times.filter(t => t <= simulation.durationMinutes * 60).length 
+          : times.length,
+        totalWithTime: times.length,
+      } : null;
+
+      // Top performers (top 5)
+      const topPerformers = results.slice(0, 5).map(r => ({
+        studentId: r.student?.id ?? '',
+        studentName: r.student?.user?.name ?? 'Studente',
+        percentageScore: r.percentageScore ?? 0,
+        correctAnswers: r.correctAnswers ?? 0,
+        durationSeconds: r.durationSeconds,
+      }));
+
+      // Struggling students (bottom 5, below passing score if set)
+      const strugglingStudents = results
+        .filter(r => simulation.passingScore 
+          ? (r.percentageScore ?? 0) < simulation.passingScore 
+          : (r.percentageScore ?? 0) < 60)
+        .slice(-5)
+        .reverse()
+        .map(r => ({
+          studentId: r.student?.id ?? '',
+          studentName: r.student?.user?.name ?? 'Studente',
+          percentageScore: r.percentageScore ?? 0,
+          correctAnswers: r.correctAnswers ?? 0,
+          wrongAnswers: r.wrongAnswers ?? 0,
+          blankAnswers: r.blankAnswers ?? 0,
+        }));
+
+      // Completion trend (by date)
+      const completionsByDate = new Map<string, number>();
+      results.forEach(r => {
+        if (r.completedAt) {
+          const dateKey = new Date(r.completedAt).toISOString().split('T')[0];
+          completionsByDate.set(dateKey, (completionsByDate.get(dateKey) || 0) + 1);
+        }
+      });
+
+      const completionTrend = Array.from(completionsByDate.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([date, count]) => ({ date, count }));
+
+      return {
+        hasData: true,
+        simulation: {
+          id: simulation.id,
+          title: simulation.title,
+          totalQuestions: simulation.totalQuestions,
+          durationMinutes: simulation.durationMinutes,
+          passingScore: simulation.passingScore,
+          assignmentsCount: simulation._count.assignments,
+        },
+        overview,
+        scoreDistribution,
+        timeAnalysis,
+        topPerformers,
+        strugglingStudents,
+        completionTrend,
+      };
+    }),
+
+  // ==================== ASSIGNMENT STATISTICS ====================
+
+  /**
+   * Get detailed statistics for a specific assignment session
+   * Includes: per-student details, questions wrong by student
+   */
+  getAssignmentStatistics: staffProcedure
+    .input(z.object({ 
+      simulationId: z.string(),
+      assignmentId: z.string().optional(), // If provided, filter by specific assignment
+      groupId: z.string().optional(), // If provided, filter by group
+    }))
+    .query(async ({ ctx, input }) => {
+      const simulation = await ctx.prisma.simulation.findUnique({
+        where: { id: input.simulationId },
+        include: {
+          questions: {
+            orderBy: { order: 'asc' },
+            include: {
+              question: {
+                include: {
+                  subject: { select: { id: true, name: true, code: true, color: true } },
+                  topic: { select: { id: true, name: true } },
+                  answers: { orderBy: { order: 'asc' } },
+                },
+              },
+            },
+          },
+          assignments: {
+            where: input.assignmentId ? { id: input.assignmentId } : input.groupId ? { groupId: input.groupId } : undefined,
+            include: {
+              student: {
+                include: { user: { select: { id: true, name: true, email: true } } },
+              },
+              group: {
+                include: {
+                  members: {
+                    include: {
+                      student: { include: { user: { select: { id: true, name: true, email: true } } } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!simulation) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
+      }
+
+      if (ctx.user.role === 'COLLABORATOR' && simulation.createdById !== ctx.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai accesso alle statistiche' });
+      }
+
+      // Collect all targeted student IDs from assignments
+      const targetedStudentIds = new Set<string>();
+      simulation.assignments.forEach(a => {
+        if (a.studentId) targetedStudentIds.add(a.studentId);
+        if (a.group) {
+          a.group.members.forEach(m => targetedStudentIds.add(m.studentId));
+        }
+      });
+
+      // Get results for targeted students
+      const results = await ctx.prisma.simulationResult.findMany({
+        where: { 
+          simulationId: input.simulationId,
+          studentId: { in: Array.from(targetedStudentIds) },
+        },
+        select: {
+          id: true,
+          studentId: true,
+          totalScore: true,
+          percentageScore: true,
+          correctAnswers: true,
+          wrongAnswers: true,
+          blankAnswers: true,
+          durationSeconds: true,
+          completedAt: true,
+          answers: true,
+          student: {
+            include: { user: { select: { id: true, name: true, email: true } } },
+          },
+        },
+        orderBy: { percentageScore: 'desc' },
+      });
+
+      const completedResults = results.filter(r => r.completedAt !== null);
+      const hasData = completedResults.length > 0;
+
+      // Calculate effective maxScore for percentage calculations
+      const effectiveMaxScore = simulation.maxScore && simulation.maxScore > 0
+        ? simulation.maxScore
+        : simulation.totalQuestions * (simulation.correctPoints ?? 1.5);
+
+      if (!hasData) {
+        return {
+          hasData: false,
+          simulation: {
+            id: simulation.id,
+            title: simulation.title,
+            totalQuestions: simulation.totalQuestions,
+          },
+          overview: null,
+          studentDetails: [],
+          questionsWrongByStudent: [],
+          mostMissedQuestions: [],
+        };
+      }
+
+      // Build question ID to details map
+      const questionMap = new Map<string, {
+        id: string;
+        order: number;
+        text: string;
+        subject: { id: string; name: string; color: string } | null;
+        topic: { id: string; name: string } | null;
+        correctAnswerLetter: string;
+        correctAnswerText: string;
+        answerIdToLetter: Record<string, string>;
+        answerIdToText: Record<string, string>;
+      }>();
+
+      simulation.questions.forEach((sq, idx) => {
+        const correctAnswer = sq.question.answers.find(a => a.isCorrect);
+        const correctLetter = correctAnswer 
+          ? String.fromCharCode(65 + sq.question.answers.indexOf(correctAnswer))
+          : '';
+        const correctText = correctAnswer?.text || '';
+        
+        // Build answer ID to letter and text mappings
+        const answerIdToLetter: Record<string, string> = {};
+        const answerIdToText: Record<string, string> = {};
+        sq.question.answers.forEach((a, ansIdx) => {
+          answerIdToLetter[a.id] = String.fromCharCode(65 + ansIdx);
+          answerIdToText[a.id] = a.text;
+        });
+        
+        questionMap.set(sq.questionId, {
+          id: sq.questionId,
+          order: idx + 1,
+          text: sq.question.text.replace(/<[^>]*>/g, '').substring(0, 80),
+          subject: sq.question.subject,
+          topic: sq.question.topic,
+          correctAnswerLetter: correctLetter,
+          correctAnswerText: correctText,
+          answerIdToLetter, // Map from answer ID to letter (A, B, C, D)
+          answerIdToText, // Map from answer ID to answer text
+        });
+      });
+
+      // Calculate overview
+      // Recalculate percentage scores dynamically if they're 0 but totalScore exists
+      const scores = completedResults.map(r => {
+        if (r.percentageScore && r.percentageScore > 0) {
+          return r.percentageScore;
+        }
+        // Recalculate if percentageScore was saved as 0
+        if (r.totalScore && effectiveMaxScore > 0) {
+          return (r.totalScore / effectiveMaxScore) * 100;
+        }
+        return 0;
+      });
+      const overview = {
+        targetedStudents: targetedStudentIds.size,
+        completedCount: completedResults.length,
+        pendingCount: targetedStudentIds.size - completedResults.length,
+        completionRate: (completedResults.length / targetedStudentIds.size) * 100,
+        averageScore: scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0,
+        highestScore: scores.length > 0 ? Math.max(...scores) : 0,
+        lowestScore: scores.length > 0 ? Math.min(...scores) : 0,
+      };
+
+      // Build per-student details with wrong questions
+      type AnswerData = {
+        questionId: string;
+        answerId: string | null;
+        answerText?: string | null;
+        isCorrect: boolean;
+        earnedPoints?: number;
+        timeSpent?: number;
+      };
+
+      const studentDetails = completedResults.map(r => {
+        const answers = (r.answers as AnswerData[]) || [];
+        const wrongQuestions: Array<{
+          questionId: string;
+          order: number;
+          text: string;
+          subject: string | null;
+          studentAnswer: string;
+          studentAnswerText: string;
+          correctAnswer: string;
+          correctAnswerText: string;
+        }> = [];
+        const blankQuestions: Array<{
+          questionId: string;
+          order: number;
+          text: string;
+          subject: string | null;
+        }> = [];
+
+        answers.forEach(ans => {
+          const questionInfo = questionMap.get(ans.questionId);
+          if (!questionInfo) return;
+
+          if (!ans.answerId) {
+            // Blank answer (no answerId selected)
+            blankQuestions.push({
+              questionId: ans.questionId,
+              order: questionInfo.order,
+              text: questionInfo.text,
+              subject: questionInfo.subject?.name || null,
+            });
+          } else if (!ans.isCorrect) {
+            // Wrong answer - find the letter and text of the student's answer
+            const studentAnswerLetter = questionInfo.answerIdToLetter?.[ans.answerId] || '?';
+            const studentAnswerText = questionInfo.answerIdToText?.[ans.answerId] || '';
+            wrongQuestions.push({
+              questionId: ans.questionId,
+              order: questionInfo.order,
+              text: questionInfo.text,
+              subject: questionInfo.subject?.name || null,
+              studentAnswer: studentAnswerLetter,
+              studentAnswerText: studentAnswerText,
+              correctAnswer: questionInfo.correctAnswerLetter,
+              correctAnswerText: questionInfo.correctAnswerText,
+            });
+          }
+        });
+
+        // Recalculate percentage if it's 0 but totalScore exists
+        let studentPercentageScore = r.percentageScore ?? 0;
+        if (studentPercentageScore === 0 && r.totalScore && effectiveMaxScore > 0) {
+          studentPercentageScore = (r.totalScore / effectiveMaxScore) * 100;
+        }
+
+        return {
+          studentId: r.student?.id ?? '',
+          studentName: r.student?.user?.name ?? 'Studente',
+          studentEmail: r.student?.user?.email ?? '',
+          percentageScore: studentPercentageScore,
+          totalScore: r.totalScore ?? 0,
+          correctAnswers: r.correctAnswers ?? 0,
+          wrongAnswers: r.wrongAnswers ?? 0,
+          blankAnswers: r.blankAnswers ?? 0,
+          durationSeconds: r.durationSeconds,
+          completedAt: r.completedAt,
+          wrongQuestions,
+          blankQuestions,
+        };
+      });
+
+      // Find most missed questions (questions most students got wrong)
+      const questionMissCount = new Map<string, { wrong: number; blank: number; total: number }>();
+      
+      completedResults.forEach(r => {
+        const answers = (r.answers as AnswerData[]) || [];
+        answers.forEach(ans => {
+          const current = questionMissCount.get(ans.questionId) || { wrong: 0, blank: 0, total: 0 };
+          current.total++;
+          if (!ans.answerId) {
+            // Blank answer
+            current.blank++;
+          } else if (!ans.isCorrect) {
+            // Wrong answer
+            current.wrong++;
+          }
+          questionMissCount.set(ans.questionId, current);
+        });
+      });
+
+      const mostMissedQuestions = Array.from(questionMissCount.entries())
+        .map(([questionId, counts]) => {
+          const questionInfo = questionMap.get(questionId);
+          if (!questionInfo) return null;
+          const missRate = ((counts.wrong + counts.blank) / counts.total) * 100;
+          return {
+            questionId,
+            order: questionInfo.order,
+            text: questionInfo.text,
+            subject: questionInfo.subject?.name || null,
+            subjectColor: questionInfo.subject?.color || null,
+            wrongCount: counts.wrong,
+            blankCount: counts.blank,
+            totalAnswers: counts.total,
+            missRate,
+          };
+        })
+        .filter((q): q is NonNullable<typeof q> => q !== null)
+        .sort((a, b) => b.missRate - a.missRate)
+        .slice(0, 10);
+
+      return {
+        hasData: true,
+        simulation: {
+          id: simulation.id,
+          title: simulation.title,
+          totalQuestions: simulation.totalQuestions,
+        },
+        overview,
+        studentDetails,
+        mostMissedQuestions,
+      };
+    }),
 });
+
+// Helper function to calculate standard deviation
+function calculateStandardDeviation(values: number[]): number {
+  if (values.length === 0) return 0;
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const squaredDiffs = values.map(v => Math.pow(v - mean, 2));
+  const avgSquaredDiff = squaredDiffs.reduce((a, b) => a + b, 0) / values.length;
+  return Math.sqrt(avgSquaredDiff);
+}

@@ -1354,10 +1354,13 @@ export const questionsRouter = router({
         });
       }
 
-      // Get question title for notification
+      // Get question title and creator for notification
       const question = await ctx.prisma.question.findUnique({
         where: { id: input.questionId },
-        select: { text: true },
+        select: { 
+          text: true,
+          createdById: true,
+        },
       });
 
       const feedback = await ctx.prisma.questionFeedback.create({
@@ -1376,6 +1379,7 @@ export const questionsRouter = router({
         questionTitle: questionTitle + (question?.text && question.text.length > 50 ? '...' : ''),
         feedbackType: input.type,
         reporterName: ctx.user.name,
+        creatorUserId: question?.createdById || undefined,
       }).catch(err => {
         console.error('[Questions] Failed to send feedback notification:', err);
       });

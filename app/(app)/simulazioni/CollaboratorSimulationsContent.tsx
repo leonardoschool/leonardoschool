@@ -887,10 +887,10 @@ export default function CollaboratorSimulationsContent() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-2 flex-wrap">
-                              {/* Statistics - only show if assignment is closed AND has completions */}
-                              {group.status === 'CLOSED' && group.completedCount > 0 && (
+                              {/* Statistics - only show if there are completions */}
+                              {group.completedCount > 0 && (
                                 <Link
-                                  href={`/simulazioni/${group.simulationId}/statistiche`}
+                                  href={`/simulazioni/${group.simulationId}/statistiche-assegnazione?assignmentId=${group.id}`}
                                   className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-purple-500 to-indigo-600 text-white hover:from-purple-600 hover:to-indigo-700 shadow-sm hover:shadow-md transition-all`}
                                 >
                                   <BarChart3 className="w-4 h-4" />

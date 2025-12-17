@@ -8,12 +8,11 @@ import { colors } from '@/lib/theme/colors';
 import { PageLoader } from '@/components/ui/loaders';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { isStaff } from '@/lib/permissions';
+import { TemplateStatistics } from '@/components/simulazioni';
 import {
   ArrowLeft,
   Users,
   Clock,
-  Award,
-  TrendingUp,
   CheckCircle,
   XCircle,
   MinusCircle,
@@ -92,29 +91,8 @@ export default function SimulationStatsPage({ params }: { params: Promise<{ id: 
     );
   }
 
+  // Get results for students tab
   const results = simulation.results;
-  const completedResults = results.filter((r) => r.completedAt !== null);
-
-  // Calculate statistics
-  const totalParticipants = results.length;
-  const completedCount = completedResults.length;
-  const inProgressCount = results.filter((r) => r.completedAt === null).length;
-
-  const avgScore =
-    completedResults.length > 0
-      ? completedResults.reduce((sum, r) => sum + (r.percentageScore ?? 0), 0) /
-        completedResults.length
-      : 0;
-
-  const bestScore =
-    completedResults.length > 0
-      ? Math.max(...completedResults.map((r) => r.percentageScore ?? 0))
-      : 0;
-
-  const passedCount = simulation.passingScore
-    ? completedResults.filter((r) => (r.percentageScore ?? 0) >= (simulation.passingScore ?? 0))
-        .length
-    : null;
 
   // Format duration
   const formatDuration = (seconds: number | null) => {
@@ -157,14 +135,6 @@ export default function SimulationStatsPage({ params }: { params: Promise<{ id: 
               <p className={colors.text.muted}>{simulation.title}</p>
             </div>
           </div>
-          {/* Leaderboard Link */}
-          <Link
-            href={`/simulazioni/${id}/classifica`}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-br from-yellow-400 to-amber-600 text-white font-medium hover:opacity-90 shadow-lg`}
-          >
-            <Award className="w-4 h-4" />
-            Classifica
-          </Link>
         </div>
       </div>
 
@@ -218,123 +188,7 @@ export default function SimulationStatsPage({ params }: { params: Promise<{ id: 
 
       {/* Overview Tab */}
       {activeTab === 'overview' && (
-        <>
-          {/* Overview Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <div className={`p-5 rounded-xl ${colors.background.card} border ${colors.border.light}`}>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                  <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <span className={`text-sm ${colors.text.muted}`}>Partecipanti</span>
-              </div>
-              <p className={`text-3xl font-bold ${colors.text.primary}`}>{totalParticipants}</p>
-              <p className={`text-sm ${colors.text.muted}`}>
-                {completedCount} completati, {inProgressCount} in corso
-              </p>
-            </div>
-
-            <div className={`p-5 rounded-xl ${colors.background.card} border ${colors.border.light}`}>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                  <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
-                </div>
-                <span className={`text-sm ${colors.text.muted}`}>Punteggio Medio</span>
-              </div>
-              <p className={`text-3xl font-bold ${colors.text.primary}`}>{avgScore.toFixed(1)}%</p>
-            </div>
-
-            <div className={`p-5 rounded-xl ${colors.background.card} border ${colors.border.light}`}>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
-                  <Award className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                </div>
-                <span className={`text-sm ${colors.text.muted}`}>Miglior Punteggio</span>
-              </div>
-              <p className={`text-3xl font-bold ${colors.text.primary}`}>{bestScore.toFixed(1)}%</p>
-            </div>
-
-            {passedCount !== null && (
-              <div
-                className={`p-5 rounded-xl ${colors.background.card} border ${colors.border.light}`}
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                    <CheckCircle className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <span className={`text-sm ${colors.text.muted}`}>Superati</span>
-                </div>
-                <p className={`text-3xl font-bold ${colors.text.primary}`}>
-                  {passedCount}/{completedCount}
-                </p>
-                <p className={`text-sm ${colors.text.muted}`}>
-                  {completedCount > 0 ? ((passedCount / completedCount) * 100).toFixed(0) : 0}% tasso
-                  di successo
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Quick Subject Breakdown */}
-          {questionAnalysis && questionAnalysis.subjectBreakdown.length > 0 && (
-            <div
-              className={`mb-8 rounded-xl ${colors.background.card} border ${colors.border.light} overflow-hidden`}
-            >
-              <div className={`px-6 py-4 border-b ${colors.border.light}`}>
-                <h2 className={`text-lg font-semibold ${colors.text.primary}`}>
-                  Prestazioni per Materia
-                </h2>
-              </div>
-              <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {questionAnalysis.subjectBreakdown.map((subject) => (
-                  <div
-                    key={subject.subject.id}
-                    className={`p-4 rounded-lg ${colors.background.secondary}`}
-                  >
-                    <div className="flex items-center gap-2 mb-3">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: subject.subject.color }}
-                      />
-                      <span className={`font-medium ${colors.text.primary}`}>
-                        {subject.subject.name}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm mb-2">
-                      <span className={colors.text.muted}>Tasso di successo</span>
-                      <span
-                        className={`font-bold ${
-                          subject.correctRate >= 70
-                            ? 'text-green-600 dark:text-green-400'
-                            : subject.correctRate >= 50
-                              ? 'text-yellow-600 dark:text-yellow-400'
-                              : 'text-red-600 dark:text-red-400'
-                        }`}
-                      >
-                        {subject.correctRate.toFixed(0)}%
-                      </span>
-                    </div>
-                    {/* Progress bar */}
-                    <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
-                      <div
-                        className="h-full transition-all"
-                        style={{
-                          width: `${subject.correctRate}%`,
-                          backgroundColor: subject.subject.color,
-                        }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-xs mt-2">
-                      <span className="text-green-600">{subject.totalCorrect} corrette</span>
-                      <span className="text-red-600">{subject.totalWrong} errate</span>
-                      <span className={colors.text.muted}>{subject.totalBlank} vuote</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
+        <TemplateStatistics simulationId={id} />
       )}
 
       {/* Questions Analysis Tab */}

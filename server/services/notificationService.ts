@@ -513,6 +513,7 @@ export async function notifyQuestionFeedback(
     questionTitle: string;
     feedbackType: string;
     reporterName: string;
+    creatorUserId?: string;
   }
 ): Promise<void> {
   await notifications.questionFeedback(prisma, params);

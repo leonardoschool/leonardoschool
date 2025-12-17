@@ -811,16 +811,54 @@ export const notifications = {
       questionTitle: string;
       feedbackType: string;
       reporterName: string;
+      creatorUserId?: string;
     }
   ) {
-    return notifyStaff(prisma, {
+    // Translate feedback type to Italian
+    const typeLabels: Record<string, string> = {
+      ERROR_IN_QUESTION: 'Errore nel testo',
+      ERROR_IN_ANSWER: 'Errore nelle risposte',
+      UNCLEAR: 'Domanda poco chiara',
+      SUGGESTION: 'Suggerimento',
+      OTHER: 'Altro',
+    };
+    const feedbackLabel = typeLabels[params.feedbackType] || params.feedbackType;
+
+    // Notify all staff (admin + collaborators)
+    const staffNotification = notifyStaff(prisma, {
       type: 'QUESTION_FEEDBACK',
       title: 'Segnalazione su domanda',
-      message: `${params.reporterName} ha segnalato un problema (${params.feedbackType}) sulla domanda: "${params.questionTitle}"`,
+      message: `${params.reporterName} ha segnalato un problema (${feedbackLabel}) sulla domanda: "${params.questionTitle}"`,
       linkUrl: `/domande/${params.questionId}`,
       linkType: 'question',
       linkEntityId: params.questionId,
     });
+
+    // If there's a creator, notify them specifically (if not already staff)
+    if (params.creatorUserId) {
+      const creator = await prisma.user.findUnique({
+        where: { id: params.creatorUserId },
+        select: { role: true, isActive: true },
+      });
+
+      // Only send separate notification if creator is not admin/collaborator
+      // (they already got it from notifyStaff)
+      if (creator && creator.isActive && creator.role === 'STUDENT') {
+        const creatorNotification = createNotification(prisma, {
+          userId: params.creatorUserId,
+          type: 'QUESTION_FEEDBACK',
+          title: 'Segnalazione sulla tua domanda',
+          message: `${params.reporterName} ha segnalato un problema (${feedbackLabel}) su una domanda che hai creato: "${params.questionTitle}"`,
+          linkUrl: `/domande/${params.questionId}`,
+          linkType: 'question',
+          linkEntityId: params.questionId,
+        });
+
+        return Promise.all([staffNotification, creatorNotification]);
+      }
+    }
+
+    return staffNotification;
   },
 
   /**

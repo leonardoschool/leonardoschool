@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import {
   ArrowLeft,
@@ -65,12 +65,32 @@ function formatDuration(seconds: number): string {
 export default function ClassificaPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = params.id as string;
+  
+  const assignmentId = searchParams.get('assignmentId') || undefined;
+  const groupId = searchParams.get('groupId') || undefined;
 
   const { data, isLoading, error } = trpc.simulations.getLeaderboard.useQuery(
-    { simulationId: id, limit: 100 },
+    { 
+      simulationId: id, 
+      assignmentId,
+      groupId,
+      limit: 100 
+    },
     { enabled: !!id }
   );
+
+  // Determine back navigation path
+  const getBackPath = () => {
+    if (assignmentId) {
+      return `/simulazioni/${id}/statistiche-assegnazione?assignmentId=${assignmentId}`;
+    }
+    if (groupId) {
+      return `/simulazioni/${id}/statistiche-assegnazione?groupId=${groupId}`;
+    }
+    return '/simulazioni';
+  };
 
   if (isLoading) {
     return <PageLoader />;
@@ -91,7 +111,7 @@ export default function ClassificaPage() {
     );
   }
 
-  const { simulation, leaderboard, totalParticipants } = data;
+  const { simulation, leaderboard, totalParticipants, canSeeAllNames } = data;
   const myPosition = leaderboard.find((e) => e.isCurrentUser);
 
   // Top 3 per il podio
@@ -105,11 +125,11 @@ export default function ClassificaPage() {
       <div className={`${colors.background.secondary} border-b ${colors.border.primary}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <button
-            onClick={() => router.push(`/simulazioni/${id}/risultato`)}
+            onClick={() => router.push(getBackPath())}
             className={`flex items-center gap-2 ${colors.text.muted} hover:${colors.text.primary} transition-colors mb-4`}
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Torna ai risultati</span>
+            <span>Torna indietro</span>
           </button>
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -192,6 +212,11 @@ export default function ClassificaPage() {
                     <p className={`font-medium ${colors.text.primary} mb-1`}>
                       {podium[1].studentName}
                     </p>
+                    {canSeeAllNames && podium[1].studentMatricola && (
+                      <p className={`text-xs ${colors.text.muted} mb-2`}>
+                        Matricola: {podium[1].studentMatricola}
+                      </p>
+                    )}
                     <p className={`text-2xl font-bold ${colors.text.primary}`}>
                       {podium[1].totalScore?.toFixed(2)}
                     </p>
@@ -214,6 +239,11 @@ export default function ClassificaPage() {
                     <p className={`font-medium ${colors.text.primary} mb-1`}>
                       {podium[0].studentName}
                     </p>
+                    {canSeeAllNames && podium[0].studentMatricola && (
+                      <p className={`text-xs ${colors.text.muted} mb-2`}>
+                        Matricola: {podium[0].studentMatricola}
+                      </p>
+                    )}
                     <p className="text-3xl font-bold text-yellow-500">
                       {podium[0].totalScore?.toFixed(2)}
                     </p>
@@ -236,6 +266,11 @@ export default function ClassificaPage() {
                     <p className={`font-medium ${colors.text.primary} mb-1`}>
                       {podium[2].studentName}
                     </p>
+                    {canSeeAllNames && podium[2].studentMatricola && (
+                      <p className={`text-xs ${colors.text.muted} mb-2`}>
+                        Matricola: {podium[2].studentMatricola}
+                      </p>
+                    )}
                     <p className={`text-2xl font-bold ${colors.text.primary}`}>
                       {podium[2].totalScore?.toFixed(2)}
                     </p>
@@ -270,6 +305,13 @@ export default function ClassificaPage() {
                       >
                         Studente
                       </th>
+                      {canSeeAllNames && (
+                        <th
+                          className={`px-4 py-3 text-left text-xs font-medium ${colors.text.muted} uppercase tracking-wider hidden lg:table-cell`}
+                        >
+                          Matricola
+                        </th>
+                      )}
                       <th
                         className={`px-4 py-3 text-center text-xs font-medium ${colors.text.muted} uppercase tracking-wider`}
                       >
@@ -323,6 +365,11 @@ export default function ClassificaPage() {
                             )}
                           </div>
                         </td>
+                        {canSeeAllNames && (
+                          <td className={`px-4 py-3 ${colors.text.muted} hidden lg:table-cell`}>
+                            {entry.studentMatricola || '-'}
+                          </td>
+                        )}
                         <td
                           className={`px-4 py-3 text-center font-semibold ${colors.text.primary}`}
                         >

@@ -17,7 +17,6 @@ import {
   Archive,
   Send,
   Target,
-  Users,
   Award,
   BarChart3,
   CheckCircle,
@@ -232,13 +231,16 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
               <Edit2 className="w-4 h-4" />
               <span className="hidden sm:inline">Modifica</span>
             </Link>
-            <Link
-              href={`/simulazioni/${id}/statistiche`}
-              className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg border ${colors.border.light} ${colors.text.secondary} ${colors.background.hover}`}
-            >
-              <BarChart3 className="w-4 h-4" />
-              <span className="hidden lg:inline">Statistiche</span>
-            </Link>
+            {/* Show statistics only if there are results */}
+            {simulation.results.filter(r => r.completedAt !== null).length > 0 && (
+              <Link
+                href={`/simulazioni/${id}/statistiche`}
+                className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg bg-gradient-to-r from-purple-500 to-indigo-600 text-white hover:from-purple-600 hover:to-indigo-700 shadow-sm`}
+              >
+                <BarChart3 className="w-4 h-4" />
+                <span className="hidden lg:inline">Statistiche</span>
+              </Link>
+            )}
             {isAdmin && simulation.isPaperBased && (
               <Link
                 href={`/simulazioni/${id}/risultati-cartacei`}
@@ -334,12 +336,12 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
             </div>
           </div>
 
-          {/* Results preview */}
-          {simulation.results.length > 0 && (
+          {/* Results preview - only show if there are completed results */}
+          {simulation.results.filter(r => r.completedAt !== null).length > 0 && (
             <div className={`rounded-xl ${colors.background.card} border ${colors.border.light} overflow-hidden`}>
               <div className={`px-6 py-4 border-b ${colors.border.light} flex items-center justify-between`}>
                 <h2 className={`text-lg font-semibold ${colors.text.primary}`}>
-                  Ultimi risultati ({simulation.results.length})
+                  Ultimi risultati ({simulation.results.filter(r => r.completedAt !== null).length})
                 </h2>
                 <Link
                   href={`/simulazioni/${id}/statistiche`}
@@ -359,7 +361,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
                     </tr>
                   </thead>
                   <tbody className={`divide-y ${colors.border.light}`}>
-                    {simulation.results.slice(0, 10).map((result) => (
+                    {simulation.results.filter(r => r.completedAt !== null).slice(0, 10).map((result) => (
                       <tr key={result.id} className={colors.background.hover}>
                         <td className={`px-4 py-3 ${colors.text.primary}`}>
                           {result.student?.user?.name || 'Studente'}

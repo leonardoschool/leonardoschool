@@ -9,7 +9,6 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { PageLoader, Spinner } from '@/components/ui/loaders';
 import Checkbox from '@/components/ui/Checkbox';
-import DateTimePicker from '@/components/ui/DateTimePicker';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { isStaff } from '@/lib/permissions';
 import { ArrowLeft, Save, Target, Award, Clock, Settings, ShieldX } from 'lucide-react';
@@ -29,8 +28,6 @@ export default function EditSimulationPage({ params }: { params: Promise<{ id: s
   // Form state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(0);
   const [correctPoints, setCorrectPoints] = useState(1.5);
   const [wrongPoints, setWrongPoints] = useState(-0.4);
@@ -57,8 +54,6 @@ export default function EditSimulationPage({ params }: { params: Promise<{ id: s
     if (simulation) {
       setTitle(simulation.title);
       setDescription(simulation.description || '');
-      setStartDate(simulation.startDate ? formatDateTimeLocal(new Date(simulation.startDate)) : '');
-      setEndDate(simulation.endDate ? formatDateTimeLocal(new Date(simulation.endDate)) : '');
       setDurationMinutes(simulation.durationMinutes || 0);
       setCorrectPoints(simulation.correctPoints);
       setWrongPoints(simulation.wrongPoints);
@@ -85,37 +80,17 @@ export default function EditSimulationPage({ params }: { params: Promise<{ id: s
     onError: handleMutationError,
   });
 
-  const formatDateTimeLocal = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
 
     try {
-      // Convert datetime-local format to ISO string or undefined
-      const formatDate = (dateStr: string): string | undefined => {
-        if (!dateStr) return undefined;
-        try {
-          const date = new Date(dateStr);
-          return date.toISOString();
-        } catch {
-          return undefined;
-        }
-      };
-
       await updateMutation.mutateAsync({
         id,
         title,
         description: description || undefined,
-        startDate: formatDate(startDate),
-        endDate: formatDate(endDate),
+        startDate: undefined,
+        endDate: undefined,
         durationMinutes,
         showResults,
         showCorrectAnswers,
@@ -224,29 +199,6 @@ export default function EditSimulationPage({ params }: { params: Promise<{ id: s
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                Data inizio
-              </label>
-              <DateTimePicker
-                id="startDate"
-                value={startDate}
-                onChange={setStartDate}
-                placeholder="Seleziona data e ora"
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                Data fine
-              </label>
-              <DateTimePicker
-                id="endDate"
-                value={endDate}
-                onChange={setEndDate}
-                placeholder="Seleziona data e ora"
-                minDate={startDate ? startDate.split('T')[0] : undefined}
-              />
-            </div>
             <div>
               <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
                 Durata (minuti)

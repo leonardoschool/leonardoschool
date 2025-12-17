@@ -8,6 +8,7 @@ import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { PageLoader, Spinner } from '@/components/ui/loaders';
+import Checkbox from '@/components/ui/Checkbox';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { isStaff } from '@/lib/permissions';
 import {
@@ -334,11 +335,9 @@ export default function PaperResultsPage({ params }: { params: Promise<{ id: str
 
           {/* Toggle pending only */}
           <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={showOnlyPending}
               onChange={(e) => setShowOnlyPending(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
             />
             <span className={colors.text.secondary}>Solo da inserire</span>
           </label>

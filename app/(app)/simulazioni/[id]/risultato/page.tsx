@@ -237,18 +237,6 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
             </div>
           </div>
 
-          {/* Leaderboard link - only for official simulations */}
-          {simulation.isOfficial && (
-            <div className="mt-6">
-              <Link
-                href={`/simulazioni/${simulationId}/classifica`}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${colors.background.secondary} ${colors.text.primary} hover:opacity-80 transition-opacity border ${colors.border.light}`}
-              >
-                <Trophy className="w-5 h-5 text-yellow-500" />
-                <span className="font-medium">Vedi la Classifica</span>
-              </Link>
-            </div>
-          )}
         </div>
       </div>
 

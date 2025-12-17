@@ -7,6 +7,8 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { PageLoader, Spinner } from '@/components/ui/loaders';
 import ConfirmModal from '@/components/ui/ConfirmModal';
+import CustomSelect from '@/components/ui/CustomSelect';
+import TolcSimulationLayout from '@/components/simulazioni/TolcSimulationLayout';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
@@ -31,6 +33,8 @@ import {
   Layers,
   Lock,
   CalendarPlus,
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 
 interface Answer {
@@ -73,10 +77,16 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
   const [showNavigation, setShowNavigation] = useState(false);
   const [submitConfirm, setSubmitConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Feedback modal state
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackType, setFeedbackType] = useState<'ERROR_IN_QUESTION' | 'ERROR_IN_ANSWER' | 'UNCLEAR' | 'SUGGESTION' | 'OTHER'>('ERROR_IN_QUESTION');
+  const [feedbackMessage, setFeedbackMessage] = useState('');
 
   const questionStartTimeRef = useRef<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const autoSubmitRef = useRef<(() => void) | null>(null);
+  const answersInitializedRef = useRef<boolean>(false);
 
   // Fetch simulation
   const { data: simulation, isLoading, error } = trpc.simulations.getSimulationForStudent.useQuery(
@@ -87,10 +97,43 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
   // Mutations
   const startAttemptMutation = trpc.simulations.startAttempt.useMutation({
     onSuccess: (data) => {
-      setHasStarted(true);
       if (data.resumed) {
         showSuccess('Ripreso', 'Hai ripreso il tuo tentativo precedente');
+        // Mark as initialized to prevent re-initialization
+        answersInitializedRef.current = true;
+        // Restore saved time and answers BEFORE setting hasStarted
+        if (data.savedTimeSpent) {
+          setTimeSpent(data.savedTimeSpent);
+        }
+        if (data.savedAnswers && data.savedAnswers.length > 0) {
+          const restoredAnswers = data.savedAnswers.map(a => ({
+            questionId: a.questionId,
+            answerId: a.answerId,
+            answerText: a.answerText,
+            timeSpent: a.timeSpent || 0,
+            flagged: a.flagged || false,
+          }));
+          setAnswers(restoredAnswers);
+          // Also restore question times
+          const restoredQuestionTimes: Record<string, number> = {};
+          data.savedAnswers.forEach(a => {
+            if (a.timeSpent) {
+              restoredQuestionTimes[a.questionId] = a.timeSpent;
+            }
+          });
+          setQuestionTimes(restoredQuestionTimes);
+          // Restore section times for TOLC mode
+          if (data.savedSectionTimes) {
+            setSectionTimes(data.savedSectionTimes);
+          }
+          // Restore current section index
+          if (data.savedCurrentSectionIndex !== undefined) {
+            setCurrentSectionIndex(data.savedCurrentSectionIndex);
+          }
+        }
       }
+      // Set hasStarted AFTER restoring state to prevent re-initialization
+      setHasStarted(true);
     },
     onError: handleMutationError,
   });
@@ -105,6 +148,17 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
     onSuccess: (data) => {
       showSuccess('Completata!', 'Simulazione inviata con successo');
       router.push(`/simulazioni/${id}/risultato?resultId=${data.resultId}`);
+    },
+    onError: handleMutationError,
+  });
+
+  // Feedback mutation
+  const submitFeedbackMutation = trpc.questions.submitFeedback.useMutation({
+    onSuccess: () => {
+      showSuccess('Segnalazione inviata', 'La tua segnalazione è stata inviata agli admin.');
+      setShowFeedbackModal(false);
+      setFeedbackMessage('');
+      setFeedbackType('ERROR_IN_QUESTION');
     },
     onError: handleMutationError,
   });
@@ -155,9 +209,10 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
     };
   }, [simulation, isSubmitting, answers, questionTimes, timeSpent, id, submitMutation]);
 
-  // Initialize answers when simulation loads
+  // Initialize answers when simulation loads (only if not already initialized from resume)
   useEffect(() => {
-    if (simulation && hasStarted && answers.length === 0) {
+    if (simulation && hasStarted && answers.length === 0 && !answersInitializedRef.current) {
+      answersInitializedRef.current = true;
       setAnswers(
         simulation.questions.map((sq) => ({
           questionId: sq.questionId,
@@ -200,26 +255,67 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
     questionStartTimeRef.current = Date.now();
   }, [simulation, currentQuestionIndex, hasStarted]);
 
-  // Auto-save progress periodically
-  useEffect(() => {
+  // Save progress function (reusable)
+  const saveProgress = useCallback(() => {
     if (!hasStarted || !startAttemptMutation.data?.resultId) return;
+    
+    const answersWithTimes = answers.map((a) => ({
+      ...a,
+      timeSpent: questionTimes[a.questionId] || 0,
+    }));
 
-    const interval = setInterval(() => {
+    saveProgressMutation.mutate({
+      resultId: startAttemptMutation.data.resultId,
+      answers: answersWithTimes,
+      timeSpent,
+      sectionTimes,
+      currentSectionIndex,
+    });
+  }, [hasStarted, startAttemptMutation.data?.resultId, answers, questionTimes, timeSpent, sectionTimes, currentSectionIndex, saveProgressMutation]);
+
+  // Save on page unload/refresh
+  useEffect(() => {
+    const resultId = startAttemptMutation.data?.resultId;
+    if (!hasStarted || !resultId) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Save progress synchronously using sendBeacon for reliability
       const answersWithTimes = answers.map((a) => ({
         ...a,
         timeSpent: questionTimes[a.questionId] || 0,
       }));
 
-      saveProgressMutation.mutate({
-        resultId: startAttemptMutation.data.resultId,
+      const payload = JSON.stringify({
+        resultId,
         answers: answersWithTimes,
         timeSpent,
+        sectionTimes,
+        currentSectionIndex,
       });
+
+      // Use sendBeacon for reliable delivery during page unload
+      navigator.sendBeacon('/api/simulations/save-progress', payload);
+
+      // Show confirmation dialog
+      e.preventDefault();
+      e.returnValue = 'Hai una simulazione in corso. Sei sicuro di voler lasciare la pagina?';
+      return e.returnValue;
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasStarted, startAttemptMutation.data?.resultId, answers, questionTimes, timeSpent, sectionTimes, currentSectionIndex]);
+
+  // Auto-save progress periodically
+  useEffect(() => {
+    if (!hasStarted || !startAttemptMutation.data?.resultId) return;
+
+    const interval = setInterval(() => {
+      saveProgress();
     }, 30000); // Save every 30 seconds
 
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasStarted, answers, timeSpent, questionTimes]);
+  }, [hasStarted, startAttemptMutation.data?.resultId, saveProgress]);
 
   // Handle answer selection
   const handleAnswerSelect = (answerId: string) => {
@@ -557,6 +653,142 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
   const answeredCount = answers.filter((a) => a.answerId !== null).length;
   const flaggedCount = answers.filter((a) => a.flagged).length;
 
+  // Use TOLC layout for simulations with sections
+  if (hasSectionsMode && sections.length > 0) {
+    return (
+      <>
+        {/* Anti-cheat warning overlay */}
+        {simulation.enableAntiCheat && (antiCheat.isBlurred || (simulation.forceFullscreen && !antiCheat.isFullscreen)) && (
+          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center">
+            <div className={`max-w-md p-8 rounded-2xl ${colors.background.card} text-center`}>
+              <EyeOff className="w-16 h-16 mx-auto text-orange-500 mb-4" />
+              <h2 className={`text-xl font-bold ${colors.text.primary} mb-3`}>
+                {antiCheat.isBlurred ? 'Torna alla simulazione!' : 'Schermo intero richiesto'}
+              </h2>
+              <p className={`${colors.text.secondary} mb-6`}>
+                {antiCheat.isBlurred 
+                  ? 'Hai lasciato la finestra della simulazione. Questo evento è stato registrato.' 
+                  : 'Questa simulazione richiede la modalità schermo intero. Clicca il pulsante per continuare.'}
+              </p>
+              {simulation.forceFullscreen && !antiCheat.isFullscreen && (
+                <button
+                  onClick={() => antiCheat.requestFullscreen()}
+                  className={`flex items-center justify-center gap-2 w-full px-6 py-3 rounded-lg text-white ${colors.primary.bg} hover:opacity-90`}
+                >
+                  <Maximize className="w-5 h-5" />
+                  Attiva schermo intero
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        <TolcSimulationLayout
+          simulationTitle={simulation.title}
+          questions={simulation.questions}
+          sections={sections}
+          currentSectionIndex={currentSectionIndex}
+          currentQuestionIndex={currentQuestionIndex}
+          answers={answers}
+          sectionTimeRemaining={sectionTimeRemaining}
+          completedSections={completedSections}
+          onAnswerSelect={handleAnswerSelect}
+          onToggleFlag={handleToggleFlag}
+          onGoToQuestion={goToQuestion}
+          onGoNext={goNext}
+          onGoPrev={goPrev}
+          onCompleteSection={handleRequestSectionComplete}
+          onSubmit={() => setSubmitConfirm(true)}
+          onReportQuestion={() => setShowFeedbackModal(true)}
+          answeredCount={answeredCount}
+          totalQuestions={simulation.totalQuestions}
+        />
+
+        {/* Section Transition Modal */}
+        {showSectionTransition && currentSection && (
+          <ConfirmModal
+            isOpen={true}
+            title={`Concludi "${currentSection.name}"?`}
+            message={`Stai per concludere la sezione "${currentSection.name}". Non potrai più tornare a questa sezione. Vuoi continuare?`}
+            confirmLabel="Concludi Sezione"
+            cancelLabel="Annulla"
+            variant="warning"
+            onConfirm={handleCompleteSection}
+            onCancel={() => setShowSectionTransition(false)}
+          />
+        )}
+
+        {/* Submit confirmation */}
+        <ConfirmModal
+          isOpen={submitConfirm}
+          title="Consegna Simulazione"
+          message={`Hai risposto a ${answeredCount}/${simulation.totalQuestions} domande. Vuoi consegnare?`}
+          confirmLabel="Consegna"
+          cancelLabel="Torna alla Simulazione"
+          variant="warning"
+          onConfirm={handleSubmit}
+          onCancel={() => setSubmitConfirm(false)}
+          isLoading={isSubmitting}
+        />
+
+        {/* Feedback Modal */}
+        {showFeedbackModal && currentQuestion && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className={`w-full max-w-md rounded-2xl ${colors.background.card} shadow-2xl overflow-hidden`}>
+              <div className={`flex items-center justify-between px-4 py-3 border-b ${colors.border.light}`}>
+                <h3 className={`text-lg font-semibold ${colors.text.primary}`}>Segnala Problema</h3>
+                <button onClick={() => setShowFeedbackModal(false)} className={`p-1 rounded-lg ${colors.background.hover}`}>
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-4 space-y-4">
+                <CustomSelect
+                  value={feedbackType}
+                  onChange={(value) => setFeedbackType(value as typeof feedbackType)}
+                  options={[
+                    { value: 'ERROR_IN_QUESTION', label: 'Errore nel testo della domanda' },
+                    { value: 'ERROR_IN_ANSWER', label: 'Errore nelle risposte' },
+                    { value: 'UNCLEAR', label: 'Domanda poco chiara' },
+                    { value: 'SUGGESTION', label: 'Suggerimento miglioramento' },
+                    { value: 'OTHER', label: 'Altro' },
+                  ]}
+                />
+                <textarea
+                  value={feedbackMessage}
+                  onChange={(e) => setFeedbackMessage(e.target.value)}
+                  placeholder="Descrivi il problema in almeno 10 caratteri..."
+                  rows={4}
+                  className={`w-full p-3 rounded-lg border ${colors.border.light} ${colors.background.secondary} ${colors.text.primary} resize-none`}
+                />
+                <div className="flex gap-3">
+                  <button onClick={() => setShowFeedbackModal(false)} className={`flex-1 px-4 py-2 rounded-lg border ${colors.border.light}`}>
+                    Annulla
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (feedbackMessage.length >= 10) {
+                        submitFeedbackMutation.mutate({
+                          questionId: currentQuestion.questionId,
+                          type: feedbackType,
+                          message: feedbackMessage,
+                        });
+                      }
+                    }}
+                    disabled={feedbackMessage.length < 10 || submitFeedbackMutation.isPending}
+                    className={`flex-1 px-4 py-2 rounded-lg ${colors.primary.gradient} text-white font-medium disabled:opacity-50`}
+                  >
+                    {submitFeedbackMutation.isPending ? 'Invio...' : 'Invia'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // Standard layout (non-TOLC)
   return (
     <div className="min-h-screen flex flex-col">
       {/* Anti-cheat warning banner */}
@@ -698,17 +930,27 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
               <span className={`text-sm font-medium ${colors.text.muted}`}>
                 Domanda {currentQuestionIndex + 1}
               </span>
-              <button
-                onClick={handleToggleFlag}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${
-                  currentAnswer?.flagged
-                    ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
-                    : `${colors.background.hover} ${colors.text.secondary}`
-                }`}
-              >
-                <Flag className="w-4 h-4" />
-                {currentAnswer?.flagged ? 'Contrassegnata' : 'Contrassegna'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowFeedbackModal(true)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${colors.background.hover} ${colors.text.secondary} hover:text-orange-500`}
+                  title="Segnala problema con la domanda"
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  <span className="hidden sm:inline">Segnala</span>
+                </button>
+                <button
+                  onClick={handleToggleFlag}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${
+                    currentAnswer?.flagged
+                      ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+                      : `${colors.background.hover} ${colors.text.secondary}`
+                  }`}
+                >
+                  <Flag className="w-4 h-4" />
+                  {currentAnswer?.flagged ? 'Contrassegnata' : 'Contrassegna'}
+                </button>
+              </div>
             </div>
 
             {/* Question text */}
@@ -971,6 +1213,79 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
           onConfirm={handleCompleteSection}
           onCancel={() => setShowSectionTransition(false)}
         />
+      )}
+
+      {/* Feedback Modal */}
+      {showFeedbackModal && currentQuestion && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className={`w-full max-w-md rounded-xl ${colors.background.card} border ${colors.border.light} shadow-xl`}>
+            <div className={`flex items-center justify-between p-4 border-b ${colors.border.light}`}>
+              <h3 className={`text-lg font-semibold ${colors.text.primary}`}>
+                Segnala Problema
+              </h3>
+              <button
+                onClick={() => setShowFeedbackModal(false)}
+                className={`p-1 rounded-lg ${colors.background.hover} ${colors.text.secondary}`}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className={`block text-sm font-medium ${colors.text.secondary} mb-2`}>
+                  Tipo di problema
+                </label>
+                <CustomSelect
+                  value={feedbackType}
+                  onChange={(value) => setFeedbackType(value as typeof feedbackType)}
+                  options={[
+                    { value: 'ERROR_IN_QUESTION', label: 'Errore nel testo della domanda' },
+                    { value: 'ERROR_IN_ANSWER', label: 'Errore nelle risposte' },
+                    { value: 'UNCLEAR', label: 'Domanda poco chiara' },
+                    { value: 'SUGGESTION', label: 'Suggerimento miglioramento' },
+                    { value: 'OTHER', label: 'Altro' },
+                  ]}
+                  placeholder="Seleziona tipo di problema"
+                />
+              </div>
+              <div>
+                <label className={`block text-sm font-medium ${colors.text.secondary} mb-2`}>
+                  Descrizione del problema
+                </label>
+                <textarea
+                  value={feedbackMessage}
+                  onChange={(e) => setFeedbackMessage(e.target.value)}
+                  placeholder="Descrivi il problema in almeno 10 caratteri..."
+                  rows={4}
+                  className={`w-full p-3 rounded-lg border ${colors.border.light} ${colors.background.secondary} ${colors.text.primary} resize-none`}
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setShowFeedbackModal(false)}
+                  className={`flex-1 px-4 py-2 rounded-lg border ${colors.border.light} ${colors.text.secondary} ${colors.background.hover}`}
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={() => {
+                    if (feedbackMessage.length >= 10 && currentQuestion) {
+                      submitFeedbackMutation.mutate({
+                        questionId: currentQuestion.questionId,
+                        type: feedbackType,
+                        message: feedbackMessage,
+                      });
+                    }
+                  }}
+                  disabled={feedbackMessage.length < 10 || submitFeedbackMutation.isPending}
+                  className={`flex-1 px-4 py-2 rounded-lg ${colors.primary.gradient} text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {submitFeedbackMutation.isPending ? 'Invio...' : 'Invia Segnalazione'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
