@@ -2,7 +2,7 @@
 // Users Router - Handles user management for admin
 // Note: 'any' types are used for Prisma dynamic queries and include patterns
 // that cannot be strictly typed without significant complexity
-import { router, adminProcedure } from '../init';
+import { router, adminProcedure, protectedProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { adminAuth } from '@/lib/firebase/admin';
@@ -10,6 +10,20 @@ import { Prisma } from '@prisma/client';
 import { generateMatricola } from '@/lib/utils/matricolaUtils';
 
 export const usersRouter = router({
+  /**
+   * Get current user information
+   */
+  me: protectedProcedure.query(async ({ ctx }) => {
+    return {
+      id: ctx.user.id,
+      name: ctx.user.name,
+      email: ctx.user.email,
+      role: ctx.user.role,
+      isActive: ctx.user.isActive,
+      profileCompleted: ctx.user.profileCompleted,
+    };
+  }),
+
   /**
    * Get all users with their roles and status
    */

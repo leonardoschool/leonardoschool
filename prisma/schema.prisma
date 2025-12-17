@@ -889,6 +889,7 @@ model SimulationAssignment {
   startDate    DateTime? // When this assignment becomes available
   endDate      DateTime? // When this assignment closes
   locationType String? // 'ONLINE', 'IN_PERSON', 'HYBRID'
+  createCalendarEvent Boolean @default(false) // Whether to create a calendar event for this assignment
 
   // Relations
   simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
@@ -896,14 +897,16 @@ model SimulationAssignment {
   group      Group?     @relation(fields: [groupId], references: [id], onDelete: Cascade)
   assignedBy User?      @relation("AssignmentCreator", fields: [assignedById], references: [id], onDelete: SetNull)
 
-  @@unique([simulationId, studentId])
-  @@unique([simulationId, groupId])
+  // Note: Removed unique constraints to allow multiple assignments of the same simulation
+  // to the same student/group with different dates/schedules
   @@index([simulationId])
   @@index([studentId])
   @@index([groupId])
   @@index([startDate])
   @@index([endDate])
   @@index([status])
+  @@index([simulationId, studentId]) // Composite index for queries
+  @@index([simulationId, groupId])   // Composite index for queries
   @@map("simulation_assignments")
 }
 

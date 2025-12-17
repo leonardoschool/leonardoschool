@@ -65,26 +65,57 @@ export const calendarRouter = router({
         where.createdById = createdById;
       }
 
-      // Only my events (created by me or invited)
-      if (onlyMyEvents && ctx.user) {
-        where.OR = [
-          { createdById: ctx.user.id },
-          { invitations: { some: { userId: ctx.user.id } } },
-        ];
-      }
-
       // Cancelled filter
       if (!includeCancelled) {
         where.isCancelled = false;
       }
 
-      // Public events or user-specific
+      // Get student's groups if user is a student (needed for both filters below)
+      let studentGroupIds: string[] = [];
       if (ctx.user?.role === 'STUDENT') {
-        // Students see only public events or events they're invited to
-        where.OR = [
+        const student = await ctx.prisma.student.findUnique({
+          where: { userId: ctx.user.id },
+          select: { id: true },
+        });
+        
+        if (student) {
+          const groupMembers = await ctx.prisma.groupMember.findMany({
+            where: { studentId: student.id },
+            select: { groupId: true },
+          });
+          studentGroupIds = groupMembers.map(gm => gm.groupId);
+        }
+      }
+
+      // Only my events (created by me or invited) - takes precedence over public filter
+      if (onlyMyEvents && ctx.user) {
+        type WhereCondition = Parameters<typeof ctx.prisma.calendarEvent.findMany>[0]['where'];
+        const orConditions: WhereCondition[] = [
+          { createdById: ctx.user.id },
+          { invitations: { some: { userId: ctx.user.id } } },
+        ];
+        
+        // Add group invitations for students
+        if (studentGroupIds.length > 0) {
+          orConditions.push({ invitations: { some: { groupId: { in: studentGroupIds } } } });
+        }
+        
+        where.OR = orConditions;
+      } 
+      // Public events or user-specific (only if not using onlyMyEvents filter)
+      else if (ctx.user?.role === 'STUDENT') {
+        // Students see: public events, events they're invited to directly, or events their groups are invited to
+        type WhereCondition = Parameters<typeof ctx.prisma.calendarEvent.findMany>[0]['where'];
+        const orConditions: WhereCondition[] = [
           { isPublic: true },
           { invitations: { some: { userId: ctx.user.id } } },
         ];
+        
+        if (studentGroupIds.length > 0) {
+          orConditions.push({ invitations: { some: { groupId: { in: studentGroupIds } } } });
+        }
+        
+        where.OR = orConditions;
       }
 
       const [events, total] = await Promise.all([
@@ -146,7 +177,12 @@ export const calendarRouter = router({
           attendances: {
             include: {
               student: {
-                select: { id: true, name: true, email: true },
+                select: { 
+                  id: true,
+                  user: {
+                    select: { name: true, email: true },
+                  },
+                },
               },
               recordedBy: {
                 select: { id: true, name: true },
@@ -174,10 +210,33 @@ export const calendarRouter = router({
 
       // Check access
       if (ctx.user?.role === 'STUDENT' && !event.isPublic) {
-        const isInvited = event.invitations.some(
+        // Check if user is invited directly
+        const isInvitedDirectly = event.invitations?.some(
           (inv) => inv.userId === ctx.user?.id
         );
-        if (!isInvited) {
+        
+        // Check if user is invited via group
+        let isInvitedViaGroup = false;
+        if (!isInvitedDirectly) {
+          const student = await ctx.prisma.student.findUnique({
+            where: { userId: ctx.user.id },
+            select: { id: true },
+          });
+          
+          if (student) {
+            const groupMembers = await ctx.prisma.groupMember.findMany({
+              where: { studentId: student.id },
+              select: { groupId: true },
+            });
+            const studentGroupIds = groupMembers.map(gm => gm.groupId);
+            
+            isInvitedViaGroup = event.invitations?.some(
+              (inv) => inv.groupId && studentGroupIds.includes(inv.groupId)
+            ) || false;
+          }
+        }
+        
+        if (!isInvitedDirectly && !isInvitedViaGroup) {
           throw new TRPCError({
             code: 'FORBIDDEN',
             message: 'Non hai accesso a questo evento',

@@ -798,8 +798,6 @@ export const studentsRouter = router({
     const groupMembers = await ctx.prisma.groupMember.findMany({
       where: {
         groupId: { in: groupIds },
-        memberType: 'STUDENT',
-        student: { isNot: null },
       },
       include: {
         student: {

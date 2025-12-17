@@ -21,8 +21,8 @@ import {
 export default function AdminStatisticheContent() {
   // Fetch platform statistics
   const { data: userStats, isLoading: userStatsLoading } = trpc.users.getStats.useQuery({});
-  const { data: questions } = trpc.questions.getAll.useQuery({ page: 1, limit: 1 });
-  const { data: simulations } = trpc.simulations.getAll.useQuery({ page: 1, limit: 1 });
+  const { data: questions } = trpc.questions.getQuestions.useQuery({ page: 1, pageSize: 1 });
+  const { data: simulations } = trpc.simulations.getSimulations.useQuery({ page: 1, pageSize: 1 });
 
   if (userStatsLoading) {
     return <PageLoader />;
@@ -33,8 +33,8 @@ export default function AdminStatisticheContent() {
     totalUsers: userStats?.total || 0,
     totalStudents: userStats?.students || 0,
     totalCollaborators: userStats?.collaborators || 0,
-    totalQuestions: questions?.total || 0,
-    totalSimulations: simulations?.total || 0,
+    totalQuestions: questions?.pagination?.total || 0,
+    totalSimulations: simulations?.pagination?.total || 0,
     activeUsers: userStats?.active || 0,
   };
 

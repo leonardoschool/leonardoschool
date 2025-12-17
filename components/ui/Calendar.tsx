@@ -154,6 +154,41 @@ const isSameDay = (d1: Date, d2: Date): boolean => {
   );
 };
 
+const isMultiDayEvent = (event: CalendarEvent): boolean => {
+  const start = new Date(event.startDate);
+  const end = new Date(event.endDate);
+  return !isSameDay(start, end);
+};
+
+const formatDateRange = (event: CalendarEvent): string => {
+  const start = new Date(event.startDate);
+  const end = new Date(event.endDate);
+  
+  if (isSameDay(start, end)) {
+    return '';
+  }
+  
+  const startDay = start.getDate();
+  const endDay = end.getDate();
+  const startMonth = MONTHS[start.getMonth()].slice(0, 3);
+  const endMonth = MONTHS[end.getMonth()].slice(0, 3);
+  
+  if (start.getMonth() === end.getMonth()) {
+    return `${startDay}-${endDay} ${startMonth}`;
+  }
+  return `${startDay} ${startMonth} - ${endDay} ${endMonth}`;
+};
+
+const isFirstDayOfEvent = (day: Date, event: CalendarEvent): boolean => {
+  const eventStart = new Date(event.startDate);
+  return isSameDay(day, eventStart);
+};
+
+const isLastDayOfEvent = (day: Date, event: CalendarEvent): boolean => {
+  const eventEnd = new Date(event.endDate);
+  return isSameDay(day, eventEnd);
+};
+
 const formatTime = (date: Date | string): string => {
   const d = new Date(date);
   return d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
@@ -402,29 +437,64 @@ export function Calendar({
                   </div>
                   
                   <div className="space-y-1 mt-1">
-                    {dayEvents.slice(0, 3).map((event) => (
-                      <div
-                        key={event.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEventClick?.(event);
-                        }}
-                        className={`
-                          px-1.5 py-0.5 rounded text-xs truncate cursor-pointer flex items-center gap-1
-                          ${eventTypeColors[event.type].bg}
-                          ${eventTypeColors[event.type].text}
-                          ${event.isCancelled ? 'line-through opacity-50' : ''}
-                          ${event.isMine ? 'ring-2 ring-amber-400 ring-offset-1 dark:ring-offset-gray-900' : ''}
-                        `}
-                        title={event.isMine ? `⭐ ${event.title} (Il tuo evento)` : event.title}
-                      >
-                        {event.isMine && <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400 flex-shrink-0" />}
-                        {!event.isAllDay && (
-                          <span className="font-medium">{formatTime(event.startDate)} </span>
-                        )}
-                        <span className="truncate">{event.title}</span>
-                      </div>
-                    ))}
+                    {dayEvents.slice(0, 3).map((event) => {
+                      const multiDay = isMultiDayEvent(event);
+                      const eventStart = new Date(event.startDate);
+                      const isFirstDay = isSameDay(day, eventStart);
+                      const dateRange = formatDateRange(event);
+                      
+                      return (
+                        <div
+                          key={event.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEventClick?.(event);
+                          }}
+                          className={`
+                            px-1.5 py-0.5 rounded text-xs truncate cursor-pointer flex items-center gap-1
+                            ${eventTypeColors[event.type].bg}
+                            ${eventTypeColors[event.type].text}
+                            ${event.isCancelled ? 'line-through opacity-50' : ''}
+                            ${event.isMine ? 'ring-2 ring-amber-400 ring-offset-1 dark:ring-offset-gray-900' : ''}
+                            ${multiDay && !isFirstDay ? 'opacity-60 border-l-2 border-current' : ''}
+                          `}
+                          title={multiDay 
+                            ? `${event.title} (${dateRange})` 
+                            : event.isMine 
+                              ? `⭐ ${event.title} (Il tuo evento)` 
+                              : event.title
+                          }
+                        >
+                          {event.isMine && <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400 flex-shrink-0" />}
+                          {/* For multi-day events: show INIZIO on first day, FINE on last day, arrow + title on middle days */}
+                          {multiDay ? (
+                            isFirstDay ? (
+                              <>
+                                <span className="font-bold text-[10px] uppercase">INIZIO</span>
+                                <span className="truncate">- {event.title}</span>
+                              </>
+                            ) : isLastDayOfEvent(day, event) ? (
+                              <>
+                                <span className="font-bold text-[10px] uppercase">FINE</span>
+                                <span className="truncate">- {event.title}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="font-medium">→ </span>
+                                <span className="truncate">{event.title}</span>
+                              </>
+                            )
+                          ) : (
+                            <>
+                              {!event.isAllDay && (
+                                <span className="font-medium">{formatTime(event.startDate)} </span>
+                              )}
+                              <span className="truncate">{event.title}</span>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
                     {dayEvents.length > 3 && (
                       <div className={`text-xs ${colors.text.muted} px-1.5`}>
                         +{dayEvents.length - 3} altri
@@ -470,22 +540,36 @@ export function Calendar({
                 const dayEvents = getEventsForDay(day).filter((e) => e.isAllDay);
                 return (
                   <div key={index} className={`min-h-[40px] p-1 ${colors.background.secondary} rounded`}>
-                    {dayEvents.map((event) => (
-                      <div
-                        key={event.id}
-                        onClick={() => onEventClick?.(event)}
-                        className={`
-                          px-2 py-1 rounded text-xs truncate cursor-pointer mb-1 flex items-center gap-1
-                          ${eventTypeColors[event.type].bg}
-                          ${eventTypeColors[event.type].text}
-                          ${event.isMine ? 'ring-2 ring-amber-400' : ''}
-                        `}
-                        title={event.isMine ? `⭐ ${event.title} (Il tuo evento)` : event.title}
-                      >
-                        {event.isMine && <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400 flex-shrink-0" />}
-                        <span className="truncate">{event.title}</span>
-                      </div>
-                    ))}
+                    {dayEvents.map((event) => {
+                      const isMultiDay = isMultiDayEvent(event);
+                      const isFirstDay = isFirstDayOfEvent(day, event);
+                      const isLastDay = isLastDayOfEvent(day, event);
+                      
+                      return (
+                        <div
+                          key={event.id}
+                          onClick={() => onEventClick?.(event)}
+                          className={`
+                            px-2 py-1 rounded text-xs cursor-pointer mb-1 flex flex-col
+                            ${eventTypeColors[event.type].bg}
+                            ${eventTypeColors[event.type].text}
+                            ${event.isMine ? 'ring-2 ring-amber-400' : ''}
+                          `}
+                          title={event.isMine ? `⭐ ${event.title} (Il tuo evento)` : event.title}
+                        >
+                          <div className="flex items-center gap-1 truncate">
+                            {event.isMine && <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400 flex-shrink-0" />}
+                            <span className="truncate">{event.title}</span>
+                          </div>
+                          {isMultiDay && isFirstDay && (
+                            <span className="text-[10px] opacity-75">Inizio: {formatTime(event.startDate)}</span>
+                          )}
+                          {isMultiDay && isLastDay && (
+                            <span className="text-[10px] opacity-75">Fine: {formatTime(event.endDate)}</span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}
@@ -649,22 +733,36 @@ export function Calendar({
               {/* All day events at top */}
               {getEventsForDay(selectedDate).filter((e) => e.isAllDay).length > 0 && (
                 <div className={`absolute -top-12 left-0 right-0 ${colors.background.secondary} rounded-lg p-2 space-y-1`}>
-                  {getEventsForDay(selectedDate).filter((e) => e.isAllDay).map((event) => (
-                    <div
-                      key={event.id}
-                      onClick={() => onEventClick?.(event)}
-                      className={`
-                        px-2 py-1 rounded text-sm cursor-pointer flex items-center gap-1
-                        ${eventTypeColors[event.type].bg}
-                        ${eventTypeColors[event.type].text}
-                        ${event.isMine ? 'ring-2 ring-amber-400' : ''}
-                      `}
-                      title={event.isMine ? `⭐ ${event.title} (Il tuo evento)` : event.title}
-                    >
-                      {event.isMine && <Star className="w-3 h-3 fill-amber-400 text-amber-400 flex-shrink-0" />}
-                      <span>{event.title}</span>
-                    </div>
-                  ))}
+                  {getEventsForDay(selectedDate).filter((e) => e.isAllDay).map((event) => {
+                    const isMultiDay = isMultiDayEvent(event);
+                    const isFirstDay = isFirstDayOfEvent(selectedDate, event);
+                    const isLastDay = isLastDayOfEvent(selectedDate, event);
+                    
+                    return (
+                      <div
+                        key={event.id}
+                        onClick={() => onEventClick?.(event)}
+                        className={`
+                          px-2 py-1 rounded text-sm cursor-pointer flex flex-col
+                          ${eventTypeColors[event.type].bg}
+                          ${eventTypeColors[event.type].text}
+                          ${event.isMine ? 'ring-2 ring-amber-400' : ''}
+                        `}
+                        title={event.isMine ? `⭐ ${event.title} (Il tuo evento)` : event.title}
+                      >
+                        <div className="flex items-center gap-1">
+                          {event.isMine && <Star className="w-3 h-3 fill-amber-400 text-amber-400 flex-shrink-0" />}
+                          <span>{event.title}</span>
+                        </div>
+                        {isMultiDay && isFirstDay && (
+                          <span className="text-xs opacity-75">Inizio: {formatTime(event.startDate)}</span>
+                        )}
+                        {isMultiDay && isLastDay && (
+                          <span className="text-xs opacity-75">Fine: {formatTime(event.endDate)}</span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -737,21 +835,45 @@ export function EventDetail({ event, onClose, onEdit, onDelete, onUserClick, onG
           <div className="flex items-start gap-3">
             <CalendarIcon className={`w-5 h-5 ${colors.icon.secondary} mt-0.5`} />
             <div>
-              <p className={colors.text.primary}>
-                {new Date(event.startDate).toLocaleDateString('it-IT', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
-              </p>
-              {!event.isAllDay && (
-                <p className={`text-sm ${colors.text.secondary}`}>
-                  {formatTime(event.startDate)} - {formatTime(event.endDate)}
-                </p>
-              )}
-              {event.isAllDay && (
-                <p className={`text-sm ${colors.text.secondary}`}>Tutto il giorno</p>
+              {isMultiDayEvent(event) ? (
+                // Multi-day event: show date range with start and end times
+                <>
+                  <p className={colors.text.primary}>
+                    Dal {new Date(event.startDate).toLocaleDateString('it-IT', {
+                      weekday: 'long',
+                      day: 'numeric',
+                      month: 'long',
+                    })} al {new Date(event.endDate).toLocaleDateString('it-IT', {
+                      weekday: 'long',
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    })}
+                  </p>
+                  <p className={`text-sm ${colors.text.secondary}`}>
+                    Inizio: {formatTime(event.startDate)} • Fine: {formatTime(event.endDate)}
+                  </p>
+                </>
+              ) : (
+                // Single-day event
+                <>
+                  <p className={colors.text.primary}>
+                    {new Date(event.startDate).toLocaleDateString('it-IT', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
+                  </p>
+                  {!event.isAllDay && (
+                    <p className={`text-sm ${colors.text.secondary}`}>
+                      {formatTime(event.startDate)} - {formatTime(event.endDate)}
+                    </p>
+                  )}
+                  {event.isAllDay && (
+                    <p className={`text-sm ${colors.text.secondary}`}>Tutto il giorno</p>
+                  )}
+                </>
               )}
             </div>
           </div>

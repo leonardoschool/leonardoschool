@@ -68,6 +68,7 @@ export const assignmentTargetSchema = z.object({
   startDate: z.string().datetime().optional().nullable(),
   endDate: z.string().datetime().optional().nullable(),
   locationType: z.enum(['ONLINE', 'IN_PERSON', 'HYBRID']).optional().nullable(),
+  createCalendarEvent: z.boolean().default(false), // Whether to create a calendar event
 }).refine(
   data => data.studentId || data.groupId,
   { message: 'Devi selezionare almeno uno tra studente o gruppo' }

@@ -94,6 +94,13 @@ export default function CollaboratorCalendarContent() {
       const dayOfWeek = start.getDay() === 0 ? 6 : start.getDay() - 1;
       start.setDate(start.getDate() - dayOfWeek);
       end.setDate(start.getDate() + 6);
+      // Expand range to include multi-day events that might span into this week
+      start.setDate(start.getDate() - 30);
+      end.setDate(end.getDate() + 30);
+    } else if (view === 'day') {
+      // For day view, expand range to include multi-day events that might span this day
+      start.setDate(start.getDate() - 30);
+      end.setDate(end.getDate() + 30);
     }
 
     start.setHours(0, 0, 0, 0);
@@ -157,7 +164,6 @@ export default function CollaboratorCalendarContent() {
         id: student.id,
         name: student.name || 'Studente',
         role: 'STUDENT',
-        extra: student.className,
       });
     });
     

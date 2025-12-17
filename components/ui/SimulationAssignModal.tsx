@@ -67,6 +67,7 @@ export function SimulationAssignModal({
   const [dateMode, setDateMode] = useState<DateMode>('single');
   const [locationType, setLocationType] = useState<LocationType>('ONLINE');
   const [locationDetails, setLocationDetails] = useState('');
+  const [createCalendarEvent, setCreateCalendarEvent] = useState(false);
   
   // Search state
   const [groupSearch, setGroupSearch] = useState('');
@@ -97,15 +98,11 @@ export function SimulationAssignModal({
     { enabled: isOpen && !!simulationId }
   );
 
-  // Sets of already assigned IDs
-  const alreadyAssignedStudentIds = useMemo(
-    () => new Set(existingAssignments?.assignedStudentIds ?? []),
-    [existingAssignments]
-  );
-  const alreadyAssignedGroupIds = useMemo(
-    () => new Set(existingAssignments?.assignedGroupIds ?? []),
-    [existingAssignments]
-  );
+  // Note: Removed client-side duplicate checks since the server now handles
+  // duplicate detection intelligently based on overlapping dates.
+  // This allows assigning the same simulation multiple times with different schedules.
+  const alreadyAssignedStudentIds = useMemo(() => new Set<string>(), []);
+  const alreadyAssignedGroupIds = useMemo(() => new Set<string>(), []);
 
   // Calculate end date automatically when using single date mode
   useEffect(() => {
@@ -210,7 +207,7 @@ export function SimulationAssignModal({
       }> = {};
       
       for (const groupId of selectedGroupIds) {
-        if (alreadyAssignedGroupIds.has(groupId)) continue; // Skip already assigned groups
+        // Note: Removed skip for already assigned groups to allow multiple assignments with different dates
         
         try {
           const result = await utils.simulations.getGroupMembersAlreadyAssigned.fetch({
@@ -245,15 +242,8 @@ export function SimulationAssignModal({
 
   // Mutation
   const assignMutation = trpc.simulations.addAssignments.useMutation({
-    onSuccess: (data) => {
-      if (data.duplicates && data.duplicates > 0) {
-        showSuccess(
-          'Simulazione assegnata',
-          `Assegnati ${data.created} destinatari. ${data.duplicates} erano già assegnati.`
-        );
-      } else {
-        showSuccess('Simulazione assegnata', 'La simulazione è stata assegnata con successo.');
-      }
+    onSuccess: () => {
+      showSuccess('Simulazione assegnata', 'La simulazione è stata assegnata con successo.');
       utils.simulations.invalidate();
       handleClose();
     },
@@ -286,6 +276,7 @@ export function SimulationAssignModal({
     setDateMode('single');
     setLocationType('ONLINE');
     setLocationDetails('');
+    setCreateCalendarEvent(false);
     setGroupSearch('');
     setStudentSearch('');
     setViewGroupId(null);
@@ -315,6 +306,7 @@ export function SimulationAssignModal({
       startDate: string;
       endDate: string;
       locationType: LocationType;
+      createCalendarEvent: boolean;
       groupId?: string;
       studentId?: string;
     }> = [];
@@ -324,6 +316,7 @@ export function SimulationAssignModal({
         startDate: isoStartDate,
         endDate: isoEndDate,
         locationType,
+        createCalendarEvent,
         groupId,
       });
     }
@@ -332,6 +325,7 @@ export function SimulationAssignModal({
         startDate: isoStartDate,
         endDate: isoEndDate,
         locationType,
+        createCalendarEvent,
         studentId,
       });
     }
@@ -691,6 +685,17 @@ export function SimulationAssignModal({
                   />
                 )}
               </div>
+            </div>
+
+            {/* Calendar Event Checkbox */}
+            <div className={`p-4 rounded-lg border ${colors.border.light} ${colors.background.secondary}`}>
+              <Checkbox
+                id="create-calendar-event"
+                checked={createCalendarEvent}
+                onChange={(e) => setCreateCalendarEvent(e.target.checked)}
+                label="Evento programmato"
+                description="Crea un evento nel calendario associato a questa simulazione"
+              />
             </div>
           </div>
 

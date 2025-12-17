@@ -339,11 +339,12 @@ export default function AppHeader() {
     { href: '/simulazioni', label: 'Simulazioni', icon: ClipboardList },
   ];
 
-  // Menu Didattica (dropdown) - Collaboratore: Domande, Tags, Materiali
+  // Menu Didattica (dropdown) - Collaboratore: Domande, Tags, Materiali, Simulazioni
   const didatticaItemsCollaborator = [
     { href: '/domande', label: 'Domande', icon: BookOpen },
     { href: '/tags', label: 'Tag', icon: Tag },
     { href: '/materiali', label: 'Materiali', icon: FolderOpen },
+    { href: '/simulazioni', label: 'Simulazioni', icon: ClipboardList },
   ];
 
   // Get gestione items based on role

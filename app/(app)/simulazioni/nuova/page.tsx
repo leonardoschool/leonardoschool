@@ -48,7 +48,6 @@ const STEPS = [
   { id: 'type', title: 'Tipo', icon: FileText },
   { id: 'config', title: 'Configurazione', icon: Settings },
   { id: 'questions', title: 'Domande', icon: Target },
-  { id: 'scheduling', title: 'Pianificazione', icon: Calendar },
   { id: 'review', title: 'Riepilogo', icon: Eye },
 ];
 
@@ -160,9 +159,7 @@ export default function NewSimulationPage() {
   const [trackAttendance, setTrackAttendance] = useState(false);
   const [locationType, setLocationType] = useState<LocationType | ''>('');
   const [locationDetails, setLocationDetails] = useState('');
-  
-  // Calendar integration
-  const [isScheduled, setIsScheduled] = useState(false);
+
   
   // Anti-cheat settings
   const [enableAntiCheat, setEnableAntiCheat] = useState(false);
@@ -484,7 +481,7 @@ export default function NewSimulationPage() {
     }
   };
 
-  // Validation (5 steps: type, config, questions, scheduling, review)
+  // Validation (5 steps: type, config, questions, review)
   const isStepValid = (step: number): boolean => {
     switch (step) {
       case 0: // Type
@@ -493,12 +490,7 @@ export default function NewSimulationPage() {
         return !!title && durationMinutes >= 0;
       case 2: // Questions
         return selectedQuestions.length > 0;
-      case 3: // Scheduling (calendar, attendance, location)
-        // Scheduling step is optional - dates are now set during assignment
-        // If tracking attendance and in-person, need location details
-        if (trackAttendance && locationType === 'IN_PERSON' && !locationDetails) return false;
-        return true;
-      case 4: // Review
+      case 3: // Review
         return true;
       default:
         return false;
@@ -509,6 +501,7 @@ export default function NewSimulationPage() {
   const handleSubmit = async (_publishImmediately: boolean) => {
     setIsSaving(true);
     try {
+      const isScheduled = false; // Scheduling handled during assignment now
       await createWithQuestionsMutation.mutateAsync({
         title,
         description: description || undefined,
@@ -566,9 +559,17 @@ export default function NewSimulationPage() {
       case 0:
         return (
           <div className="space-y-6">
-            <h2 className={`text-xl font-semibold ${colors.text.primary}`}>
-              Seleziona il tipo di simulazione
-            </h2>
+            <div>
+              <h2 className={`text-xl font-semibold ${colors.text.primary}`}>
+                Seleziona il tipo di simulazione
+              </h2>
+              {userRole === 'COLLABORATOR' && (
+                <p className={`mt-2 text-sm ${colors.text.muted} flex items-start gap-2`}>
+                  <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <span>Come collaboratore puoi creare tutti i tipi di simulazione, ma non potrai modificarle o eliminarle dopo la creazione.</span>
+                </p>
+              )}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {typeOptions.map((option) => (
                 <button
@@ -1265,62 +1266,7 @@ export default function NewSimulationPage() {
           </div>
         );
 
-      case 3: // Scheduling step
-        return (
-          <div className="space-y-8">
-            <h2 className={`text-xl font-semibold ${colors.text.primary}`}>
-              Programmazione e Logistica
-            </h2>
-
-            {/* Scheduled event toggle */}
-            <div className={`p-4 rounded-xl ${isScheduled ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500' : `${colors.background.secondary} border ${colors.border.light}`}`}>
-              <div className="flex items-start gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isScheduled ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>
-                  <Calendar className="w-5 h-5" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="isScheduled"
-                      checked={isScheduled}
-                      onChange={(e) => setIsScheduled(e.target.checked)}
-                    />
-                    <label htmlFor="isScheduled" className={`font-medium ${colors.text.primary} cursor-pointer`}>
-                      Evento programmato
-                    </label>
-                  </div>
-                  <p className={`text-sm ${colors.text.muted} mt-1`}>
-                    Crea un evento nel calendario associato a questa simulazione
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Duration info */}
-            <div className={`p-4 rounded-xl ${colors.background.secondary} border ${colors.border.light}`}>
-              <div className="flex items-start gap-3">
-                <Clock className="w-5 h-5 text-orange-600 dark:text-orange-400 mt-0.5" />
-                <div>
-                  <h4 className={`font-medium ${colors.text.primary}`}>Durata simulazione</h4>
-                  <p className={`text-sm ${colors.text.muted} mt-1`}>
-                    {durationMinutes > 0 ? (
-                      <>
-                        <strong>{Math.floor(durationMinutes / 60) > 0 && `${Math.floor(durationMinutes / 60)} ore `}{durationMinutes % 60 > 0 && `${durationMinutes % 60} minuti`}</strong>
-                      </>
-                    ) : (
-                      <strong>Tempo illimitato</strong>
-                    )}
-                  </p>
-                  <p className={`text-xs ${colors.text.muted} mt-2`}>
-                    La data e l&apos;orario di svolgimento verranno definiti al momento dell&apos;assegnazione.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-
-      case 4: // Review step
+      case 3: // Review step
         return (
           <div className="space-y-6">
             <h2 className={`text-xl font-semibold ${colors.text.primary}`}>
@@ -1417,16 +1363,6 @@ export default function NewSimulationPage() {
                             <Shield className="w-4 h-4" /> Attivo
                           </span>
                         ) : 'Disattivato'}
-                      </dd>
-                    </div>
-                  )}
-                  {isScheduled && (
-                    <div className="flex justify-between">
-                      <dt className={colors.text.muted}>Evento calendario</dt>
-                      <dd className={`font-medium text-blue-600 dark:text-blue-400`}>
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" /> Programmato
-                        </span>
                       </dd>
                     </div>
                   )}

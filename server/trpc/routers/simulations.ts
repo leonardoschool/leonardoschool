@@ -1,5 +1,5 @@
 // Simulations Router - Manage tests and simulations
-import { router, staffProcedure, studentProcedure, protectedProcedure } from '../init';
+import { router, staffProcedure, studentProcedure, protectedProcedure, adminProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import {
@@ -17,6 +17,212 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import { notifySimulationCreated } from '@/server/services/simulationNotificationService';
 import * as notificationService from '@/server/services/notificationService';
 import { notifications } from '@/lib/notifications';
+
+// Helper function to create calendar events for simulation assignments
+async function createCalendarEventsForAssignments(
+  simulationId: string,
+  simulation: {
+    title: string;
+    type: string;
+    isOfficial: boolean;
+    durationMinutes: number;
+  },
+  assignments: Array<{
+    id: string;
+    studentId: string | null;
+    groupId: string | null;
+    startDate: Date | null;
+    endDate: Date | null;
+    createCalendarEvent?: boolean;
+  }>,
+  assignerId: string,
+  prisma: PrismaClient
+) {
+  const eventsToCreate: Array<{
+    title: string;
+    description: string | null;
+    type: 'SIMULATION';
+    startDate: Date;
+    endDate: Date;
+    isAllDay: boolean;
+    isPublic: boolean;
+    createdById: string;
+    invitations: Array<{
+      userId?: string;
+      groupId?: string;
+      status: 'PENDING' | 'ACCEPTED';
+    }>;
+  }> = [];
+
+  // Track which keys we've already created events for (to avoid duplicates)
+  const processedKeys = new Set<string>();
+
+  for (const assignment of assignments) {
+    // Calculate dates once per assignment
+    const startDate = assignment.startDate || new Date();
+    const endDate = assignment.endDate || new Date(startDate.getTime() + simulation.durationMinutes * 60 * 1000);
+    
+    // Build unique key for this event (to avoid duplicates)
+    const eventKey = `${simulationId}-${startDate.getTime()}-${assignment.studentId || assignment.groupId}`;
+    if (processedKeys.has(eventKey)) continue;
+    processedKeys.add(eventKey);
+
+    // Check if this is a multi-day event (start and end on different days)
+    const startDay = new Date(startDate).setHours(0, 0, 0, 0);
+    const endDay = new Date(endDate).setHours(0, 0, 0, 0);
+    const isMultiDay = startDay !== endDay;
+
+    // Build invitations based on assignment type
+    const invitations: Array<{ 
+      userId?: string; 
+      groupId?: string; 
+      status: 'PENDING' | 'ACCEPTED' 
+    }> = [];
+
+    if (assignment.studentId) {
+      // Direct assignment to student
+      const student = await prisma.student.findUnique({
+        where: { id: assignment.studentId },
+        select: { userId: true },
+      });
+      if (student?.userId) {
+        invitations.push({ userId: student.userId, status: 'PENDING' as const });
+      }
+    } else if (assignment.groupId) {
+      // Group assignment - invite the entire group
+      invitations.push({ groupId: assignment.groupId, status: 'PENDING' as const });
+    }
+
+    // Add assigner if simulation is official
+    if (simulation.isOfficial && invitations.length > 0) {
+      invitations.push({ userId: assignerId, status: 'ACCEPTED' as const });
+    }
+
+    // Create event only if we have invitations
+    if (invitations.length > 0) {
+      // Build description with date range for multi-day events
+      let description: string | null = null;
+      if (isMultiDay) {
+        const startDateFormatted = startDate.toLocaleDateString('it-IT', { 
+          day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' 
+        });
+        const endDateFormatted = endDate.toLocaleDateString('it-IT', { 
+          day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' 
+        });
+        description = `Disponibile dal ${startDateFormatted} al ${endDateFormatted}`;
+      }
+
+      eventsToCreate.push({
+        title: `${simulation.type === 'OFFICIAL' ? 'TOLC' : 'Simulazione'}: ${simulation.title}`,
+        description,
+        type: 'SIMULATION',
+        startDate,
+        endDate,
+        // For multi-day events, mark as all-day for cleaner calendar display
+        isAllDay: isMultiDay,
+        isPublic: simulation.isOfficial,
+        createdById: assignerId,
+        invitations,
+      });
+    }
+  }
+
+  // Batch create all events
+  if (eventsToCreate.length > 0) {
+    await Promise.all(
+      eventsToCreate.map(eventData =>
+        prisma.calendarEvent.create({
+          data: {
+            ...eventData,
+            invitations: {
+              create: eventData.invitations,
+            },
+          },
+        })
+      )
+    );
+    console.log(`[Simulations] Created ${eventsToCreate.length} calendar events for simulation assignments`);
+  }
+}
+
+// Helper function to delete calendar events when removing assignment
+async function deleteCalendarEventsForAssignment(
+  simulationId: string,
+  userIds: string[],
+  prisma: PrismaClient,
+  groupId?: string | null
+) {
+  // Get simulation details to match event title
+  const simulation = await prisma.simulation.findUnique({
+    where: { id: simulationId },
+    select: { title: true, type: true },
+  });
+
+  if (!simulation) {
+    console.warn(`[Simulations] Simulation ${simulationId} not found for calendar event deletion`);
+    return;
+  }
+
+  const eventTitlePrefix = `${simulation.type === 'OFFICIAL' ? 'TOLC' : 'Simulazione'}: ${simulation.title}`;
+
+  // Build the query to find events
+  // Look for events with matching title and either:
+  // 1. Invitations to specific users (for individual assignments)
+  // 2. Invitations to a specific group (for group assignments)
+  const invitationFilter: { some: { userId?: { in: string[] }; groupId?: string } } = {
+    some: {},
+  };
+
+  if (groupId) {
+    invitationFilter.some.groupId = groupId;
+  } else if (userIds.length > 0) {
+    invitationFilter.some.userId = { in: userIds };
+  } else {
+    console.warn('[Simulations] No userIds or groupId provided for calendar event deletion');
+    return;
+  }
+
+  // Find calendar events with matching title and invitees
+  const events = await prisma.calendarEvent.findMany({
+    where: {
+      type: 'SIMULATION',
+      title: { startsWith: eventTitlePrefix },
+      invitations: invitationFilter,
+    },
+    include: {
+      invitations: true,
+    },
+  });
+
+  console.log(`[Simulations] Found ${events.length} calendar events matching title "${eventTitlePrefix}" for deletion`);
+
+  // Delete events that match our criteria
+  // For group assignments: delete if the group matches
+  // For individual assignments: delete if all invitees are in our userIds list
+  const eventsToDelete = events.filter(event => {
+    if (groupId) {
+      // For group assignment: check if any invitation is for this group
+      return event.invitations.some(inv => inv.groupId === groupId);
+    } else {
+      // For individual assignment: check if all user invitations are in our list
+      const invitedUserIds = event.invitations
+        .map(inv => inv.userId)
+        .filter((id): id is string => id !== null);
+      return invitedUserIds.length > 0 && invitedUserIds.every(id => userIds.includes(id));
+    }
+  });
+
+  if (eventsToDelete.length > 0) {
+    await prisma.calendarEvent.deleteMany({
+      where: {
+        id: { in: eventsToDelete.map(e => e.id) },
+      },
+    });
+    console.log(`[Simulations] Deleted ${eventsToDelete.length} calendar events for removed assignment`);
+  } else {
+    console.log(`[Simulations] No calendar events to delete for this assignment`);
+  }
+}
 
 // Helper function to get student from user
 async function getStudentFromUser(prisma: PrismaClient, userId: string) {
@@ -215,14 +421,6 @@ export const simulationsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { questions, assignments, ...simulationData } = input;
 
-      // Validate official simulations can only be created by admins
-      if (simulationData.isOfficial && ctx.user.role !== 'ADMIN') {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Solo gli admin possono creare simulazioni ufficiali',
-        });
-      }
-
       // For collaborators: validate they can only assign to their groups/students
       if (ctx.user.role === 'COLLABORATOR' && ctx.user.collaborator?.id && assignments.length > 0) {
         const collaboratorId = ctx.user.collaborator.id;
@@ -365,14 +563,6 @@ export const simulationsRouter = router({
     .input(createSimulationAutoSchema)
     .mutation(async ({ ctx, input }) => {
       const { subjectDistribution, difficultyDistribution, topicIds, assignments, ...simulationData } = input;
-
-      // Validate official simulations
-      if (simulationData.isOfficial && ctx.user.role !== 'ADMIN') {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Solo gli admin possono creare simulazioni ufficiali',
-        });
-      }
 
       // For collaborators: validate they can only assign to their groups/students
       if (ctx.user.role === 'COLLABORATOR' && ctx.user.collaborator?.id && assignments.length > 0) {
@@ -556,7 +746,7 @@ export const simulationsRouter = router({
     }),
 
   // Update simulation metadata
-  update: staffProcedure
+  update: adminProcedure
     .input(updateSimulationSchema)
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
@@ -569,11 +759,6 @@ export const simulationsRouter = router({
 
       if (!existing) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
-      }
-
-      // Collaborators can only edit their own
-      if (ctx.user.role === 'COLLABORATOR' && existing.createdById !== ctx.user.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi per modificare questa simulazione' });
       }
 
       // Can't make official if not admin
@@ -609,7 +794,7 @@ export const simulationsRouter = router({
     }),
 
   // Update simulation questions
-  updateQuestions: staffProcedure
+  updateQuestions: adminProcedure
     .input(updateSimulationQuestionsSchema)
     .mutation(async ({ ctx, input }) => {
       const { simulationId, questions, mode } = input;
@@ -622,10 +807,6 @@ export const simulationsRouter = router({
 
       if (!existing) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
-      }
-
-      if (ctx.user.role === 'COLLABORATOR' && existing.createdById !== ctx.user.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi' });
       }
 
       if (existing.status === 'ARCHIVED') {
@@ -704,22 +885,27 @@ export const simulationsRouter = router({
       return { success: true };
     }),
 
-  // Delete simulation
-  delete: staffProcedure
+  // Delete simulation (Admin only)
+  delete: adminProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const existing = await ctx.prisma.simulation.findUnique({
         where: { id: input.id },
-        select: { createdById: true, status: true, _count: { select: { results: true } } },
+        select: { 
+          createdById: true, 
+          status: true, 
+          title: true,
+          _count: { 
+            select: { 
+              results: true,
+              assignments: true 
+            } 
+          } 
+        },
       });
 
       if (!existing) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
-      }
-
-      // Only creators or admins can delete
-      if (ctx.user.role === 'COLLABORATOR' && existing.createdById !== ctx.user.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi per eliminare questa simulazione' });
       }
 
       // Can't delete if has results (archive instead)
@@ -730,9 +916,21 @@ export const simulationsRouter = router({
         });
       }
 
+      // Log assignments that will be deleted
+      if (existing._count.assignments > 0) {
+        console.log(`[Simulation Delete] Rimozione di ${existing._count.assignments} assegnazioni per la simulazione "${existing.title}" (ID: ${input.id})`);
+      }
+
+      // Delete simulation - CASCADE will automatically delete:
+      // - SimulationAssignment (assignments in calendar)
+      // - SimulationQuestion (questions relationship)
+      // - SimulationSession (if any)
       await ctx.prisma.simulation.delete({ where: { id: input.id } });
 
-      return { success: true };
+      return { 
+        success: true,
+        deletedAssignments: existing._count.assignments 
+      };
     }),
 
   // Publish simulation
@@ -810,25 +1008,23 @@ export const simulationsRouter = router({
       assignmentIds: z.array(z.string()).min(1),
     }))
     .mutation(async ({ ctx, input }) => {
-      // Get assignments with simulation info for permission check
+      // Get assignments
       const assignments = await ctx.prisma.simulationAssignment.findMany({
         where: { id: { in: input.assignmentIds } },
-        include: { 
-          simulation: { select: { createdById: true } },
-        },
       });
 
       if (assignments.length === 0) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Assegnazioni non trovate' });
       }
 
-      // Check permissions for collaborators
+      // For collaborators, verify they created all assignments
       if (ctx.user.role === 'COLLABORATOR') {
-        const hasPermission = assignments.every(
-          (a) => a.simulation.createdById === ctx.user.id
-        );
-        if (!hasPermission) {
-          throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi per chiudere queste assegnazioni' });
+        const notOwnedByUser = assignments.some(a => a.assignedById !== ctx.user.id);
+        if (notOwnedByUser) {
+          throw new TRPCError({ 
+            code: 'FORBIDDEN', 
+            message: 'Puoi chiudere solo le assegnazioni che hai creato tu' 
+          });
         }
       }
 
@@ -851,25 +1047,23 @@ export const simulationsRouter = router({
       assignmentIds: z.array(z.string()).min(1),
     }))
     .mutation(async ({ ctx, input }) => {
-      // Get assignments with simulation info for permission check
+      // Get assignments
       const assignments = await ctx.prisma.simulationAssignment.findMany({
         where: { id: { in: input.assignmentIds } },
-        include: { 
-          simulation: { select: { createdById: true } },
-        },
       });
 
       if (assignments.length === 0) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Assegnazioni non trovate' });
       }
 
-      // Check permissions for collaborators
+      // For collaborators, verify they created all assignments
       if (ctx.user.role === 'COLLABORATOR') {
-        const hasPermission = assignments.every(
-          (a) => a.simulation.createdById === ctx.user.id
-        );
-        if (!hasPermission) {
-          throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi per riaprire queste assegnazioni' });
+        const notOwnedByUser = assignments.some(a => a.assignedById !== ctx.user.id);
+        if (notOwnedByUser) {
+          throw new TRPCError({ 
+            code: 'FORBIDDEN', 
+            message: 'Puoi riaprire solo le assegnazioni che hai creato tu' 
+          });
         }
       }
 
@@ -894,19 +1088,25 @@ export const simulationsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { simulationId, targets } = input;
 
-      // Check simulation exists
+      // Check simulation exists and get details for calendar events
       const simulation = await ctx.prisma.simulation.findUnique({
         where: { id: simulationId },
-        select: { createdById: true, status: true },
+        select: { 
+          createdById: true, 
+          status: true,
+          title: true,
+          type: true,
+          isOfficial: true,
+          durationMinutes: true,
+        },
       });
 
       if (!simulation) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
       }
 
-      if (ctx.user.role === 'COLLABORATOR' && simulation.createdById !== ctx.user.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi' });
-      }
+      // Note: Collaborators can assign any published simulation to their groups
+      // They can only modify/delete assignments they created, but can assign any template
 
       // For collaborators: validate they can only assign to their groups/students
       if (ctx.user.role === 'COLLABORATOR' && ctx.user.collaborator?.id) {
@@ -943,31 +1143,108 @@ export const simulationsRouter = router({
         }
       }
 
-      // Create assignments (ignore duplicates) and auto-publish simulation
-      let duplicatesCount = 0;
+      // Check for overlapping assignments BEFORE creating new ones
+      for (const target of targets) {
+        const startDate = target.startDate ? new Date(target.startDate) : null;
+        const endDate = target.endDate ? new Date(target.endDate) : null;
+        
+        if (startDate && endDate) {
+          // Determine if this is a single-date assignment
+          const diffInHours = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60);
+          const isSingleDateAssignment = diffInHours <= 24;
+          
+          if (isSingleDateAssignment) {
+            // For single-date assignments, check for overlaps with ANY simulation (not just this one)
+            const existingAssignments = await ctx.prisma.simulationAssignment.findMany({
+              where: {
+                // Don't filter by simulationId - check ALL simulations
+                ...(target.studentId ? { studentId: target.studentId } : {}),
+                ...(target.groupId ? { groupId: target.groupId } : {}),
+                status: { in: ['ACTIVE', 'CLOSED'] },
+                startDate: { not: null },
+                endDate: { not: null },
+              },
+              include: {
+                simulation: {
+                  select: { title: true },
+                },
+              },
+            });
+            
+            // Check each existing assignment for overlap
+            for (const existing of existingAssignments) {
+              if (!existing.startDate || !existing.endDate) continue;
+              
+              const existingDiffInHours = 
+                (existing.endDate.getTime() - existing.startDate.getTime()) / (1000 * 60 * 60);
+              
+              // Skip if existing is a range assignment
+              if (existingDiffInHours > 24) continue;
+              
+              // Both are single-date - check for overlap
+              const hasOverlap = 
+                startDate.getTime() < existing.endDate.getTime() &&
+                existing.startDate.getTime() < endDate.getTime();
+              
+              if (hasOverlap) {
+                const targetType = target.groupId ? 'gruppo' : 'studente';
+                const existingStart = existing.startDate.toLocaleString('it-IT', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                });
+                const existingEnd = existing.endDate.toLocaleString('it-IT', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                });
+                const existingTitle = existing.simulation?.title || 'Simulazione';
+                throw new TRPCError({
+                  code: 'BAD_REQUEST',
+                  message: `Il ${targetType} ha già un'assegnazione di "${existingTitle}" programmata per ${existingStart} - ${existingEnd}. Non è possibile sovrapporre le simulazioni.`,
+                });
+              }
+            }
+          }
+        }
+      }
+
+      // Create assignments and auto-publish simulation
+      console.log('[Simulations] Creating assignments with targets:', 
+        targets.map(t => ({ 
+          groupId: t.groupId, 
+          studentId: t.studentId, 
+          createCalendarEvent: t.createCalendarEvent 
+        }))
+      );
+      
       const created = await ctx.prisma.$transaction(async (tx) => {
         const results = [];
         for (const target of targets) {
-          try {
-            const assignment = await tx.simulationAssignment.create({
-              data: {
-                simulationId,
-                studentId: target.studentId,
-                groupId: target.groupId,
-                dueDate: target.dueDate ? new Date(target.dueDate) : null,
-                notes: target.notes,
-                assignedById: ctx.user.id,
-                // New schedule fields for this assignment
-                startDate: target.startDate ? new Date(target.startDate) : null,
-                endDate: target.endDate ? new Date(target.endDate) : null,
-                locationType: target.locationType,
-              },
-            });
-            results.push(assignment);
-          } catch {
-            // Count duplicate assignments (already assigned)
-            duplicatesCount++;
-          }
+          const startDate = target.startDate ? new Date(target.startDate) : null;
+          const endDate = target.endDate ? new Date(target.endDate) : null;
+
+          console.log(`[Simulations] Creating assignment: createCalendarEvent=${target.createCalendarEvent}`);
+          
+          // Create the assignment
+          const assignment = await tx.simulationAssignment.create({
+            data: {
+              simulationId,
+              studentId: target.studentId,
+              groupId: target.groupId,
+              dueDate: target.dueDate ? new Date(target.dueDate) : null,
+              notes: target.notes,
+              assignedById: ctx.user.id,
+              startDate,
+              endDate,
+              locationType: target.locationType,
+              createCalendarEvent: target.createCalendarEvent ?? false,
+            },
+          });
+          
+          console.log(`[Simulations] Created assignment ${assignment.id} with createCalendarEvent=${assignment.createCalendarEvent}`);
+          results.push(assignment);
         }
 
         // Auto-publish simulation when assignments are created
@@ -981,16 +1258,6 @@ export const simulationsRouter = router({
         return results;
       });
 
-      // If all were duplicates, throw a user-friendly error
-      if (created.length === 0 && duplicatesCount > 0) {
-        throw new TRPCError({
-          code: 'CONFLICT',
-          message: duplicatesCount === 1 
-            ? 'Lo studente/gruppo selezionato è già stato assegnato a questa simulazione.'
-            : `Tutti i ${duplicatesCount} destinatari selezionati sono già stati assegnati a questa simulazione.`,
-        });
-      }
-
       // Send notifications for newly added assignments
       if (created.length > 0) {
         // Fire and forget - don't block the response
@@ -999,9 +1266,31 @@ export const simulationsRouter = router({
         });
       }
 
+      // Create calendar events for assignments (fire and forget)
+      // Only for assignments where createCalendarEvent is explicitly true
+      if (created.length > 0) {
+        console.log('[Simulations] Checking calendar event creation for assignments:', 
+          created.map(a => ({ id: a.id, createCalendarEvent: a.createCalendarEvent }))
+        );
+        
+        const assignmentsWithCalendarEvents = created.filter(a => a.createCalendarEvent === true);
+        console.log(`[Simulations] Assignments with calendar events: ${assignmentsWithCalendarEvents.length} of ${created.length}`);
+        
+        if (assignmentsWithCalendarEvents.length > 0) {
+          createCalendarEventsForAssignments(
+            simulationId,
+            simulation,
+            assignmentsWithCalendarEvents,
+            ctx.user.id,
+            ctx.prisma
+          ).catch((error) => {
+            console.error('[Simulations] Failed to create calendar events:', error);
+          });
+        }
+      }
+
       return { 
         created: created.length,
-        duplicates: duplicatesCount,
       };
     }),
 
@@ -1179,8 +1468,8 @@ export const simulationsRouter = router({
       };
     }),
 
-  // Update existing assignment (reassign with new dates)
-  updateAssignment: staffProcedure
+  // Update existing assignment (reassign with new dates) - Admin only
+  updateAssignment: adminProcedure
     .input(z.object({
       assignmentId: z.string(),
       startDate: z.string().datetime().optional().nullable(),
@@ -1197,10 +1486,6 @@ export const simulationsRouter = router({
 
       if (!assignment) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Assegnazione non trovata' });
-      }
-
-      if (ctx.user.role === 'COLLABORATOR' && assignment.simulation.createdById !== ctx.user.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi per modificare questa assegnazione' });
       }
 
       const updated = await ctx.prisma.simulationAssignment.update({
@@ -1237,18 +1522,70 @@ export const simulationsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const assignment = await ctx.prisma.simulationAssignment.findUnique({
         where: { id: input.assignmentId },
-        include: { simulation: { select: { createdById: true } } },
+        select: {
+          id: true,
+          simulationId: true,
+          studentId: true,
+          groupId: true,
+          assignedById: true,
+          createCalendarEvent: true,
+          student: { select: { userId: true } },
+          group: {
+            include: {
+              members: {
+                include: {
+                  student: { select: { userId: true } },
+                },
+              },
+            },
+          },
+        },
       });
 
       if (!assignment) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Assegnazione non trovata' });
       }
 
-      if (ctx.user.role === 'COLLABORATOR' && assignment.simulation.createdById !== ctx.user.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi' });
+      // For collaborators, verify they created the assignment
+      if (ctx.user.role === 'COLLABORATOR' && assignment.assignedById !== ctx.user.id) {
+        throw new TRPCError({ 
+          code: 'FORBIDDEN', 
+          message: 'Puoi eliminare solo le assegnazioni che hai creato tu' 
+        });
       }
 
+      // Collect user IDs to remove calendar events for
+      // We always try to delete calendar events (even if createCalendarEvent is false)
+      // because old assignments may have events created before this flag existed
+      const userIds: string[] = [];
+      const groupIdForCalendar = assignment.groupId;
+      
+      if (assignment.studentId && assignment.student?.userId) {
+        userIds.push(assignment.student.userId);
+      } else if (assignment.groupId && assignment.group) {
+        userIds.push(
+          ...assignment.group.members
+            .map(m => m.student.userId)
+            .filter(Boolean) as string[]
+        );
+      }
+
+      // Delete assignment
       await ctx.prisma.simulationAssignment.delete({ where: { id: input.assignmentId } });
+
+      // Always try to delete related calendar events (fire and forget)
+      // This handles both new assignments with createCalendarEvent=true
+      // and old assignments that were created before this flag existed
+      if (assignment.simulationId) {
+        deleteCalendarEventsForAssignment(
+          assignment.simulationId,
+          userIds,
+          ctx.prisma,
+          groupIdForCalendar
+        ).catch((error) => {
+          console.error('[Simulations] Failed to delete calendar events:', error);
+        });
+      }
 
       return { success: true };
     }),
@@ -2456,13 +2793,8 @@ export const simulationsRouter = router({
       // Build where clause
       const where: Prisma.SimulationAssignmentWhereInput = {};
 
-      // For collaborators, only show assignments they created or for simulations they created
-      if (ctx.user.role === 'COLLABORATOR') {
-        where.OR = [
-          { assignedById: ctx.user.id },
-          { simulation: { createdById: ctx.user.id } },
-        ];
-      }
+      // Note: Collaborators can now see ALL assignments (not filtered by creator)
+      // but they can only take actions on assignments they created (enforced in frontend)
 
       if (simulationId) {
         where.simulationId = simulationId;

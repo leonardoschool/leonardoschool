@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
@@ -9,6 +9,7 @@ import { PageLoader, Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import { Portal } from '@/components/ui/Portal';
+import { StudentDetailModal } from '@/components/ui/StudentDetailModal';
 import Link from 'next/link';
 import {
   Plus,
@@ -32,6 +33,7 @@ import {
   UserPlus,
   Lock,
   Unlock,
+  User,
 } from 'lucide-react';
 import type { SimulationType, SimulationStatus } from '@/lib/validations/simulationValidation';
 import { SimulationAssignModal } from '@/components/ui/SimulationAssignModal';
@@ -107,9 +109,15 @@ export default function AdminSimulationsContent() {
   // Action menus state
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string; assignmentsCount?: number } | null>(null);
   const [archiveConfirm, setArchiveConfirm] = useState<{ id: string; title: string } | null>(null);
   const [assignModal, setAssignModal] = useState<{ id: string; title: string; isOfficial: boolean; durationMinutes: number } | null>(null);
+  
+  // Student detail modal state
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  
+  // Expanded groups state (for showing all students)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -140,9 +148,19 @@ export default function AdminSimulationsContent() {
 
   // Mutations
   const deleteMutation = trpc.simulations.delete.useMutation({
-    onSuccess: () => {
-      showSuccess('Eliminata', 'Simulazione eliminata con successo');
-      utils.simulations.getSimulations.invalidate();
+    onSuccess: async (data) => {
+      const message = data.deletedAssignments > 0 
+        ? `Simulazione eliminata con successo. ${data.deletedAssignments} assegnazione${data.deletedAssignments === 1 ? '' : 'i'} rimossa${data.deletedAssignments === 1 ? '' : 'e'} dal calendario.`
+        : 'Simulazione eliminata con successo';
+      showSuccess('Eliminata', message);
+      
+      // Invalidate all related queries to ensure UI updates
+      await Promise.all([
+        utils.simulations.getSimulations.invalidate(),
+        utils.simulations.getAssignments.invalidate(),
+        utils.simulations.getAvailableSimulations.invalidate(),
+      ]);
+      
       setDeleteConfirm(null);
     },
     onError: handleMutationError,
@@ -189,6 +207,104 @@ export default function AdminSimulationsContent() {
     },
     onError: handleMutationError,
   });
+
+  // Group assignments by simulation + dates (for assignments tab)
+  interface GroupedAssignment {
+    id: string;
+    simulationId: string;
+    simulationTitle: string;
+    simulationType: SimulationType;
+    startDate: string | Date | null;
+    endDate: string | Date | null;
+    status: AssignmentStatus;
+    students: Array<{
+      id: string;
+      name: string;
+      assignmentId: string;
+      completedCount: number;
+      totalTargeted: number;
+      completionRate: number;
+    }>;
+    groups: Array<{
+      id: string;
+      name: string;
+      assignmentId: string;
+      completedCount: number;
+      totalTargeted: number;
+      completionRate: number;
+    }>;
+    completedCount: number;
+    totalTargeted: number;
+    completionRate: number;
+    createdBy: { id: string; name: string };
+  }
+
+  const groupedAssignments = useMemo((): GroupedAssignment[] => {
+    if (!assignmentsData?.assignments) return [];
+
+    const groups = new Map<string, GroupedAssignment>();
+
+    assignmentsData.assignments.forEach((assignment) => {
+      const startDateStr = assignment.startDate 
+        ? new Date(assignment.startDate).toISOString() 
+        : 'null';
+      const endDateStr = assignment.endDate 
+        ? new Date(assignment.endDate).toISOString() 
+        : 'null';
+      
+      const key = `${assignment.simulationId}-${startDateStr}-${endDateStr}-${assignment.status}`;
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          id: assignment.id,
+          simulationId: assignment.simulationId,
+          simulationTitle: assignment.simulation?.title || '-',
+          simulationType: (assignment.simulation?.type || 'PRACTICE') as SimulationType,
+          startDate: assignment.startDate || null,
+          endDate: assignment.endDate || null,
+          status: (assignment.status || 'ACTIVE') as AssignmentStatus,
+          students: [],
+          groups: [],
+          completedCount: 0,
+          totalTargeted: 0,
+          completionRate: 0,
+          createdBy: assignment.assignedBy || { id: '', name: 'Sconosciuto' },
+        });
+      }
+
+      const group = groups.get(key)!;
+
+      if (assignment.student) {
+        group.students.push({
+          id: assignment.student.user.id,
+          name: assignment.student.user.name,
+          assignmentId: assignment.id,
+          completedCount: assignment.completedCount || 0,
+          totalTargeted: assignment.totalTargeted || 1,
+          completionRate: assignment.completionRate || 0,
+        });
+      } else if (assignment.group) {
+        group.groups.push({
+          id: assignment.group.id,
+          name: assignment.group.name,
+          assignmentId: assignment.id,
+          completedCount: assignment.completedCount || 0,
+          totalTargeted: assignment.totalTargeted || 0,
+          completionRate: assignment.completionRate || 0,
+        });
+      }
+
+      group.completedCount += assignment.completedCount || 0;
+      group.totalTargeted += assignment.totalTargeted || 0;
+    });
+
+    return Array.from(groups.values()).map((group) => ({
+      ...group,
+      completionRate: group.totalTargeted > 0 
+        ? (group.completedCount / group.totalTargeted) * 100 
+        : 0,
+    }));
+  }, [assignmentsData]);
 
   // Close menu on click outside
   useEffect(() => {
@@ -613,129 +729,224 @@ export default function AdminSimulationsContent() {
                     </tr>
                   </thead>
                   <tbody className={`divide-y ${colors.border.light}`}>
-                    {assignmentsData.assignments.map((assignment) => (
-                      <tr key={assignment.id} className={`${colors.background.hover}`}>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-lg ${colors.primary.light} flex items-center justify-center`}>
-                              <FileText className={`w-5 h-5 ${colors.primary.text}`} />
+                    {groupedAssignments.map((group) => {
+                      const totalCount = group.students.length + group.groups.length;
+                      const isExpanded = expandedGroups.has(group.id);
+                      const displayLimit = 3;
+                      const hasMore = totalCount > displayLimit;
+                      
+                      const visibleStudents = isExpanded ? group.students : group.students.slice(0, displayLimit);
+                      const remainingCount = totalCount - displayLimit;
+                      
+                      const toggleExpand = () => {
+                        setExpandedGroups(prev => {
+                          const next = new Set(prev);
+                          if (next.has(group.id)) {
+                            next.delete(group.id);
+                          } else {
+                            next.add(group.id);
+                          }
+                          return next;
+                        });
+                      };
+                      
+                      return (
+                        <tr key={group.id} className={`${colors.background.hover}`}>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-lg ${colors.primary.light} flex items-center justify-center flex-shrink-0`}>
+                                <FileText className={`w-5 h-5 ${colors.primary.text}`} />
+                              </div>
+                              <div className="min-w-0">
+                                <p className={`font-medium ${colors.text.primary}`}>{group.simulationTitle}</p>
+                                <p className={`text-xs ${colors.text.muted}`}>
+                                  {typeLabels[group.simulationType]}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className={`font-medium ${colors.text.primary}`}>{assignment.simulation.title}</p>
-                              <p className={`text-xs ${colors.text.muted}`}>
-                                {typeLabels[assignment.simulation.type as SimulationType]}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="space-y-1.5">
+                              <div className="flex flex-wrap gap-1.5">
+                                {visibleStudents.map((student) => (
+                                  <button
+                                    key={student.id}
+                                    onClick={() => setSelectedStudentId(student.id)}
+                                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md ${colors.primary.light} ${colors.primary.text} hover:opacity-80 transition-opacity cursor-pointer`}
+                                    title={`Clicca per visualizzare info di ${student.name}`}
+                                  >
+                                    <User className="w-3 h-3" />
+                                    {student.name}
+                                  </button>
+                                ))}
+                                {!hasMore && group.groups.map((g) => (
+                                  <span
+                                    key={g.id}
+                                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300`}
+                                    title={`Gruppo: ${g.name}`}
+                                  >
+                                    <Users className="w-3 h-3" />
+                                    {g.name}
+                                  </span>
+                                ))}
+                                {hasMore && !isExpanded && (
+                                  <button
+                                    onClick={toggleExpand}
+                                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:opacity-80 transition-opacity cursor-pointer`}
+                                    title="Clicca per mostrare tutti"
+                                  >
+                                    +{remainingCount} altr{remainingCount === 1 ? 'o' : 'i'}
+                                  </button>
+                                )}
+                                {hasMore && isExpanded && (
+                                  <button
+                                    onClick={toggleExpand}
+                                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:opacity-80 transition-opacity cursor-pointer`}
+                                  >
+                                    Mostra meno
+                                  </button>
+                                )}
+                              </div>
+                              <p className={`text-[10px] ${colors.text.muted}`}>
+                                Creata da: {group.createdBy.name}
                               </p>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <Users className={`w-4 h-4 ${colors.text.muted}`} />
-                            <span className={colors.text.secondary}>
-                              {assignment.student?.user?.name 
-                                || assignment.group?.name 
-                                || '-'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${assignmentStatusColors[group.status]}`}>
+                              {assignmentStatusLabels[group.status]}
                             </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${assignmentStatusColors[(assignment as { status?: AssignmentStatus }).status || 'ACTIVE']}`}>
-                            {assignmentStatusLabels[(assignment as { status?: AssignmentStatus }).status || 'ACTIVE']}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`text-sm ${colors.text.secondary}`}>
-                            {(assignment as { startDate?: string | Date | null }).startDate 
-                              ? new Date((assignment as { startDate: string | Date }).startDate).toLocaleDateString('it-IT', { 
-                                  day: '2-digit', 
-                                  month: 'short', 
-                                  year: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })
-                              : '-'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`text-sm ${colors.text.secondary}`}>
-                            {(assignment as { endDate?: string | Date | null }).endDate 
-                              ? new Date((assignment as { endDate: string | Date }).endDate).toLocaleDateString('it-IT', { 
-                                  day: '2-digit', 
-                                  month: 'short', 
-                                  year: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })
-                              : '-'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-2 rounded-full bg-gray-200 dark:bg-gray-700 max-w-[80px]">
-                              <div 
-                                className={`h-full rounded-full ${
-                                  assignment.completionRate >= 80 
-                                    ? 'bg-green-500' 
-                                    : assignment.completionRate >= 50 
-                                    ? 'bg-yellow-500' 
-                                    : 'bg-red-500'
-                                }`}
-                                style={{ width: `${assignment.completionRate}%` }}
-                              />
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="flex flex-col gap-0.5">
+                              <span className={`text-xs ${colors.text.secondary}`}>
+                                {group.startDate 
+                                  ? new Date(group.startDate).toLocaleDateString('it-IT', { 
+                                      day: '2-digit', 
+                                      month: 'short', 
+                                      year: 'numeric'
+                                    })
+                                  : '-'}
+                              </span>
+                              <span className={`text-[10px] ${colors.text.muted}`}>
+                                {group.startDate 
+                                  ? new Date(group.startDate).toLocaleTimeString('it-IT', { 
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })
+                                  : ''}
+                              </span>
                             </div>
-                            <span className={`text-sm ${colors.text.secondary} whitespace-nowrap`}>
-                              {assignment.completedCount}/{assignment.totalTargeted}
-                            </span>
-                            {assignment.completionRate === 100 && (
-                              <CheckCircle className="w-4 h-4 text-green-500" />
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {/* Close/Reopen button */}
-                            {(assignment as { status?: AssignmentStatus }).status === 'CLOSED' ? (
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="flex flex-col gap-0.5">
+                              <span className={`text-xs ${colors.text.secondary}`}>
+                                {group.endDate 
+                                  ? new Date(group.endDate).toLocaleDateString('it-IT', { 
+                                      day: '2-digit', 
+                                      month: 'short', 
+                                      year: 'numeric'
+                                    })
+                                  : '-'}
+                              </span>
+                              <span className={`text-[10px] ${colors.text.muted}`}>
+                                {group.endDate 
+                                  ? new Date(group.endDate).toLocaleTimeString('it-IT', { 
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })
+                                  : ''}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-2 rounded-full bg-gray-200 dark:bg-gray-700 max-w-[80px]">
+                                <div 
+                                  className={`h-full rounded-full ${
+                                    group.completionRate >= 80 
+                                      ? 'bg-green-500' 
+                                      : group.completionRate >= 50 
+                                      ? 'bg-yellow-500' 
+                                      : 'bg-red-500'
+                                  }`}
+                                  style={{ width: `${group.completionRate}%` }}
+                                />
+                              </div>
+                              <span className={`text-sm ${colors.text.secondary} whitespace-nowrap`}>
+                                {group.completedCount}/{group.totalTargeted}
+                              </span>
+                              {group.completionRate === 100 && (
+                                <CheckCircle className="w-4 h-4 text-green-500" />
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-2 flex-wrap">
+                              {/* Statistics - only show if assignment is closed */}
+                              {group.status === 'CLOSED' && (
+                                <Link
+                                  href={`/simulazioni/${group.simulationId}/statistiche`}
+                                  className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-purple-500 to-indigo-600 text-white hover:from-purple-600 hover:to-indigo-700 shadow-sm hover:shadow-md transition-all`}
+                                >
+                                  <BarChart3 className="w-4 h-4" />
+                                  Statistiche
+                                </Link>
+                              )}
+                              {/* Close/Reopen button - Admin can always act */}
+                              {group.status === 'CLOSED' ? (
+                                <button
+                                  onClick={() => {
+                                    const assignmentIds = [
+                                      ...group.students.map(s => s.assignmentId),
+                                      ...group.groups.map(g => g.assignmentId),
+                                    ];
+                                    reopenAssignmentMutation.mutate({ assignmentIds });
+                                  }}
+                                  disabled={reopenAssignmentMutation.isPending}
+                                  className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
+                                  title="Riapri assegnazione"
+                                >
+                                  <Unlock className="w-4 h-4" />
+                                  Riapri
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    const assignmentIds = [
+                                      ...group.students.map(s => s.assignmentId),
+                                      ...group.groups.map(g => g.assignmentId),
+                                    ];
+                                    closeAssignmentMutation.mutate({ assignmentIds });
+                                  }}
+                                  disabled={closeAssignmentMutation.isPending}
+                                  className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
+                                  title="Chiudi assegnazione"
+                                >
+                                  <Lock className="w-4 h-4" />
+                                  Chiudi
+                                </button>
+                              )}
+                              {/* Delete button - Admin can always act */}
                               <button
-                                onClick={() => reopenAssignmentMutation.mutate({ assignmentIds: [assignment.id] })}
-                                disabled={reopenAssignmentMutation.isPending}
-                                className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
-                                title="Riapri assegnazione"
+                                onClick={() => {
+                                  const firstAssignmentId = group.students[0]?.assignmentId || group.groups[0]?.assignmentId;
+                                  if (firstAssignmentId) {
+                                    removeAssignmentMutation.mutate({ assignmentId: firstAssignmentId });
+                                  }
+                                }}
+                                disabled={removeAssignmentMutation.isPending}
+                                className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
+                                title="Elimina assegnazione"
                               >
-                                <Unlock className="w-4 h-4" />
-                                Riapri
+                                <Trash2 className="w-4 h-4" />
+                                Elimina
                               </button>
-                            ) : (
-                              <button
-                                onClick={() => closeAssignmentMutation.mutate({ assignmentIds: [assignment.id] })}
-                                disabled={closeAssignmentMutation.isPending}
-                                className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
-                                title="Chiudi assegnazione"
-                              >
-                                <Lock className="w-4 h-4" />
-                                Chiudi
-                              </button>
-                            )}
-                            <Link
-                              href={`/simulazioni/${assignment.simulation.id}/statistiche`}
-                              className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg ${colors.primary.light} ${colors.primary.text} hover:opacity-80 transition-opacity`}
-                            >
-                              <BarChart3 className="w-4 h-4" />
-                              Statistiche
-                            </Link>
-                            {/* Delete button */}
-                            <button
-                              onClick={() => removeAssignmentMutation.mutate({ assignmentId: assignment.id })}
-                              disabled={removeAssignmentMutation.isPending}
-                              className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
-                              title="Elimina assegnazione"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              Elimina
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -891,7 +1102,16 @@ export default function AdminSimulationsContent() {
                 onClick={() => {
                   const sim = simulations.find(s => s.id === openMenuId);
                   if (sim) {
-                    setDeleteConfirm({ id: sim.id, title: sim.title });
+                    // Check if simulation has assignments
+                    const assignmentsCount = assignmentsData?.assignments.filter(
+                      a => a.simulationId === sim.id
+                    ).length || 0;
+                    
+                    setDeleteConfirm({ 
+                      id: sim.id, 
+                      title: sim.title,
+                      assignmentsCount 
+                    });
                   }
                   setOpenMenuId(null);
                 }}
@@ -910,7 +1130,11 @@ export default function AdminSimulationsContent() {
         <ConfirmModal
           isOpen={true}
           title="Elimina Simulazione"
-          message={`Sei sicuro di voler eliminare "${deleteConfirm.title}"? Questa azione non può essere annullata.`}
+          message={
+            deleteConfirm.assignmentsCount && deleteConfirm.assignmentsCount > 0
+              ? `Sei sicuro di voler eliminare "${deleteConfirm.title}"?\n\n⚠️ Questa simulazione è assegnata a ${deleteConfirm.assignmentsCount} studente/gruppo${deleteConfirm.assignmentsCount > 1 ? 'i' : ''} e verrà rimossa dal loro calendario.\n\nQuesta azione non può essere annullata.`
+              : `Sei sicuro di voler eliminare "${deleteConfirm.title}"? Questa azione non può essere annullata.`
+          }
           confirmText="Elimina"
           cancelText="Annulla"
           variant="danger"
@@ -945,6 +1169,15 @@ export default function AdminSimulationsContent() {
           isOfficial={assignModal.isOfficial}
           durationMinutes={assignModal.durationMinutes}
           userRole="ADMIN"
+        />
+      )}
+
+      {/* Student Detail Modal */}
+      {selectedStudentId && (
+        <StudentDetailModal
+          isOpen={true}
+          onClose={() => setSelectedStudentId(null)}
+          studentId={selectedStudentId}
         />
       )}
     </div>

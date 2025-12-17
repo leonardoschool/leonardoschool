@@ -1,15 +1,15 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
-import { useApiError } from '@/lib/hooks/useApiError';
-import { useToast } from '@/components/ui/Toast';
 import { PageLoader, Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
-import ConfirmModal from '@/components/ui/ConfirmModal';
 import { Portal } from '@/components/ui/Portal';
 import { SimulationAssignModal } from '@/components/ui/SimulationAssignModal';
+import { StudentDetailModal } from '@/components/ui/StudentDetailModal';
+import { useApiError } from '@/lib/hooks/useApiError';
+import { useToast } from '@/components/ui/Toast';
 import Link from 'next/link';
 import {
   Plus,
@@ -33,6 +33,8 @@ import {
   Lock,
   Unlock,
   Archive,
+  User,
+  AlertCircle,
 } from 'lucide-react';
 import type { SimulationType, SimulationStatus } from '@/lib/validations/simulationValidation';
 
@@ -80,9 +82,7 @@ const assignmentStatusColors: Record<AssignmentStatus, string> = {
 };
 
 export default function CollaboratorSimulationsContent() {
-  const { handleMutationError } = useApiError();
-  const { showSuccess } = useToast();
-  const utils = trpc.useUtils();
+  // Collaborators have READ-ONLY access - removed unused mutation hooks
 
   // Filters state for simulations tab (templates only)
   const [search, setSearch] = useState('');
@@ -102,10 +102,22 @@ export default function CollaboratorSimulationsContent() {
   // Action menus state
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
   const [assignModal, setAssignModal] = useState<{ id: string; title: string; isOfficial: boolean; durationMinutes: number } | null>(null);
+  
+  // Student detail modal state
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  
+  // Expanded groups state (for showing all students)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Error handling and toast notifications
+  const { handleMutationError } = useApiError();
+  const { showSuccess } = useToast();
+
+  // Get current user to check permissions
+  const { data: currentUser } = trpc.users.me.useQuery();
 
   // Fetch groups for filter
   const { data: groupsData } = trpc.groups.getGroups.useQuery({ page: 1, pageSize: 100 });
@@ -131,36 +143,12 @@ export default function CollaboratorSimulationsContent() {
     { enabled: activeTab === 'assignments' }
   );
 
-  // Mutations
-  const deleteMutation = trpc.simulations.delete.useMutation({
-    onSuccess: () => {
-      showSuccess('Eliminata', 'Simulazione eliminata con successo');
-      utils.simulations.getSimulations.invalidate();
-      setDeleteConfirm(null);
-    },
-    onError: handleMutationError,
-  });
-
-  const publishMutation = trpc.simulations.publish.useMutation({
-    onSuccess: () => {
-      showSuccess('Pubblicata', 'Simulazione pubblicata con successo');
-      utils.simulations.getSimulations.invalidate();
-    },
-    onError: handleMutationError,
-  });
-
-  const archiveMutation = trpc.simulations.archive.useMutation({
-    onSuccess: () => {
-      showSuccess('Archiviata', 'Simulazione archiviata con successo');
-      utils.simulations.getSimulations.invalidate();
-    },
-    onError: handleMutationError,
-  });
-
-  // Assignment mutations
+  // Mutations for assignment actions (collaborators can act on their own assignments)
+  const utils = trpc.useUtils();
+  
   const closeAssignmentMutation = trpc.simulations.closeAssignment.useMutation({
     onSuccess: () => {
-      showSuccess('Chiusa', 'Assegnazione chiusa con successo');
+      showSuccess('Assegnazione chiusa', 'L\'assegnazione è stata chiusa con successo.');
       utils.simulations.getAssignments.invalidate();
     },
     onError: handleMutationError,
@@ -168,7 +156,7 @@ export default function CollaboratorSimulationsContent() {
 
   const reopenAssignmentMutation = trpc.simulations.reopenAssignment.useMutation({
     onSuccess: () => {
-      showSuccess('Riaperta', 'Assegnazione riaperta con successo');
+      showSuccess('Assegnazione riaperta', 'L\'assegnazione è stata riaperta con successo.');
       utils.simulations.getAssignments.invalidate();
     },
     onError: handleMutationError,
@@ -176,11 +164,143 @@ export default function CollaboratorSimulationsContent() {
 
   const removeAssignmentMutation = trpc.simulations.removeAssignment.useMutation({
     onSuccess: () => {
-      showSuccess('Eliminata', 'Assegnazione eliminata con successo');
+      showSuccess('Assegnazione eliminata', 'L\'assegnazione è stata eliminata con successo.');
       utils.simulations.getAssignments.invalidate();
     },
     onError: handleMutationError,
   });
+
+  // Mutations for simulation status changes (collaborators can act on their own simulations)
+  const publishMutation = trpc.simulations.publish.useMutation({
+    onSuccess: () => {
+      showSuccess('Simulazione pubblicata', 'La simulazione è stata pubblicata con successo.');
+      utils.simulations.getSimulations.invalidate();
+    },
+    onError: handleMutationError,
+  });
+
+  const archiveMutation = trpc.simulations.archive.useMutation({
+    onSuccess: () => {
+      showSuccess('Simulazione archiviata', 'La simulazione è stata archiviata con successo.');
+      utils.simulations.getSimulations.invalidate();
+    },
+    onError: handleMutationError,
+  });
+
+  // Group assignments by simulation + dates (for assignments tab)
+  interface GroupedAssignment {
+    id: string; // Use first assignment id as group id
+    simulationId: string;
+    simulationTitle: string;
+    simulationType: SimulationType;
+    startDate: string | Date | null;
+    endDate: string | Date | null;
+    status: AssignmentStatus;
+    students: Array<{
+      id: string;
+      name: string;
+      assignmentId: string;
+      completedCount: number;
+      totalTargeted: number;
+      completionRate: number;
+    }>;
+    groups: Array<{
+      id: string;
+      name: string;
+      assignmentId: string;
+      completedCount: number;
+      totalTargeted: number;
+      completionRate: number;
+    }>;
+    completedCount: number;
+    totalTargeted: number;
+    completionRate: number;
+    createdBy: { id: string; name: string };
+  }
+
+  const groupedAssignments = useMemo((): GroupedAssignment[] => {
+    if (!assignmentsData?.assignments) return [];
+
+    const groups = new Map<string, GroupedAssignment>();
+
+    assignmentsData.assignments.forEach((assignment) => {
+      const startDateStr = assignment.startDate 
+        ? new Date(assignment.startDate).toISOString() 
+        : 'null';
+      const endDateStr = assignment.endDate 
+        ? new Date(assignment.endDate).toISOString() 
+        : 'null';
+      
+      // Group key: simulationId + startDate + endDate + status
+      const key = `${assignment.simulationId}-${startDateStr}-${endDateStr}-${assignment.status}`;
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          id: assignment.id,
+          simulationId: assignment.simulationId,
+          simulationTitle: assignment.simulation?.title || '-',
+          simulationType: (assignment.simulation?.type || 'PRACTICE') as SimulationType,
+          startDate: assignment.startDate || null,
+          endDate: assignment.endDate || null,
+          status: (assignment.status || 'ACTIVE') as AssignmentStatus,
+          students: [],
+          groups: [],
+          completedCount: 0,
+          totalTargeted: 0,
+          completionRate: 0,
+          createdBy: assignment.assignedBy || { id: '', name: 'Sconosciuto' },
+        });
+      }
+
+      const group = groups.get(key)!;
+
+      // Add student or group to the grouped assignment
+      if (assignment.student) {
+        group.students.push({
+          id: assignment.student.user.id,
+          name: assignment.student.user.name,
+          assignmentId: assignment.id,
+          completedCount: assignment.completedCount || 0,
+          totalTargeted: assignment.totalTargeted || 1,
+          completionRate: assignment.completionRate || 0,
+        });
+      } else if (assignment.group) {
+        group.groups.push({
+          id: assignment.group.id,
+          name: assignment.group.name,
+          assignmentId: assignment.id,
+          completedCount: assignment.completedCount || 0,
+          totalTargeted: assignment.totalTargeted || 0,
+          completionRate: assignment.completionRate || 0,
+        });
+      }
+
+      // Update totals
+      group.completedCount += assignment.completedCount || 0;
+      group.totalTargeted += assignment.totalTargeted || 0;
+    });
+
+    // Calculate overall completion rate for each group
+    return Array.from(groups.values()).map((group) => ({
+      ...group,
+      completionRate: group.totalTargeted > 0 
+        ? (group.completedCount / group.totalTargeted) * 100 
+        : 0,
+    }));
+  }, [assignmentsData]);
+
+  // Permission check helpers
+  // For collaborators: they can only act on items they created
+  const canTakeAction = (createdById: string) => {
+    // User can only act on items they created
+    return currentUser?.id === createdById;
+  };
+
+  // Check if user can modify simulation (only if they created it)
+  const canModifySimulation = (simulationId: string) => {
+    const simulation = simulations.find(s => s.id === simulationId);
+    return simulation?.createdById === currentUser?.id;
+  };
 
   // Close menu on click outside
   useEffect(() => {
@@ -274,10 +394,11 @@ export default function CollaboratorSimulationsContent() {
         </Link>
       </div>
 
-      {/* Info banner */}
-      <div className={`mb-6 p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800`}>
-        <p className="text-sm text-blue-700 dark:text-blue-300">
-          <strong>Nota:</strong> Puoi creare esercitazioni e test personalizzati. Solo gli admin possono creare simulazioni ufficiali.
+      {/* Info banner for collaborators */}
+      <div className={`mb-6 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800`}>
+        <p className="text-sm text-amber-800 dark:text-amber-300">
+          <strong>Modalità Collaboratore:</strong> Puoi creare tutte le tipologie di simulazione e assegnare ai tuoi gruppi. 
+          Le simulazioni possono essere modificate o eliminate solo dagli amministratori.
         </p>
       </div>
 
@@ -606,129 +727,242 @@ export default function CollaboratorSimulationsContent() {
                     </tr>
                   </thead>
                   <tbody className={`divide-y ${colors.border.light}`}>
-                    {assignmentsData.assignments.map((assignment) => (
-                      <tr key={assignment.id} className={`${colors.background.hover}`}>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-lg ${colors.primary.light} flex items-center justify-center`}>
-                              <FileText className={`w-5 h-5 ${colors.primary.text}`} />
+                    {groupedAssignments.map((group) => {
+                      const hasPermission = canTakeAction(group.createdBy.id);
+                      const totalCount = group.students.length + group.groups.length;
+                      const isExpanded = expandedGroups.has(group.id);
+                      const displayLimit = 3;
+                      const hasMore = totalCount > displayLimit;
+                      
+                      // Determine which students/groups to show
+                      const visibleStudents = isExpanded ? group.students : group.students.slice(0, displayLimit);
+                      const remainingCount = totalCount - displayLimit;
+                      
+                      const toggleExpand = () => {
+                        setExpandedGroups(prev => {
+                          const next = new Set(prev);
+                          if (next.has(group.id)) {
+                            next.delete(group.id);
+                          } else {
+                            next.add(group.id);
+                          }
+                          return next;
+                        });
+                      };
+                      
+                      return (
+                        <tr key={group.id} className={`${colors.background.hover}`}>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-lg ${colors.primary.light} flex items-center justify-center flex-shrink-0`}>
+                                <FileText className={`w-5 h-5 ${colors.primary.text}`} />
+                              </div>
+                              <div className="min-w-0">
+                                <p className={`font-medium ${colors.text.primary}`}>{group.simulationTitle}</p>
+                                <p className={`text-xs ${colors.text.muted}`}>
+                                  {typeLabels[group.simulationType]}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className={`font-medium ${colors.text.primary}`}>{assignment.simulation?.title}</p>
-                              <p className={`text-xs ${colors.text.muted}`}>
-                                {typeLabels[assignment.simulation?.type as SimulationType]}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="space-y-1.5">
+                              <div className="flex flex-wrap gap-1.5">
+                                {/* Show students */}
+                                {visibleStudents.map((student) => (
+                                  <button
+                                    key={student.id}
+                                    onClick={() => setSelectedStudentId(student.id)}
+                                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md ${colors.primary.light} ${colors.primary.text} hover:opacity-80 transition-opacity cursor-pointer`}
+                                    title={`Clicca per visualizzare info di ${student.name}`}
+                                  >
+                                    <User className="w-3 h-3" />
+                                    {student.name}
+                                  </button>
+                                ))}
+                                {/* Show groups only if not truncating students */}
+                                {!hasMore && group.groups.map((g) => (
+                                  <span
+                                    key={g.id}
+                                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300`}
+                                    title={`Gruppo: ${g.name}`}
+                                  >
+                                    <Users className="w-3 h-3" />
+                                    {g.name}
+                                  </span>
+                                ))}
+                                {/* Expand/collapse button if many */}
+                                {hasMore && !isExpanded && (
+                                  <button
+                                    onClick={toggleExpand}
+                                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:opacity-80 transition-opacity cursor-pointer`}
+                                    title="Clicca per mostrare tutti"
+                                  >
+                                    +{remainingCount} altr{remainingCount === 1 ? 'o' : 'i'}
+                                  </button>
+                                )}
+                                {hasMore && isExpanded && (
+                                  <button
+                                    onClick={toggleExpand}
+                                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:opacity-80 transition-opacity cursor-pointer`}
+                                  >
+                                    Mostra meno
+                                  </button>
+                                )}
+                              </div>
+                              {/* Show creator for reference */}
+                              <p className={`text-[10px] ${colors.text.muted}`}>
+                                Creata da: {group.createdBy.name}
                               </p>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <Users className={`w-4 h-4 ${colors.text.muted}`} />
-                            <span className={colors.text.secondary}>
-                              {assignment.student?.user?.name 
-                                || assignment.group?.name 
-                                || '-'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${assignmentStatusColors[group.status]}`}>
+                              {assignmentStatusLabels[group.status]}
                             </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${assignmentStatusColors[(assignment as { status?: AssignmentStatus }).status || 'ACTIVE']}`}>
-                            {assignmentStatusLabels[(assignment as { status?: AssignmentStatus }).status || 'ACTIVE']}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`text-sm ${colors.text.secondary}`}>
-                            {(assignment as { startDate?: string | Date | null }).startDate 
-                              ? new Date((assignment as { startDate: string | Date }).startDate).toLocaleDateString('it-IT', { 
-                                  day: '2-digit', 
-                                  month: 'short', 
-                                  year: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })
-                              : '-'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`text-sm ${colors.text.secondary}`}>
-                            {(assignment as { endDate?: string | Date | null }).endDate 
-                              ? new Date((assignment as { endDate: string | Date }).endDate).toLocaleDateString('it-IT', { 
-                                  day: '2-digit', 
-                                  month: 'short', 
-                                  year: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })
-                              : '-'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-2 rounded-full bg-gray-200 dark:bg-gray-700 max-w-[80px]">
-                              <div 
-                                className={`h-full rounded-full ${
-                                  (assignment.completionRate ?? 0) >= 80 
-                                    ? 'bg-green-500' 
-                                    : (assignment.completionRate ?? 0) >= 50 
-                                    ? 'bg-yellow-500' 
-                                    : 'bg-red-500'
-                                }`}
-                                style={{ width: `${assignment.completionRate ?? 0}%` }}
-                              />
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="flex flex-col gap-0.5">
+                              <span className={`text-xs ${colors.text.secondary}`}>
+                                {group.startDate 
+                                  ? new Date(group.startDate).toLocaleDateString('it-IT', { 
+                                      day: '2-digit', 
+                                      month: 'short', 
+                                      year: 'numeric'
+                                    })
+                                  : '-'}
+                              </span>
+                              <span className={`text-[10px] ${colors.text.muted}`}>
+                                {group.startDate 
+                                  ? new Date(group.startDate).toLocaleTimeString('it-IT', { 
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })
+                                  : ''}
+                              </span>
                             </div>
-                            <span className={`text-sm ${colors.text.secondary} whitespace-nowrap`}>
-                              {assignment.completedCount ?? 0}/{assignment.totalTargeted ?? 0}
-                            </span>
-                            {assignment.completionRate === 100 && (
-                              <CheckCircle className="w-4 h-4 text-green-500" />
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {/* Close/Reopen button */}
-                            {(assignment as { status?: AssignmentStatus }).status === 'CLOSED' ? (
-                              <button
-                                onClick={() => reopenAssignmentMutation.mutate({ assignmentIds: [assignment.id] })}
-                                disabled={reopenAssignmentMutation.isPending}
-                                className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
-                                title="Riapri assegnazione"
-                              >
-                                <Unlock className="w-4 h-4" />
-                                Riapri
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => closeAssignmentMutation.mutate({ assignmentIds: [assignment.id] })}
-                                disabled={closeAssignmentMutation.isPending}
-                                className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
-                                title="Chiudi assegnazione"
-                              >
-                                <Lock className="w-4 h-4" />
-                                Chiudi
-                              </button>
-                            )}
-                            <Link
-                              href={`/simulazioni/${assignment.simulation?.id}/statistiche`}
-                              className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg ${colors.primary.light} ${colors.primary.text} hover:opacity-80 transition-opacity`}
-                            >
-                              <BarChart3 className="w-4 h-4" />
-                              Statistiche
-                            </Link>
-                            {/* Delete button */}
-                            <button
-                              onClick={() => removeAssignmentMutation.mutate({ assignmentId: assignment.id })}
-                              disabled={removeAssignmentMutation.isPending}
-                              className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
-                              title="Elimina assegnazione"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              Elimina
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="flex flex-col gap-0.5">
+                              <span className={`text-xs ${colors.text.secondary}`}>
+                                {group.endDate 
+                                  ? new Date(group.endDate).toLocaleDateString('it-IT', { 
+                                      day: '2-digit', 
+                                      month: 'short', 
+                                      year: 'numeric'
+                                    })
+                                  : '-'}
+                              </span>
+                              <span className={`text-[10px] ${colors.text.muted}`}>
+                                {group.endDate 
+                                  ? new Date(group.endDate).toLocaleTimeString('it-IT', { 
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })
+                                  : ''}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-2 rounded-full bg-gray-200 dark:bg-gray-700 max-w-[80px]">
+                                <div 
+                                  className={`h-full rounded-full ${
+                                    group.completionRate >= 80 
+                                      ? 'bg-green-500' 
+                                      : group.completionRate >= 50 
+                                      ? 'bg-yellow-500' 
+                                      : 'bg-red-500'
+                                  }`}
+                                  style={{ width: `${group.completionRate}%` }}
+                                />
+                              </div>
+                              <span className={`text-sm ${colors.text.secondary} whitespace-nowrap`}>
+                                {group.completedCount}/{group.totalTargeted}
+                              </span>
+                              {group.completionRate === 100 && (
+                                <CheckCircle className="w-4 h-4 text-green-500" />
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-2 flex-wrap">
+                              {/* Statistics - only show if assignment is closed AND has completions */}
+                              {group.status === 'CLOSED' && group.completedCount > 0 && (
+                                <Link
+                                  href={`/simulazioni/${group.simulationId}/statistiche`}
+                                  className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-purple-500 to-indigo-600 text-white hover:from-purple-600 hover:to-indigo-700 shadow-sm hover:shadow-md transition-all`}
+                                >
+                                  <BarChart3 className="w-4 h-4" />
+                                  Statistiche
+                                </Link>
+                              )}
+                              
+                              {/* Action buttons - only if has permission */}
+                              {hasPermission ? (
+                                <>
+                                  {/* Close/Reopen button */}
+                                  {group.status === 'CLOSED' ? (
+                                    <button
+                                      onClick={() => {
+                                        const assignmentIds = [
+                                          ...group.students.map(s => s.assignmentId),
+                                          ...group.groups.map(g => g.assignmentId),
+                                        ];
+                                        reopenAssignmentMutation.mutate({ assignmentIds });
+                                      }}
+                                      disabled={reopenAssignmentMutation.isPending}
+                                      className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
+                                      title="Riapri assegnazione"
+                                    >
+                                      <Unlock className="w-4 h-4" />
+                                      Riapri
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => {
+                                        const assignmentIds = [
+                                          ...group.students.map(s => s.assignmentId),
+                                          ...group.groups.map(g => g.assignmentId),
+                                        ];
+                                        closeAssignmentMutation.mutate({ assignmentIds });
+                                      }}
+                                      disabled={closeAssignmentMutation.isPending}
+                                      className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
+                                      title="Chiudi assegnazione"
+                                    >
+                                      <Lock className="w-4 h-4" />
+                                      Chiudi
+                                    </button>
+                                  )}
+                                  {/* Delete button */}
+                                  <button
+                                    onClick={() => {
+                                      // Delete first assignment (will need to loop if we want to delete all)
+                                      const firstAssignmentId = group.students[0]?.assignmentId || group.groups[0]?.assignmentId;
+                                      if (firstAssignmentId) {
+                                        removeAssignmentMutation.mutate({ assignmentId: firstAssignmentId });
+                                      }
+                                    }}
+                                    disabled={removeAssignmentMutation.isPending}
+                                    className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
+                                    title="Elimina assegnazione"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                    Elimina
+                                  </button>
+                                </>
+                              ) : (
+                                <div className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400`} title="Solo l'amministratore o il creatore può modificare questa assegnazione">
+                                  <AlertCircle className="w-3 h-3" />
+                                  Sola lettura
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -844,31 +1078,32 @@ export default function CollaboratorSimulationsContent() {
                 Assegna a studenti
               </button>
               
-              {/* Pubblica - only for DRAFT */}
-              {simulations.find(s => s.id === openMenuId)?.status === 'DRAFT' && (
+              {/* Pubblica - only for DRAFT and if user created it */}
+              {simulations.find(s => s.id === openMenuId)?.status === 'DRAFT' && 
+               canModifySimulation(openMenuId) && (
                 <button
                   onClick={() => {
                     publishMutation.mutate({ id: openMenuId });
                     setOpenMenuId(null);
                   }}
-                  className={`w-full flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm sm:text-sm rounded-lg text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors touch-manipulation`}
+                  disabled={publishMutation.isPending}
+                  className={`w-full flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm sm:text-sm rounded-lg text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors touch-manipulation disabled:opacity-50`}
                 >
                   <Send className="w-5 h-5 sm:w-4 sm:h-4" />
                   Pubblica
                 </button>
               )}
               
-              {/* Archivia - only for PUBLISHED */}
-              {simulations.find(s => s.id === openMenuId)?.status === 'PUBLISHED' && (
+              {/* Archivia - only for PUBLISHED and if user created it */}
+              {simulations.find(s => s.id === openMenuId)?.status === 'PUBLISHED' && 
+               canModifySimulation(openMenuId) && (
                 <button
                   onClick={() => {
-                    const sim = simulations.find(s => s.id === openMenuId);
-                    if (sim) {
-                      archiveMutation.mutate({ id: sim.id });
-                    }
+                    archiveMutation.mutate({ id: openMenuId });
                     setOpenMenuId(null);
                   }}
-                  className={`w-full flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm sm:text-sm rounded-lg text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors touch-manipulation`}
+                  disabled={archiveMutation.isPending}
+                  className={`w-full flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm sm:text-sm rounded-lg text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors touch-manipulation disabled:opacity-50`}
                 >
                   <Archive className="w-5 h-5 sm:w-4 sm:h-4" />
                   Archivia
@@ -876,39 +1111,9 @@ export default function CollaboratorSimulationsContent() {
               )}
             </div>
             
-            <hr className={`my-1 ${colors.border.light}`} />
-            
-            {/* Danger Zone */}
-            <div className="px-3 sm:px-2 pt-1 pb-4 sm:pb-1">
-              <button
-                onClick={() => {
-                  const sim = simulations.find(s => s.id === openMenuId);
-                  if (sim) setDeleteConfirm({ id: sim.id, title: sim.title });
-                  setOpenMenuId(null);
-                }}
-                className={`w-full flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm sm:text-sm rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors touch-manipulation`}
-              >
-                <Trash2 className="w-5 h-5 sm:w-4 sm:h-4" />
-                Elimina
-              </button>
-            </div>
+            {/* Collaborators cannot delete simulations - admin only */}
           </div>
         </Portal>
-      )}
-
-      {/* Delete Modal */}
-      {deleteConfirm && (
-        <ConfirmModal
-          isOpen={true}
-          title="Elimina Simulazione"
-          message={`Sei sicuro di voler eliminare "${deleteConfirm.title}"?`}
-          confirmText="Elimina"
-          cancelText="Annulla"
-          variant="danger"
-          isLoading={deleteMutation.isPending}
-          onConfirm={() => deleteMutation.mutate({ id: deleteConfirm.id })}
-          onCancel={() => setDeleteConfirm(null)}
-        />
       )}
 
       {/* Assign Modal */}
@@ -921,6 +1126,15 @@ export default function CollaboratorSimulationsContent() {
           isOfficial={assignModal.isOfficial}
           durationMinutes={assignModal.durationMinutes}
           userRole="COLLABORATOR"
+        />
+      )}
+
+      {/* Student Detail Modal */}
+      {selectedStudentId && (
+        <StudentDetailModal
+          isOpen={true}
+          onClose={() => setSelectedStudentId(null)}
+          studentId={selectedStudentId}
         />
       )}
     </div>

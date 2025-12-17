@@ -270,23 +270,10 @@ export async function sendSimulationNotifications(
     // Use assignment dates if simulation doesn't have dates
     const effectiveStartDate = simulation.startDate || assignments[0]?.startDate;
     const effectiveEndDate = simulation.endDate || assignments[0]?.endDate;
-    
-    // Create a modified simulation object with effective dates for calendar/email
-    const simulationWithDates = {
-      ...simulation,
-      startDate: effectiveStartDate || null,
-      endDate: effectiveEndDate || null,
-    };
 
-    // 1. Create calendar event (only if we have a start date)
-    if (effectiveStartDate) {
-      result.calendarEventId = await createSimulationCalendarEvent(prisma, simulationWithDates as SimulationWithRelations & { startDate: Date }, createdByUser);
-    }
-
-    // 2. Create event invitations if calendar event was created
-    if (result.calendarEventId) {
-      await createSimulationEventInvitations(prisma, result.calendarEventId, assignments);
-    }
+    // NOTE: Calendar events are now created in the router (addAssignments)
+    // based on the createCalendarEvent flag for each assignment.
+    // We skip calendar event creation here to avoid duplicates.
 
     // 3. Get all invitee data (emails and user IDs)
     const invitees = await getAssignedStudentEmails(prisma, assignments);

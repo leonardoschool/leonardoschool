@@ -15,6 +15,7 @@ export const PAGE_PERMISSIONS: Record<string, PermissionRole[]> = {
   // Common pages - all authenticated users
   '/dashboard': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
   '/simulazioni': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
+  '/simulazioni/nuova': ['ADMIN', 'COLLABORATOR'], // Create simulation page - staff only
   '/calendario': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
   '/messaggi': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
   '/notifiche': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
