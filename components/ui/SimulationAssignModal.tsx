@@ -75,9 +75,37 @@ export function SimulationAssignModal({
   // Info modals
   const [viewGroupId, setViewGroupId] = useState<string | null>(null);
   const [viewUserId, setViewUserId] = useState<string | null>(null);
+  
+  // Track groups with members that have any assignments (direct or from other groups)
+  const [groupsWithConflicts, setGroupsWithConflicts] = useState<
+    Record<string, { 
+      count: number; 
+      members: Array<{ 
+        name: string; 
+        isDirect: boolean; 
+        fromGroups: string[] 
+      }> 
+    }>
+  >();
 
   // Collaborators only see their groups/students
   const isCollaborator = userRole === 'COLLABORATOR';
+
+  // Fetch existing assignments for this simulation
+  const { data: existingAssignments } = trpc.simulations.getExistingAssignmentIds.useQuery(
+    { simulationId },
+    { enabled: isOpen && !!simulationId }
+  );
+
+  // Sets of already assigned IDs
+  const alreadyAssignedStudentIds = useMemo(
+    () => new Set(existingAssignments?.assignedStudentIds ?? []),
+    [existingAssignments]
+  );
+  const alreadyAssignedGroupIds = useMemo(
+    () => new Set(existingAssignments?.assignedGroupIds ?? []),
+    [existingAssignments]
+  );
 
   // Calculate end date automatically when using single date mode
   useEffect(() => {
@@ -115,11 +143,14 @@ export function SimulationAssignModal({
   }, [groupsData]);
 
   const students = useMemo(() => {
-    return (studentsData?.students ?? []).map((s) => ({
-      id: s.id,
-      name: s.name ?? '',
-      matricola: s.matricola ?? '',
-    }));
+    return (studentsData?.students ?? [])
+      .filter((s) => s.studentId) // Only include users with student records
+      .map((s) => ({
+        id: s.studentId!, // Use studentId, not user id
+        userId: s.id, // Keep userId for info modal
+        name: s.name ?? '',
+        matricola: s.matricola ?? '',
+      }));
   }, [studentsData]);
 
   // Filter by search
@@ -169,16 +200,83 @@ export function SimulationAssignModal({
       prev.includes(studentId) ? prev.filter((id) => id !== studentId) : [...prev, studentId]
     );
   };
+  
+  // Check for group members already assigned (direct or from other groups)
+  useEffect(() => {
+    const checkGroups = async () => {
+      const newGroupsWithConflicts: Record<string, { 
+        count: number; 
+        members: Array<{ name: string; isDirect: boolean; fromGroups: string[] }> 
+      }> = {};
+      
+      for (const groupId of selectedGroupIds) {
+        if (alreadyAssignedGroupIds.has(groupId)) continue; // Skip already assigned groups
+        
+        try {
+          const result = await utils.simulations.getGroupMembersAlreadyAssigned.fetch({
+            simulationId,
+            groupId,
+          });
+          
+          if (result.countAlreadyAssigned > 0) {
+            newGroupsWithConflicts[groupId] = {
+              count: result.countAlreadyAssigned,
+              members: result.membersAlreadyAssigned.map((m) => ({
+                name: m.name || 'Sconosciuto',
+                isDirect: m.isDirect,
+                fromGroups: m.fromGroups,
+              })),
+            };
+          }
+        } catch {
+          // Ignore errors
+        }
+      }
+      
+      setGroupsWithConflicts(newGroupsWithConflicts);
+    };
+    
+    if (selectedGroupIds.length > 0) {
+      checkGroups();
+    } else {
+      setGroupsWithConflicts({});
+    }
+  }, [selectedGroupIds, alreadyAssignedGroupIds, simulationId, utils]);
 
   // Mutation
   const assignMutation = trpc.simulations.addAssignments.useMutation({
-    onSuccess: () => {
-      showSuccess('Simulazione assegnata', 'La simulazione è stata assegnata con successo.');
+    onSuccess: (data) => {
+      if (data.duplicates && data.duplicates > 0) {
+        showSuccess(
+          'Simulazione assegnata',
+          `Assegnati ${data.created} destinatari. ${data.duplicates} erano già assegnati.`
+        );
+      } else {
+        showSuccess('Simulazione assegnata', 'La simulazione è stata assegnata con successo.');
+      }
       utils.simulations.invalidate();
       handleClose();
     },
     onError: handleMutationError,
   });
+
+  // Remove assignment mutation (for reassigning)
+  const removeAssignmentMutation = trpc.simulations.removeAssignment.useMutation({
+    onSuccess: () => {
+      utils.simulations.invalidate();
+    },
+    onError: handleMutationError,
+  });
+
+  // Handle reassign - remove existing assignment and enable selection
+  const handleReassign = (studentId: string) => {
+    const assignment = existingAssignments?.assignments.find(
+      (a) => a.studentId === studentId
+    );
+    if (assignment) {
+      removeAssignmentMutation.mutate({ assignmentId: assignment.id });
+    }
+  };
 
   const resetForm = () => {
     setSelectedGroupIds([]);
@@ -217,7 +315,6 @@ export function SimulationAssignModal({
       startDate: string;
       endDate: string;
       locationType: LocationType;
-      locationDetails?: string;
       groupId?: string;
       studentId?: string;
     }> = [];
@@ -227,7 +324,6 @@ export function SimulationAssignModal({
         startDate: isoStartDate,
         endDate: isoEndDate,
         locationType,
-        locationDetails: locationDetails || undefined,
         groupId,
       });
     }
@@ -236,7 +332,6 @@ export function SimulationAssignModal({
         startDate: isoStartDate,
         endDate: isoEndDate,
         locationType,
-        locationDetails: locationDetails || undefined,
         studentId,
       });
     }
@@ -359,31 +454,68 @@ export function SimulationAssignModal({
                 </div>
               ) : (
                 <div className="divide-y divide-gray-100 dark:divide-slate-700">
-                  {filteredGroups.map((group) => (
-                    <div
-                      key={group.id}
-                      className={`flex items-center justify-between px-4 py-3 ${colors.background.cardHover} transition-colors`}
-                    >
-                      <div className="flex items-center gap-3 flex-1">
-                        <Checkbox
-                          checked={selectedGroupIds.includes(group.id)}
-                          onChange={() => handleGroupToggle(group.id)}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className={`font-medium ${colors.text.primary} truncate`}>{group.name}</p>
-                          <p className={`text-xs ${colors.text.tertiary}`}>{group.memberCount} studenti</p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setViewGroupId(group.id)}
-                        className={`p-1.5 rounded-lg ${colors.text.secondary} hover:text-[#a8012b] hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors`}
-                        title="Visualizza info gruppo"
+                  {filteredGroups.map((group) => {
+                    const isAlreadyAssigned = alreadyAssignedGroupIds.has(group.id);
+                    const isSelected = selectedGroupIds.includes(group.id);
+                    return (
+                      <div
+                        key={group.id}
+                        className={`px-4 py-3 ${isAlreadyAssigned ? 'opacity-60' : ''} ${colors.background.cardHover} transition-colors`}
                       >
-                        <Info className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 flex-1">
+                            <Checkbox
+                              checked={isSelected}
+                              onChange={() => handleGroupToggle(group.id)}
+                              disabled={isAlreadyAssigned}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className={`font-medium ${colors.text.primary} truncate`}>{group.name}</p>
+                                {isAlreadyAssigned && (
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                                    Già assegnato
+                                  </span>
+                                )}
+                              </div>
+                              <p className={`text-xs ${colors.text.tertiary}`}>{group.memberCount} studenti</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setViewGroupId(group.id)}
+                            className={`p-1.5 rounded-lg ${colors.text.secondary} hover:text-[#a8012b] hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors`}
+                            title="Visualizza info gruppo"
+                          >
+                            <Info className="w-4 h-4" />
+                          </button>
+                        </div>
+                        {/* Warning for members already assigned */}
+                        {isSelected && groupsWithConflicts?.[group.id] && groupsWithConflicts[group.id].count > 0 && (
+                          <div className="mt-2 ml-8 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                            <p className="text-xs text-amber-700 dark:text-amber-300 font-medium mb-1">
+                              ⚠️ {groupsWithConflicts[group.id].count} {groupsWithConflicts[group.id].count === 1 ? 'membro ha' : 'membri hanno'} già questa simulazione:
+                            </p>
+                            <ul className="text-xs text-amber-700 dark:text-amber-300 space-y-1 ml-4">
+                              {groupsWithConflicts[group.id].members.slice(0, 3).map((member, idx) => (
+                                <li key={idx}>
+                                  <strong>{member.name}</strong> - {member.isDirect ? 'Assegnazione diretta' : `Via ${member.fromGroups.join(', ')}`}
+                                </li>
+                              ))}
+                              {groupsWithConflicts[group.id].members.length > 3 && (
+                                <li className="text-xs italic">
+                                  ...e altri {groupsWithConflicts[group.id].members.length - 3}
+                                </li>
+                              )}
+                            </ul>
+                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 italic">
+                              Questi studenti verranno saltati (duplicati)
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -438,31 +570,52 @@ export function SimulationAssignModal({
                 </div>
               ) : (
                 <div className="divide-y divide-gray-100 dark:divide-slate-700">
-                  {filteredStudents.map((student) => (
-                    <div
-                      key={student.id}
-                      className={`flex items-center justify-between px-4 py-3 ${colors.background.cardHover} transition-colors`}
-                    >
-                      <div className="flex items-center gap-3 flex-1">
-                        <Checkbox
-                          checked={selectedStudentIds.includes(student.id)}
-                          onChange={() => handleStudentToggle(student.id)}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className={`font-medium ${colors.text.primary} truncate`}>{student.name}</p>
-                          <p className={`text-xs ${colors.text.tertiary} truncate`}>{student.matricola}</p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setViewUserId(student.id)}
-                        className={`p-1.5 rounded-lg ${colors.text.secondary} hover:text-[#a8012b] hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors`}
-                        title="Visualizza info studente"
+                  {filteredStudents.map((student) => {
+                    const isAlreadyAssigned = alreadyAssignedStudentIds.has(student.id);
+                    const isRemoving = removeAssignmentMutation.isPending;
+                    return (
+                      <div
+                        key={student.id}
+                        className={`flex items-center justify-between px-4 py-3 ${isAlreadyAssigned ? 'opacity-60' : ''} ${colors.background.cardHover} transition-colors`}
                       >
-                        <Info className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
+                        <div className="flex items-center gap-3 flex-1">
+                          <Checkbox
+                            checked={selectedStudentIds.includes(student.id)}
+                            onChange={() => handleStudentToggle(student.id)}
+                            disabled={isAlreadyAssigned}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className={`font-medium ${colors.text.primary} truncate`}>{student.name}</p>
+                              {isAlreadyAssigned && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleReassign(student.id);
+                                  }}
+                                  disabled={isRemoving}
+                                  className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors disabled:opacity-50"
+                                  title="Rimuovi assegnazione e permetti nuova assegnazione"
+                                >
+                                    Riassegna
+                                </button>
+                              )}
+                            </div>
+                            <p className={`text-xs ${colors.text.tertiary} truncate`}>{student.matricola}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setViewUserId(student.userId)}
+                          className={`p-1.5 rounded-lg ${colors.text.secondary} hover:text-[#a8012b] hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors`}
+                          title="Visualizza info studente"
+                        >
+                          <Info className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

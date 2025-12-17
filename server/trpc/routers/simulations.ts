@@ -16,6 +16,7 @@ import {
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { notifySimulationCreated } from '@/server/services/simulationNotificationService';
 import * as notificationService from '@/server/services/notificationService';
+import { notifications } from '@/lib/notifications';
 
 // Helper function to get student from user
 async function getStudentFromUser(prisma: PrismaClient, userId: string) {
@@ -943,6 +944,7 @@ export const simulationsRouter = router({
       }
 
       // Create assignments (ignore duplicates) and auto-publish simulation
+      let duplicatesCount = 0;
       const created = await ctx.prisma.$transaction(async (tx) => {
         const results = [];
         for (const target of targets) {
@@ -963,7 +965,8 @@ export const simulationsRouter = router({
             });
             results.push(assignment);
           } catch {
-            // Ignore duplicate assignments
+            // Count duplicate assignments (already assigned)
+            duplicatesCount++;
           }
         }
 
@@ -978,6 +981,16 @@ export const simulationsRouter = router({
         return results;
       });
 
+      // If all were duplicates, throw a user-friendly error
+      if (created.length === 0 && duplicatesCount > 0) {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: duplicatesCount === 1 
+            ? 'Lo studente/gruppo selezionato è già stato assegnato a questa simulazione.'
+            : `Tutti i ${duplicatesCount} destinatari selezionati sono già stati assegnati a questa simulazione.`,
+        });
+      }
+
       // Send notifications for newly added assignments
       if (created.length > 0) {
         // Fire and forget - don't block the response
@@ -986,7 +999,236 @@ export const simulationsRouter = router({
         });
       }
 
-      return { created: created.length };
+      return { 
+        created: created.length,
+        duplicates: duplicatesCount,
+      };
+    }),
+
+  // Get existing assignments for a simulation (for the assign modal)
+  getExistingAssignmentIds: staffProcedure
+    .input(z.object({ simulationId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const assignments = await ctx.prisma.simulationAssignment.findMany({
+        where: { simulationId: input.simulationId },
+        select: {
+          id: true,
+          studentId: true,
+          groupId: true,
+          startDate: true,
+          endDate: true,
+        },
+      });
+
+      // Get directly assigned student IDs
+      const directlyAssignedStudentIds = assignments
+        .filter(a => a.studentId)
+        .map(a => a.studentId as string);
+
+      return {
+        assignedStudentIds: directlyAssignedStudentIds,
+        assignedGroupIds: assignments
+          .filter(a => a.groupId)
+          .map(a => a.groupId as string),
+        assignments: assignments.map(a => ({
+          id: a.id,
+          studentId: a.studentId,
+          groupId: a.groupId,
+          startDate: a.startDate,
+          endDate: a.endDate,
+        })),
+        // This will be used to show warnings when selecting groups
+        directlyAssignedStudentIds,
+      };
+    }),
+
+  // Get students in a group that already have direct assignments for a simulation
+  getGroupMembersWithDirectAssignment: staffProcedure
+    .input(z.object({ 
+      simulationId: z.string(),
+      groupId: z.string(),
+    }))
+    .query(async ({ ctx, input }) => {
+      // Get all members of the group
+      const groupMembers = await ctx.prisma.groupMember.findMany({
+        where: { groupId: input.groupId },
+        select: { 
+          studentId: true,
+          student: {
+            select: {
+              id: true,
+              user: { select: { name: true } },
+            },
+          },
+        },
+      });
+
+      // Get students directly assigned to this simulation
+      const directAssignments = await ctx.prisma.simulationAssignment.findMany({
+        where: { 
+          simulationId: input.simulationId,
+          studentId: { not: null },
+        },
+        select: { studentId: true },
+      });
+      const directlyAssignedIds = new Set(directAssignments.map(a => a.studentId));
+
+      // Find group members who have direct assignments
+      const membersWithDirectAssignment = groupMembers
+        .filter(m => directlyAssignedIds.has(m.studentId))
+        .map(m => ({
+          studentId: m.studentId,
+          name: m.student.user.name,
+        }));
+
+      return {
+        totalMembers: groupMembers.length,
+        membersWithDirectAssignment,
+        countWithDirectAssignment: membersWithDirectAssignment.length,
+      };
+    }),
+
+  // Get group members who already have this simulation (direct OR from other groups)
+  getGroupMembersAlreadyAssigned: staffProcedure
+    .input(z.object({
+      groupId: z.string(),
+      simulationId: z.string(),
+    }))
+    .query(async ({ ctx, input }) => {
+      // Get all members of the group
+      const groupMembers = await ctx.prisma.groupMember.findMany({
+        where: { groupId: input.groupId },
+        select: { 
+          studentId: true,
+          student: {
+            select: {
+              id: true,
+              user: { select: { name: true } },
+            },
+          },
+        },
+      });
+
+      // Get ALL assignments for this simulation (direct + from any group)
+      const allAssignments = await ctx.prisma.simulationAssignment.findMany({
+        where: { 
+          simulationId: input.simulationId,
+          OR: [
+            { studentId: { not: null } },
+            { groupId: { not: null } },
+          ],
+        },
+        select: { 
+          studentId: true,
+          groupId: true,
+          group: { select: { name: true } },
+        },
+      });
+
+      // Build set of assigned student IDs
+      const assignedStudentIds = new Set<string>();
+      const assignmentSources: Record<string, Array<{ type: 'direct' | 'group'; name?: string }>> = {};
+      
+      for (const assignment of allAssignments) {
+        if (assignment.studentId) {
+          // Direct assignment
+          assignedStudentIds.add(assignment.studentId);
+          if (!assignmentSources[assignment.studentId]) {
+            assignmentSources[assignment.studentId] = [];
+          }
+          assignmentSources[assignment.studentId].push({ type: 'direct' });
+        } else if (assignment.groupId && assignment.groupId !== input.groupId) {
+          // Group assignment (exclude current group)
+          const groupMembersOfAssignment = await ctx.prisma.groupMember.findMany({
+            where: { groupId: assignment.groupId },
+            select: { studentId: true },
+          });
+          for (const member of groupMembersOfAssignment) {
+            assignedStudentIds.add(member.studentId);
+            if (!assignmentSources[member.studentId]) {
+              assignmentSources[member.studentId] = [];
+            }
+            assignmentSources[member.studentId].push({ 
+              type: 'group', 
+              name: assignment.group?.name || 'Gruppo sconosciuto' 
+            });
+          }
+        }
+      }
+
+      // Find group members who are already assigned
+      const membersAlreadyAssigned = groupMembers
+        .filter(m => assignedStudentIds.has(m.studentId))
+        .map(m => {
+          const sources = assignmentSources[m.studentId] || [];
+          const isDirect = sources.some(s => s.type === 'direct');
+          const fromGroups = sources.filter(s => s.type === 'group').map(s => s.name!);
+          
+          return {
+            studentId: m.studentId,
+            name: m.student.user.name,
+            isDirect,
+            fromGroups,
+          };
+        });
+
+      return {
+        totalMembers: groupMembers.length,
+        membersAlreadyAssigned,
+        countAlreadyAssigned: membersAlreadyAssigned.length,
+      };
+    }),
+
+  // Update existing assignment (reassign with new dates)
+  updateAssignment: staffProcedure
+    .input(z.object({
+      assignmentId: z.string(),
+      startDate: z.string().datetime().optional().nullable(),
+      endDate: z.string().datetime().optional().nullable(),
+      locationType: z.enum(['ONLINE', 'IN_PERSON', 'HYBRID']).optional().nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { assignmentId, startDate, endDate, locationType } = input;
+
+      const assignment = await ctx.prisma.simulationAssignment.findUnique({
+        where: { id: assignmentId },
+        include: { simulation: { select: { id: true, createdById: true, title: true } } },
+      });
+
+      if (!assignment) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Assegnazione non trovata' });
+      }
+
+      if (ctx.user.role === 'COLLABORATOR' && assignment.simulation.createdById !== ctx.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi per modificare questa assegnazione' });
+      }
+
+      const updated = await ctx.prisma.simulationAssignment.update({
+        where: { id: assignmentId },
+        data: {
+          startDate: startDate ? new Date(startDate) : null,
+          endDate: endDate ? new Date(endDate) : null,
+          locationType: locationType,
+        },
+      });
+
+      // Send notification about the update
+      if (assignment.studentId) {
+        const student = await ctx.prisma.student.findUnique({
+          where: { id: assignment.studentId },
+          select: { userId: true },
+        });
+        if (student?.userId) {
+          await notifications.simulationAssigned(ctx.prisma, {
+            assignedUserIds: [student.userId],
+            simulationId: assignment.simulation.id,
+            simulationTitle: assignment.simulation.title,
+            dueDate: endDate ? new Date(endDate) : undefined,
+          });
+        }
+      }
+
+      return updated;
     }),
 
   // Remove assignment
@@ -1098,31 +1340,73 @@ export const simulationsRouter = router({
                 ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
               ],
             },
-            select: { dueDate: true, notes: true },
-            take: 1,
+            select: { 
+              studentId: true, 
+              groupId: true,
+              dueDate: true, 
+              notes: true,
+              startDate: true,
+              endDate: true,
+              status: true,
+            },
+            // Get all assignments, we'll prioritize in code
           },
         },
       });
 
       // Add student's status for each simulation
+      // Prioritize direct student assignment over group assignment
       const simulationsWithStatus = simulations.map(sim => {
         const isCompleted = completedSimulationIds.includes(sim.id);
         const isInProgress = inProgressSimulationIds.includes(sim.id);
-        const isExpired = sim.endDate && sim.endDate < now;
-        const isNotStarted = sim.startDate && sim.startDate > now;
+        
+        // Find the most relevant assignment: direct (studentId) takes priority over group
+        const directAssignment = sim.assignments.find(a => a.studentId === studentId);
+        const groupAssignment = sim.assignments.find(a => a.groupId && groupIds.includes(a.groupId));
+        const relevantAssignment = directAssignment || groupAssignment;
+        
+        // Check if assignment is closed
+        const isClosed = relevantAssignment?.status === 'CLOSED';
+        
+        // Use assignment dates if available, otherwise use simulation dates
+        const effectiveStartDate = relevantAssignment?.startDate || sim.startDate;
+        const effectiveEndDate = relevantAssignment?.endDate || sim.endDate;
+        
+        const isExpired = effectiveEndDate && effectiveEndDate < now;
+        const isNotStarted = effectiveStartDate && effectiveStartDate > now;
 
-        let studentStatus: 'not_started' | 'available' | 'in_progress' | 'completed' | 'expired';
-        if (isCompleted) studentStatus = 'completed';
-        else if (isInProgress) studentStatus = 'in_progress';
-        else if (isExpired) studentStatus = 'expired';
-        else if (isNotStarted) studentStatus = 'not_started';
-        else studentStatus = 'available';
+        // Determine student status with proper priority:
+        // 1. Completed simulations are always "completed"
+        // 2. Closed assignments block everything (handled separately in UI)
+        // 3. Date restrictions (expired, not started) come before in_progress
+        // 4. Then check for in_progress or available
+        let studentStatus: 'not_started' | 'available' | 'in_progress' | 'completed' | 'expired' | 'closed';
+        if (isCompleted) {
+          studentStatus = 'completed';
+        } else if (isClosed) {
+          studentStatus = 'closed';
+        } else if (isExpired) {
+          studentStatus = 'expired';
+        } else if (isNotStarted) {
+          studentStatus = 'not_started';
+        } else if (isInProgress) {
+          studentStatus = 'in_progress';
+        } else {
+          studentStatus = 'available';
+        }
 
         return {
           ...sim,
           studentStatus,
-          dueDate: sim.assignments[0]?.dueDate ?? null,
-          assignmentNotes: sim.assignments[0]?.notes ?? null,
+          // Use assignment dates, prioritizing direct assignment
+          startDate: effectiveStartDate,
+          endDate: effectiveEndDate,
+          dueDate: relevantAssignment?.dueDate ?? null,
+          assignmentNotes: relevantAssignment?.notes ?? null,
+          // Info about assignment type (for debugging/display)
+          assignmentType: directAssignment ? 'direct' : (groupAssignment ? 'group' : null),
+          // Assignment status (ACTIVE or CLOSED)
+          assignmentStatus: relevantAssignment?.status ?? null,
         };
       });
 
@@ -1186,7 +1470,13 @@ export const simulationsRouter = router({
                 ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
               ],
             },
-            select: { dueDate: true, notes: true },
+            select: { 
+              dueDate: true, 
+              notes: true, 
+              status: true,
+              startDate: true,
+              endDate: true,
+            },
             take: 1,
           },
         },
@@ -1205,12 +1495,38 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai accesso a questa simulazione' });
       }
 
+      // Get relevant assignment (direct assignment takes priority)
+      const assignment = simulation.assignments[0];
+
+      // Check if assignment is closed
+      if (assignment && assignment.status === 'CLOSED') {
+        // Allow access only if they have a completed result (to view stats)
+        const hasCompletedResult = await ctx.prisma.simulationResult.findFirst({
+          where: { 
+            simulationId: input.id, 
+            studentId,
+            completedAt: { not: null },
+          },
+        });
+        
+        if (!hasCompletedResult) {
+          throw new TRPCError({ 
+            code: 'FORBIDDEN', 
+            message: 'Questa simulazione è stata chiusa e non è più disponibile' 
+          });
+        }
+      }
+
+      // Use assignment dates if available, otherwise use simulation dates
+      const effectiveStartDate = assignment?.startDate || simulation.startDate;
+      const effectiveEndDate = assignment?.endDate || simulation.endDate;
+
       // Check dates
-      if (simulation.startDate && simulation.startDate > now) {
+      if (effectiveStartDate && effectiveStartDate > now) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'La simulazione non è ancora iniziata' });
       }
 
-      if (simulation.endDate && simulation.endDate < now) {
+      if (effectiveEndDate && effectiveEndDate < now) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'La simulazione è scaduta' });
       }
 
@@ -1270,6 +1586,13 @@ export const simulationsRouter = router({
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
       const studentId = student.id;
 
+      // Get student's groups
+      const groupMembers = await ctx.prisma.groupMember.findMany({
+        where: { studentId },
+        select: { groupId: true },
+      });
+      const groupIds = groupMembers.map(gm => gm.groupId);
+
       // Check simulation exists and is accessible
       const simulation = await ctx.prisma.simulation.findUnique({
         where: { id: input.simulationId },
@@ -1281,6 +1604,20 @@ export const simulationsRouter = router({
           isRepeatable: true,
           maxAttempts: true,
           totalQuestions: true,
+          assignments: {
+            where: {
+              OR: [
+                { studentId },
+                ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
+              ],
+            },
+            select: { 
+              status: true,
+              startDate: true,
+              endDate: true,
+            },
+            take: 1,
+          },
         },
       });
 
@@ -1288,11 +1625,24 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non disponibile' });
       }
 
+      // Check if assignment is closed
+      const assignment = simulation.assignments[0];
+      if (assignment && assignment.status === 'CLOSED') {
+        throw new TRPCError({ 
+          code: 'FORBIDDEN', 
+          message: 'Questa simulazione è stata chiusa e non puoi più accedervi' 
+        });
+      }
+
+      // Use assignment dates if available
+      const effectiveStartDate = assignment?.startDate || simulation.startDate;
+      const effectiveEndDate = assignment?.endDate || simulation.endDate;
+
       const now = new Date();
-      if (simulation.startDate && simulation.startDate > now) {
+      if (effectiveStartDate && effectiveStartDate > now) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'La simulazione non è ancora iniziata' });
       }
-      if (simulation.endDate && simulation.endDate < now) {
+      if (effectiveEndDate && effectiveEndDate < now) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'La simulazione è scaduta' });
       }
 

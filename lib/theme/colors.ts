@@ -159,9 +159,9 @@ export const colors = {
    */
   text: {
     primary: 'text-gray-900 dark:text-slate-100',
-    secondary: 'text-gray-600 dark:text-slate-400',
-    tertiary: 'text-gray-500 dark:text-slate-500',
-    muted: 'text-gray-400 dark:text-slate-600',
+    secondary: 'text-gray-700 dark:text-slate-300',
+    tertiary: 'text-gray-600 dark:text-slate-400',
+    muted: 'text-gray-500 dark:text-slate-400',
     
     // Inverso (per sfondi scuri in light mode)
     inverse: 'text-white dark:text-slate-900',
@@ -174,7 +174,7 @@ export const colors = {
   icon: {
     primary: 'text-gray-700 dark:text-slate-300',
     secondary: 'text-gray-500 dark:text-slate-400',
-    muted: 'text-gray-400 dark:text-slate-500',
+    muted: 'text-gray-400 dark:text-slate-400',
     interactive: 'text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white',
   },
 

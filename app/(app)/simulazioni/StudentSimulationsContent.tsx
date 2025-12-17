@@ -20,6 +20,9 @@ import {
   Calendar,
   Zap,
   BarChart3,
+  RefreshCw,
+  Shield,
+  Lock,
 } from 'lucide-react';
 import type { SimulationType } from '@/lib/validations/simulationValidation';
 
@@ -73,6 +76,11 @@ const studentStatusColors: Record<string, { bg: string; text: string; icon: Reac
     text: 'text-yellow-700 dark:text-yellow-300',
     icon: <Calendar className="w-4 h-4" />,
   },
+  closed: { 
+    bg: 'bg-red-100 dark:bg-red-900/30', 
+    text: 'text-red-700 dark:text-red-300',
+    icon: <Lock className="w-4 h-4" />,
+  },
 };
 
 const studentStatusLabels: Record<string, string> = {
@@ -81,6 +89,7 @@ const studentStatusLabels: Record<string, string> = {
   completed: 'Completata',
   expired: 'Scaduta',
   not_started: 'Non iniziata',
+  closed: 'Chiusa',
 };
 
 export default function StudentSimulationsContent() {
@@ -104,13 +113,15 @@ export default function StudentSimulationsContent() {
   // Fetch student results for stats
   const { data: resultsData } = trpc.simulations.getMyResults.useQuery({ pageSize: 50 });
 
-  // Format date
-  const formatDate = (date: Date | string | null | undefined) => {
+  // Format date with time
+  const formatDateTime = (date: Date | string | null | undefined) => {
     if (!date) return '-';
     return new Date(date).toLocaleDateString('it-IT', {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   };
 
@@ -304,15 +315,24 @@ export default function StudentSimulationsContent() {
               ? `/simulazioni/${simulation.id}/risultato`
               : `/simulazioni/${simulation.id}`;
             
+            // Determine if it's a single date or date range
+            const hasStartDate = !!simulation.startDate;
+            const hasEndDate = !!simulation.endDate;
+            const isSingleDate = hasStartDate && hasEndDate && 
+              new Date(simulation.startDate!).toDateString() === new Date(simulation.endDate!).toDateString();
+            
+            // Check if the simulation is disabled (closed, expired, not started)
+            const isDisabled = ['closed', 'expired', 'not_started'].includes(simulation.studentStatus);
+            
             return (
               <Link
                 key={simulation.id}
                 href={href}
-                className={`block p-5 rounded-xl ${colors.background.card} border ${colors.border.light} hover:shadow-lg transition-all group`}
+                className={`block p-5 rounded-xl ${colors.background.card} border ${colors.border.light} ${isDisabled ? 'opacity-75 cursor-not-allowed pointer-events-none' : 'hover:shadow-lg transition-all group'}`}
               >
                 {/* Header */}
                 <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     {simulation.isOfficial && (
                       <div className="p-1.5 rounded-lg bg-red-100 dark:bg-red-900/30">
                         <Award className="w-4 h-4 text-red-600 dark:text-red-400" />
@@ -347,25 +367,91 @@ export default function StudentSimulationsContent() {
                   )}
                 </div>
 
-                {/* Due date */}
-                {simulation.dueDate && (
+                {/* Info badges */}
+                <div className="flex items-center gap-2 mt-3 flex-wrap">
+                  {/* Repeatable badge */}
+                  {simulation.isRepeatable && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                      <RefreshCw className="w-3 h-3" />
+                      Ripetibile
+                    </span>
+                  )}
+                  {/* Anti-cheat badge */}
+                  {simulation.enableAntiCheat && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">
+                      <Shield className="w-3 h-3" />
+                      Anti-cheat
+                    </span>
+                  )}
+                </div>
+
+                {/* Date/Time info */}
+                {(hasStartDate || hasEndDate) && (
                   <div className={`mt-3 pt-3 border-t ${colors.border.light}`}>
-                    <p className={`text-xs ${colors.text.muted}`}>
-                      <Calendar className="w-3 h-3 inline mr-1" />
-                      Scadenza: {formatDate(simulation.dueDate)}
-                    </p>
+                    {isSingleDate ? (
+                      // Single date: show date and time
+                      <p className={`text-xs ${colors.text.muted}`}>
+                        <Calendar className="w-3 h-3 inline mr-1" />
+                        {formatDateTime(simulation.startDate)} - {formatDateTime(simulation.endDate)}
+                      </p>
+                    ) : (
+                      // Date range: show availability window
+                      <div className="space-y-1">
+                        {hasStartDate && (
+                          <p className={`text-xs ${colors.text.muted}`}>
+                            <Calendar className="w-3 h-3 inline mr-1" />
+                            Dal: {formatDateTime(simulation.startDate)}
+                          </p>
+                        )}
+                        {hasEndDate && (
+                          <p className={`text-xs ${colors.text.muted}`}>
+                            <Clock className="w-3 h-3 inline mr-1" />
+                            Al: {formatDateTime(simulation.endDate)}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* CTA */}
-                <div className={`mt-4 pt-3 border-t ${colors.border.light} flex items-center justify-between`}>
-                  <span className={`text-sm font-medium ${colors.primary.text}`}>
-                    {simulation.studentStatus === 'available' && 'Inizia →'}
-                    {simulation.studentStatus === 'in_progress' && 'Continua →'}
-                    {simulation.studentStatus === 'completed' && 'Vedi risultati →'}
-                    {simulation.studentStatus === 'expired' && 'Scaduta'}
-                    {simulation.studentStatus === 'not_started' && 'Non ancora attiva'}
-                  </span>
+                <div className={`mt-4 pt-3 border-t ${colors.border.light}`}>
+                  {simulation.studentStatus === 'available' && (
+                    <div className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg ${colors.primary.bg} text-white font-medium group-hover:shadow-md transition-all`}>
+                      <Play className="w-4 h-4" />
+                      <span>Inizia simulazione</span>
+                    </div>
+                  )}
+                  {simulation.studentStatus === 'in_progress' && (
+                    <div className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 dark:bg-blue-600 text-white font-medium group-hover:shadow-md transition-all`}>
+                      <Play className="w-4 h-4" />
+                      <span>Continua simulazione</span>
+                    </div>
+                  )}
+                  {simulation.studentStatus === 'completed' && (
+                    <div className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-gray-600 dark:bg-gray-700 text-white font-medium group-hover:shadow-md transition-all`}>
+                      <BarChart3 className="w-4 h-4" />
+                      <span>Vedi risultati</span>
+                    </div>
+                  )}
+                  {simulation.studentStatus === 'expired' && (
+                    <div className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 font-medium cursor-not-allowed`}>
+                      <AlertCircle className="w-4 h-4" />
+                      <span>Scaduta</span>
+                    </div>
+                  )}
+                  {simulation.studentStatus === 'not_started' && (
+                    <div className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 font-medium cursor-not-allowed`}>
+                      <Calendar className="w-4 h-4" />
+                      <span>Non ancora attiva</span>
+                    </div>
+                  )}
+                  {simulation.studentStatus === 'closed' && (
+                    <div className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 font-medium cursor-not-allowed`}>
+                      <Lock className="w-4 h-4" />
+                      <span>Chiusa</span>
+                    </div>
+                  )}
                 </div>
               </Link>
             );

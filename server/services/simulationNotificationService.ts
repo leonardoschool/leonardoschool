@@ -15,6 +15,8 @@ interface SimulationWithRelations extends Simulation {
     studentId?: string | null;
     groupId?: string | null;
     dueDate?: Date | null;
+    startDate?: Date | null;
+    endDate?: Date | null;
   }>;
 }
 
@@ -230,6 +232,8 @@ export async function sendSimulationNotifications(
     studentId?: string | null;
     groupId?: string | null;
     dueDate?: Date | null;
+    startDate?: Date | null;
+    endDate?: Date | null;
   }>
 ): Promise<NotificationResult> {
   const result: NotificationResult = {
@@ -238,8 +242,22 @@ export async function sendSimulationNotifications(
     errors: [],
   };
 
-  // Skip if no start date (not a scheduled simulation)
-  if (!simulation.startDate) {
+  // Check if we have dates from simulation OR from assignments
+  const hasSimulationDates = !!simulation.startDate;
+  const hasAssignmentDates = assignments.some(a => a.startDate);
+  
+  // Skip calendar/email if no dates at all, but still send in-app notifications
+  if (!hasSimulationDates && !hasAssignmentDates) {
+    // Get all invitee user IDs for in-app notification
+    const inviteeUserIds = await getAssignedStudentUserIds(prisma, assignments);
+    if (inviteeUserIds.length > 0) {
+      await notifications.simulationAssigned(prisma, {
+        assignedUserIds: inviteeUserIds,
+        simulationId: simulation.id,
+        simulationTitle: simulation.title,
+        dueDate: assignments[0]?.dueDate || undefined,
+      });
+    }
     return result;
   }
 
@@ -249,8 +267,21 @@ export async function sendSimulationNotifications(
   }
 
   try {
-    // 1. Create calendar event
-    result.calendarEventId = await createSimulationCalendarEvent(prisma, simulation, createdByUser);
+    // Use assignment dates if simulation doesn't have dates
+    const effectiveStartDate = simulation.startDate || assignments[0]?.startDate;
+    const effectiveEndDate = simulation.endDate || assignments[0]?.endDate;
+    
+    // Create a modified simulation object with effective dates for calendar/email
+    const simulationWithDates = {
+      ...simulation,
+      startDate: effectiveStartDate || null,
+      endDate: effectiveEndDate || null,
+    };
+
+    // 1. Create calendar event (only if we have a start date)
+    if (effectiveStartDate) {
+      result.calendarEventId = await createSimulationCalendarEvent(prisma, simulationWithDates as SimulationWithRelations & { startDate: Date }, createdByUser);
+    }
 
     // 2. Create event invitations if calendar event was created
     if (result.calendarEventId) {
@@ -282,8 +313,8 @@ export async function sendSimulationNotifications(
       description: simulation.description,
       type: simulation.type,
       isOfficial: simulation.isOfficial,
-      startDate: simulation.startDate,
-      endDate: simulation.endDate,
+      startDate: effectiveStartDate || null,
+      endDate: effectiveEndDate || null,
       durationMinutes: simulation.durationMinutes,
       totalQuestions: simulation.totalQuestions,
       correctPoints: simulation.correctPoints,
@@ -334,6 +365,8 @@ export async function notifySimulationCreated(
             studentId: true,
             groupId: true,
             dueDate: true,
+            startDate: true,
+            endDate: true,
           },
         },
       },
@@ -349,13 +382,27 @@ export async function notifySimulationCreated(
       return result;
     }
 
-    if (!simulation.startDate) {
-      // Not a scheduled simulation, no notifications needed
+    if (simulation.assignments.length === 0) {
+      // No assignments, no notifications needed
       return result;
     }
 
-    if (simulation.assignments.length === 0) {
-      // No assignments, no notifications needed
+    // Check if we have dates from simulation OR from assignments
+    const hasSimulationDates = !!simulation.startDate;
+    const hasAssignmentDates = simulation.assignments.some(a => a.startDate);
+    
+    if (!hasSimulationDates && !hasAssignmentDates) {
+      // No dates at all, still send in-app notifications but skip calendar/email
+      // Get all invitee user IDs for in-app notification
+      const inviteeUserIds = await getAssignedStudentUserIds(prisma, simulation.assignments);
+      if (inviteeUserIds.length > 0) {
+        await notifications.simulationAssigned(prisma, {
+          assignedUserIds: inviteeUserIds,
+          simulationId: simulation.id,
+          simulationTitle: simulation.title,
+          dueDate: simulation.assignments[0]?.dueDate || undefined,
+        });
+      }
       return result;
     }
 
