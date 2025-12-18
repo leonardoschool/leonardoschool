@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { auth } from '@/lib/firebase/config';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
@@ -19,6 +20,9 @@ import StudentSimulationExecutionContent from './StudentSimulationExecutionConte
  */
 export default function SimulationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const searchParams = useSearchParams();
+  const assignmentId = searchParams.get('assignmentId');
+  
   const { data: user, isLoading, error } = trpc.auth.me.useQuery();
 
   // Handle error or no user - sign out and redirect to login
@@ -52,7 +56,7 @@ export default function SimulationDetailPage({ params }: { params: Promise<{ id:
       return <StaffSimulationDetailContent id={id} role={role} />;
     
     case 'STUDENT':
-      return <StudentSimulationExecutionContent id={id} />;
+      return <StudentSimulationExecutionContent id={id} assignmentId={assignmentId} />;
     
     default:
       return (

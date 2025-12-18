@@ -17,6 +17,9 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import { notifySimulationCreated } from '@/server/services/simulationNotificationService';
 import * as notificationService from '@/server/services/notificationService';
 import { notifications } from '@/lib/notifications';
+import { createLogger } from '@/lib/utils/logger';
+
+const log = createLogger('Simulations');
 
 // Helper function to create calendar events for simulation assignments
 async function createCalendarEventsForAssignments(
@@ -141,7 +144,7 @@ async function createCalendarEventsForAssignments(
         })
       )
     );
-    console.log(`[Simulations] Created ${eventsToCreate.length} calendar events for simulation assignments`);
+    log.info(`Created ${eventsToCreate.length} calendar events for simulation assignments`);
   }
 }
 
@@ -169,58 +172,40 @@ async function deleteCalendarEventsForAssignment(
   // Look for events with matching title and either:
   // 1. Invitations to specific users (for individual assignments)
   // 2. Invitations to a specific group (for group assignments)
-  const invitationFilter: { some: { userId?: { in: string[] }; groupId?: string } } = {
-    some: {},
-  };
+  let invitationFilter: { some: { userId?: { in: string[] }; groupId?: string } } | undefined;
 
   if (groupId) {
-    invitationFilter.some.groupId = groupId;
+    invitationFilter = { some: { groupId } };
   } else if (userIds.length > 0) {
-    invitationFilter.some.userId = { in: userIds };
-  } else {
-    console.warn('[Simulations] No userIds or groupId provided for calendar event deletion');
-    return;
+    invitationFilter = { some: { userId: { in: userIds } } };
   }
 
-  // Find calendar events with matching title and invitees
+  // Find calendar events with matching title (and optionally invitees)
   const events = await prisma.calendarEvent.findMany({
     where: {
       type: 'SIMULATION',
-      title: { startsWith: eventTitlePrefix },
-      invitations: invitationFilter,
+      title: eventTitlePrefix, // Exact match, not startsWith
+      ...(invitationFilter ? { invitations: invitationFilter } : {}),
     },
-    include: {
-      invitations: true,
-    },
+    select: { id: true },
   });
 
-  console.log(`[Simulations] Found ${events.length} calendar events matching title "${eventTitlePrefix}" for deletion`);
+  log.debug(`Found ${events.length} calendar events matching title "${eventTitlePrefix}" for deletion`);
 
-  // Delete events that match our criteria
-  // For group assignments: delete if the group matches
-  // For individual assignments: delete if all invitees are in our userIds list
-  const eventsToDelete = events.filter(event => {
-    if (groupId) {
-      // For group assignment: check if any invitation is for this group
-      return event.invitations.some(inv => inv.groupId === groupId);
-    } else {
-      // For individual assignment: check if all user invitations are in our list
-      const invitedUserIds = event.invitations
-        .map(inv => inv.userId)
-        .filter((id): id is string => id !== null);
-      return invitedUserIds.length > 0 && invitedUserIds.every(id => userIds.includes(id));
-    }
-  });
-
-  if (eventsToDelete.length > 0) {
-    await prisma.calendarEvent.deleteMany({
-      where: {
-        id: { in: eventsToDelete.map(e => e.id) },
-      },
+  if (events.length > 0) {
+    const eventIds = events.map(e => e.id);
+    
+    // First delete invitations (foreign key)
+    await prisma.eventInvitation.deleteMany({
+      where: { eventId: { in: eventIds } },
     });
-    console.log(`[Simulations] Deleted ${eventsToDelete.length} calendar events for removed assignment`);
-  } else {
-    console.log(`[Simulations] No calendar events to delete for this assignment`);
+    
+    // Then delete events
+    await prisma.calendarEvent.deleteMany({
+      where: { id: { in: eventIds } },
+    });
+    
+    log.info(`Deleted ${events.length} calendar events for removed assignment`);
   }
 }
 
@@ -897,7 +882,10 @@ export const simulationsRouter = router({
 
   // Delete simulation (Admin only)
   delete: adminProcedure
-    .input(z.object({ id: z.string() }))
+    .input(z.object({ 
+      id: z.string(),
+      force: z.boolean().optional().default(false), // Force delete even if has results
+    }))
     .mutation(async ({ ctx, input }) => {
       const existing = await ctx.prisma.simulation.findUnique({
         where: { id: input.id },
@@ -905,12 +893,20 @@ export const simulationsRouter = router({
           createdById: true, 
           status: true, 
           title: true,
+          type: true,
           _count: { 
             select: { 
               results: true,
-              assignments: true 
+              assignments: true,
+              sessions: true,
             } 
-          } 
+          },
+          assignments: {
+            include: {
+              student: { select: { userId: true } },
+              group: { select: { id: true } },
+            },
+          },
         },
       });
 
@@ -918,17 +914,54 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
       }
 
-      // Can't delete if has results (archive instead)
-      if (existing._count.results > 0) {
+      // If has results and force is not true, return error with count info
+      if (existing._count.results > 0 && !input.force) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'Non puoi eliminare una simulazione con risultati. Archiviala invece.',
+          message: `Questa simulazione ha ${existing._count.results} risultati salvati. Usa l'eliminazione forzata per eliminare tutto.`,
         });
       }
 
-      // Log assignments that will be deleted
-      if (existing._count.assignments > 0) {
-        console.log(`[Simulation Delete] Rimozione di ${existing._count.assignments} assegnazioni per la simulazione "${existing.title}" (ID: ${input.id})`);
+      // Log what will be deleted
+      if (input.force && existing._count.results > 0) {
+        log.info(`Force delete: "${existing.title}" with ${existing._count.results} results, ${existing._count.assignments} assignments`);
+      }
+
+      // Delete ALL calendar events related to this simulation
+      // Events are created with a title pattern: "TOLC: Title" or "Simulazione: Title"
+      const tolcTitle = `TOLC: ${existing.title}`;
+      const simTitle = `Simulazione: ${existing.title}`;
+      
+      // Find all calendar events matching either title
+      const eventsToDelete = await ctx.prisma.calendarEvent.findMany({
+        where: {
+          type: 'SIMULATION',
+          OR: [
+            { title: tolcTitle },
+            { title: simTitle },
+            { title: { contains: existing.title } },
+          ],
+        },
+        select: { id: true, title: true },
+      });
+
+      if (eventsToDelete.length > 0) {
+        const eventIds = eventsToDelete.map(e => e.id);
+        
+        // First delete all event invitations (foreign key constraint)
+        await ctx.prisma.eventInvitation.deleteMany({
+          where: {
+            eventId: { in: eventIds },
+          },
+        });
+        
+        // Then delete the calendar events
+        const eventsDeleted = await ctx.prisma.calendarEvent.deleteMany({
+          where: {
+            id: { in: eventIds },
+          },
+        });
+        log.info(`Deleted ${eventsDeleted.count} calendar events for simulation "${existing.title}"`);
       }
 
       // Delete simulation - CASCADE will automatically delete:
@@ -1077,6 +1110,22 @@ export const simulationsRouter = router({
         }
       }
 
+      // Get simulation IDs to clean up Virtual Room sessions
+      const simulationIds = [...new Set(assignments.map(a => a.simulationId))];
+      
+      // Clean up old Virtual Room sessions (WAITING/STARTED) for these simulations
+      // This prevents "phantom participants" from previous sessions
+      await ctx.prisma.simulationSession.updateMany({
+        where: {
+          simulationId: { in: simulationIds },
+          status: { in: ['WAITING', 'STARTED'] },
+        },
+        data: {
+          status: 'COMPLETED',
+          endedAt: new Date(),
+        },
+      });
+
       // Reopen all assignments
       const result = await ctx.prisma.simulationAssignment.updateMany({
         where: { id: { in: input.assignmentIds } },
@@ -1221,22 +1270,12 @@ export const simulationsRouter = router({
       }
 
       // Create assignments and auto-publish simulation
-      console.log('[Simulations] Creating assignments with targets:', 
-        targets.map(t => ({ 
-          groupId: t.groupId, 
-          studentId: t.studentId, 
-          createCalendarEvent: t.createCalendarEvent 
-        }))
-      );
-      
       const created = await ctx.prisma.$transaction(async (tx) => {
         const results = [];
         for (const target of targets) {
           const startDate = target.startDate ? new Date(target.startDate) : null;
           const endDate = target.endDate ? new Date(target.endDate) : null;
 
-          console.log(`[Simulations] Creating assignment: createCalendarEvent=${target.createCalendarEvent}`);
-          
           // Create the assignment
           const assignment = await tx.simulationAssignment.create({
             data: {
@@ -1253,7 +1292,6 @@ export const simulationsRouter = router({
             },
           });
           
-          console.log(`[Simulations] Created assignment ${assignment.id} with createCalendarEvent=${assignment.createCalendarEvent}`);
           results.push(assignment);
         }
 
@@ -1272,21 +1310,17 @@ export const simulationsRouter = router({
       if (created.length > 0) {
         // Fire and forget - don't block the response
         notifySimulationCreated(simulationId, ctx.prisma).catch((error) => {
-          console.error('[Simulations] Failed to send notifications for new assignments:', error);
+          log.error('Failed to send notifications for new assignments:', error);
         });
       }
 
       // Create calendar events for assignments (fire and forget)
       // Only for assignments where createCalendarEvent is explicitly true
       if (created.length > 0) {
-        console.log('[Simulations] Checking calendar event creation for assignments:', 
-          created.map(a => ({ id: a.id, createCalendarEvent: a.createCalendarEvent }))
-        );
-        
         const assignmentsWithCalendarEvents = created.filter(a => a.createCalendarEvent === true);
-        console.log(`[Simulations] Assignments with calendar events: ${assignmentsWithCalendarEvents.length} of ${created.length}`);
         
         if (assignmentsWithCalendarEvents.length > 0) {
+          log.info(`Creating calendar events for ${assignmentsWithCalendarEvents.length}/${created.length} assignments`);
           createCalendarEventsForAssignments(
             simulationId,
             simulation,
@@ -1294,7 +1328,7 @@ export const simulationsRouter = router({
             ctx.user.id,
             ctx.prisma
           ).catch((error) => {
-            console.error('[Simulations] Failed to create calendar events:', error);
+            log.error('Failed to create calendar events:', error);
           });
         }
       }
@@ -1619,146 +1653,284 @@ export const simulationsRouter = router({
       });
       const groupIds = groupMembers.map(gm => gm.groupId);
 
-      // Build base conditions for accessible simulations
-      const accessConditions: Prisma.SimulationWhereInput[] = [
-        // Public simulations
-        { isPublic: true },
-        // Assigned to student directly
-        { assignments: { some: { studentId } } },
-        // Assigned to student's groups
-        ...(groupIds.length > 0 ? [
-          { assignments: { some: { groupId: { in: groupIds } } } },
-        ] : []),
-      ];
-
-      const where: Prisma.SimulationWhereInput = {
-        status: 'PUBLISHED',
-        OR: accessConditions,
-      };
-
-      // Apply filters
-      if (type) where.type = type;
-      if (typeof isOfficial === 'boolean') where.isOfficial = isOfficial;
-
-      // Status filter (available, in_progress, completed, expired)
-      if (status === 'available') {
-        where.AND = [
-          { OR: [{ startDate: null }, { startDate: { lte: now } }] },
-          { OR: [{ endDate: null }, { endDate: { gt: now } }] },
-        ];
-      } else if (status === 'expired') {
-        where.endDate = { lt: now };
-      }
-
-      // Get student's results for filtering
-      const studentResults = await ctx.prisma.simulationResult.findMany({
-        where: { studentId },
-        select: { simulationId: true, completedAt: true },
+      // Get ALL assignments for this student (each assignment = separate card)
+      const assignments = await ctx.prisma.simulationAssignment.findMany({
+        where: {
+          OR: [
+            { studentId },
+            ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
+          ],
+          simulation: {
+            status: 'PUBLISHED',
+            ...(type ? { type } : {}),
+            ...(typeof isOfficial === 'boolean' ? { isOfficial } : {}),
+          },
+        },
+        include: {
+          simulation: {
+            include: {
+              createdBy: { select: { name: true } },
+              _count: { select: { questions: true } },
+            },
+          },
+        },
+        orderBy: { startDate: sortOrder },
       });
-      const completedSimulationIds = studentResults
-        .filter(r => r.completedAt)
-        .map(r => r.simulationId);
-      const inProgressSimulationIds = studentResults
-        .filter(r => !r.completedAt)
-        .map(r => r.simulationId);
 
-      if (status === 'completed') {
-        where.id = { in: completedSimulationIds };
-      } else if (status === 'in_progress') {
-        where.id = { in: inProgressSimulationIds };
-      }
-
-      // Count total
-      const total = await ctx.prisma.simulation.count({ where });
-
-      // Get simulations
-      const simulations = await ctx.prisma.simulation.findMany({
-        where,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        orderBy: { [sortBy]: sortOrder },
+      // Also get public simulations (no assignment needed)
+      const publicSimulations = await ctx.prisma.simulation.findMany({
+        where: {
+          status: 'PUBLISHED',
+          isPublic: true,
+          ...(type ? { type } : {}),
+          ...(typeof isOfficial === 'boolean' ? { isOfficial } : {}),
+        },
         include: {
           createdBy: { select: { name: true } },
           _count: { select: { questions: true } },
-          assignments: {
-            where: {
-              OR: [
-                { studentId },
-                ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
-              ],
-            },
-            select: { 
-              studentId: true, 
-              groupId: true,
-              dueDate: true, 
-              notes: true,
-              startDate: true,
-              endDate: true,
-              status: true,
-            },
-            // Get all assignments, we'll prioritize in code
-          },
         },
       });
 
-      // Add student's status for each simulation
-      // Prioritize direct student assignment over group assignment
-      const simulationsWithStatus = simulations.map(sim => {
-        const isCompleted = completedSimulationIds.includes(sim.id);
-        const isInProgress = inProgressSimulationIds.includes(sim.id);
+      // Get ALL student's results (with assignmentId)
+      const studentResults = await ctx.prisma.simulationResult.findMany({
+        where: { studentId },
+        select: { 
+          simulationId: true, 
+          assignmentId: true,
+          completedAt: true 
+        },
+      });
+
+      // Create maps for quick lookup
+      // Map by specific assignment: "simulationId:assignmentId" -> result status
+      const resultByAssignmentMap = new Map<string, 'completed' | 'in_progress'>();
+      // Map by simulation (for legacy results without assignmentId): "simulationId" -> result status
+      const resultBySimulationMap = new Map<string, 'completed' | 'in_progress'>();
+      
+      for (const r of studentResults) {
+        if (r.assignmentId) {
+          const key = `${r.simulationId}:${r.assignmentId}`;
+          resultByAssignmentMap.set(key, r.completedAt ? 'completed' : 'in_progress');
+        } else {
+          // Legacy result without assignmentId - mark by simulation only
+          resultBySimulationMap.set(r.simulationId, r.completedAt ? 'completed' : 'in_progress');
+        }
+      }
+
+      // Helper function to get result status for an assignment
+      const getResultStatus = (simulationId: string, assignmentId: string | null): 'completed' | 'in_progress' | null => {
+        // First check for specific assignment result
+        if (assignmentId) {
+          const specificKey = `${simulationId}:${assignmentId}`;
+          if (resultByAssignmentMap.has(specificKey)) {
+            return resultByAssignmentMap.get(specificKey)!;
+          }
+        }
+        // Fall back to legacy result (no assignmentId)
+        // Only use legacy result if this is the first/oldest assignment for this simulation
+        return null; // Don't inherit from legacy - each assignment should be independent
+      };
+
+      // Get active Virtual Room sessions for ROOM-type assignments
+      // This allows students to access the simulation when staff has opened the room
+      const roomAssignmentIds = assignments
+        .filter(a => a.simulation.accessType === 'ROOM')
+        .map(a => a.id);
+      
+      const activeSessions = roomAssignmentIds.length > 0 
+        ? await ctx.prisma.simulationSession.findMany({
+            where: {
+              assignmentId: { in: roomAssignmentIds },
+              status: { in: ['WAITING', 'STARTED'] },
+            },
+            select: { assignmentId: true, status: true },
+          })
+        : [];
+      
+      // Map by assignmentId for quick lookup
+      const activeSessionMap = new Map<string, string>(
+        activeSessions
+          .filter((s): s is typeof s & { assignmentId: string } => s.assignmentId !== null)
+          .map(s => [s.assignmentId, s.status])
+      );
+
+      // Build simulation cards from assignments
+      type SimulationCard = {
+        id: string;
+        assignmentId: string | null;
+        title: string;
+        description: string | null;
+        type: string;
+        durationMinutes: number;
+        totalQuestions: number;
+        isOfficial: boolean;
+        isRepeatable: boolean;
+        maxAttempts: number | null;
+        visibility: string;
+        accessType: string;
+        enableAntiCheat: boolean;
+        startDate: Date | null;
+        endDate: Date | null;
+        dueDate: Date | null;
+        assignmentNotes: string | null;
+        assignmentType: 'direct' | 'group' | 'public' | null;
+        assignmentStatus: string | null;
+        studentStatus: 'not_started' | 'available' | 'in_progress' | 'completed' | 'expired' | 'closed';
+        createdBy: { name: string | null } | null;
+        _count: { questions: number };
+      };
+
+      const simulationCards: SimulationCard[] = [];
+
+      // Process each assignment
+      for (const assignment of assignments) {
+        const sim = assignment.simulation;
+        const resultStatus = getResultStatus(sim.id, assignment.id);
         
-        // Find the most relevant assignment: direct (studentId) takes priority over group
-        const directAssignment = sim.assignments.find(a => a.studentId === studentId);
-        const groupAssignment = sim.assignments.find(a => a.groupId && groupIds.includes(a.groupId));
-        const relevantAssignment = directAssignment || groupAssignment;
+        const isCompleted = resultStatus === 'completed';
+        const isInProgress = resultStatus === 'in_progress';
+        const isClosed = assignment.status === 'CLOSED';
         
-        // Check if assignment is closed
-        const isClosed = relevantAssignment?.status === 'CLOSED';
-        
-        // Use assignment dates if available, otherwise use simulation dates
-        const effectiveStartDate = relevantAssignment?.startDate || sim.startDate;
-        const effectiveEndDate = relevantAssignment?.endDate || sim.endDate;
+        const effectiveStartDate = assignment.startDate || sim.startDate;
+        const effectiveEndDate = assignment.endDate || sim.endDate;
         
         const isExpired = effectiveEndDate && effectiveEndDate < now;
         const isNotStarted = effectiveStartDate && effectiveStartDate > now;
 
-        // Determine student status with proper priority:
-        // 1. Completed simulations are always "completed"
-        // 2. Closed assignments block everything (handled separately in UI)
-        // 3. Date restrictions (expired, not started) come before in_progress
-        // 4. Then check for in_progress or available
-        let studentStatus: 'not_started' | 'available' | 'in_progress' | 'completed' | 'expired' | 'closed';
+        let studentStatus: SimulationCard['studentStatus'];
+        
+        // For ROOM-type simulations, check if staff has opened the Virtual Room for this assignment
+        // If session is active (WAITING or STARTED), student can access regardless of date
+        const hasActiveVirtualRoom = sim.accessType === 'ROOM' && activeSessionMap.has(assignment.id);
+        
         if (isCompleted) {
           studentStatus = 'completed';
         } else if (isClosed) {
           studentStatus = 'closed';
+        } else if (isNotStarted && !hasActiveVirtualRoom) {
+          // Only show "not_started" if Virtual Room is NOT active for this assignment
+          studentStatus = 'not_started';
+        } else if (isInProgress) {
+          // Student has started but not completed (has a SimulationResult without completedAt)
+          studentStatus = 'in_progress';
         } else if (isExpired) {
           studentStatus = 'expired';
+        } else {
+          studentStatus = 'available';
+        }
+
+        // Apply status filter
+        if (status && status !== studentStatus) {
+          if (!(status === 'available' && studentStatus === 'not_started')) {
+            continue;
+          }
+        }
+
+        simulationCards.push({
+          id: sim.id,
+          assignmentId: assignment.id,
+          title: sim.title,
+          description: sim.description,
+          type: sim.type,
+          durationMinutes: sim.durationMinutes,
+          totalQuestions: sim.totalQuestions,
+          isOfficial: sim.isOfficial,
+          isRepeatable: sim.isRepeatable,
+          maxAttempts: sim.maxAttempts,
+          visibility: sim.visibility,
+          accessType: sim.accessType,
+          enableAntiCheat: sim.enableAntiCheat,
+          startDate: effectiveStartDate,
+          endDate: effectiveEndDate,
+          dueDate: assignment.dueDate,
+          assignmentNotes: assignment.notes,
+          assignmentType: assignment.studentId ? 'direct' : 'group',
+          assignmentStatus: assignment.status,
+          studentStatus,
+          createdBy: sim.createdBy,
+          _count: sim._count,
+        });
+      }
+
+      // Process public simulations
+      for (const sim of publicSimulations) {
+        // Skip if already added via assignment
+        if (simulationCards.some(c => c.id === sim.id)) {
+          continue;
+        }
+
+        // For public simulations, use legacy result map (no assignmentId)
+        const resultStatus = resultBySimulationMap.get(sim.id);
+        
+        const isCompleted = resultStatus === 'completed';
+        const isInProgress = resultStatus === 'in_progress';
+        
+        const isExpired = sim.endDate && sim.endDate < now;
+        const isNotStarted = sim.startDate && sim.startDate > now;
+
+        let studentStatus: SimulationCard['studentStatus'];
+        
+        // Note: Public simulations don't have Virtual Room (ROOM type requires assignment)
+        if (isCompleted) {
+          studentStatus = 'completed';
         } else if (isNotStarted) {
           studentStatus = 'not_started';
+        } else if (isExpired) {
+          studentStatus = 'expired';
         } else if (isInProgress) {
           studentStatus = 'in_progress';
         } else {
           studentStatus = 'available';
         }
 
-        return {
-          ...sim,
+        // Apply status filter
+        if (status && status !== studentStatus) {
+          continue;
+        }
+
+        simulationCards.push({
+          id: sim.id,
+          assignmentId: null,
+          title: sim.title,
+          description: sim.description,
+          type: sim.type,
+          durationMinutes: sim.durationMinutes,
+          totalQuestions: sim.totalQuestions,
+          isOfficial: sim.isOfficial,
+          isRepeatable: sim.isRepeatable,
+          maxAttempts: sim.maxAttempts,
+          visibility: sim.visibility,
+          accessType: sim.accessType,
+          enableAntiCheat: sim.enableAntiCheat,
+          startDate: sim.startDate,
+          endDate: sim.endDate,
+          dueDate: null,
+          assignmentNotes: null,
+          assignmentType: 'public',
+          assignmentStatus: null,
           studentStatus,
-          // Use assignment dates, prioritizing direct assignment
-          startDate: effectiveStartDate,
-          endDate: effectiveEndDate,
-          dueDate: relevantAssignment?.dueDate ?? null,
-          assignmentNotes: relevantAssignment?.notes ?? null,
-          // Info about assignment type (for debugging/display)
-          assignmentType: directAssignment ? 'direct' : (groupAssignment ? 'group' : null),
-          // Assignment status (ACTIVE or CLOSED)
-          assignmentStatus: relevantAssignment?.status ?? null,
-        };
+          createdBy: sim.createdBy,
+          _count: sim._count,
+        });
+      }
+
+      // Sort cards
+      simulationCards.sort((a, b) => {
+        const aVal = a[sortBy as keyof SimulationCard];
+        const bVal = b[sortBy as keyof SimulationCard];
+        if (aVal === null || aVal === undefined) return sortOrder === 'asc' ? 1 : -1;
+        if (bVal === null || bVal === undefined) return sortOrder === 'asc' ? -1 : 1;
+        if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+        return 0;
       });
 
+      // Paginate
+      const total = simulationCards.length;
+      const paginatedCards = simulationCards.slice((page - 1) * pageSize, page * pageSize);
+
       return {
-        simulations: simulationsWithStatus,
+        simulations: paginatedCards,
         pagination: {
           page,
           pageSize,
@@ -1770,7 +1942,10 @@ export const simulationsRouter = router({
 
   // Get simulation details for student (without answers if not allowed)
   getSimulationForStudent: studentProcedure
-    .input(z.object({ id: z.string() }))
+    .input(z.object({ 
+      id: z.string(),
+      assignmentId: z.string().optional(), // Specific assignment to use for dates/access
+    }))
     .query(async ({ ctx, input }) => {
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
       const studentId = student.id;
@@ -1811,13 +1986,16 @@ export const simulationsRouter = router({
             },
           },
           assignments: {
-            where: {
-              OR: [
-                { studentId },
-                ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
-              ],
-            },
+            where: input.assignmentId 
+              ? { id: input.assignmentId } // Use specific assignment if provided
+              : {
+                  OR: [
+                    { studentId },
+                    ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
+                  ],
+                },
             select: { 
+              id: true,
               dueDate: true, 
               notes: true, 
               status: true,
@@ -1868,18 +2046,49 @@ export const simulationsRouter = router({
       const effectiveStartDate = assignment?.startDate || simulation.startDate;
       const effectiveEndDate = assignment?.endDate || simulation.endDate;
 
-      // Check dates
-      if (effectiveStartDate && effectiveStartDate > now) {
+      // Date validation logic:
+      // - NON-official: strict date check (before startDate or after endDate = blocked)
+      // - Official (Virtual Room): 
+      //   - Before startDate = always blocked
+      //   - After startDate with ACTIVE status = allowed (but startAttempt will check for STARTED session)
+      //   - After endDate with CLOSED status = blocked
+      //   - After endDate with ACTIVE status = allowed (admin reopened)
+      
+      const isAssignmentActive = assignment?.status === 'ACTIVE';
+      
+      // For Virtual Room simulations, check if staff has opened the room
+      // If session is active (WAITING or STARTED), student can access regardless of start date
+      let hasActiveVirtualRoom = false;
+      if (simulation.accessType === 'ROOM' && assignment?.id) {
+        const activeSession = await ctx.prisma.simulationSession.findFirst({
+          where: {
+            assignmentId: assignment.id,
+            status: { in: ['WAITING', 'STARTED'] },
+          },
+        });
+        hasActiveVirtualRoom = !!activeSession;
+      }
+      
+      // Block before start date UNLESS Virtual Room is active for this assignment
+      if (effectiveStartDate && effectiveStartDate > now && !hasActiveVirtualRoom) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'La simulazione non è ancora iniziata' });
       }
 
-      if (effectiveEndDate && effectiveEndDate < now) {
+      // For non-official simulations, strictly enforce end date
+      // For official simulations with ACTIVE status, allow access (admin control)
+      if (effectiveEndDate && effectiveEndDate < now && !isAssignmentActive) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'La simulazione è scaduta' });
       }
 
-      // Check attempts
+      // Check attempts - filter by assignmentId if provided
+      // This allows the same student to attempt the same simulation in different assignments
       const existingResults = await ctx.prisma.simulationResult.findMany({
-        where: { simulationId: input.id, studentId },
+        where: { 
+          simulationId: input.id, 
+          studentId,
+          // If assignmentId is provided, only check results for that specific assignment
+          ...(input.assignmentId ? { assignmentId: input.assignmentId } : {}),
+        },
         orderBy: { startedAt: 'desc' },
       });
 
@@ -1928,7 +2137,10 @@ export const simulationsRouter = router({
 
   // Start simulation attempt
   startAttempt: studentProcedure
-    .input(z.object({ simulationId: z.string() }))
+    .input(z.object({ 
+      simulationId: z.string(),
+      assignmentId: z.string().optional(), // Specific assignment for this attempt
+    }))
     .mutation(async ({ ctx, input }) => {
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
       const studentId = student.id;
@@ -1953,12 +2165,20 @@ export const simulationsRouter = router({
           totalQuestions: true,
           assignments: {
             where: {
-              OR: [
-                { studentId },
-                ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
-              ],
+              // If assignmentId is provided, get that specific assignment
+              // Otherwise, get any assignment for this student/groups
+              ...(input.assignmentId 
+                ? { id: input.assignmentId }
+                : {
+                    OR: [
+                      { studentId },
+                      ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
+                    ],
+                  }
+              ),
             },
             select: { 
+              id: true,
               status: true,
               startDate: true,
               endDate: true,
@@ -1974,6 +2194,8 @@ export const simulationsRouter = router({
 
       // Check if assignment is closed
       const assignment = simulation.assignments[0];
+      const assignmentId = assignment?.id || null;
+      
       if (assignment && assignment.status === 'CLOSED') {
         throw new TRPCError({ 
           code: 'FORBIDDEN', 
@@ -1981,21 +2203,45 @@ export const simulationsRouter = router({
         });
       }
 
+      // For Virtual Room simulations, check if there's an active STARTED session
+      // Only bypass date checks if the student is actually in a started session
+      let hasActiveVirtualRoomSession = false;
+      if (assignment?.status === 'ACTIVE') {
+        const activeSession = await ctx.prisma.simulationSession.findFirst({
+          where: {
+            simulationId: input.simulationId,
+            assignmentId: assignmentId, // Filter by specific assignment
+            status: 'STARTED', // Must be actually started, not just WAITING
+            participants: {
+              some: { studentId },
+            },
+          },
+        });
+        hasActiveVirtualRoomSession = !!activeSession;
+      }
+      
       // Use assignment dates if available
       const effectiveStartDate = assignment?.startDate || simulation.startDate;
       const effectiveEndDate = assignment?.endDate || simulation.endDate;
 
-      const now = new Date();
-      if (effectiveStartDate && effectiveStartDate > now) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'La simulazione non è ancora iniziata' });
-      }
-      if (effectiveEndDate && effectiveEndDate < now) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'La simulazione è scaduta' });
+      // Check dates UNLESS student is in an active Virtual Room session that has started
+      if (!hasActiveVirtualRoomSession) {
+        const now = new Date();
+        if (effectiveStartDate && effectiveStartDate > now) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'La simulazione non è ancora iniziata' });
+        }
+        if (effectiveEndDate && effectiveEndDate < now) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'La simulazione è scaduta' });
+        }
       }
 
-      // Check existing attempts
+      // Check existing attempts FOR THIS SPECIFIC ASSIGNMENT
       const existingResults = await ctx.prisma.simulationResult.findMany({
-        where: { simulationId: input.simulationId, studentId },
+        where: { 
+          simulationId: input.simulationId, 
+          studentId,
+          assignmentId: assignmentId, // Filter by assignment (null for public simulations)
+        },
       });
 
       const completedAttempts = existingResults.filter(r => r.completedAt).length;
@@ -2054,11 +2300,12 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Tentativi esauriti' });
       }
 
-      // Create new attempt
+      // Create new attempt with assignmentId
       const result = await ctx.prisma.simulationResult.create({
         data: {
           simulation: { connect: { id: input.simulationId } },
           student: { connect: { id: studentId } },
+          ...(assignmentId && { assignment: { connect: { id: assignmentId } } }),
           totalQuestions: simulation.totalQuestions,
           answers: [],
         },
@@ -2148,25 +2395,62 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
       }
 
-      // Get or create result
+      // Get existing in-progress result
       let result = await ctx.prisma.simulationResult.findFirst({
         where: { simulationId, studentId, completedAt: null },
       });
 
       if (!result) {
-        // Create new result for direct submission
-        const _completedCount = await ctx.prisma.simulationResult.count({
+        // Check if there's already a completed result
+        const completedResult = await ctx.prisma.simulationResult.findFirst({
           where: { simulationId, studentId, completedAt: { not: null } },
+          orderBy: { completedAt: 'desc' },
         });
-
-        result = await ctx.prisma.simulationResult.create({
-          data: {
-            simulation: { connect: { id: simulationId } },
-            student: { connect: { id: studentId } },
-            totalQuestions: simulation.totalQuestions,
-            answers: [],
-          },
-        });
+        
+        if (completedResult) {
+          // If simulation is not repeatable, user shouldn't be submitting again
+          if (!simulation.isRepeatable) {
+            throw new TRPCError({ 
+              code: 'BAD_REQUEST', 
+              message: 'Hai già completato questa simulazione' 
+            });
+          }
+          // For repeatable simulations with no in-progress result,
+          // this is likely a stale submission - return error
+          throw new TRPCError({ 
+            code: 'BAD_REQUEST', 
+            message: 'Sessione scaduta. Per favore, riavvia la simulazione.' 
+          });
+        }
+        
+        // Create new result for this submission attempt
+        try {
+          result = await ctx.prisma.simulationResult.create({
+            data: {
+              simulation: { connect: { id: simulationId } },
+              student: { connect: { id: studentId } },
+              totalQuestions: simulation.totalQuestions,
+              answers: [],
+            },
+          });
+        } catch (error) {
+          // Handle unique constraint violation - result was created in parallel
+          const existingResult = await ctx.prisma.simulationResult.findFirst({
+            where: { simulationId, studentId },
+            orderBy: { startedAt: 'desc' },
+          });
+          if (existingResult?.completedAt) {
+            throw new TRPCError({ 
+              code: 'BAD_REQUEST', 
+              message: 'Questa simulazione è già stata completata' 
+            });
+          }
+          if (existingResult) {
+            result = existingResult;
+          } else {
+            throw error;
+          }
+        }
       }
 
       // Calculate score
@@ -2699,10 +2983,18 @@ export const simulationsRouter = router({
       // Build question analysis
       type AnswerData = {
         questionId: string;
-        answer: string;
+        answerId: string | null;
         isCorrect: boolean;
         timeSpent?: number;
       };
+
+      // Create a map of answerId to letter label for each question
+      const answerIdToLetter = new Map<string, string>();
+      simulation.questions.forEach(sq => {
+        sq.question.answers.forEach((a, i) => {
+          answerIdToLetter.set(a.id, String.fromCharCode(65 + i));
+        });
+      });
 
       const questionStats = new Map<string, {
         questionId: string;
@@ -2711,6 +3003,7 @@ export const simulationsRouter = router({
         subject: { id: string; name: string; code: string; color: string } | null;
         topic: { id: string; name: string } | null;
         correctAnswer: string;
+        answers: Array<{ label: string; text: string; isCorrect: boolean }>;
         totalAnswers: number;
         correctCount: number;
         wrongCount: number;
@@ -2727,6 +3020,13 @@ export const simulationsRouter = router({
           ? String.fromCharCode(65 + sq.question.answers.indexOf(correctAnswerObj)) 
           : '';
 
+        // Build answers array with letter labels
+        const answersWithLabels = sq.question.answers.map((a, i) => ({
+          label: String.fromCharCode(65 + i), // A, B, C, D, E
+          text: a.text,
+          isCorrect: a.isCorrect,
+        }));
+
         questionStats.set(sq.questionId, {
           questionId: sq.questionId,
           order: idx + 1,
@@ -2734,6 +3034,7 @@ export const simulationsRouter = router({
           subject: sq.question.subject,
           topic: sq.question.topic,
           correctAnswer: correctAnswerLetter,
+          answers: answersWithLabels,
           totalAnswers: 0,
           correctCount: 0,
           wrongCount: 0,
@@ -2754,17 +3055,24 @@ export const simulationsRouter = router({
           if (!stats) return;
 
           stats.totalAnswers++;
-          if (answerData.answer === 'BLANK' || !answerData.answer) {
+          
+          // Check if answer is blank (no answerId)
+          if (!answerData.answerId) {
             stats.blankCount++;
             stats.answerDistribution['BLANK']++;
-          } else if (answerData.isCorrect) {
-            stats.correctCount++;
-            stats.answerDistribution[answerData.answer] = 
-              (stats.answerDistribution[answerData.answer] || 0) + 1;
           } else {
-            stats.wrongCount++;
-            stats.answerDistribution[answerData.answer] = 
-              (stats.answerDistribution[answerData.answer] || 0) + 1;
+            // Get the letter label for this answerId
+            const answerLetter = answerIdToLetter.get(answerData.answerId) || 'UNKNOWN';
+            
+            if (answerData.isCorrect) {
+              stats.correctCount++;
+              stats.answerDistribution[answerLetter] = 
+                (stats.answerDistribution[answerLetter] || 0) + 1;
+            } else {
+              stats.wrongCount++;
+              stats.answerDistribution[answerLetter] = 
+                (stats.answerDistribution[answerLetter] || 0) + 1;
+            }
           }
 
           if (typeof answerData.timeSpent === 'number' && answerData.timeSpent > 0) {
@@ -2917,14 +3225,13 @@ export const simulationsRouter = router({
           let totalTargeted = 0;
 
           if (assignment.studentId) {
-            // Single student assignment
+            // Single student assignment - count results for this specific assignment
             totalTargeted = 1;
-            const result = await ctx.prisma.simulationResult.findUnique({
+            const result = await ctx.prisma.simulationResult.findFirst({
               where: {
-                simulationId_studentId: {
-                  simulationId: assignment.simulationId,
-                  studentId: assignment.studentId,
-                },
+                simulationId: assignment.simulationId,
+                studentId: assignment.studentId,
+                assignmentId: assignment.id,
               },
               select: { completedAt: true },
             });
@@ -2942,6 +3249,7 @@ export const simulationsRouter = router({
                 where: {
                   simulationId: assignment.simulationId,
                   studentId: { in: members.map(m => m.studentId) },
+                  assignmentId: assignment.id, // Filter by this specific assignment
                   completedAt: { not: null },
                 },
                 select: { id: true },
@@ -3191,9 +3499,13 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Studente non trovato' });
       }
 
-      // Check if result already exists
-      const existingResult = await ctx.prisma.simulationResult.findUnique({
-        where: { simulationId_studentId: { simulationId, studentId } },
+      // Check if result already exists (for paper-based, we don't use assignmentId)
+      const existingResult = await ctx.prisma.simulationResult.findFirst({
+        where: { 
+          simulationId, 
+          studentId,
+          // For paper-based sims, we typically don't have assignmentId context
+        },
       });
 
       if (existingResult) {
@@ -3522,7 +3834,9 @@ export const simulationsRouter = router({
       ];
 
       scores.forEach(score => {
-        const bucketIndex = Math.min(Math.floor(score / 10), 9);
+        // Handle edge cases: negative scores go to first bucket, scores > 100 go to last bucket
+        const normalizedScore = Math.max(0, Math.min(score, 100));
+        const bucketIndex = Math.min(Math.floor(normalizedScore / 10), 9);
         scoreDistribution[bucketIndex].count++;
       });
 
@@ -3541,6 +3855,7 @@ export const simulationsRouter = router({
 
       // Top performers (top 5)
       const topPerformers = results.slice(0, 5).map(r => ({
+        resultId: r.id, // Unique identifier for the result
         studentId: r.student?.id ?? '',
         studentName: r.student?.user?.name ?? 'Studente',
         percentageScore: r.percentageScore ?? 0,
@@ -3556,6 +3871,7 @@ export const simulationsRouter = router({
         .slice(-5)
         .reverse()
         .map(r => ({
+          resultId: r.id, // Unique identifier for the result
           studentId: r.student?.id ?? '',
           studentName: r.student?.user?.name ?? 'Studente',
           percentageScore: r.percentageScore ?? 0,
@@ -3654,7 +3970,11 @@ export const simulationsRouter = router({
 
       // Collect all targeted student IDs from assignments
       const targetedStudentIds = new Set<string>();
+      // Also collect all assignment IDs if filtering by specific assignment or group
+      const targetedAssignmentIds = new Set<string>();
+      
       simulation.assignments.forEach(a => {
+        targetedAssignmentIds.add(a.id);
         if (a.studentId) targetedStudentIds.add(a.studentId);
         if (a.group) {
           a.group.members.forEach(m => targetedStudentIds.add(m.studentId));
@@ -3662,10 +3982,20 @@ export const simulationsRouter = router({
       });
 
       // Get results for targeted students
+      // If assignmentId is specified, filter by that specific assignment
+      // Otherwise, if groupId is specified, filter by all assignments for that group
+      // Otherwise, filter by all assignments for this simulation
       const results = await ctx.prisma.simulationResult.findMany({
         where: { 
           simulationId: input.simulationId,
           studentId: { in: Array.from(targetedStudentIds) },
+          // Filter by assignmentId(s) to ensure we only get results for this specific assignment/group
+          ...(input.assignmentId 
+            ? { assignmentId: input.assignmentId }
+            : targetedAssignmentIds.size > 0 
+              ? { assignmentId: { in: Array.from(targetedAssignmentIds) } }
+              : {}
+          ),
         },
         select: {
           id: true,

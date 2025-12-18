@@ -914,10 +914,12 @@ model SimulationAssignment {
   createCalendarEvent Boolean @default(false) // Whether to create a calendar event for this assignment
 
   // Relations
-  simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
-  student    Student?   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  group      Group?     @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  assignedBy User?      @relation("AssignmentCreator", fields: [assignedById], references: [id], onDelete: SetNull)
+  simulation Simulation           @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  student    Student?             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  group      Group?               @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  assignedBy User?                @relation("AssignmentCreator", fields: [assignedById], references: [id], onDelete: SetNull)
+  results    SimulationResult[]   // Results for this specific assignment
+  sessions   SimulationSession[]  // Virtual Room sessions for this assignment
 
   // Note: Removed unique constraints to allow multiple assignments of the same simulation
   // to the same student/group with different dates/schedules
@@ -954,9 +956,10 @@ model SimulationQuestion {
 // ==================== RESULTS ====================
 
 model SimulationResult {
-  id           String @id @default(cuid())
+  id           String  @id @default(cuid())
   simulationId String
   studentId    String
+  assignmentId String? // Link to specific assignment (allows multiple attempts per simulation)
 
   // Timing
   startedAt       DateTime  @default(now())
@@ -981,15 +984,19 @@ model SimulationResult {
   rankPosition      Int?
   totalParticipants Int?
 
-  simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
-  student    Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  simulation Simulation            @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  student    Student               @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assignment SimulationAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
 
   // Virtual room participant link
   sessionParticipant SimulationSessionParticipant?
 
-  @@unique([simulationId, studentId])
+  // Unique constraint: one result per student per simulation per assignment
+  // For simulations without assignment (public), assignmentId is null
+  @@unique([simulationId, studentId, assignmentId])
   @@index([studentId])
   @@index([simulationId])
+  @@index([assignmentId])
   @@index([totalScore])
   @@index([completedAt])
   @@map("simulation_results")
@@ -998,8 +1005,9 @@ model SimulationResult {
 // ==================== SIMULATION SESSIONS (Virtual Room) ====================
 
 model SimulationSession {
-  id           String @id @default(cuid())
+  id           String  @id @default(cuid())
   simulationId String
+  assignmentId String? // Link to specific assignment for per-assignment Virtual Rooms
 
   // Session status
   status SimulationSessionStatus @default(WAITING)
@@ -1020,9 +1028,11 @@ model SimulationSession {
 
   // Relations
   simulation   Simulation                     @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  assignment   SimulationAssignment?          @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   participants SimulationSessionParticipant[]
 
   @@index([simulationId])
+  @@index([assignmentId])
   @@index([status])
   @@index([scheduledStartAt])
   @@map("simulation_sessions")
@@ -1043,6 +1053,11 @@ model SimulationSessionParticipant {
   isConnected    Boolean   @default(true) // Currently connected
   lastHeartbeat  DateTime  @default(now()) // Last activity ping
   disconnectedAt DateTime? // When disconnected (for reconnection)
+  
+  // Kick/block status
+  isKicked     Boolean   @default(false) // Se lo studente è stato espulso
+  kickedAt     DateTime? // Quando è stato espulso
+  kickedReason String?   // Motivo dell'espulsione
 
   // Progress tracking (for admin monitoring)
   currentQuestionIndex Int @default(0) // Current question being viewed

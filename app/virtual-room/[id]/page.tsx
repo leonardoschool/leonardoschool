@@ -19,11 +19,13 @@ import {
   Zap,
   Shield,
   Activity,
-  Radio
+  Radio,
+  Ban
 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { useApiError } from '@/lib/hooks/useApiError';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { formatDistanceToNow } from 'date-fns';
 import { it } from 'date-fns/locale';
 
@@ -34,10 +36,11 @@ interface ParticipantCardProps {
   participant: Participant;
   totalQuestions: number;
   onSendMessage: (participantId: string) => void;
+  onKickParticipant: (participantId: string, studentName: string) => void;
   sessionStatus: string;
 }
 
-function ParticipantCard({ participant, totalQuestions, onSendMessage, sessionStatus }: ParticipantCardProps) {
+function ParticipantCard({ participant, totalQuestions, onSendMessage, onKickParticipant, sessionStatus }: ParticipantCardProps) {
   const progressPercent = totalQuestions > 0 
     ? Math.round(((participant.answeredCount || 0) / totalQuestions) * 100)
     : 0;
@@ -46,18 +49,47 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, sessionSt
   const isConnected = participant.isConnected;
   const hasStarted = !!participant.startedAt;
   const isReady = participant.isReady;
+  const isKicked = participant.isKicked;
+
+  // Se espulso, mostra uno stato speciale
+  if (isKicked) {
+    return (
+      <div className="relative overflow-hidden rounded-2xl backdrop-blur-xl bg-red-950/30 border border-red-500/40 opacity-75">
+        <div className="relative p-5">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-red-500/20">
+              <Ban className="w-5 h-5 text-red-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-red-300 text-lg line-through">
+                {participant.studentName}
+              </h3>
+              <p className="text-sm text-red-400">
+                ✕ Espulso
+              </p>
+            </div>
+          </div>
+          {participant.kickedReason && (
+            <p className="mt-3 text-xs text-red-400/70 italic">
+              Motivo: {participant.kickedReason}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] ${
+    <div className={`relative overflow-hidden rounded-2xl backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] shadow-lg ${
       isCompleted 
-        ? 'bg-gradient-to-br from-emerald-500/20 to-green-600/10 border border-emerald-500/30' 
+        ? 'bg-gradient-to-br from-emerald-500/30 to-green-600/20 border-2 border-emerald-400/50 shadow-emerald-500/20' 
         : isConnected 
-          ? 'bg-white/5 border border-white/10 hover:border-white/20' 
-          : 'bg-white/[0.02] border border-white/5 opacity-60'
+          ? 'bg-gradient-to-br from-slate-800/80 to-slate-700/60 border-2 border-cyan-400/40 hover:border-cyan-400/60 shadow-cyan-500/10' 
+          : 'bg-slate-800/40 border-2 border-slate-600/30 opacity-60'
     }`}>
       {/* Glow effect for active participants */}
       {isConnected && !isCompleted && (
-        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-purple-500/5 animate-pulse" />
+        <div className="absolute inset-0 bg-gradient-to-r from-cyan-400/10 via-purple-500/10 to-cyan-400/10 animate-pulse" />
       )}
       
       <div className="relative p-5">
@@ -105,7 +137,7 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, sessionSt
                 {isCompleted 
                   ? '✓ Completato' 
                   : hasStarted 
-                    ? `Domanda ${participant.currentQuestionIndex + 1}/${totalQuestions}`
+                    ? 'In corso...'
                     : isReady
                       ? '✓ Pronto'
                       : isConnected 
@@ -118,9 +150,9 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, sessionSt
           <div className="flex items-center gap-2">
             {/* Cheating alerts */}
             {participant.cheatingEventsCount > 0 && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 border border-red-500/30 rounded-full">
-                <AlertTriangle className="w-4 h-4 text-red-400" />
-                <span className="text-sm font-medium text-red-400">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/30 border-2 border-red-500/60 rounded-full shadow-lg shadow-red-500/20">
+                <AlertTriangle className="w-4 h-4 text-red-300" />
+                <span className="text-sm font-bold text-red-200">
                   {participant.cheatingEventsCount}
                 </span>
               </div>
@@ -128,7 +160,7 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, sessionSt
 
             {/* Unread messages indicator */}
             {participant.hasUnreadMessages && (
-              <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse shadow-lg shadow-blue-500/50" />
+              <div className="w-3 h-3 bg-blue-400 rounded-full animate-pulse shadow-lg shadow-blue-400/80 ring-2 ring-blue-400/30" />
             )}
 
             {/* Message button */}
@@ -139,19 +171,30 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, sessionSt
             >
               <MessageSquare className="w-4 h-4" />
             </button>
+
+            {/* Kick button */}
+            {!isCompleted && (
+              <button
+                onClick={() => onKickParticipant(participant.id, participant.studentName)}
+                className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 transition-all text-red-400 hover:text-red-300"
+                title="Espelli studente"
+              >
+                <Ban className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 
         {/* Progress bar - shown only during exam */}
         {sessionStatus === 'STARTED' && !isCompleted && hasStarted && (
-          <div className="mt-4">
-            <div className="flex justify-between text-xs text-gray-400 mb-2">
-              <span>Progresso: {participant.answeredCount}/{totalQuestions} risposte</span>
-              <span className="font-mono">{progressPercent}%</span>
+          <div className="mt-4 p-3 bg-slate-900/50 rounded-xl border border-cyan-500/20">
+            <div className="flex justify-between text-xs font-medium mb-2">
+              <span className="text-cyan-300">Progresso: {participant.answeredCount}/{totalQuestions} risposte</span>
+              <span className="font-mono text-cyan-200 font-bold">{progressPercent}%</span>
             </div>
-            <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+            <div className="w-full bg-slate-700/50 rounded-full h-3 overflow-hidden shadow-inner">
               <div 
-                className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-500 ease-out"
+                className="h-full rounded-full bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 transition-all duration-500 ease-out shadow-lg shadow-cyan-500/50"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
@@ -177,19 +220,50 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, sessionSt
           </div>
         )}
 
+        {/* Recent messages from student */}
+        {participant.recentMessages?.length > 0 && (
+          <div className="mt-4 pt-4 border-t-2 border-blue-500/30">
+            <p className="text-xs font-semibold text-blue-300 mb-3 flex items-center gap-1.5">
+              <MessageSquare className="w-4 h-4" />
+              Messaggi dallo studente
+            </p>
+            <div className="space-y-2">
+              {participant.recentMessages.map((msg: { id: string; message: string; createdAt: string; isRead: boolean }) => (
+                <div key={msg.id} className={`text-xs rounded-lg px-3 py-2.5 border ${
+                  msg.isRead 
+                    ? 'bg-slate-800/40 text-gray-300 border-slate-600/30' 
+                    : 'bg-blue-500/25 text-blue-100 font-medium border-blue-400/40 shadow-lg shadow-blue-500/10'
+                }`}>
+                  <div className="flex items-start gap-2">
+                    <span className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${
+                      msg.isRead ? 'bg-gray-500' : 'bg-blue-300 animate-pulse shadow-lg shadow-blue-400/50'
+                    }`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="break-words">{msg.message}</p>
+                      <span className="text-gray-400 text-[10px] mt-1 block">
+                        {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true, locale: it })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Recent cheating events */}
         {participant.recentCheatingEvents?.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-red-500/20">
-            <p className="text-xs font-medium text-red-400 mb-2 flex items-center gap-1.5">
-              <Shield className="w-3.5 h-3.5" />
+          <div className="mt-4 pt-4 border-t-2 border-red-500/30">
+            <p className="text-xs font-semibold text-red-300 mb-3 flex items-center gap-1.5">
+              <Shield className="w-4 h-4" />
               Eventi sospetti recenti
             </p>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {participant.recentCheatingEvents.slice(0, 3).map((event: { id: string; eventType: string; createdAt: string }) => (
-                <div key={event.id} className="text-xs text-gray-400 flex items-center gap-2 bg-red-500/10 rounded-lg px-2 py-1">
-                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full" />
-                  <span className="flex-1">{event.eventType.replace(/_/g, ' ')}</span>
-                  <span className="text-gray-500">
+                <div key={event.id} className="text-xs text-red-100 flex items-center gap-2 bg-red-500/20 border border-red-500/40 rounded-lg px-3 py-2 shadow-lg shadow-red-500/10">
+                  <span className="w-2 h-2 bg-red-400 rounded-full animate-pulse shadow-lg shadow-red-500/50" />
+                  <span className="flex-1 font-medium">{event.eventType.replace(/_/g, ' ')}</span>
+                  <span className="text-gray-400 text-[10px]">
                     {formatDistanceToNow(new Date(event.createdAt), { addSuffix: true, locale: it })}
                   </span>
                 </div>
@@ -205,17 +279,26 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, sessionSt
 export default function VirtualRoomPage() {
   const params = useParams();
   const router = useRouter();
-  const simulationId = params.id as string;
+  const assignmentId = params.id as string; // The URL param is now assignmentId
   const { showSuccess } = useToast();
   const { handleMutationError } = useApiError();
+  const { user } = useAuth();
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [showStartConfirm, setShowStartConfirm] = useState(false);
   const [showForceStartConfirm, setShowForceStartConfirm] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [selectedParticipantId, setSelectedParticipantId] = useState<string | null>(null);
   const [messageText, setMessageText] = useState('');
+  const [kickConfirm, setKickConfirm] = useState<{ id: string; name: string } | null>(null);
 
-  // Create or get session
+  const isStudent = user?.role === 'STUDENT';
+  const isStaff = user?.role === 'ADMIN' || user?.role === 'COLLABORATOR';
+
+  // Student states
+  const [participantId, setParticipantId] = useState<string | null>(null);
+
+  // Create or get session (Staff only) - now uses assignmentId
   const getOrCreateSession = trpc.virtualRoom.getOrCreateSession.useMutation({
     onSuccess: (data) => {
       setSessionId(data.session.id);
@@ -223,14 +306,83 @@ export default function VirtualRoomPage() {
     onError: handleMutationError,
   });
 
-  // Get session state (polling)
+  // Student join session - now uses assignmentId
+  const joinSession = trpc.virtualRoom.joinSession.useMutation({
+    onSuccess: (data) => {
+      setParticipantId(data.participantId);
+      setSessionId(data.sessionId);
+    },
+    onError: handleMutationError,
+  });
+
+  // Student heartbeat
+  const heartbeat = trpc.virtualRoom.heartbeat.useMutation();
+
+  // Student set ready
+  const setReady = trpc.virtualRoom.setReady.useMutation({
+    onSuccess: () => {
+      showSuccess('Pronto!', 'Hai confermato di essere pronto per iniziare.');
+    },
+    onError: handleMutationError,
+  });
+
+  // Get session state (polling) - Staff only
   const sessionState = trpc.virtualRoom.getSessionState.useQuery(
     { sessionId: sessionId! },
     { 
-      enabled: !!sessionId,
-      refetchInterval: 3000,
+      enabled: !!sessionId && isStaff,
+      refetchInterval: 2000, // Poll every 2 seconds for real-time updates
     }
   );
+
+  // Get student session status (polling) - Student only - now uses assignmentId
+  const studentStatus = trpc.virtualRoom.getStudentSessionStatus.useQuery(
+    { assignmentId },
+    {
+      enabled: isStudent,
+      refetchInterval: 2000,
+    }
+  );
+
+  // Sync student status data and handle session start
+  useEffect(() => {
+    const data = studentStatus.data;
+    if (!data?.hasSession) return;
+    
+    // Check if kicked (use 'in' operator for type narrowing)
+    if ('isKicked' in data && data.isKicked) {
+      console.log('[Student] Kicked from session:', 'kickedReason' in data ? data.kickedReason : '');
+      // Redirect to simulations with error message
+      router.push(`/simulazioni?kicked=true`);
+      return;
+    }
+    
+    // Normal session handling
+    if ('sessionId' in data && 'participantId' in data) {
+      console.log('[Student] Session status update:', {
+        sessionId: data.sessionId,
+        status: data.status,
+        participantId: data.participantId,
+        isConnected: 'isConnected' in data ? data.isConnected : false,
+      });
+      setSessionId(data.sessionId ?? null);
+      setParticipantId(data.participantId ?? null);
+
+      // When session starts, redirect to test page
+      if (data.status === 'STARTED' && isStudent && data.simulationId) {
+        console.log('[Student] Session STARTED - Redirecting to test page');
+        setTimeout(() => {
+          router.push(`/simulazioni/${data.simulationId}?assignmentId=${assignmentId}`);
+        }, 1500); // Small delay to show "La simulazione è iniziata!" message
+      }
+
+      // When session is completed/ended, redirect back to simulations
+      if (data.status === 'COMPLETED' && isStudent) {
+        console.log('[Student] Session COMPLETED - Redirecting to simulations');
+        router.push('/simulazioni?sessionEnded=true');
+      }
+    }
+  }, [studentStatus.data, isStudent, router, assignmentId]);
 
   // Start session mutation
   const startSession = trpc.virtualRoom.startSession.useMutation({
@@ -252,8 +404,11 @@ export default function VirtualRoomPage() {
   // End session mutation
   const endSession = trpc.virtualRoom.endSession.useMutation({
     onSuccess: () => {
-      showSuccess('Sessione terminata', 'La simulazione è stata conclusa.');
-      sessionState.refetch();
+      showSuccess('Sessione terminata', 'La simulazione è stata conclusa. Tutti i partecipanti sono stati disconnessi.');
+      // Redirect staff to simulations page after a brief delay
+      setTimeout(() => {
+        router.push('/simulazioni');
+      }, 1500);
     },
     onError: handleMutationError,
   });
@@ -269,13 +424,52 @@ export default function VirtualRoomPage() {
     onError: handleMutationError,
   });
 
+  // Kick participant mutation
+  const kickParticipant = trpc.virtualRoom.kickParticipant.useMutation({
+    onSuccess: (data) => {
+      showSuccess('Studente espulso', data.message);
+      setKickConfirm(null);
+      sessionState.refetch();
+    },
+    onError: handleMutationError,
+  });
+
+  // Handler for kick button
+  const handleKickParticipant = useCallback((participantId: string, studentName: string) => {
+    setKickConfirm({ id: participantId, name: studentName });
+  }, []);
+
   // Initialize session on mount
   useEffect(() => {
-    if (simulationId && !sessionId) {
-      getOrCreateSession.mutate({ simulationId });
+    if (!user) return;
+    
+    if (isStaff && assignmentId && !sessionId) {
+      getOrCreateSession.mutate({ assignmentId });
+    }
+    
+    if (isStudent && assignmentId && !participantId) {
+      joinSession.mutate({ assignmentId });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [simulationId]);
+  }, [assignmentId, user, isStaff, isStudent]);
+
+  // Student heartbeat
+  useEffect(() => {
+    if (!isStudent || !participantId) return;
+
+    const interval = setInterval(() => {
+      heartbeat.mutate({ participantId });
+    }, 10000); // Every 10 seconds
+
+    // Send heartbeat on unmount/close
+    return () => {
+      clearInterval(interval);
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(`/api/trpc/virtualRoom.heartbeat`, JSON.stringify({ participantId }));
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStudent, participantId]);
 
   const handleStartSession = useCallback(() => {
     if (!sessionId) return;
@@ -310,7 +504,8 @@ export default function VirtualRoomPage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  if (getOrCreateSession.isPending || !sessionState.data) {
+  // Loading states
+  if (!user || (isStaff && (getOrCreateSession.isPending || !sessionState.data)) || (isStudent && (joinSession.isPending || !studentStatus.data))) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -322,6 +517,256 @@ export default function VirtualRoomPage() {
         </div>
       </div>
     );
+  }
+
+  // === STUDENT VIEW ===
+  if (isStudent) {
+    // Show loading if still fetching
+    if (studentStatus.isLoading || !studentStatus.data) {
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="relative">
+              <div className="w-20 h-20 rounded-full border-4 border-white/10 border-t-cyan-500 animate-spin" />
+              <Zap className="absolute inset-0 m-auto w-8 h-8 text-cyan-400" />
+            </div>
+            <p className="mt-6 text-gray-400 text-lg">Connessione in corso...</p>
+          </div>
+        </div>
+      );
+    }
+
+    // No session found
+    if (!studentStatus.data.hasSession) {
+      return (
+        <div className="fixed inset-0 z-50 bg-gray-900 flex items-center justify-center p-4">
+          <div className="max-w-md w-full text-center">
+            {/* Icon */}
+            <div className="w-24 h-24 rounded-full bg-orange-500/20 border-2 border-orange-500/30 flex items-center justify-center mx-auto mb-8">
+              <XCircle className="w-12 h-12 text-orange-500" />
+            </div>
+            
+            {/* Title */}
+            <h2 className="text-3xl font-bold text-white mb-4">
+              Sessione non trovata
+            </h2>
+            
+            {/* Message */}
+            <p className="text-gray-300 text-base mb-10 px-4">
+              Non c&apos;è una sessione attiva per questa simulazione. Contatta il tuo docente o attendi che la sessione venga aperta.
+            </p>
+            
+            {/* Back button */}
+            <Button 
+              onClick={() => router.back()}
+              className="px-8 py-4 bg-white text-gray-900 hover:bg-gray-100 rounded-xl font-medium shadow-lg"
+            >
+              Torna indietro
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // Check if kicked (use 'in' operator for type narrowing)
+    if ('isKicked' in studentStatus.data && studentStatus.data.isKicked) {
+      const kickedReason = 'kickedReason' in studentStatus.data 
+        ? (studentStatus.data.kickedReason as string) 
+        : 'Sei stato espulso dalla sessione';
+      return (
+        <div className="fixed inset-0 z-50 bg-gray-900 flex items-center justify-center p-4">
+          <div className="max-w-md w-full text-center">
+            {/* Icon */}
+            <div className="w-24 h-24 rounded-full bg-red-500/20 border-2 border-red-500/30 flex items-center justify-center mx-auto mb-8">
+              <Shield className="w-12 h-12 text-red-500" />
+            </div>
+            
+            {/* Title */}
+            <h2 className="text-3xl font-bold text-white mb-4">
+              Sessione Terminata
+            </h2>
+            
+            {/* Status message */}
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6">
+              <p className="text-red-400 font-semibold text-lg">
+                Sei stato espulso dalla sessione
+              </p>
+            </div>
+            
+            {/* Reason */}
+            <p className="text-gray-300 text-base mb-10 px-4">
+              {kickedReason}
+            </p>
+            
+            {/* Back button */}
+            <Button 
+              onClick={() => router.push('/simulazioni')}
+              className="px-8 py-4 bg-white text-gray-900 hover:bg-gray-100 rounded-xl font-medium shadow-lg"
+            >
+              Torna alle simulazioni
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // Session found - type guard for non-kicked sessions
+    if (!('simulation' in studentStatus.data) || !studentStatus.data.simulation) {
+      return null;
+    }
+
+    const { status, simulation: simInfo, waitingMessage } = studentStatus.data;
+    
+    return (
+      <div className="min-h-screen relative overflow-hidden">
+        {/* Background Effects */}
+        <div className="fixed inset-0 pointer-events-none">
+          <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl" />
+          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-pink-500/10 rounded-full blur-3xl" />
+        </div>
+
+        {/* Header */}
+        <header className="relative z-10 backdrop-blur-xl bg-black/30 border-b border-white/10">
+          <div className="container mx-auto px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center">
+                  <Radio className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-white">{simInfo?.title || 'TOLC-MED 2025'}</h1>
+                  <p className="text-sm text-gray-400 flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                    Virtual Room • Live
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => router.back()}
+                className="p-2 rounded-xl hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Content */}
+        <div className="relative z-10 flex items-center justify-center min-h-[calc(100vh-80px)]">
+          <div className="max-w-2xl w-full mx-auto px-6">
+            {status === 'WAITING' ? (
+              // Waiting Room
+              <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-10 text-center shadow-2xl">
+                <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center mx-auto mb-6">
+                  <Wifi className="w-12 h-12 text-white" />
+                </div>
+                
+                <h2 className="text-3xl font-bold text-white mb-3">Sei connesso alla stanza</h2>
+                <p className="text-gray-400 text-lg mb-8">
+                  {waitingMessage || 'Attendi che l\'esaminatore avvii la simulazione'}
+                </p>
+
+                {/* Details */}
+                <div className="grid grid-cols-1 gap-4 mb-8">
+                  <div className="bg-purple-900/30 border border-purple-500/30 rounded-2xl p-5">
+                    <div className="flex items-center justify-center gap-3">
+                      <Clock className="w-6 h-6 text-purple-400" />
+                      <div>
+                        <p className="text-sm text-purple-300">Durata</p>
+                        <p className="text-xl font-bold text-white">{simInfo?.durationMinutes} minuti</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-green-900/30 border border-green-500/30 rounded-2xl p-5">
+                    <div className="flex items-center justify-center gap-3">
+                      <CheckCircle className="w-6 h-6 text-green-400" />
+                      <div>
+                        <p className="text-sm text-green-300">Stato</p>
+                        <p className="text-xl font-bold text-white">Pronto per iniziare</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ready Button */}
+                {participantId && (
+                  <Button
+                    onClick={() => setReady.mutate({ participantId })}
+                    disabled={setReady.isPending}
+                    className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold py-4 px-8 rounded-xl text-lg"
+                  >
+                    <CheckCircle className="w-5 h-5 mr-2" />
+                    Sono pronto
+                  </Button>
+                )}
+
+                {/* Tips */}
+                <div className="mt-8 bg-cyan-900/20 border border-cyan-500/20 rounded-2xl p-6">
+                  <h3 className="flex items-center gap-2 text-cyan-400 font-semibold mb-3">
+                    <Zap className="w-5 h-5" />
+                    Suggerimenti
+                  </h3>
+                  <ul className="text-sm text-gray-300 space-y-2 text-left">
+                    <li>• Assicurati di avere una connessione stabile</li>
+                    <li>• Non chiudere questa finestra</li>
+                    <li>• Il test inizierà automaticamente</li>
+                    <li>• Il timer partirà per tutti contemporaneamente</li>
+                  </ul>
+                </div>
+
+                {/* Waiting dots */}
+                <div className="mt-8 flex items-center justify-center gap-2">
+                  <span className="w-2 h-2 bg-cyan-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 bg-cyan-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 bg-cyan-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <span className="ml-3 text-gray-400">In attesa dell&apos;avvio...</span>
+                </div>
+              </div>
+            ) : status === 'STARTED' ? (
+              // Session Started - Redirect to normal test interface
+              <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-10 text-center shadow-2xl">
+                <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center mx-auto mb-6 animate-pulse">
+                  <Activity className="w-12 h-12 text-white" />
+                </div>
+                <h2 className="text-3xl font-bold text-white mb-3">La simulazione è iniziata!</h2>
+                <p className="text-gray-400 text-lg mb-6">
+                  Verrai reindirizzato all&apos;interfaccia del test...
+                </p>
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-2 h-2 bg-cyan-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-2 h-2 bg-cyan-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-2 h-2 bg-cyan-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              </div>
+            ) : (
+              // Session Completed
+              <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-10 text-center shadow-2xl">
+                <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center mx-auto mb-6">
+                  <CheckCircle className="w-12 h-12 text-white" />
+                </div>
+                <h2 className="text-3xl font-bold text-white mb-3">Simulazione completata</h2>
+                <p className="text-gray-400 text-lg mb-8">
+                  Grazie per aver partecipato!
+                </p>
+                <Button
+                  onClick={() => router.push('/simulazioni')}
+                  className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white"
+                >
+                  Torna alle simulazioni
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // === STAFF VIEW ===
+  if (!sessionState.data) {
+    return null;
   }
 
   const { session, simulation, participants, invitedStudents, connectedCount, totalInvited, timeRemaining } = sessionState.data;
@@ -401,9 +846,9 @@ export default function VirtualRoomPage() {
                 <span className="text-sm font-medium text-red-400">LIVE</span>
               </div>
 
-              {/* Close button */}
+              {/* Close button - shows confirmation */}
               <button
-                onClick={() => window.close()}
+                onClick={() => setShowCloseConfirm(true)}
                 className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all text-gray-400 hover:text-white"
                 title="Chiudi"
               >
@@ -453,14 +898,7 @@ export default function VirtualRoomPage() {
               </div>
 
               <Button
-                onClick={() => {
-                  console.log('Button clicked!');
-                  console.log('showStartConfirm before:', showStartConfirm);
-                  setShowStartConfirm(true);
-                  setTimeout(() => {
-                    console.log('showStartConfirm after:', showStartConfirm);
-                  }, 100);
-                }}
+                onClick={() => setShowStartConfirm(true)}
                 disabled={startSession.isPending}
                 className="relative z-10 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white border-0 px-8 py-3 text-lg font-semibold rounded-xl shadow-lg shadow-pink-500/25 hover:shadow-pink-500/40 transition-all"
               >
@@ -527,7 +965,7 @@ export default function VirtualRoomPage() {
               </div>
 
               <Button
-                onClick={() => router.push(`/simulazioni/${simulationId}/classifica`)}
+                onClick={() => router.push(`/simulazioni/${simulation.id}/classifica`)}
                 className="bg-white/10 hover:bg-white/20 text-white border border-white/20 hover:border-white/30 px-6 py-3 rounded-xl transition-all"
               >
                 Vedi Classifica
@@ -570,6 +1008,7 @@ export default function VirtualRoomPage() {
                   participant={participant}
                   totalQuestions={simulation.totalQuestions}
                   onSendMessage={setSelectedParticipantId}
+                  onKickParticipant={handleKickParticipant}
                   sessionStatus={session.status}
                 />
               ))}
@@ -730,6 +1169,123 @@ export default function VirtualRoomPage() {
               >
                 <Send className="w-4 h-4 mr-2" />
                 Invia
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Kick Confirmation Modal */}
+      {kickConfirm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-red-500/20 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-5 border-b border-red-500/20 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
+                <Ban className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-white">Conferma Espulsione</h3>
+                <p className="text-sm text-gray-400">Questa azione non può essere annullata</p>
+              </div>
+            </div>
+            <div className="p-5">
+              <p className="text-gray-300">
+                Stai per espellere <span className="font-semibold text-white">{kickConfirm.name}</span> dalla sessione.
+              </p>
+              <p className="text-gray-400 text-sm mt-2">
+                Lo studente non potrà più partecipare a questa simulazione e la sua sessione verrà terminata immediatamente.
+              </p>
+            </div>
+            <div className="p-5 pt-0 flex justify-end gap-3">
+              <Button
+                variant="ghost"
+                onClick={() => setKickConfirm(null)}
+                className="text-gray-400 hover:text-white"
+              >
+                Annulla
+              </Button>
+              <Button
+                onClick={() => kickParticipant.mutate({ participantId: kickConfirm.id, reason: 'Espulso dall\'amministratore' })}
+                disabled={kickParticipant.isPending}
+                className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white border-0 px-6"
+              >
+                <Ban className="w-4 h-4 mr-2" />
+                {kickParticipant.isPending ? 'Espulsione...' : 'Espelli Studente'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Close Session Confirmation Modal */}
+      {showCloseConfirm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-gray-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-5 border-b border-white/10 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-white">Chiudere la Virtual Room?</h3>
+                <p className="text-sm text-gray-400">Scegli come procedere</p>
+              </div>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-gray-300">
+                {session.status === 'STARTED' 
+                  ? 'La simulazione è in corso. Cosa vuoi fare?'
+                  : 'Cosa vuoi fare con questa sessione?'
+                }
+              </p>
+              
+              {/* Option 1: End session and disconnect everyone */}
+              <button
+                onClick={() => {
+                  setShowCloseConfirm(false);
+                  if (sessionId) {
+                    endSession.mutate({ sessionId });
+                  }
+                }}
+                disabled={endSession.isPending}
+                className="w-full p-4 rounded-xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-colors text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <XCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium text-red-400">Termina sessione ed esci</p>
+                    <p className="text-sm text-gray-400 mt-1">
+                      Tutti gli studenti saranno disconnessi e la sessione verrà chiusa definitivamente.
+                    </p>
+                  </div>
+                </div>
+              </button>
+              
+              {/* Option 2: Just close the window (session stays active) */}
+              <button
+                onClick={() => {
+                  setShowCloseConfirm(false);
+                  router.push('/simulazioni');
+                }}
+                className="w-full p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <X className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium text-white">Solo esci (sessione attiva)</p>
+                    <p className="text-sm text-gray-400 mt-1">
+                      La sessione rimarrà attiva e potrai tornare in seguito. Gli studenti continueranno.
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+            <div className="p-5 pt-0">
+              <Button
+                variant="ghost"
+                onClick={() => setShowCloseConfirm(false)}
+                className="w-full text-gray-400 hover:text-white"
+              >
+                Annulla
               </Button>
             </div>
           </div>

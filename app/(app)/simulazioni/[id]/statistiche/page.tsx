@@ -311,15 +311,17 @@ export default function SimulationStatsPage({ params }: { params: Promise<{ id: 
                             Distribuzione risposte
                           </h4>
                           <div className="space-y-2">
-                            {['A', 'B', 'C', 'D', 'E'].map((letter) => {
+                            {(q.answers && q.answers.length > 0 ? q.answers : ['A', 'B', 'C', 'D', 'E'].map(l => ({ label: l, text: '', isCorrect: l === q.correctAnswer }))).map((answer) => {
+                              const letter = typeof answer === 'string' ? answer : answer.label;
+                              const answerText = typeof answer === 'string' ? '' : answer.text;
+                              const isCorrect = typeof answer === 'string' ? letter === q.correctAnswer : answer.isCorrect;
                               const count = q.answerDistribution[letter] || 0;
                               const percentage = q.totalAnswers > 0 ? (count / q.totalAnswers) * 100 : 0;
-                              const isCorrect = letter === q.correctAnswer;
 
                               return (
                                 <div key={letter} className="flex items-center gap-3">
                                   <span
-                                    className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${
+                                    className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                                       isCorrect
                                         ? 'bg-green-500 text-white'
                                         : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
@@ -327,15 +329,22 @@ export default function SimulationStatsPage({ params }: { params: Promise<{ id: 
                                   >
                                     {letter}
                                   </span>
-                                  <div className="flex-1 h-4 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
-                                    <div
-                                      className={`h-full transition-all ${
-                                        isCorrect ? 'bg-green-500' : 'bg-red-400'
-                                      }`}
-                                      style={{ width: `${percentage}%` }}
-                                    />
+                                  <div className="flex-1 min-w-0">
+                                    {answerText && (
+                                      <p className={`text-sm ${colors.text.secondary} truncate mb-1`} title={answerText}>
+                                        {answerText}
+                                      </p>
+                                    )}
+                                    <div className="h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                                      <div
+                                        className={`h-full transition-all ${
+                                          isCorrect ? 'bg-green-500' : 'bg-red-400'
+                                        }`}
+                                        style={{ width: `${percentage}%` }}
+                                      />
+                                    </div>
                                   </div>
-                                  <span className={`text-sm ${colors.text.secondary} w-16 text-right`}>
+                                  <span className={`text-sm ${colors.text.secondary} w-16 text-right flex-shrink-0`}>
                                     {count} ({percentage.toFixed(0)}%)
                                   </span>
                                 </div>

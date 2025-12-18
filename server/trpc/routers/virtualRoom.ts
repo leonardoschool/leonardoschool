@@ -3,41 +3,63 @@ import { z } from 'zod';
 import { router, staffProcedure, protectedProcedure } from '../init';
 import { TRPCError } from '@trpc/server';
 import { CheatingEventType, SessionMessageSender } from '@prisma/client';
+import { createLogger } from '@/lib/utils/logger';
+
+const log = createLogger('VirtualRoom');
 
 export const virtualRoomRouter = router({
   // ==================== SESSION MANAGEMENT (Staff Only) ====================
 
-  // Create or get session for a simulation
+  // Create or get session for an assignment (each assignment has its own Virtual Room)
   getOrCreateSession: staffProcedure
     .input(z.object({
-      simulationId: z.string(),
+      assignmentId: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
-      // Check simulation exists and is ROOM type
-      const simulation = await ctx.prisma.simulation.findUnique({
-        where: { id: input.simulationId },
+      // Get assignment with simulation details
+      const assignment = await ctx.prisma.simulationAssignment.findUnique({
+        where: { id: input.assignmentId },
         include: {
-          assignments: {
-            include: {
-              student: { include: { user: true } },
-              group: { include: { members: { include: { student: { include: { user: true } } } } } },
-            },
-          },
+          simulation: true,
+          student: { include: { user: true } },
+          group: { include: { members: { include: { student: { include: { user: true } } } } } },
         },
       });
 
-      if (!simulation) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
+      if (!assignment) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Assegnazione non trovata' });
       }
+
+      const simulation = assignment.simulation;
 
       if (simulation.accessType !== 'ROOM') {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Questa simulazione non è configurata per la stanza virtuale' });
       }
 
-      // Check if session already exists (not completed/cancelled)
+      // Check if assignment is expired
+      const now = new Date();
+      const effectiveEndDate = assignment.endDate || simulation.endDate;
+      const isExpired = effectiveEndDate && effectiveEndDate < now;
+
+      if (isExpired) {
+        throw new TRPCError({ 
+          code: 'BAD_REQUEST', 
+          message: 'L\'assegnazione è scaduta. Non è più possibile accedere alla Virtual Room.' 
+        });
+      }
+
+      // Check if assignment is ACTIVE
+      if (assignment.status !== 'ACTIVE') {
+        throw new TRPCError({ 
+          code: 'BAD_REQUEST', 
+          message: 'L\'assegnazione è chiusa. Riapri l\'assegnazione per accedere alla Virtual Room.' 
+        });
+      }
+
+      // Check if session already exists for this assignment (not completed/cancelled)
       let session = await ctx.prisma.simulationSession.findFirst({
         where: {
-          simulationId: input.simulationId,
+          assignmentId: input.assignmentId,
           status: { in: ['WAITING', 'STARTED'] },
         },
         include: {
@@ -51,12 +73,13 @@ export const virtualRoomRouter = router({
       });
 
       if (!session) {
-        // Create new session
+        // Create new session for this assignment
         session = await ctx.prisma.simulationSession.create({
           data: {
-            simulationId: input.simulationId,
+            simulationId: simulation.id,
+            assignmentId: input.assignmentId,
             status: 'WAITING',
-            scheduledStartAt: simulation.startDate,
+            scheduledStartAt: assignment.startDate || simulation.startDate,
           },
           include: {
             participants: {
@@ -67,35 +90,43 @@ export const virtualRoomRouter = router({
             },
           },
         });
+        
+        // Log session creation with request tracking
+        log.info('Session created', {
+          sessionId: session.id,
+          simulationId: simulation.id,
+          assignmentId: input.assignmentId,
+          staffId: ctx.user.id,
+        });
       }
 
-      // Get list of invited students
+      // Get list of invited students for this specific assignment
       const invitedStudents: { id: string; userId: string; name: string; email: string }[] = [];
-      for (const assignment of simulation.assignments) {
-        if (assignment.student) {
-          invitedStudents.push({
-            id: assignment.student.id,
-            userId: assignment.student.userId,
-            name: assignment.student.user.name,
-            email: assignment.student.user.email,
-          });
-        }
-        if (assignment.group) {
-          for (const member of assignment.group.members) {
-            if (member.student && !invitedStudents.find(s => s.id === member.student!.id)) {
-              invitedStudents.push({
-                id: member.student.id,
-                userId: member.student.userId,
-                name: member.student.user.name,
-                email: member.student.user.email,
-              });
-            }
+      
+      if (assignment.student) {
+        invitedStudents.push({
+          id: assignment.student.id,
+          userId: assignment.student.userId,
+          name: assignment.student.user.name,
+          email: assignment.student.user.email,
+        });
+      }
+      if (assignment.group) {
+        for (const member of assignment.group.members) {
+          if (member.student && !invitedStudents.find(s => s.id === member.student!.id)) {
+            invitedStudents.push({
+              id: member.student.id,
+              userId: member.student.userId,
+              name: member.student.user.name,
+              email: member.student.user.email,
+            });
           }
         }
       }
 
       return {
         session,
+        assignmentId: input.assignmentId,
         simulation: {
           id: simulation.id,
           title: simulation.title,
@@ -201,12 +232,26 @@ export const virtualRoomRouter = router({
       sessionId: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const session = await ctx.prisma.simulationSession.update({
-        where: { id: input.sessionId },
-        data: {
-          status: 'COMPLETED',
-          endedAt: new Date(),
-        },
+      // Use transaction to ensure atomicity
+      const session = await ctx.prisma.$transaction(async (tx) => {
+        // Update session status
+        const updatedSession = await tx.simulationSession.update({
+          where: { id: input.sessionId },
+          data: {
+            status: 'COMPLETED',
+            endedAt: new Date(),
+          },
+        });
+
+        // Disconnect all participants
+        await tx.simulationSessionParticipant.updateMany({
+          where: { sessionId: input.sessionId },
+          data: {
+            isConnected: false,
+          },
+        });
+
+        return updatedSession;
       });
 
       return { success: true, session };
@@ -325,6 +370,16 @@ export const virtualRoomRouter = router({
             cheatingEventsCount: p.cheatingEvents.length,
             recentCheatingEvents: p.cheatingEvents,
             hasUnreadMessages: p.messages.some(m => m.senderType === 'STUDENT' && !m.isRead),
+            recentMessages: p.messages.filter(m => m.senderType === 'STUDENT').slice(0, 3).map(m => ({
+              id: m.id,
+              message: m.message,
+              createdAt: m.createdAt,
+              isRead: m.isRead,
+            })),
+            // Kick status
+            isKicked: p.isKicked,
+            kickedReason: p.kickedReason,
+            kickedAt: p.kickedAt,
             result: p.result ? {
               totalScore: p.result.totalScore,
               correctAnswers: p.result.correctAnswers,
@@ -345,10 +400,10 @@ export const virtualRoomRouter = router({
 
   // ==================== STUDENT PROCEDURES ====================
 
-  // Student joins the waiting room
+  // Student joins the waiting room for a specific assignment
   joinSession: protectedProcedure
     .input(z.object({
-      simulationId: z.string(),
+      assignmentId: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
       if (ctx.user.role !== 'STUDENT') {
@@ -364,59 +419,51 @@ export const virtualRoomRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Profilo studente non trovato' });
       }
 
-      // Check if student is invited
-      const simulation = await ctx.prisma.simulation.findUnique({
-        where: { id: input.simulationId },
+      // Get assignment with simulation
+      const assignment = await ctx.prisma.simulationAssignment.findUnique({
+        where: { id: input.assignmentId },
         include: {
-          assignments: {
-            include: {
-              student: true,
-              group: { include: { members: { include: { student: true } } } },
-            },
-          },
+          simulation: true,
+          student: true,
+          group: { include: { members: { include: { student: true } } } },
         },
       });
 
-      if (!simulation) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
+      if (!assignment) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Assegnazione non trovata' });
       }
 
-      if (simulation.accessType !== 'ROOM') {
+      if (assignment.simulation.accessType !== 'ROOM') {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Questa simulazione non richiede stanza virtuale' });
       }
 
-      // Check invitation
+      // Check if student is invited to this assignment
       let isInvited = false;
-      for (const assignment of simulation.assignments) {
-        if (assignment.studentId === student.id) {
-          isInvited = true;
-          break;
-        }
-        if (assignment.group) {
-          for (const member of assignment.group.members) {
-            if (member.studentId === student.id) {
-              isInvited = true;
-              break;
-            }
+      if (assignment.studentId === student.id) {
+        isInvited = true;
+      } else if (assignment.group) {
+        for (const member of assignment.group.members) {
+          if (member.studentId === student.id) {
+            isInvited = true;
+            break;
           }
         }
-        if (isInvited) break;
       }
 
       if (!isInvited) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Non sei invitato a questa simulazione' });
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Non sei invitato a questa assegnazione' });
       }
 
-      // Find active session
+      // Find active session for this assignment
       const session = await ctx.prisma.simulationSession.findFirst({
         where: {
-          simulationId: input.simulationId,
+          assignmentId: input.assignmentId,
           status: { in: ['WAITING', 'STARTED'] },
         },
       });
 
       if (!session) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Nessuna sessione attiva per questa simulazione' });
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Nessuna sessione attiva per questa assegnazione' });
       }
 
       // Join or update participant
@@ -449,9 +496,9 @@ export const virtualRoomRouter = router({
         actualStartAt: session.actualStartAt,
         waitingMessage: session.waitingMessage,
         simulation: {
-          title: simulation.title,
-          durationMinutes: simulation.durationMinutes,
-          totalQuestions: simulation.totalQuestions,
+          title: assignment.simulation.title,
+          durationMinutes: assignment.simulation.durationMinutes,
+          totalQuestions: assignment.simulation.totalQuestions,
         },
       };
     }),
@@ -464,6 +511,30 @@ export const virtualRoomRouter = router({
       answeredCount: z.number().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      // First check if participant exists and isn't kicked
+      const existing = await ctx.prisma.simulationSessionParticipant.findUnique({
+        where: { id: input.participantId },
+        select: { isKicked: true, kickedReason: true },
+      });
+
+      if (!existing) {
+        log.warn('Heartbeat: Participant not found:', input.participantId);
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Partecipante non trovato' });
+      }
+
+      if (existing.isKicked) {
+        log.debug('Heartbeat: Participant is kicked:', input.participantId);
+        return {
+          isKicked: true,
+          kickedReason: existing.kickedReason || 'Sei stato espulso dalla sessione',
+          sessionStatus: 'COMPLETED' as const,
+          actualStartAt: null,
+          endedAt: null,
+          unreadMessages: [],
+          isReady: false,
+        };
+      }
+
       const participant = await ctx.prisma.simulationSessionParticipant.update({
         where: { id: input.participantId },
         data: {
@@ -481,7 +552,14 @@ export const virtualRoomRouter = router({
         },
       });
 
+      // Debug log only - very verbose, only shown with LOG_VERBOSE=true
+      log.debug('Heartbeat updated:', {
+        participantId: input.participantId,
+        answeredCount: input.answeredCount,
+      });
+
       return {
+        isKicked: false,
         sessionStatus: participant.session.status,
         actualStartAt: participant.session.actualStartAt,
         endedAt: participant.session.endedAt,
@@ -503,10 +581,10 @@ export const virtualRoomRouter = router({
       return { success: true };
     }),
 
-  // Get session status (for student polling)
+  // Get session status for student polling (by assignmentId)
   getStudentSessionStatus: protectedProcedure
     .input(z.object({
-      simulationId: z.string(),
+      assignmentId: z.string(),
     }))
     .query(async ({ ctx, input }) => {
       if (ctx.user.role !== 'STUDENT') {
@@ -523,7 +601,7 @@ export const virtualRoomRouter = router({
 
       const session = await ctx.prisma.simulationSession.findFirst({
         where: {
-          simulationId: input.simulationId,
+          assignmentId: input.assignmentId,
           status: { in: ['WAITING', 'STARTED', 'COMPLETED'] },
         },
         include: {
@@ -547,6 +625,17 @@ export const virtualRoomRouter = router({
 
       const participant = session.participants[0];
 
+      // Check if kicked
+      if (participant?.isKicked) {
+        return {
+          hasSession: true,
+          isKicked: true,
+          kickedReason: participant.kickedReason || 'Sei stato espulso dalla sessione',
+          sessionId: session.id,
+          status: 'COMPLETED' as const,
+        };
+      }
+
       // Calculate time remaining
       let timeRemaining: number | null = null;
       if (session.status === 'STARTED' && session.actualStartAt) {
@@ -557,7 +646,9 @@ export const virtualRoomRouter = router({
 
       return {
         hasSession: true,
+        isKicked: false,
         sessionId: session.id,
+        simulationId: session.simulationId, // For redirect after session starts
         status: session.status,
         actualStartAt: session.actualStartAt,
         endedAt: session.endedAt,
@@ -594,6 +685,39 @@ export const virtualRoomRouter = router({
       });
 
       return { success: true, eventId: event.id };
+    }),
+
+  // Kick/block participant (staff only)
+  kickParticipant: staffProcedure
+    .input(z.object({
+      participantId: z.string(),
+      reason: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const participant = await ctx.prisma.simulationSessionParticipant.findUnique({
+        where: { id: input.participantId },
+        include: { student: { include: { user: true } }, session: true },
+      });
+
+      if (!participant) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Partecipante non trovato' });
+      }
+
+      // Update participant as kicked
+      await ctx.prisma.simulationSessionParticipant.update({
+        where: { id: input.participantId },
+        data: {
+          isKicked: true,
+          kickedAt: new Date(),
+          kickedReason: input.reason || 'Espulso dall\'amministratore',
+          isConnected: false,
+        },
+      });
+
+      return { 
+        success: true, 
+        message: `${participant.student.user.name} è stato espulso dalla sessione` 
+      };
     }),
 
   // ==================== MESSAGING ====================

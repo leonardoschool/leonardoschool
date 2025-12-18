@@ -24,7 +24,6 @@ import {
   AlertCircle,
   Clock,
   FileDown,
-  Users,
 } from 'lucide-react';
 import type { SimulationType, SimulationStatus } from '@/lib/validations/simulationValidation';
 
@@ -64,6 +63,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
   const isAdmin = role === 'ADMIN';
 
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [forceDeleteConfirm, setForceDeleteConfirm] = useState<{ resultsCount: number } | null>(null);
   const [archiveConfirm, setArchiveConfirm] = useState(false);
 
   // Fetch simulation
@@ -75,7 +75,20 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
       showSuccess('Eliminata', 'Simulazione eliminata con successo');
       router.push('/simulazioni');
     },
-    onError: handleMutationError,
+    onError: (error) => {
+      // Check if error is about having results - offer force delete
+      if (error.message.includes('risultati salvati') || error.message.includes('Usa l\'eliminazione forzata')) {
+        // Extract results count from message if possible
+        const match = error.message.match(/ha (\d+) risultati/);
+        const resultsCount = match ? parseInt(match[1], 10) : 0;
+        
+        // Close normal delete dialog and show force delete dialog
+        setDeleteConfirm(false);
+        setForceDeleteConfirm({ resultsCount });
+      } else {
+        handleMutationError(error);
+      }
+    },
   });
 
   const publishMutation = trpc.simulations.publish.useMutation({
@@ -240,25 +253,6 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
               >
                 <BarChart3 className="w-4 h-4" />
                 <span className="hidden lg:inline">Statistiche</span>
-              </Link>
-            )}
-            {isAdmin && simulation.isPaperBased && (
-              <Link
-                href={`/simulazioni/${id}/risultati-cartacei`}
-                className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg border border-blue-300 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20`}
-              >
-                <Edit2 className="w-4 h-4" />
-                <span className="hidden xl:inline">Inserisci Risultati</span>
-              </Link>
-            )}
-            {/* Virtual Room button for ROOM access type simulations */}
-            {simulation.accessType === 'ROOM' && simulation.status === 'PUBLISHED' && (
-              <Link
-                href={`/simulazioni/${id}/virtual-room`}
-                className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 shadow-sm`}
-              >
-                <Users className="w-4 h-4" />
-                <span className="hidden lg:inline">Virtual Room</span>
               </Link>
             )}
             <button
@@ -551,6 +545,21 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
           isLoading={deleteMutation.isPending}
           onConfirm={() => deleteMutation.mutate({ id })}
           onCancel={() => setDeleteConfirm(false)}
+        />
+      )}
+
+      {/* Force Delete Confirmation Modal - shown when simulation has results */}
+      {forceDeleteConfirm && (
+        <ConfirmModal
+          isOpen={true}
+          title="⚠️ Eliminazione Forzata"
+          message={`ATTENZIONE: Stai per eliminare definitivamente "${simulation.title}".\n\n🗑️ Verranno eliminati:\n• ${forceDeleteConfirm.resultsCount} risultati degli studenti\n• Tutte le statistiche e analisi\n• Tutte le assegnazioni e sessioni\n• Gli eventi calendario correlati\n\n❌ Questa operazione è IRREVERSIBILE.\n\nSei assolutamente sicuro di voler procedere?`}
+          confirmText="Elimina Definitivamente"
+          cancelText="Annulla"
+          variant="danger"
+          isLoading={deleteMutation.isPending}
+          onConfirm={() => deleteMutation.mutate({ id, force: true })}
+          onCancel={() => setForceDeleteConfirm(null)}
         />
       )}
 

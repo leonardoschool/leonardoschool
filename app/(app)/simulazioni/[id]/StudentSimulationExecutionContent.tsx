@@ -58,9 +58,10 @@ interface SimulationSection {
 
 interface StudentSimulationExecutionContentProps {
   id: string;
+  assignmentId?: string | null;
 }
 
-export default function StudentSimulationExecutionContent({ id }: StudentSimulationExecutionContentProps) {
+export default function StudentSimulationExecutionContent({ id, assignmentId }: StudentSimulationExecutionContentProps) {
   const router = useRouter();
   const { handleMutationError } = useApiError();
   const { showSuccess, showError } = useToast();
@@ -75,6 +76,8 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [showMessaging, setShowMessaging] = useState(false);
   const [messagingUnreadCount, setMessagingUnreadCount] = useState(0);
+  const [isKicked, setIsKicked] = useState(false);
+  const [kickedReason, setKickedReason] = useState<string | null>(null);
   
   // Section state for TOLC-style simulations
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
@@ -97,18 +100,54 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
   const autoSubmitRef = useRef<(() => void) | null>(null);
   const answersInitializedRef = useRef<boolean>(false);
 
-  // Fetch simulation
+  // Fetch simulation - pass assignmentId to get correct assignment dates
   const { data: simulation, isLoading, error } = trpc.simulations.getSimulationForStudent.useQuery(
-    { id },
+    { id, assignmentId: assignmentId ?? undefined },
     { enabled: !hasStarted }
   );
 
   // Check if this is a virtual room simulation (after simulation is loaded)
   const isVirtualRoom = simulation?.accessType === 'ROOM';
 
+  // Get participant ID for Virtual Room simulations - run immediately when isVirtualRoom
+  // Uses assignmentId to get the session status for this specific assignment
+  const { data: sessionStatus, refetch: _refetchSessionStatus } = trpc.virtualRoom.getStudentSessionStatus.useQuery(
+    { assignmentId: assignmentId ?? undefined },
+    { 
+      enabled: isVirtualRoom === true && !!assignmentId, // Run only for Virtual Room with valid assignmentId
+      refetchInterval: hasStarted ? 5000 : false, // Poll only after started to check for session end
+    }
+  );
+
+  // Set participantId from session status
+  useEffect(() => {
+    console.log('[VirtualRoom] sessionStatus changed:', sessionStatus);
+    
+    if (sessionStatus?.hasSession && 'participantId' in sessionStatus && sessionStatus.participantId) {
+      console.log('[VirtualRoom] Got participantId:', sessionStatus.participantId);
+      setParticipantId(sessionStatus.participantId);
+    }
+    
+    // Check if session has been terminated by admin
+    if (sessionStatus?.hasSession && 'status' in sessionStatus && sessionStatus.status === 'COMPLETED' && hasStarted) {
+      console.log('[VirtualRoom] Session terminated by admin, auto-submitting...');
+      // Auto-submit if session ended
+      if (autoSubmitRef.current) {
+        autoSubmitRef.current();
+      }
+    }
+    
+    // Check if kicked
+    if (sessionStatus?.hasSession && 'isKicked' in sessionStatus && sessionStatus.isKicked) {
+      setIsKicked(true);
+      setKickedReason('kickedReason' in sessionStatus ? (sessionStatus.kickedReason as string) : 'Sei stato espulso dalla sessione');
+    }
+  }, [sessionStatus, hasStarted]);
+
   // Mutations
   const startAttemptMutation = trpc.simulations.startAttempt.useMutation({
     onSuccess: (data) => {
+      console.log('[VirtualRoom] startAttemptMutation onSuccess');
       if (data.resumed) {
         showSuccess('Ripreso', 'Hai ripreso il tuo tentativo precedente');
         // Mark as initialized to prevent re-initialization
@@ -145,6 +184,7 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
         }
       }
       // Set hasStarted AFTER restoring state to prevent re-initialization
+      console.log('[VirtualRoom] Setting hasStarted = true');
       setHasStarted(true);
     },
     onError: handleMutationError,
@@ -281,6 +321,49 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
     };
   }, [hasStarted, simulation]);
 
+  // Virtual Room heartbeat - send progress updates
+  const heartbeatMutation = trpc.virtualRoom.heartbeat.useMutation({
+    onSuccess: (data) => {
+      // Check if student has been kicked (type guard for kicked response)
+      if (data.isKicked && 'kickedReason' in data) {
+        setIsKicked(true);
+        setKickedReason((data.kickedReason as string) || 'Sei stato espulso dalla sessione');
+      }
+    },
+  });
+
+  useEffect(() => {
+    if (!isVirtualRoom || !participantId || !hasStarted) {
+      console.log('[VirtualRoom Heartbeat] Skipping - conditions not met:', { isVirtualRoom, participantId, hasStarted });
+      return;
+    }
+
+    console.log('[VirtualRoom Heartbeat] Starting interval with participantId:', participantId);
+
+    // Send heartbeat immediately once
+    const answeredCount = answers.filter(a => a.answerId !== null || a.answerText !== null).length;
+    console.log('[VirtualRoom Heartbeat] Sending initial heartbeat:', { participantId, currentQuestionIndex, answeredCount });
+    heartbeatMutation.mutate({
+      participantId,
+      currentQuestionIndex,
+      answeredCount,
+    });
+
+    // Send heartbeat every 5 seconds with current progress
+    const interval = setInterval(() => {
+      const currentAnsweredCount = answers.filter(a => a.answerId !== null || a.answerText !== null).length;
+      console.log('[VirtualRoom Heartbeat] Sending:', { participantId, currentQuestionIndex, answeredCount: currentAnsweredCount });
+      
+      heartbeatMutation.mutate({
+        participantId,
+        currentQuestionIndex,
+        answeredCount: currentAnsweredCount,
+      });
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [isVirtualRoom, participantId, hasStarted, currentQuestionIndex, answers, heartbeatMutation]);
+
   // Track question time
   const trackQuestionTime = useCallback(() => {
     if (!simulation || !hasStarted) return;
@@ -405,7 +488,7 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
   };
 
   // Submit simulation
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     if (!simulation) return;
     setIsSubmitting(true);
 
@@ -424,7 +507,13 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
       answers: finalAnswers,
       totalTimeSpent: timeSpent,
     });
-  };
+  }, [simulation, trackQuestionTime, answers, questionTimes, submitMutation, id, timeSpent]);
+
+  // Keep autoSubmitRef updated with the latest handleSubmit function
+  // This allows external triggers (like Virtual Room session end) to auto-submit
+  useEffect(() => {
+    autoSubmitRef.current = handleSubmit;
+  }, [handleSubmit]);
 
   // Format time
   const formatTime = (seconds: number) => {
@@ -552,6 +641,46 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
     return <PageLoader />;
   }
 
+  // Kicked state - shown when student is expelled from Virtual Room session
+  if (isKicked) {
+    return (
+      <div className="fixed inset-0 z-50 bg-gray-900 flex items-center justify-center p-4">
+        <div className="max-w-md w-full text-center">
+          {/* Icon */}
+          <div className="w-24 h-24 rounded-full bg-red-500/20 border-2 border-red-500/30 flex items-center justify-center mx-auto mb-8">
+            <ShieldAlert className="w-12 h-12 text-red-500" />
+          </div>
+          
+          {/* Title */}
+          <h1 className="text-3xl font-bold text-white mb-4">
+            Sessione Terminata
+          </h1>
+          
+          {/* Status message */}
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6">
+            <p className="text-red-400 font-semibold text-lg">
+              Sei stato espulso dalla sessione
+            </p>
+          </div>
+          
+          {/* Reason */}
+          <p className="text-gray-300 text-base mb-10 px-4">
+            {kickedReason || 'La tua partecipazione a questa simulazione è stata terminata dall\'amministratore.'}
+          </p>
+          
+          {/* Back button */}
+          <Link
+            href="/simulazioni"
+            className="inline-flex items-center gap-2 px-8 py-4 bg-white text-gray-900 hover:bg-gray-100 rounded-xl font-medium transition-colors shadow-lg"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            Torna alle simulazioni
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   // Error state
   if (error || !simulation) {
     return (
@@ -575,19 +704,35 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
 
   // Virtual Room Waiting Screen
   if (!hasStarted && isVirtualRoom) {
+    // Virtual Room requires assignmentId
+    if (!assignmentId) {
+      return (
+        <div className="px-4 sm:px-6 lg:px-8 py-8">
+          <div className={`text-center py-12 ${colors.background.card} rounded-xl border ${colors.border.light}`}>
+            <p className={colors.text.secondary}>Errore: manca l&apos;ID dell&apos;assegnazione per la Virtual Room.</p>
+          </div>
+        </div>
+      );
+    }
+    
     return (
       <StudentWaitingRoom
-        simulationId={id}
+        assignmentId={assignmentId}
         simulationTitle={simulation.title}
         durationMinutes={simulation.durationMinutes}
         onSessionStart={(actualStartAt, pId) => {
+          console.log('[VirtualRoom] onSessionStart called with participantId:', pId);
           // Calculate elapsed time from session start
           const elapsed = Math.floor((Date.now() - actualStartAt.getTime()) / 1000);
           setVirtualRoomStartedAt(actualStartAt);
           setTimeSpent(elapsed);
           setParticipantId(pId);
-          // Start the attempt
-          startAttemptMutation.mutate({ simulationId: id });
+          console.log('[VirtualRoom] participantId set, calling startAttemptMutation');
+          // Start the attempt with assignmentId
+          startAttemptMutation.mutate({ 
+            simulationId: id,
+            assignmentId: assignmentId,
+          });
         }}
       />
     );
@@ -699,7 +844,10 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
           )}
 
           <button
-            onClick={() => startAttemptMutation.mutate({ simulationId: id })}
+            onClick={() => startAttemptMutation.mutate({ 
+              simulationId: id,
+              assignmentId: assignmentId || undefined,
+            })}
             disabled={startAttemptMutation.isPending}
             className={`w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg text-white ${colors.primary.bg} hover:opacity-90 disabled:opacity-50 text-lg font-medium`}
           >
@@ -953,27 +1101,31 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
               <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${
                 timeRemaining !== null && timeRemaining < 300 
                   ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' 
-                  : colors.background.secondary
+                  : 'bg-gray-100 dark:bg-slate-700'
               }`}>
-                <Clock className="w-4 h-4" />
-                <span className="font-mono font-medium">
+                <Clock className={`w-4 h-4 ${timeRemaining !== null && timeRemaining < 300 ? '' : colors.icon.primary}`} />
+                <span className={`font-mono font-medium ${timeRemaining !== null && timeRemaining < 300 ? '' : colors.text.primary}`}>
                   {timeRemaining !== null ? formatTime(timeRemaining) : formatTime(timeSpent)}
                 </span>
               </div>
             )}
 
             {/* Progress */}
-            <div className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg ${colors.background.secondary}`}>
-              <CheckCircle className="w-4 h-4 text-green-500" />
-              <span className={`text-sm ${colors.text.secondary}`}>{answeredCount}/{simulation.totalQuestions}</span>
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-slate-700">
+              <CheckCircle className="w-4 h-4 text-green-500 dark:text-green-400" />
+              <span className={`text-sm font-medium ${colors.text.primary}`}>{answeredCount}/{simulation.totalQuestions}</span>
             </div>
 
             {/* Navigation toggle */}
             <button
               onClick={() => setShowNavigation(!showNavigation)}
-              className={`p-2 rounded-lg ${colors.background.hover} ${showNavigation ? 'bg-gray-200 dark:bg-gray-700' : ''}`}
+              className={`p-2 rounded-lg transition-colors ${
+                showNavigation 
+                  ? 'bg-gray-300 dark:bg-slate-600' 
+                  : 'bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600'
+              }`}
             >
-              <Grid3X3 className="w-5 h-5" />
+              <Grid3X3 className={`w-5 h-5 ${colors.icon.primary}`} />
             </button>
 
             {/* Submit button */}

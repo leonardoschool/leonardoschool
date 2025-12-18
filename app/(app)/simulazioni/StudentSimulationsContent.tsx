@@ -310,10 +310,12 @@ export default function StudentSimulationsContent() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {simulations.map((simulation) => {
             const statusInfo = studentStatusColors[simulation.studentStatus] || studentStatusColors.available;
+            // Build URL with assignmentId if present
+            const assignmentQuery = simulation.assignmentId ? `?assignmentId=${simulation.assignmentId}` : '';
             // Per simulazioni completate, vai direttamente ai risultati
             const href = simulation.studentStatus === 'completed' 
-              ? `/simulazioni/${simulation.id}/risultato`
-              : `/simulazioni/${simulation.id}`;
+              ? `/simulazioni/${simulation.id}/risultato${assignmentQuery}`
+              : `/simulazioni/${simulation.id}${assignmentQuery}`;
             
             // Determine if it's a single date or date range
             const hasStartDate = !!simulation.startDate;
@@ -324,9 +326,14 @@ export default function StudentSimulationsContent() {
             // Check if the simulation is disabled (closed, expired, not started)
             const isDisabled = ['closed', 'expired', 'not_started'].includes(simulation.studentStatus);
             
+            // Use combination of id and assignmentId as unique key
+            const cardKey = simulation.assignmentId 
+              ? `${simulation.id}-${simulation.assignmentId}` 
+              : simulation.id;
+            
             return (
               <Link
-                key={simulation.id}
+                key={cardKey}
                 href={href}
                 className={`block p-5 rounded-xl ${colors.background.card} border ${colors.border.light} ${isDisabled ? 'opacity-75 cursor-not-allowed pointer-events-none' : 'hover:shadow-lg transition-all group'}`}
               >

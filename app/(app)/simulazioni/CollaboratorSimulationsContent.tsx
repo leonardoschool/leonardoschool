@@ -889,28 +889,45 @@ export default function CollaboratorSimulationsContent() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-1.5 sm:gap-2 flex-wrap">
-                              {/* Virtual Room button for ROOM access type */}
-                              {group.simulationAccessType === 'ROOM' && group.status === 'ACTIVE' && hasPermission && (
-                                <button
-                                  onClick={() => {
-                                    const url = `/virtual-room/${group.simulationId}`;
-                                    const width = Math.min(1400, window.screen.width - 100);
-                                    const height = Math.min(900, window.screen.height - 100);
-                                    const left = (window.screen.width - width) / 2;
-                                    const top = (window.screen.height - height) / 2;
-                                    window.open(
-                                      url,
-                                      'VirtualRoom',
-                                      `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes`
-                                    );
-                                  }}
-                                  className={`inline-flex items-center gap-1.5 px-2 py-1.5 sm:px-3 sm:py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 shadow-sm hover:shadow-md transition-all`}
-                                  title="Virtual Room"
-                                >
-                                  <Users className="w-4 h-4" />
-                                  <span className="hidden sm:inline">Virtual Room</span>
-                                </button>
-                              )}
+                              {/* Virtual Room button for ROOM access type - show if ACTIVE, has permission, and not expired */}
+                              {group.simulationAccessType === 'ROOM' && group.status === 'ACTIVE' && hasPermission && (() => {
+                                const isExpired = group.endDate && new Date(group.endDate) < new Date();
+                                
+                                if (isExpired) {
+                                  return (
+                                    <button
+                                      disabled
+                                      className={`inline-flex items-center gap-1.5 px-2 py-1.5 sm:px-3 sm:py-2 text-sm font-medium rounded-lg bg-gray-400 dark:bg-gray-700 text-gray-200 dark:text-gray-500 cursor-not-allowed opacity-50`}
+                                      title="Simulazione scaduta"
+                                    >
+                                      <Lock className="w-4 h-4" />
+                                      <span className="hidden sm:inline">Virtual Room</span>
+                                    </button>
+                                  );
+                                }
+                                
+                                return (
+                                  <button
+                                    onClick={() => {
+                                      const url = `/virtual-room/${group.id}`;
+                                      const width = Math.min(1400, window.screen.width - 100);
+                                      const height = Math.min(900, window.screen.height - 100);
+                                      const left = (window.screen.width - width) / 2;
+                                      const top = (window.screen.height - height) / 2;
+                                      window.open(
+                                        url,
+                                        `VirtualRoom_${group.id}`,
+                                        `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes`
+                                      );
+                                    }}
+                                    className={`inline-flex items-center gap-1.5 px-2 py-1.5 sm:px-3 sm:py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 shadow-sm hover:shadow-md transition-all`}
+                                    title="Virtual Room"
+                                  >
+                                    <Users className="w-4 h-4" />
+                                    <span className="hidden sm:inline">Virtual Room</span>
+                                  </button>
+                                );
+                              })()}
                               {/* Statistics - only show if there are completions */}
                               {group.completedCount > 0 && (
                                 <Link

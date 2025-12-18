@@ -41,6 +41,30 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  
+  // Reduce noisy logs in development
+  logging: {
+    fetches: {
+      fullUrl: false, // Don't log full URLs for internal fetches
+    },
+  },
+  
+  // Suppress verbose development logs
+  ...(process.env.NODE_ENV === 'development' && {
+    onDemandEntries: {
+      maxInactiveAge: 25 * 1000,
+      pagesBufferLength: 2,
+    },
+  }),
+  
+  // In production, only log errors
+  ...(process.env.NODE_ENV === 'production' && {
+    logging: {
+      fetches: {
+        fullUrl: false,
+      },
+    },
+  }),
 };
 
 export default nextConfig;

@@ -14,6 +14,7 @@ Piattaforma web completa per la preparazione ai test d'ammissione universitari (
 - [Autenticazione](#-autenticazione)
 - [Database](#-database)
 - [API (tRPC)](#-api-trpc)
+- [Logging](#-logging)
 - [Sicurezza](#-sicurezza)
 - [Sistema Colori](#-sistema-colori)
 - [Seeding Dati di Test](#-seeding-dati-di-test)
@@ -342,7 +343,81 @@ const mutation = trpc.users.create.useMutation({
 
 ---
 
-## 🔒 Sicurezza
+## � Logging
+
+Leonardo School utilizza un **sistema di logging centralizzato** con request tracking (simile a Spring Boot MDC).
+
+### Quick Start
+
+```typescript
+import { createLogger } from '@/lib/utils/logger';
+
+const log = createLogger('MyModule');
+
+log.info('Operazione completata', { userId: 123 });
+// Output: [12:34:56.789] [req:a1b2c3d4] [MyModule] Operazione completata { userId: 123 }
+```
+
+### Request Tracking
+
+Ogni richiesta ha un **Request ID univoco** (UUID) che appare in tutti i log correlati:
+
+```bash
+# Esempio di log con request tracking
+[12:34:56.789] [req:a1b2c3d4] [Auth] User logged in
+[12:34:57.123] [req:a1b2c3d4] [Database] User fetched from DB
+[12:34:57.456] [req:a1b2c3d4] [Auth] JWT token created
+
+# Per tracciare una richiesta specifica in production:
+grep "req:a1b2c3d4" application.log
+```
+
+**Request ID nel Browser**: Ogni risposta API include l'header `x-request-id` visibile in DevTools → Network → Headers. Puoi copiarlo e cercarlo nei log server per debug end-to-end!
+
+### Log Levels
+
+| Level | Development | Production | Uso |
+|-------|-------------|------------|-----|
+| `debug` | ❌ No (solo con `LOG_VERBOSE=true`) | ❌ No | Log molto frequenti (heartbeat, polling) |
+| `info` | ✅ Sì | ❌ No (solo con `ENABLE_PROD_LOGS=true`) | Operazioni normali |
+| `warn` | ✅ Sì | ✅ Sì | Warning non bloccanti |
+| `error` | ✅ Sì | ✅ Sì | Errori che richiedono attenzione |
+
+### Configurazione Log
+
+```bash
+# .env.local
+
+# Abilita log query Prisma (utile per debug)
+LOG_PRISMA_QUERIES=true
+
+# Abilita log debug/verbose
+LOG_VERBOSE=true
+
+# Production: abilita log info (non raccomandato)
+ENABLE_PROD_LOGS=true
+```
+
+### Ridurre Log Noise in Development
+
+I log HTTP di Next.js (`GET /dashboard 200 in 2.3s`) sono normali in development. Per ridurli:
+
+```bash
+# Opzione 1: Filtra con grep (raccomandato)
+pnpm dev 2>&1 | grep -E "\[[0-9]{2}:[0-9]{2}:[0-9]{2}\]"  # Solo log del tuo logger
+pnpm dev 2>&1 | grep -v "GET\|POST\|PUT\|DELETE"          # Escludi log HTTP
+
+# Opzione 2: Disabilita tutti i log Next.js (SPERIMENTALE - non raccomandato)
+NEXT_DISABLE_DEV_LOGGING=true pnpm dev
+```
+
+**In production** questi log sono già **minimizzati automaticamente** da Next.js.
+
+📖 **Documentazione completa**: [docs/LOGGING.md](docs/LOGGING.md)
+
+---
+
+## �🔒 Sicurezza
 
 ### Misure Implementate
 

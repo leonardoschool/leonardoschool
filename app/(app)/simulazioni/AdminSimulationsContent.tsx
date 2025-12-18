@@ -110,6 +110,7 @@ export default function AdminSimulationsContent() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string; assignmentsCount?: number } | null>(null);
+  const [forceDeleteConfirm, setForceDeleteConfirm] = useState<{ id: string; title: string; resultsCount: number } | null>(null);
   const [archiveConfirm, setArchiveConfirm] = useState<{ id: string; title: string } | null>(null);
   const [assignModal, setAssignModal] = useState<{ id: string; title: string; isOfficial: boolean; durationMinutes: number } | null>(null);
   
@@ -162,8 +163,28 @@ export default function AdminSimulationsContent() {
       ]);
       
       setDeleteConfirm(null);
+      setForceDeleteConfirm(null);
     },
-    onError: handleMutationError,
+    onError: (error) => {
+      // Check if error is about having results - offer force delete
+      if (error.message.includes('risultati salvati') || error.message.includes('Usa l\'eliminazione forzata')) {
+        // Extract results count from message if possible
+        const match = error.message.match(/ha (\d+) risultati/);
+        const resultsCount = match ? parseInt(match[1], 10) : 0;
+        
+        // Close normal delete dialog and show force delete dialog
+        if (deleteConfirm) {
+          setForceDeleteConfirm({
+            id: deleteConfirm.id,
+            title: deleteConfirm.title,
+            resultsCount,
+          });
+          setDeleteConfirm(null);
+        }
+      } else {
+        handleMutationError(error);
+      }
+    },
   });
 
   const publishMutation = trpc.simulations.publish.useMutation({
@@ -885,28 +906,45 @@ export default function AdminSimulationsContent() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-1.5 sm:gap-2 flex-wrap">
-                              {/* Virtual Room button for ROOM access type */}
-                              {group.simulationAccessType === 'ROOM' && group.status === 'ACTIVE' && (
-                                <button
-                                  onClick={() => {
-                                    const url = `/virtual-room/${group.simulationId}`;
-                                    const width = Math.min(1400, window.screen.width - 100);
-                                    const height = Math.min(900, window.screen.height - 100);
-                                    const left = (window.screen.width - width) / 2;
-                                    const top = (window.screen.height - height) / 2;
-                                    window.open(
-                                      url,
-                                      'VirtualRoom',
-                                      `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes`
-                                    );
-                                  }}
-                                  className={`inline-flex items-center gap-1.5 px-2 py-1.5 sm:px-3 sm:py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 shadow-sm hover:shadow-md transition-all`}
-                                  title="Virtual Room"
-                                >
-                                  <Users className="w-4 h-4" />
-                                  <span className="hidden sm:inline">Virtual Room</span>
-                                </button>
-                              )}
+                              {/* Virtual Room button for ROOM access type - show if ACTIVE and not expired */}
+                              {group.simulationAccessType === 'ROOM' && group.status === 'ACTIVE' && (() => {
+                                const isExpired = group.endDate && new Date(group.endDate) < new Date();
+                                
+                                if (isExpired) {
+                                  return (
+                                    <button
+                                      disabled
+                                      className={`inline-flex items-center gap-1.5 px-2 py-1.5 sm:px-3 sm:py-2 text-sm font-medium rounded-lg bg-gray-400 dark:bg-gray-700 text-gray-200 dark:text-gray-500 cursor-not-allowed opacity-50`}
+                                      title="Simulazione scaduta"
+                                    >
+                                      <Lock className="w-4 h-4" />
+                                      <span className="hidden sm:inline">Virtual Room</span>
+                                    </button>
+                                  );
+                                }
+                                
+                                return (
+                                  <button
+                                    onClick={() => {
+                                      const url = `/virtual-room/${group.id}`;
+                                      const width = Math.min(1400, window.screen.width - 100);
+                                      const height = Math.min(900, window.screen.height - 100);
+                                      const left = (window.screen.width - width) / 2;
+                                      const top = (window.screen.height - height) / 2;
+                                      window.open(
+                                        url,
+                                        `VirtualRoom_${group.id}`,
+                                        `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes`
+                                      );
+                                    }}
+                                    className={`inline-flex items-center gap-1.5 px-2 py-1.5 sm:px-3 sm:py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 shadow-sm hover:shadow-md transition-all`}
+                                    title="Virtual Room"
+                                  >
+                                    <Users className="w-4 h-4" />
+                                    <span className="hidden sm:inline">Virtual Room</span>
+                                  </button>
+                                );
+                              })()}
                               {/* Statistics - only show if there are completions */}
                               {group.completedCount > 0 && (
                                 <Link
@@ -1165,6 +1203,21 @@ export default function AdminSimulationsContent() {
           isLoading={deleteMutation.isPending}
           onConfirm={() => deleteMutation.mutate({ id: deleteConfirm.id })}
           onCancel={() => setDeleteConfirm(null)}
+        />
+      )}
+
+      {/* Force Delete Confirmation Modal - shown when simulation has results */}
+      {forceDeleteConfirm && (
+        <ConfirmModal
+          isOpen={true}
+          title="⚠️ Eliminazione Forzata"
+          message={`ATTENZIONE: Stai per eliminare definitivamente "${forceDeleteConfirm.title}".\n\n🗑️ Verranno eliminati:\n• ${forceDeleteConfirm.resultsCount} risultati degli studenti\n• Tutte le statistiche e analisi\n• Tutte le assegnazioni e sessioni\n• Gli eventi calendario correlati\n\n❌ Questa operazione è IRREVERSIBILE.\n\nSei assolutamente sicuro di voler procedere?`}
+          confirmText="Elimina Definitivamente"
+          cancelText="Annulla"
+          variant="danger"
+          isLoading={deleteMutation.isPending}
+          onConfirm={() => deleteMutation.mutate({ id: forceDeleteConfirm.id, force: true })}
+          onCancel={() => setForceDeleteConfirm(null)}
         />
       )}
 

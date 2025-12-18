@@ -171,7 +171,7 @@ export function TemplateStatistics({ simulationId }: TemplateStatisticsProps) {
           </p>
         </div>
         <div className="p-6">
-          <div className="flex items-end gap-2 h-40">
+          <div className="flex items-end gap-1 sm:gap-2 h-40 mb-12">
             {scoreDistribution.map((bucket, index) => {
               const maxCount = Math.max(...scoreDistribution.map(b => b.count));
               const heightPercent = maxCount > 0 ? (bucket.count / maxCount) * 100 : 0;
@@ -180,7 +180,7 @@ export function TemplateStatistics({ simulationId }: TemplateStatisticsProps) {
                 : index >= 6;
               
               return (
-                <div key={bucket.range} className="flex-1 flex flex-col items-center gap-1">
+                <div key={bucket.range} className="flex-1 flex flex-col items-center gap-1 relative">
                   <span className={`text-xs font-medium ${colors.text.primary}`}>
                     {bucket.count}
                   </span>
@@ -192,7 +192,7 @@ export function TemplateStatistics({ simulationId }: TemplateStatisticsProps) {
                     }`}
                     style={{ height: `${heightPercent}%`, minHeight: bucket.count > 0 ? '4px' : '0' }}
                   />
-                  <span className={`text-xs ${colors.text.muted} transform -rotate-45 origin-left whitespace-nowrap`}>
+                  <span className={`absolute -bottom-10 left-1/2 -translate-x-1/2 text-[10px] sm:text-xs ${colors.text.muted} transform -rotate-45 origin-center whitespace-nowrap`}>
                     {bucket.range}
                   </span>
                 </div>
@@ -262,7 +262,7 @@ export function TemplateStatistics({ simulationId }: TemplateStatisticsProps) {
             </div>
             <div className="divide-y divide-gray-200 dark:divide-gray-700">
               {topPerformers.map((student, index) => (
-                <div key={student.studentId} className={`px-6 py-3 flex items-center gap-4 ${colors.background.hover}`}>
+                <div key={student.resultId} className={`px-6 py-3 flex items-center gap-4 ${colors.background.hover}`}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
                     index === 0 
                       ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
@@ -299,7 +299,7 @@ export function TemplateStatistics({ simulationId }: TemplateStatisticsProps) {
             </div>
             <div className="divide-y divide-gray-200 dark:divide-gray-700">
               {strugglingStudents.map((student) => (
-                <div key={student.studentId} className={`px-6 py-3 flex items-center gap-4 ${colors.background.hover}`}>
+                <div key={student.resultId} className={`px-6 py-3 flex items-center gap-4 ${colors.background.hover}`}>
                   <div className="flex-1 min-w-0">
                     <p className={`font-medium ${colors.text.primary} truncate`}>{student.studentName}</p>
                     <div className="flex items-center gap-3 text-sm">

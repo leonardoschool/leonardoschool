@@ -2,6 +2,7 @@
 import { initTRPC, TRPCError } from '@trpc/server';
 import { Context } from './context';
 import { transformer } from '@/lib/trpc/transformer';
+import { runWithContext } from '@/lib/utils/requestContext';
 
 const t = initTRPC.context<Context>().create({
   transformer,
@@ -10,9 +11,17 @@ const t = initTRPC.context<Context>().create({
   },
 });
 
+// Request context middleware - wraps all procedures to maintain request context
+const withRequestContext = t.middleware(({ ctx, next }) => {
+  // Run the procedure within the request context (like Spring Boot's RequestContextHolder)
+  return runWithContext(ctx.requestContext, () => next());
+});
+
 // Export reusable router and procedure helpers
 export const router = t.router;
-export const publicProcedure = t.procedure;
+
+// All procedures now include request context tracking
+export const publicProcedure = t.procedure.use(withRequestContext);
 
 // Auth middleware
 const isAuthed = t.middleware(({ ctx, next }) => {
@@ -94,8 +103,9 @@ const isStudent = t.middleware(({ ctx, next }) => {
   });
 });
 
-export const protectedProcedure = t.procedure.use(isAuthed);
-export const adminProcedure = t.procedure.use(isAdmin);
-export const collaboratorProcedure = t.procedure.use(isCollaborator);
-export const staffProcedure = t.procedure.use(isStaff); // Admin OR Collaborator
-export const studentProcedure = t.procedure.use(isStudent);
+// All protected procedures include request context tracking + auth
+export const protectedProcedure = t.procedure.use(withRequestContext).use(isAuthed);
+export const adminProcedure = t.procedure.use(withRequestContext).use(isAdmin);
+export const collaboratorProcedure = t.procedure.use(withRequestContext).use(isCollaborator);
+export const staffProcedure = t.procedure.use(withRequestContext).use(isStaff); // Admin OR Collaborator
+export const studentProcedure = t.procedure.use(withRequestContext).use(isStudent);

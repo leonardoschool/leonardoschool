@@ -19,14 +19,14 @@ import {
 } from 'lucide-react';
 
 interface StudentWaitingRoomProps {
-  simulationId: string;
+  assignmentId: string;
   simulationTitle: string;
   durationMinutes: number;
   onSessionStart: (actualStartAt: Date, participantId: string) => void;
 }
 
 export default function StudentWaitingRoom({ 
-  simulationId, 
+  assignmentId, 
   simulationTitle,
   durationMinutes,
   onSessionStart 
@@ -44,9 +44,9 @@ export default function StudentWaitingRoom({
   }>>([]);
   const [showMessagePopup, setShowMessagePopup] = useState<string | null>(null);
 
-  // Check session status first
+  // Check session status first - uses assignmentId for session lookup
   const { data: sessionStatus, isLoading: isCheckingSession } = trpc.virtualRoom.getStudentSessionStatus.useQuery(
-    { simulationId },
+    { assignmentId },
     { 
       refetchInterval: participantId ? false : 5000,
     }
@@ -105,14 +105,14 @@ export default function StudentWaitingRoom({
   // Mark messages as read mutation
   const markMessagesRead = trpc.virtualRoom.markMessagesRead.useMutation();
 
-  // Join on mount (only if session exists)
+  // Join on mount (only if session exists) - uses assignmentId
   useEffect(() => {
     if (!participantId && !joinSession.isPending && !isJoining && sessionStatus?.hasSession) {
       setIsJoining(true);
-      joinSession.mutate({ simulationId });
+      joinSession.mutate({ assignmentId });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [simulationId, participantId, isJoining, sessionStatus?.hasSession]);
+  }, [assignmentId, participantId, isJoining, sessionStatus?.hasSession]);
 
   // Heartbeat polling
   useEffect(() => {
