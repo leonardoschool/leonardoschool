@@ -490,6 +490,8 @@ export const simulationsRouter = router({
           type: simulationData.type,
           visibility: simulationData.visibility ?? 'PRIVATE',
           isOfficial: simulationData.isOfficial ?? false,
+          // Auto-set accessType based on isOfficial: ROOM for official, OPEN otherwise
+          accessType: (simulationData.isOfficial ?? false) ? 'ROOM' : 'OPEN',
           durationMinutes: simulationData.durationMinutes ?? 0,
           totalQuestions: questions.length,
           showResults: simulationData.showResults ?? true,
@@ -2892,6 +2894,7 @@ export const simulationsRouter = router({
               totalQuestions: true,
               startDate: true,
               endDate: true,
+              accessType: true,
               createdById: true,
               createdBy: { select: { id: true, name: true } },
               _count: { select: { results: true } },

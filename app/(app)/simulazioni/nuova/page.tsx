@@ -31,11 +31,10 @@ import {
   Save,
   Eye,
   Send,
-  Calendar,
-  MapPin,
   Printer,
   Shield,
   ShieldX,
+  Users,
   Clock,
   Layers,
   Info,
@@ -644,17 +643,35 @@ export default function NewSimulationPage() {
               )}
             </div>
             
-            {/* Anti-cheat info for official simulations */}
+            {/* Virtual Room + Anti-cheat info for official simulations */}
             {simulationType === 'OFFICIAL' && !isPaperBased && (
-              <div className={`p-4 rounded-xl ${colors.background.secondary} border ${colors.border.light}`}>
-                <div className="flex items-start gap-3">
-                  <Shield className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5" />
-                  <div>
-                    <h4 className={`font-medium ${colors.text.primary}`}>Protezione anti-cheat attiva</h4>
-                    <p className={`text-sm ${colors.text.muted} mt-1`}>
-                      Modalità fullscreen forzata, blocco cambio tab, blocco copia/incolla. 
-                      Gli eventi sospetti vengono registrati.
-                    </p>
+              <div className={`p-4 rounded-xl bg-purple-50 dark:bg-purple-900/20 border-2 border-purple-200 dark:border-purple-800`}>
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <Users className="w-5 h-5 text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <h4 className={`font-medium ${colors.text.primary}`}>🎯 Stanza Virtuale Attiva</h4>
+                      <p className={`text-sm ${colors.text.muted} mt-1`}>
+                        Le simulazioni ufficiali utilizzano la <strong>Stanza Virtuale</strong> per sincronizzare l&apos;esecuzione del test tra tutti gli studenti.
+                      </p>
+                      <ul className={`text-sm ${colors.text.muted} mt-2 space-y-1 ml-4 list-disc`}>
+                        <li>Gli studenti accedono a una sala d&apos;attesa</li>
+                        <li>L&apos;admin/collaboratore avvia la sessione quando tutti sono pronti</li>
+                        <li>Timer sincronizzato per tutti i partecipanti</li>
+                        <li>Monitoraggio in tempo reale di progressi e connessioni</li>
+                        <li>Sistema di messaggistica bidirezionale durante il test</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div className={`flex items-start gap-3 pt-3 border-t border-purple-200 dark:border-purple-800`}>
+                    <Shield className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <h4 className={`font-medium ${colors.text.primary}`}>Protezione Anti-Cheat</h4>
+                      <p className={`text-sm ${colors.text.muted} mt-1`}>
+                        Modalità fullscreen forzata, blocco cambio tab, blocco copia/incolla. 
+                        Gli eventi sospetti vengono registrati automaticamente.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>

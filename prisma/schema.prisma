@@ -106,6 +106,25 @@ enum SimulationAccessType {
   ROOM // Stanza virtuale - si aspetta che tutti entrino, poi si parte insieme
 }
 
+enum CheatingEventType {
+  TAB_CHANGE // Cambio tab/finestra
+  WINDOW_BLUR // Finestra persa di focus
+  COPY_ATTEMPT // Tentativo di copia
+  PASTE_ATTEMPT // Tentativo di incolla
+  RIGHT_CLICK // Click destro
+  DEVTOOLS_OPEN // DevTools aperti
+  SCREENSHOT_ATTEMPT // Tentativo screenshot (Print Screen)
+  KEYBOARD_SHORTCUT // Shortcut sospetta (Ctrl+C, Ctrl+V, etc.)
+  MULTIPLE_MONITORS // Rilevati monitor multipli
+  DISCONNECTION // Disconnessione sospetta
+  OTHER // Altro evento sospetto
+}
+
+enum SessionMessageSender {
+  ADMIN // Inviato da admin/collaboratore
+  STUDENT // Inviato dallo studente
+}
+
 enum AlertType {
   INFO
   WARNING
@@ -290,6 +309,9 @@ model User {
   // Messaging relations
   conversationParticipations ConversationParticipant[]
   messagesSent               Message[]                 @relation("MessageSender")
+
+  // Session messaging (virtual room)
+  sessionMessagesSent SessionMessage[] @relation("SessionMessageSender")
 
   // Notification relations
   notifications           Notification[]
@@ -962,6 +984,9 @@ model SimulationResult {
   simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
   student    Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
+  // Virtual room participant link
+  sessionParticipant SimulationSessionParticipant?
+
   @@unique([simulationId, studentId])
   @@index([studentId])
   @@index([simulationId])
@@ -1014,17 +1039,76 @@ model SimulationSessionParticipant {
   startedAt   DateTime? // Quando ha iniziato la simulazione
   completedAt DateTime? // Quando ha completato
 
+  // Connection status (for real-time monitoring)
+  isConnected    Boolean   @default(true) // Currently connected
+  lastHeartbeat  DateTime  @default(now()) // Last activity ping
+  disconnectedAt DateTime? // When disconnected (for reconnection)
+
+  // Progress tracking (for admin monitoring)
+  currentQuestionIndex Int @default(0) // Current question being viewed
+  answeredCount        Int @default(0) // Number of questions answered
+  resultId             String? @unique // Link to SimulationResult when started
+
   // For ranking display
   anonymousId String @default(cuid()) // ID anonimo per la graduatoria pubblica
 
   // Relations
-  session SimulationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  student Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session         SimulationSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student         Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  cheatingEvents  SessionCheatingEvent[]
+  messages        SessionMessage[]
+  result          SimulationResult?        @relation(fields: [resultId], references: [id], onDelete: SetNull)
 
   @@unique([sessionId, studentId])
   @@index([sessionId])
   @@index([studentId])
+  @@index([isConnected])
   @@map("simulation_session_participants")
+}
+
+// Session cheating events - logged suspicious activities during virtual room sessions
+model SessionCheatingEvent {
+  id            String @id @default(cuid())
+  participantId String
+
+  eventType   CheatingEventType
+  description String? // Additional details
+  metadata    Json? // Browser info, timestamp details, etc.
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  participant SimulationSessionParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@index([participantId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("session_cheating_events")
+}
+
+// Session messages - bidirectional messages between admin/collaborator and student
+model SessionMessage {
+  id            String @id @default(cuid())
+  participantId String
+
+  senderType SessionMessageSender // ADMIN or STUDENT
+  senderId   String? // User ID of the sender (admin/collaborator or student's user)
+  message    String  @db.Text
+
+  isRead    Boolean   @default(false)
+  readAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  participant SimulationSessionParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  sender      User?                        @relation("SessionMessageSender", fields: [senderId], references: [id], onDelete: SetNull)
+
+  @@index([participantId])
+  @@index([senderType])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("session_messages")
 }
 
 // ==================== STATS & ANALYTICS ====================

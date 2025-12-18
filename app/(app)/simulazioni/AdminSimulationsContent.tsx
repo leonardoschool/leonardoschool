@@ -214,6 +214,7 @@ export default function AdminSimulationsContent() {
     simulationId: string;
     simulationTitle: string;
     simulationType: SimulationType;
+    simulationAccessType: 'OPEN' | 'ROOM';
     startDate: string | Date | null;
     endDate: string | Date | null;
     status: AssignmentStatus;
@@ -260,6 +261,7 @@ export default function AdminSimulationsContent() {
           simulationId: assignment.simulationId,
           simulationTitle: assignment.simulation?.title || '-',
           simulationType: (assignment.simulation?.type || 'PRACTICE') as SimulationType,
+          simulationAccessType: (assignment.simulation?.accessType || 'OPEN') as 'OPEN' | 'ROOM',
           startDate: assignment.startDate || null,
           endDate: assignment.endDate || null,
           status: (assignment.status || 'ACTIVE') as AssignmentStatus,
@@ -882,15 +884,38 @@ export default function AdminSimulationsContent() {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-2 flex-wrap">
+                            <div className="flex items-center justify-end gap-1.5 sm:gap-2 flex-wrap">
+                              {/* Virtual Room button for ROOM access type */}
+                              {group.simulationAccessType === 'ROOM' && group.status === 'ACTIVE' && (
+                                <button
+                                  onClick={() => {
+                                    const url = `/virtual-room/${group.simulationId}`;
+                                    const width = Math.min(1400, window.screen.width - 100);
+                                    const height = Math.min(900, window.screen.height - 100);
+                                    const left = (window.screen.width - width) / 2;
+                                    const top = (window.screen.height - height) / 2;
+                                    window.open(
+                                      url,
+                                      'VirtualRoom',
+                                      `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes`
+                                    );
+                                  }}
+                                  className={`inline-flex items-center gap-1.5 px-2 py-1.5 sm:px-3 sm:py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 shadow-sm hover:shadow-md transition-all`}
+                                  title="Virtual Room"
+                                >
+                                  <Users className="w-4 h-4" />
+                                  <span className="hidden sm:inline">Virtual Room</span>
+                                </button>
+                              )}
                               {/* Statistics - only show if there are completions */}
                               {group.completedCount > 0 && (
                                 <Link
                                   href={`/simulazioni/${group.simulationId}/statistiche-assegnazione?assignmentId=${group.id}`}
-                                  className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-purple-500 to-indigo-600 text-white hover:from-purple-600 hover:to-indigo-700 shadow-sm hover:shadow-md transition-all`}
+                                  className={`inline-flex items-center gap-1.5 px-2 py-1.5 sm:px-3 sm:py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-purple-500 to-indigo-600 text-white hover:from-purple-600 hover:to-indigo-700 shadow-sm hover:shadow-md transition-all`}
+                                  title="Statistiche"
                                 >
                                   <BarChart3 className="w-4 h-4" />
-                                  Statistiche
+                                  <span className="hidden sm:inline">Statistiche</span>
                                 </Link>
                               )}
                               {/* Close/Reopen button - Admin can always act */}
@@ -904,11 +929,11 @@ export default function AdminSimulationsContent() {
                                     reopenAssignmentMutation.mutate({ assignmentIds });
                                   }}
                                   disabled={reopenAssignmentMutation.isPending}
-                                  className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
+                                  className={`inline-flex items-center gap-1 px-2 py-1.5 sm:px-3 text-sm rounded-lg bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
                                   title="Riapri assegnazione"
                                 >
                                   <Unlock className="w-4 h-4" />
-                                  Riapri
+                                  <span className="hidden sm:inline">Riapri</span>
                                 </button>
                               ) : (
                                 <button
@@ -920,11 +945,11 @@ export default function AdminSimulationsContent() {
                                     closeAssignmentMutation.mutate({ assignmentIds });
                                   }}
                                   disabled={closeAssignmentMutation.isPending}
-                                  className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
+                                  className={`inline-flex items-center gap-1 px-2 py-1.5 sm:px-3 text-sm rounded-lg bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
                                   title="Chiudi assegnazione"
                                 >
                                   <Lock className="w-4 h-4" />
-                                  Chiudi
+                                  <span className="hidden sm:inline">Chiudi</span>
                                 </button>
                               )}
                               {/* Delete button - Admin can always act */}
@@ -940,7 +965,6 @@ export default function AdminSimulationsContent() {
                                 title="Elimina assegnazione"
                               >
                                 <Trash2 className="w-4 h-4" />
-                                Elimina
                               </button>
                             </div>
                           </td>

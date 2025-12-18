@@ -24,6 +24,7 @@ import {
   AlertCircle,
   Clock,
   FileDown,
+  Users,
 } from 'lucide-react';
 import type { SimulationType, SimulationStatus } from '@/lib/validations/simulationValidation';
 
@@ -248,6 +249,16 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
               >
                 <Edit2 className="w-4 h-4" />
                 <span className="hidden xl:inline">Inserisci Risultati</span>
+              </Link>
+            )}
+            {/* Virtual Room button for ROOM access type simulations */}
+            {simulation.accessType === 'ROOM' && simulation.status === 'PUBLISHED' && (
+              <Link
+                href={`/simulazioni/${id}/virtual-room`}
+                className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 shadow-sm`}
+              >
+                <Users className="w-4 h-4" />
+                <span className="hidden lg:inline">Virtual Room</span>
               </Link>
             )}
             <button

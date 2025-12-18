@@ -96,6 +96,9 @@ const simulationBaseSchema = z.object({
   // Official simulation flag
   isOfficial: z.boolean().default(false),
   
+  // Access type (auto-set based on isOfficial: ROOM for official, OPEN otherwise)
+  accessType: z.enum(['OPEN', 'ROOM']).optional(),
+  
   // Timing
   startDate: z.string().datetime().optional().nullable(),
   endDate: z.string().datetime().optional().nullable(),

@@ -9,6 +9,8 @@ import { PageLoader, Spinner } from '@/components/ui/loaders';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import CustomSelect from '@/components/ui/CustomSelect';
 import TolcSimulationLayout from '@/components/simulazioni/TolcSimulationLayout';
+import StudentWaitingRoom from '@/components/simulazioni/StudentWaitingRoom';
+import InTestMessaging, { MessagingButton } from '@/components/simulazioni/InTestMessaging';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
@@ -35,6 +37,7 @@ import {
   CalendarPlus,
   AlertTriangle,
   X,
+  Users,
 } from 'lucide-react';
 
 interface Answer {
@@ -67,6 +70,12 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Answer[]>([]);
   
+  // Virtual Room state
+  const [_virtualRoomStartedAt, setVirtualRoomStartedAt] = useState<Date | null>(null);
+  const [participantId, setParticipantId] = useState<string | null>(null);
+  const [showMessaging, setShowMessaging] = useState(false);
+  const [messagingUnreadCount, setMessagingUnreadCount] = useState(0);
+  
   // Section state for TOLC-style simulations
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [sectionTimes, setSectionTimes] = useState<Record<number, number>>({});
@@ -93,6 +102,9 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
     { id },
     { enabled: !hasStarted }
   );
+
+  // Check if this is a virtual room simulation (after simulation is loaded)
+  const isVirtualRoom = simulation?.accessType === 'ROOM';
 
   // Mutations
   const startAttemptMutation = trpc.simulations.startAttempt.useMutation({
@@ -163,6 +175,25 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
     onError: handleMutationError,
   });
 
+  // Log cheating event for virtual room (silent - no error toast)
+  const logCheatingEvent = trpc.virtualRoom.logCheatingEvent.useMutation();
+
+  // Map anti-cheat event type to DB enum
+  const mapEventType = useCallback((type: string) => {
+    const mapping: Record<string, 'TAB_CHANGE' | 'WINDOW_BLUR' | 'COPY_ATTEMPT' | 'PASTE_ATTEMPT' | 'RIGHT_CLICK' | 'DEVTOOLS_OPEN' | 'KEYBOARD_SHORTCUT' | 'OTHER'> = {
+      'tab_blur': 'WINDOW_BLUR',
+      'visibility_hidden': 'TAB_CHANGE',
+      'fullscreen_exit': 'OTHER',
+      'copy_attempt': 'COPY_ATTEMPT',
+      'paste_attempt': 'PASTE_ATTEMPT',
+      'right_click': 'RIGHT_CLICK',
+      'keyboard_shortcut': 'KEYBOARD_SHORTCUT',
+      'page_reload_attempt': 'OTHER',
+      'devtools_open': 'DEVTOOLS_OPEN',
+    };
+    return mapping[type] || 'OTHER';
+  }, []);
+
   // Anti-cheat configuration
   const antiCheatConfig = useMemo(() => ({
     enabled: hasStarted && (simulation?.enableAntiCheat ?? false),
@@ -175,6 +206,15 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
     maxViolations: 10,
     onViolation: (event: { type: string; timestamp: Date; details?: string }) => {
       console.warn('[AntiCheat] Violation:', event);
+      // Log to database if in virtual room mode
+      if (isVirtualRoom && participantId) {
+        logCheatingEvent.mutate({
+          participantId,
+          eventType: mapEventType(event.type),
+          description: event.details,
+          metadata: { timestamp: event.timestamp.toISOString() },
+        });
+      }
     },
     onMaxViolations: () => {
       showError('Attenzione', 'Troppe violazioni rilevate. La simulazione verrà terminata.');
@@ -183,7 +223,7 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
     onFullscreenExit: () => {
       // Fullscreen exit is handled automatically by the hook
     },
-  }), [hasStarted, simulation?.enableAntiCheat, simulation?.forceFullscreen, showError]);
+  }), [hasStarted, simulation?.enableAntiCheat, simulation?.forceFullscreen, showError, isVirtualRoom, participantId, logCheatingEvent, mapEventType]);
 
   const antiCheat = useAntiCheat(antiCheatConfig);
 
@@ -533,7 +573,27 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
     );
   }
 
-  // Start screen
+  // Virtual Room Waiting Screen
+  if (!hasStarted && isVirtualRoom) {
+    return (
+      <StudentWaitingRoom
+        simulationId={id}
+        simulationTitle={simulation.title}
+        durationMinutes={simulation.durationMinutes}
+        onSessionStart={(actualStartAt, pId) => {
+          // Calculate elapsed time from session start
+          const elapsed = Math.floor((Date.now() - actualStartAt.getTime()) / 1000);
+          setVirtualRoomStartedAt(actualStartAt);
+          setTimeSpent(elapsed);
+          setParticipantId(pId);
+          // Start the attempt
+          startAttemptMutation.mutate({ simulationId: id });
+        }}
+      />
+    );
+  }
+
+  // Start screen (for non-virtual room simulations)
   if (!hasStarted) {
     return (
       <div className="px-4 sm:px-6 lg:px-8 py-8 max-w-2xl mx-auto">
@@ -546,6 +606,14 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
         </Link>
 
         <div className={`rounded-xl p-8 ${colors.background.card} border ${colors.border.light} text-center`}>
+          {/* Virtual Room indicator */}
+          {isVirtualRoom && (
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-sm font-medium mb-4 mr-2">
+              <Users className="w-4 h-4" />
+              Stanza Virtuale
+            </div>
+          )}
+          
           {simulation.isOfficial && (
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-sm font-medium mb-4">
               <Award className="w-4 h-4" />
@@ -1141,6 +1209,23 @@ export default function StudentSimulationExecutionContent({ id }: StudentSimulat
           </div>
         )}
       </div>
+
+      {/* In-test messaging for virtual room */}
+      {isVirtualRoom && participantId && hasStarted && (
+        <>
+          <MessagingButton 
+            onClick={() => setShowMessaging(true)} 
+            unreadCount={messagingUnreadCount} 
+          />
+          <InTestMessaging 
+            participantId={participantId} 
+            isOpen={showMessaging}
+            onClose={() => setShowMessaging(false)}
+            unreadCount={messagingUnreadCount}
+            onUnreadChange={setMessagingUnreadCount}
+          />
+        </>
+      )}
 
       {/* Submit confirmation modal */}
       {submitConfirm && (
