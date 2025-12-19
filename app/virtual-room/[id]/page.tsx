@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
+import { colors } from '@/lib/theme/colors';
 import Button from '@/components/ui/Button';
 import { 
   Users, 
@@ -54,23 +55,23 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, onKickPar
   // Se espulso, mostra uno stato speciale
   if (isKicked) {
     return (
-      <div className="relative overflow-hidden rounded-2xl backdrop-blur-xl bg-red-950/30 border border-red-500/40 opacity-75">
+      <div className="relative overflow-hidden rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-300 dark:border-red-500/40 opacity-75">
         <div className="relative p-5">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-red-500/20">
-              <Ban className="w-5 h-5 text-red-400" />
+            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-red-100 dark:bg-red-500/20">
+              <Ban className="w-5 h-5 text-red-500 dark:text-red-400" />
             </div>
             <div>
-              <h3 className="font-semibold text-red-300 text-lg line-through">
+              <h3 className="font-semibold text-red-700 dark:text-red-300 text-lg line-through">
                 {participant.studentName}
               </h3>
-              <p className="text-sm text-red-400">
+              <p className="text-sm text-red-600 dark:text-red-400">
                 ✕ Espulso
               </p>
             </div>
           </div>
           {participant.kickedReason && (
-            <p className="mt-3 text-xs text-red-400/70 italic">
+            <p className="mt-3 text-xs text-red-500/70 dark:text-red-400/70 italic">
               Motivo: {participant.kickedReason}
             </p>
           )}
@@ -80,16 +81,16 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, onKickPar
   }
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] shadow-lg ${
+    <div className={`relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02] shadow-lg ${
       isCompleted 
-        ? 'bg-gradient-to-br from-emerald-500/30 to-green-600/20 border-2 border-emerald-400/50 shadow-emerald-500/20' 
+        ? 'bg-gradient-to-br from-emerald-100 to-green-50 dark:from-emerald-500/30 dark:to-green-600/20 border-2 border-emerald-400 dark:border-emerald-400/50 shadow-emerald-200 dark:shadow-emerald-500/20' 
         : isConnected 
-          ? 'bg-gradient-to-br from-slate-800/80 to-slate-700/60 border-2 border-cyan-400/40 hover:border-cyan-400/60 shadow-cyan-500/10' 
-          : 'bg-slate-800/40 border-2 border-slate-600/30 opacity-60'
+          ? `${colors.background.card} border-2 ${participant.unreadMessagesCount > 0 ? 'border-blue-500 dark:border-blue-400 animate-[shake_0.5s_ease-in-out_infinite] shadow-blue-300 dark:shadow-blue-500/30' : 'border-cyan-400 dark:border-cyan-400/40 hover:border-cyan-500 dark:hover:border-cyan-400/60 shadow-cyan-100 dark:shadow-cyan-500/10'}` 
+          : `${colors.background.secondary} border-2 border-gray-300 dark:border-slate-600/30 opacity-60`
     }`}>
       {/* Glow effect for active participants */}
       {isConnected && !isCompleted && (
-        <div className="absolute inset-0 bg-gradient-to-r from-cyan-400/10 via-purple-500/10 to-cyan-400/10 animate-pulse" />
+        <div className="absolute inset-0 bg-gradient-to-r from-cyan-400/5 dark:from-cyan-400/10 via-purple-500/5 dark:via-purple-500/10 to-cyan-400/5 dark:to-cyan-400/10 animate-pulse" />
       )}
       
       <div className="relative p-5">
@@ -102,7 +103,7 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, onKickPar
                 ? isReady 
                   ? 'bg-gradient-to-br from-green-400 to-emerald-500' 
                   : 'bg-gradient-to-br from-emerald-400 to-green-500' 
-                : 'bg-gray-700'
+                : 'bg-gray-200 dark:bg-gray-700'
             }`}>
               {isConnected ? (
                 <>
@@ -115,23 +116,23 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, onKickPar
                   <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full" />
                 </>
               ) : (
-                <WifiOff className="w-5 h-5 text-gray-400" />
+                <WifiOff className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               )}
             </div>
             
             <div>
-              <h3 className="font-semibold text-white text-lg">
+              <h3 className={`font-semibold text-lg ${colors.text.primary}`}>
                 {participant.studentName}
               </h3>
               <p className={`text-sm ${
                 isCompleted 
-                  ? 'text-emerald-400' 
+                  ? 'text-emerald-600 dark:text-emerald-400' 
                   : hasStarted 
-                    ? 'text-cyan-400' 
+                    ? 'text-cyan-600 dark:text-cyan-400' 
                     : isReady
-                      ? 'text-green-400'
+                      ? 'text-green-600 dark:text-green-400'
                       : isConnected 
-                        ? 'text-amber-400'
+                        ? 'text-amber-600 dark:text-amber-400'
                         : 'text-gray-500'
               }`}>
                 {isCompleted 
@@ -150,33 +151,43 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, onKickPar
           <div className="flex items-center gap-2">
             {/* Cheating alerts */}
             {participant.cheatingEventsCount > 0 && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/30 border-2 border-red-500/60 rounded-full shadow-lg shadow-red-500/20">
-                <AlertTriangle className="w-4 h-4 text-red-300" />
-                <span className="text-sm font-bold text-red-200">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 dark:bg-red-500/30 border-2 border-red-400 dark:border-red-500/60 rounded-full shadow-lg shadow-red-200 dark:shadow-red-500/20">
+                <AlertTriangle className="w-4 h-4 text-red-500 dark:text-red-300" />
+                <span className="text-sm font-bold text-red-600 dark:text-red-200">
                   {participant.cheatingEventsCount}
                 </span>
               </div>
             )}
 
-            {/* Unread messages indicator */}
-            {participant.hasUnreadMessages && (
-              <div className="w-3 h-3 bg-blue-400 rounded-full animate-pulse shadow-lg shadow-blue-400/80 ring-2 ring-blue-400/30" />
-            )}
-
-            {/* Message button */}
+            {/* Chat button with unread indicator */}
             <button
               onClick={() => onSendMessage(participant.id)}
-              className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all text-gray-400 hover:text-white"
-              title="Invia messaggio"
+              className={`p-2 rounded-xl relative ${
+                participant.unreadMessagesCount > 0
+                  ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white border-0 shadow-lg shadow-blue-500/30 animate-pulse'
+                  : `${colors.background.hover} border ${colors.border.light} hover:border-gray-400 dark:hover:border-white/20 ${colors.text.muted} hover:${colors.text.primary}`
+              } transition-all`}
+              title={participant.unreadMessagesCount > 0 ? `${participant.unreadMessagesCount} nuovi messaggi` : 'Messaggi'}
             >
               <MessageSquare className="w-4 h-4" />
+              {participant.unreadMessagesCount > 0 && (
+                <>
+                  {/* Red dot badge */}
+                  <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 items-center justify-center">
+                      <span className="text-[9px] font-bold text-white">{participant.unreadMessagesCount}</span>
+                    </span>
+                  </span>
+                </>
+              )}
             </button>
 
             {/* Kick button */}
             {!isCompleted && (
               <button
                 onClick={() => onKickParticipant(participant.id, participant.studentName)}
-                className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 transition-all text-red-400 hover:text-red-300"
+                className="p-2 rounded-xl bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 border border-red-300 dark:border-red-500/20 hover:border-red-400 dark:hover:border-red-500/40 transition-all text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300"
                 title="Espelli studente"
               >
                 <Ban className="w-4 h-4" />
@@ -187,12 +198,12 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, onKickPar
 
         {/* Progress bar - shown only during exam */}
         {sessionStatus === 'STARTED' && !isCompleted && hasStarted && (
-          <div className="mt-4 p-3 bg-slate-900/50 rounded-xl border border-cyan-500/20">
+          <div className={`mt-4 p-3 ${colors.background.secondary} rounded-xl border border-cyan-300 dark:border-cyan-500/20`}>
             <div className="flex justify-between text-xs font-medium mb-2">
-              <span className="text-cyan-300">Progresso: {participant.answeredCount}/{totalQuestions} risposte</span>
-              <span className="font-mono text-cyan-200 font-bold">{progressPercent}%</span>
+              <span className="text-cyan-700 dark:text-cyan-300">Progresso: {participant.answeredCount}/{totalQuestions} risposte</span>
+              <span className="font-mono text-cyan-600 dark:text-cyan-200 font-bold">{progressPercent}%</span>
             </div>
-            <div className="w-full bg-slate-700/50 rounded-full h-3 overflow-hidden shadow-inner">
+            <div className="w-full bg-gray-200 dark:bg-slate-700/50 rounded-full h-3 overflow-hidden shadow-inner">
               <div 
                 className="h-full rounded-full bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 transition-all duration-500 ease-out shadow-lg shadow-cyan-500/50"
                 style={{ width: `${progressPercent}%` }}
@@ -203,48 +214,17 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, onKickPar
 
         {/* Result - shown after completion */}
         {participant.result && (
-          <div className="mt-4 pt-4 border-t border-white/10">
+          <div className={`mt-4 pt-4 border-t ${colors.border.light}`}>
             <div className="grid grid-cols-4 gap-3">
               {[
-                { label: 'Punteggio', value: participant.result.totalScore.toFixed(2), color: 'text-white' },
-                { label: 'Corrette', value: participant.result.correctAnswers, color: 'text-emerald-400' },
-                { label: 'Errate', value: participant.result.wrongAnswers, color: 'text-red-400' },
-                { label: 'Non date', value: participant.result.blankAnswers, color: 'text-gray-400' },
+                { label: 'Punteggio', value: participant.result.totalScore.toFixed(2), color: colors.text.primary },
+                { label: 'Corrette', value: participant.result.correctAnswers, color: 'text-emerald-600 dark:text-emerald-400' },
+                { label: 'Errate', value: participant.result.wrongAnswers, color: 'text-red-600 dark:text-red-400' },
+                { label: 'Non date', value: participant.result.blankAnswers, color: colors.text.muted },
               ].map(item => (
                 <div key={item.label} className="text-center">
-                  <p className="text-xs text-gray-500 mb-1">{item.label}</p>
+                  <p className={`text-xs ${colors.text.muted} mb-1`}>{item.label}</p>
                   <p className={`font-bold text-lg ${item.color}`}>{item.value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Recent messages from student */}
-        {participant.recentMessages?.length > 0 && (
-          <div className="mt-4 pt-4 border-t-2 border-blue-500/30">
-            <p className="text-xs font-semibold text-blue-300 mb-3 flex items-center gap-1.5">
-              <MessageSquare className="w-4 h-4" />
-              Messaggi dallo studente
-            </p>
-            <div className="space-y-2">
-              {participant.recentMessages.map((msg: { id: string; message: string; createdAt: string; isRead: boolean }) => (
-                <div key={msg.id} className={`text-xs rounded-lg px-3 py-2.5 border ${
-                  msg.isRead 
-                    ? 'bg-slate-800/40 text-gray-300 border-slate-600/30' 
-                    : 'bg-blue-500/25 text-blue-100 font-medium border-blue-400/40 shadow-lg shadow-blue-500/10'
-                }`}>
-                  <div className="flex items-start gap-2">
-                    <span className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${
-                      msg.isRead ? 'bg-gray-500' : 'bg-blue-300 animate-pulse shadow-lg shadow-blue-400/50'
-                    }`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="break-words">{msg.message}</p>
-                      <span className="text-gray-400 text-[10px] mt-1 block">
-                        {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true, locale: it })}
-                      </span>
-                    </div>
-                  </div>
                 </div>
               ))}
             </div>
@@ -253,17 +233,17 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, onKickPar
 
         {/* Recent cheating events */}
         {participant.recentCheatingEvents?.length > 0 && (
-          <div className="mt-4 pt-4 border-t-2 border-red-500/30">
-            <p className="text-xs font-semibold text-red-300 mb-3 flex items-center gap-1.5">
+          <div className="mt-4 pt-4 border-t-2 border-red-300 dark:border-red-500/30">
+            <p className="text-xs font-semibold text-red-600 dark:text-red-300 mb-3 flex items-center gap-1.5">
               <Shield className="w-4 h-4" />
               Eventi sospetti recenti
             </p>
             <div className="space-y-2">
               {participant.recentCheatingEvents.slice(0, 3).map((event: { id: string; eventType: string; createdAt: string }) => (
-                <div key={event.id} className="text-xs text-red-100 flex items-center gap-2 bg-red-500/20 border border-red-500/40 rounded-lg px-3 py-2 shadow-lg shadow-red-500/10">
-                  <span className="w-2 h-2 bg-red-400 rounded-full animate-pulse shadow-lg shadow-red-500/50" />
+                <div key={event.id} className="text-xs text-red-700 dark:text-red-100 flex items-center gap-2 bg-red-50 dark:bg-red-500/20 border border-red-300 dark:border-red-500/40 rounded-lg px-3 py-2 shadow-lg shadow-red-100 dark:shadow-red-500/10">
+                  <span className="w-2 h-2 bg-red-500 dark:bg-red-400 rounded-full animate-pulse shadow-lg shadow-red-500/50" />
                   <span className="flex-1 font-medium">{event.eventType.replace(/_/g, ' ')}</span>
-                  <span className="text-gray-400 text-[10px]">
+                  <span className={`${colors.text.muted} text-[10px]`}>
                     {formatDistanceToNow(new Date(event.createdAt), { addSuffix: true, locale: it })}
                   </span>
                 </div>
@@ -297,6 +277,9 @@ export default function VirtualRoomPage() {
 
   // Student states
   const [participantId, setParticipantId] = useState<string | null>(null);
+  
+  // Track previous unread message counts to detect new messages
+  const [previousUnreadCounts, setPreviousUnreadCounts] = useState<Record<string, number>>({});
 
   // Create or get session (Staff only) - now uses assignmentId
   const getOrCreateSession = trpc.virtualRoom.getOrCreateSession.useMutation({
@@ -416,13 +399,44 @@ export default function VirtualRoomPage() {
   // Send message mutation
   const sendMessage = trpc.virtualRoom.sendMessage.useMutation({
     onSuccess: () => {
-      showSuccess('Messaggio inviato', 'Il messaggio è stato inviato allo studente.');
-      setSelectedParticipantId(null);
       setMessageText('');
+      // Refetch messages and session state
+      if (selectedParticipantId) {
+        messagesQuery.refetch();
+      }
       sessionState.refetch();
     },
     onError: handleMutationError,
   });
+
+  // Get messages for selected participant
+  const messagesQuery = trpc.virtualRoom.getMessages.useQuery(
+    { participantId: selectedParticipantId! },
+    { 
+      enabled: !!selectedParticipantId,
+      refetchInterval: 3000, // Poll for new messages
+    }
+  );
+
+  // Mark messages as read
+  const markMessagesRead = trpc.virtualRoom.markMessagesRead.useMutation({
+    onSuccess: () => {
+      sessionState.refetch();
+    },
+  });
+
+  // Mark messages as read when opening chat
+  useEffect(() => {
+    if (selectedParticipantId && messagesQuery.data) {
+      const unreadIds = messagesQuery.data
+        .filter(m => !m.isRead && m.senderType === 'STUDENT')
+        .map(m => m.id);
+      if (unreadIds.length > 0) {
+        markMessagesRead.mutate({ participantId: selectedParticipantId, messageIds: unreadIds });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedParticipantId, messagesQuery.data]);
 
   // Kick participant mutation
   const kickParticipant = trpc.virtualRoom.kickParticipant.useMutation({
@@ -438,6 +452,69 @@ export default function VirtualRoomPage() {
   const handleKickParticipant = useCallback((participantId: string, studentName: string) => {
     setKickConfirm({ id: participantId, name: studentName });
   }, []);
+
+  // Play notification sound when new messages arrive (Staff only)
+  useEffect(() => {
+    if (!isStaff || !sessionState.data?.participants) return;
+
+    const currentCounts: Record<string, number> = {};
+    let hasNewMessages = false;
+
+    sessionState.data.participants.forEach((p: { id: string; unreadMessagesCount: number }) => {
+      currentCounts[p.id] = p.unreadMessagesCount;
+      
+      // Check if this participant has more unread messages than before
+      if (previousUnreadCounts[p.id] !== undefined && p.unreadMessagesCount > previousUnreadCounts[p.id]) {
+        hasNewMessages = true;
+      }
+    });
+
+    // Play sound if there are new messages
+    if (hasNewMessages) {
+      // Try to play MP3 file first, fallback to Web Audio API
+      const audio = new Audio('/sounds/notification.mp3');
+      audio.volume = 0.5;
+      audio.play().catch(() => {
+        // Fallback: Generate a pleasant notification sound using Web Audio API
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          const audioContext = new AudioContextClass();
+          
+          // First beep (higher pitch)
+          const oscillator1 = audioContext.createOscillator();
+          const gainNode1 = audioContext.createGain();
+          oscillator1.connect(gainNode1);
+          gainNode1.connect(audioContext.destination);
+          oscillator1.frequency.value = 800;
+          oscillator1.type = 'sine';
+          gainNode1.gain.setValueAtTime(0.3, audioContext.currentTime);
+          gainNode1.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+          oscillator1.start(audioContext.currentTime);
+          oscillator1.stop(audioContext.currentTime + 0.1);
+          
+          // Second beep (slightly lower pitch, delayed)
+          const oscillator2 = audioContext.createOscillator();
+          const gainNode2 = audioContext.createGain();
+          oscillator2.connect(gainNode2);
+          gainNode2.connect(audioContext.destination);
+          oscillator2.frequency.value = 600;
+          oscillator2.type = 'sine';
+          gainNode2.gain.setValueAtTime(0.3, audioContext.currentTime + 0.1);
+          gainNode2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+          oscillator2.start(audioContext.currentTime + 0.1);
+          oscillator2.stop(audioContext.currentTime + 0.2);
+        } catch (_error) {
+          // Silently fail if Web Audio API is not supported
+          console.log('Unable to play notification sound');
+        }
+      });
+    }
+
+    // Update the previous counts
+    setPreviousUnreadCounts(currentCounts);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionState.data?.participants, isStaff]);
 
   // Initialize session on mount
   useEffect(() => {
@@ -780,16 +857,16 @@ export default function VirtualRoomPage() {
   const readyCount = participants.filter(p => p.isReady && p.isConnected).length;
 
   return (
-    <div className="min-h-screen relative overflow-hidden">
+    <div className={`min-h-screen relative overflow-hidden ${colors.background.primary}`}>
       {/* Background Effects */}
       <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-pink-500/10 rounded-full blur-3xl" />
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/10 dark:bg-purple-500/20 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-cyan-500/10 dark:bg-cyan-500/20 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-pink-500/5 dark:bg-pink-500/10 rounded-full blur-3xl" />
       </div>
 
       {/* Header */}
-      <header className="relative z-10 backdrop-blur-xl bg-black/30 border-b border-white/10">
+      <header className={`relative z-10 ${colors.background.card} border-b ${colors.border.primary} shadow-sm`}>
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             {/* Left: Logo & Title */}
@@ -801,8 +878,8 @@ export default function VirtualRoomPage() {
             
               </div>
               <div>
-                <h1 className="text-xl font-bold text-white">{simulation.title}</h1>
-                <p className="text-sm text-gray-400 flex items-center gap-2">
+                <h1 className={`text-xl font-bold ${colors.text.primary}`}>{simulation.title}</h1>
+                <p className={`text-sm ${colors.text.muted} flex items-center gap-2`}>
                   <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                   Virtual Room • Live
                 </p>
@@ -812,9 +889,9 @@ export default function VirtualRoomPage() {
             {/* Center: Timer (when started) */}
             {session.status === 'STARTED' && timeRemaining !== null && (
               <div className="absolute left-1/2 -translate-x-1/2">
-                <div className="flex items-center gap-3 bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl px-6 py-3">
-                  <Clock className="w-5 h-5 text-cyan-400" />
-                  <span className="text-3xl font-mono font-bold text-white tracking-wider">
+                <div className={`flex items-center gap-3 ${colors.background.card} shadow-lg border ${colors.border.primary} rounded-2xl px-6 py-3`}>
+                  <Clock className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+                  <span className={`text-3xl font-mono font-bold ${colors.text.primary} tracking-wider`}>
                     {formatTimeRemaining(timeRemaining)}
                   </span>
                 </div>
@@ -824,32 +901,32 @@ export default function VirtualRoomPage() {
             {/* Right: Stats & Close */}
             <div className="flex items-center gap-3">
               {/* Connected counter */}
-              <div className="flex items-center gap-2 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-2">
-                <Users className="w-5 h-5 text-gray-400" />
-                <span className="text-lg font-semibold text-white">{connectedCount}</span>
-                <span className="text-gray-500">/</span>
-                <span className="text-gray-400">{totalInvited}</span>
+              <div className={`flex items-center gap-2 ${colors.background.secondary} border ${colors.border.primary} rounded-xl px-4 py-2`}>
+                <Users className={`w-5 h-5 ${colors.text.muted}`} />
+                <span className={`text-lg font-semibold ${colors.text.primary}`}>{connectedCount}</span>
+                <span className={colors.text.muted}>/</span>
+                <span className={colors.text.muted}>{totalInvited}</span>
               </div>
 
               {/* Ready counter - only show before session starts */}
               {session.status === 'WAITING' && (
-                <div className="flex items-center gap-2 bg-green-500/10 backdrop-blur-xl border border-green-500/30 rounded-xl px-4 py-2">
-                  <CheckCircle className="w-5 h-5 text-green-400" />
-                  <span className="text-lg font-semibold text-green-400">{readyCount}</span>
-                  <span className="text-sm text-green-400/60">pronti</span>
+                <div className="flex items-center gap-2 bg-green-50 dark:bg-green-500/10 border border-green-400 dark:border-green-500/30 rounded-xl px-4 py-2">
+                  <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                  <span className="text-lg font-semibold text-green-600 dark:text-green-400">{readyCount}</span>
+                  <span className="text-sm text-green-500 dark:text-green-400/60">pronti</span>
                 </div>
               )}
 
               {/* Live indicator */}
-              <div className="flex items-center gap-2 bg-red-500/20 border border-red-500/30 rounded-xl px-4 py-2">
+              <div className="flex items-center gap-2 bg-red-50 dark:bg-red-500/20 border border-red-400 dark:border-red-500/30 rounded-xl px-4 py-2">
                 <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                <span className="text-sm font-medium text-red-400">LIVE</span>
+                <span className="text-sm font-medium text-red-600 dark:text-red-400">LIVE</span>
               </div>
 
               {/* Close button - shows confirmation */}
               <button
                 onClick={() => setShowCloseConfirm(true)}
-                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all text-gray-400 hover:text-white"
+                className={`p-2 rounded-xl ${colors.background.hover} border ${colors.border.light} hover:border-gray-400 dark:hover:border-white/20 transition-all ${colors.text.muted} hover:${colors.text.primary}`}
                 title="Chiudi"
               >
                 <X className="w-5 h-5" />
@@ -863,10 +940,10 @@ export default function VirtualRoomPage() {
       <main className="relative z-20 max-w-7xl mx-auto px-6 py-8">
         {/* Status Banner */}
         {session.status === 'WAITING' && (
-          <div className={`mb-8 p-6 rounded-2xl backdrop-blur-xl border ${
+          <div className={`mb-8 p-6 rounded-2xl border ${
             allConnected 
-              ? 'bg-emerald-500/10 border-emerald-500/30'
-              : 'bg-amber-500/10 border-amber-500/30'
+              ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-400 dark:border-emerald-500/30'
+              : 'bg-amber-50 dark:bg-amber-500/10 border-amber-400 dark:border-amber-500/30'
           }`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -882,13 +959,13 @@ export default function VirtualRoomPage() {
                   )}
                 </div>
                 <div>
-                  <h2 className={`text-lg font-semibold ${allConnected ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  <h2 className={`text-lg font-semibold ${allConnected ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
                     {allConnected 
                       ? 'Tutti gli studenti sono connessi!' 
                       : `In attesa di ${totalInvited - connectedCount} studenti`
                     }
                   </h2>
-                  <p className="text-gray-400">
+                  <p className={colors.text.secondary}>
                     {allConnected 
                       ? 'Puoi avviare la simulazione quando vuoi.'
                       : 'Puoi comunque avviare la simulazione senza tutti i partecipanti.'
@@ -910,17 +987,17 @@ export default function VirtualRoomPage() {
         )}
 
         {session.status === 'STARTED' && (
-          <div className="mb-8 p-6 rounded-2xl backdrop-blur-xl bg-blue-500/10 border border-blue-500/30">
+          <div className="mb-8 p-6 rounded-2xl bg-blue-50 dark:bg-blue-500/10 border border-blue-400 dark:border-blue-500/30">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-400 to-cyan-500 flex items-center justify-center">
                   <Activity className="w-7 h-7 text-white animate-pulse" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-blue-400">
+                  <h2 className="text-lg font-semibold text-blue-600 dark:text-blue-400">
                     Simulazione in corso
                   </h2>
-                  <p className="text-gray-400">
+                  <p className={colors.text.secondary}>
                     Completati: {completedCount}/{participants.length} partecipanti
                   </p>
                 </div>
@@ -929,7 +1006,7 @@ export default function VirtualRoomPage() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => sessionState.refetch()}
-                  className="p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all text-gray-400 hover:text-white"
+                  className={`p-3 rounded-xl ${colors.background.hover} border ${colors.border.light} hover:border-gray-400 dark:hover:border-white/20 transition-all ${colors.text.muted} hover:${colors.text.primary}`}
                   title="Aggiorna"
                 >
                   <RefreshCw className={`w-5 h-5 ${sessionState.isFetching ? 'animate-spin' : ''}`} />
@@ -937,7 +1014,7 @@ export default function VirtualRoomPage() {
                 <Button
                   onClick={handleEndSession}
                   disabled={endSession.isPending}
-                  className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 hover:border-red-500/50 px-6 py-3 rounded-xl transition-all"
+                  className="bg-red-50 dark:bg-red-500/20 hover:bg-red-100 dark:hover:bg-red-500/30 text-red-600 dark:text-red-400 border border-red-400 dark:border-red-500/30 hover:border-red-500 dark:hover:border-red-500/50 px-6 py-3 rounded-xl transition-all"
                 >
                   <XCircle className="w-5 h-5 mr-2" />
                   Termina Sessione
@@ -948,17 +1025,17 @@ export default function VirtualRoomPage() {
         )}
 
         {session.status === 'COMPLETED' && (
-          <div className="mb-8 p-6 rounded-2xl backdrop-blur-xl bg-white/5 border border-white/10">
+          <div className={`mb-8 p-6 rounded-2xl ${colors.background.card} border ${colors.border.primary}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-gray-400 to-gray-500 flex items-center justify-center">
                   <CheckCircle className="w-7 h-7 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-white">
+                  <h2 className={`text-lg font-semibold ${colors.text.primary}`}>
                     Sessione completata
                   </h2>
-                  <p className="text-gray-400">
+                  <p className={colors.text.secondary}>
                     {completedCount} studenti hanno completato la simulazione.
                   </p>
                 </div>
@@ -966,7 +1043,7 @@ export default function VirtualRoomPage() {
 
               <Button
                 onClick={() => router.push(`/simulazioni/${simulation.id}/classifica`)}
-                className="bg-white/10 hover:bg-white/20 text-white border border-white/20 hover:border-white/30 px-6 py-3 rounded-xl transition-all"
+                className={`${colors.background.hover} hover:bg-gray-200 dark:hover:bg-white/20 ${colors.text.primary} border ${colors.border.primary} hover:border-gray-400 dark:hover:border-white/30 px-6 py-3 rounded-xl transition-all`}
               >
                 Vedi Classifica
               </Button>
@@ -977,15 +1054,15 @@ export default function VirtualRoomPage() {
         {/* Not connected students (waiting state) */}
         {session.status === 'WAITING' && notConnectedStudents.length > 0 && (
           <div className="mb-8">
-            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <WifiOff className="w-5 h-5 text-gray-500" />
+            <h2 className={`text-lg font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
+              <WifiOff className={`w-5 h-5 ${colors.text.muted}`} />
               Studenti non ancora connessi ({notConnectedStudents.length})
             </h2>
             <div className="flex flex-wrap gap-2">
               {notConnectedStudents.map(student => (
                 <div 
                   key={student.id}
-                  className="px-4 py-2 bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl text-sm text-gray-400"
+                  className={`px-4 py-2 ${colors.background.secondary} border ${colors.border.light} rounded-xl text-sm ${colors.text.muted}`}
                 >
                   {student.name}
                 </div>
@@ -996,8 +1073,8 @@ export default function VirtualRoomPage() {
 
         {/* Participants Grid */}
         <div>
-          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <Users className="w-5 h-5 text-cyan-400" />
+          <h2 className={`text-lg font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
+            <Users className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
             Partecipanti ({participants.length})
           </h2>
           {participants.length > 0 ? (
@@ -1014,9 +1091,9 @@ export default function VirtualRoomPage() {
               ))}
             </div>
           ) : (
-            <div className="text-center py-16 rounded-2xl bg-white/5 border border-white/10">
-              <Users className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-              <p className="text-gray-400">Nessun partecipante connesso</p>
+            <div className={`text-center py-16 rounded-2xl ${colors.background.secondary} border ${colors.border.light}`}>
+              <Users className={`w-12 h-12 ${colors.text.muted} mx-auto mb-4`} />
+              <p className={colors.text.muted}>Nessun partecipante connesso</p>
               <p className="text-gray-500 text-sm mt-2">Gli studenti appariranno qui quando si connetteranno</p>
             </div>
           )}
@@ -1027,16 +1104,16 @@ export default function VirtualRoomPage() {
       {showStartConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div 
-            className="bg-gray-800 border border-white/10 rounded-2xl max-w-md w-full p-6 shadow-2xl"
+            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-2xl max-w-md w-full p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-purple-900/30 flex items-center justify-center flex-shrink-0">
-                <Play className="w-6 h-6 text-purple-400" />
+              <div className="w-12 h-12 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
+                <Play className="w-6 h-6 text-purple-600 dark:text-purple-400" />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-bold text-white">Avvia Simulazione</h3>
-                <p className="mt-2 text-gray-300">
+                <h3 className={`text-lg font-bold ${colors.text.primary}`}>Avvia Simulazione</h3>
+                <p className={`mt-2 ${colors.text.secondary}`}>
                   {allConnected 
                     ? "Tutti gli studenti sono connessi. Vuoi avviare la simulazione? Il timer partirà per tutti contemporaneamente."
                     : `Solo ${connectedCount}/${totalInvited} studenti sono connessi. Vuoi avviare comunque? Gli studenti non connessi non potranno partecipare.`
@@ -1048,7 +1125,7 @@ export default function VirtualRoomPage() {
               <button
                 onClick={() => setShowStartConfirm(false)}
                 disabled={startSession.isPending}
-                className="flex-1 px-4 py-3 rounded-xl border border-gray-500 text-white font-medium bg-gray-700 hover:bg-gray-600 transition-colors disabled:opacity-50"
+                className={`flex-1 px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-500 ${colors.text.primary} font-medium bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50`}
               >
                 Annulla
               </button>
@@ -1075,16 +1152,16 @@ export default function VirtualRoomPage() {
       {showForceStartConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div 
-            className="bg-gray-800 border border-white/10 rounded-2xl max-w-md w-full p-6 shadow-2xl"
+            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-2xl max-w-md w-full p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-amber-900/30 flex items-center justify-center flex-shrink-0">
-                <AlertTriangle className="w-6 h-6 text-amber-400" />
+              <div className="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-bold text-white">Conferma Avvio Parziale</h3>
-                <p className="mt-2 text-gray-300">
+                <h3 className={`text-lg font-bold ${colors.text.primary}`}>Conferma Avvio Parziale</h3>
+                <p className={`mt-2 ${colors.text.secondary}`}>
                   {`Non tutti gli studenti sono connessi (${connectedCount}/${totalInvited}). Sei sicuro di voler avviare la simulazione? Gli studenti non connessi non potranno partecipare.`}
                 </p>
               </div>
@@ -1093,7 +1170,7 @@ export default function VirtualRoomPage() {
               <button
                 onClick={() => setShowForceStartConfirm(false)}
                 disabled={startSession.isPending}
-                className="flex-1 px-4 py-3 rounded-xl border border-gray-500 text-white font-medium bg-gray-700 hover:bg-gray-600 transition-colors disabled:opacity-50"
+                className={`flex-1 px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-500 ${colors.text.primary} font-medium bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50`}
               >
                 Annulla
               </button>
@@ -1116,18 +1193,19 @@ export default function VirtualRoomPage() {
         </div>
       )}
 
-      {/* Message Modal */}
+      {/* Chat Modal */}
       {selectedParticipantId && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="p-5 border-b border-white/10 flex items-center justify-between">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh]">
+            {/* Header */}
+            <div className="p-4 border-b border-gray-200 dark:border-white/10 flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-cyan-500 flex items-center justify-center">
                   <MessageSquare className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-white">Invia Messaggio</h3>
-                  <p className="text-sm text-gray-400">
+                  <h3 className={`font-semibold ${colors.text.primary}`}>Chat</h3>
+                  <p className={`text-sm ${colors.text.muted}`}>
                     {participants.find(p => p.id === selectedParticipantId)?.studentName}
                   </p>
                 </div>
@@ -1137,39 +1215,75 @@ export default function VirtualRoomPage() {
                   setSelectedParticipantId(null);
                   setMessageText('');
                 }}
-                className="p-2 rounded-xl hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
+                className={`p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors ${colors.text.muted} hover:text-gray-900 dark:hover:text-white`}
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-5">
-              <textarea
-                value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
-                placeholder="Scrivi il messaggio..."
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 resize-none h-32"
-                autoFocus
-              />
+            
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[200px] max-h-[400px] bg-gray-50 dark:bg-gray-800/50">
+              {messagesQuery.isLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : messagesQuery.data?.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center py-8">
+                  <MessageSquare className={`w-10 h-10 ${colors.text.muted} mb-2`} />
+                  <p className={`${colors.text.muted} text-sm`}>Nessun messaggio</p>
+                  <p className={`${colors.text.muted} text-xs`}>Inizia una conversazione</p>
+                </div>
+              ) : (
+                messagesQuery.data?.map((msg) => (
+                  <div 
+                    key={msg.id} 
+                    className={`flex ${msg.senderType === 'ADMIN' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+                      msg.senderType === 'ADMIN'
+                        ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-br-md'
+                        : 'bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white rounded-bl-md'
+                    }`}>
+                      <p className="text-sm break-words">{msg.message}</p>
+                      <p className={`text-[10px] mt-1 ${
+                        msg.senderType === 'ADMIN' ? 'text-white/70' : 'text-gray-400'
+                      }`}>
+                        {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true, locale: it })}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-            <div className="p-5 pt-0 flex justify-end gap-3">
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setSelectedParticipantId(null);
-                  setMessageText('');
-                }}
-                className="text-gray-400 hover:text-white"
-              >
-                Annulla
-              </Button>
-              <Button
-                onClick={handleSendMessage}
-                disabled={!messageText.trim() || sendMessage.isPending}
-                className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white border-0 px-6"
-              >
-                <Send className="w-4 h-4 mr-2" />
-                Invia
-              </Button>
+            
+            {/* Input Area */}
+            <div className="p-4 border-t border-gray-200 dark:border-white/10 flex-shrink-0">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && messageText.trim()) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  placeholder="Scrivi un messaggio..."
+                  className={`flex-1 px-4 py-2.5 bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl ${colors.text.primary} placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 text-sm`}
+                />
+                <Button
+                  onClick={handleSendMessage}
+                  disabled={!messageText.trim() || sendMessage.isPending}
+                  className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white border-0 px-4"
+                >
+                  {sendMessage.isPending ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -1178,21 +1292,21 @@ export default function VirtualRoomPage() {
       {/* Kick Confirmation Modal */}
       {kickConfirm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-red-500/20 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="p-5 border-b border-red-500/20 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
-                <Ban className="w-5 h-5 text-red-400" />
+          <div className="bg-white dark:bg-gray-900 border border-red-200 dark:border-red-500/20 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-5 border-b border-red-200 dark:border-red-500/20 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-500/20 flex items-center justify-center">
+                <Ban className="w-5 h-5 text-red-600 dark:text-red-400" />
               </div>
               <div>
-                <h3 className="font-semibold text-white">Conferma Espulsione</h3>
-                <p className="text-sm text-gray-400">Questa azione non può essere annullata</p>
+                <h3 className={`font-semibold ${colors.text.primary}`}>Conferma Espulsione</h3>
+                <p className={`text-sm ${colors.text.muted}`}>Questa azione non può essere annullata</p>
               </div>
             </div>
             <div className="p-5">
-              <p className="text-gray-300">
-                Stai per espellere <span className="font-semibold text-white">{kickConfirm.name}</span> dalla sessione.
+              <p className={colors.text.secondary}>
+                Stai per espellere <span className={`font-semibold ${colors.text.primary}`}>{kickConfirm.name}</span> dalla sessione.
               </p>
-              <p className="text-gray-400 text-sm mt-2">
+              <p className={`${colors.text.muted} text-sm mt-2`}>
                 Lo studente non potrà più partecipare a questa simulazione e la sua sessione verrà terminata immediatamente.
               </p>
             </div>
@@ -1200,7 +1314,7 @@ export default function VirtualRoomPage() {
               <Button
                 variant="ghost"
                 onClick={() => setKickConfirm(null)}
-                className="text-gray-400 hover:text-white"
+                className={`${colors.text.muted} hover:text-gray-900 dark:hover:text-white`}
               >
                 Annulla
               </Button>
@@ -1220,18 +1334,18 @@ export default function VirtualRoomPage() {
       {/* Close Session Confirmation Modal */}
       {showCloseConfirm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-          <div className="bg-gray-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="p-5 border-b border-white/10 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5 text-amber-400" />
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-5 border-b border-gray-200 dark:border-white/10 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
-                <h3 className="font-semibold text-white">Chiudere la Virtual Room?</h3>
-                <p className="text-sm text-gray-400">Scegli come procedere</p>
+                <h3 className={`font-semibold ${colors.text.primary}`}>Chiudere la Virtual Room?</h3>
+                <p className={`text-sm ${colors.text.muted}`}>Scegli come procedere</p>
               </div>
             </div>
             <div className="p-5 space-y-3">
-              <p className="text-gray-300">
+              <p className={colors.text.secondary}>
                 {session.status === 'STARTED' 
                   ? 'La simulazione è in corso. Cosa vuoi fare?'
                   : 'Cosa vuoi fare con questa sessione?'
@@ -1247,13 +1361,13 @@ export default function VirtualRoomPage() {
                   }
                 }}
                 disabled={endSession.isPending}
-                className="w-full p-4 rounded-xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-colors text-left"
+                className="w-full p-4 rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors text-left"
               >
                 <div className="flex items-center gap-3">
-                  <XCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                  <XCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
                   <div>
-                    <p className="font-medium text-red-400">Termina sessione ed esci</p>
-                    <p className="text-sm text-gray-400 mt-1">
+                    <p className="font-medium text-red-600 dark:text-red-400">Termina sessione ed esci</p>
+                    <p className={`text-sm ${colors.text.muted} mt-1`}>
                       Tutti gli studenti saranno disconnessi e la sessione verrà chiusa definitivamente.
                     </p>
                   </div>
@@ -1266,13 +1380,13 @@ export default function VirtualRoomPage() {
                   setShowCloseConfirm(false);
                   router.push('/simulazioni');
                 }}
-                className="w-full p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors text-left"
+                className="w-full p-4 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left"
               >
                 <div className="flex items-center gap-3">
-                  <X className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                  <X className={`w-5 h-5 ${colors.text.muted} flex-shrink-0`} />
                   <div>
-                    <p className="font-medium text-white">Solo esci (sessione attiva)</p>
-                    <p className="text-sm text-gray-400 mt-1">
+                    <p className={`font-medium ${colors.text.primary}`}>Solo esci (sessione attiva)</p>
+                    <p className={`text-sm ${colors.text.muted} mt-1`}>
                       La sessione rimarrà attiva e potrai tornare in seguito. Gli studenti continueranno.
                     </p>
                   </div>
@@ -1283,7 +1397,7 @@ export default function VirtualRoomPage() {
               <Button
                 variant="ghost"
                 onClick={() => setShowCloseConfirm(false)}
-                className="w-full text-gray-400 hover:text-white"
+                className={`w-full ${colors.text.muted} hover:text-gray-900 dark:hover:text-white`}
               >
                 Annulla
               </Button>

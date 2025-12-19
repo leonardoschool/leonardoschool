@@ -10,6 +10,7 @@ import ConfirmModal from '@/components/ui/ConfirmModal';
 import CustomSelect from '@/components/ui/CustomSelect';
 import TolcSimulationLayout from '@/components/simulazioni/TolcSimulationLayout';
 import StudentWaitingRoom from '@/components/simulazioni/StudentWaitingRoom';
+import TolcInstructions from '@/components/simulazioni/TolcInstructions';
 import InTestMessaging, { MessagingButton } from '@/components/simulazioni/InTestMessaging';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -71,6 +72,9 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Answer[]>([]);
   
+  // TOLC Instructions state - for Virtual Room simulations with sections
+  const [hasReadInstructions, setHasReadInstructions] = useState(false);
+  
   // Virtual Room state
   const [_virtualRoomStartedAt, setVirtualRoomStartedAt] = useState<Date | null>(null);
   const [participantId, setParticipantId] = useState<string | null>(null);
@@ -99,6 +103,8 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const autoSubmitRef = useRef<(() => void) | null>(null);
   const answersInitializedRef = useRef<boolean>(false);
+  const answersRef = useRef<Answer[]>([]); // Ref for heartbeat to read current answers
+  const participantIdRef = useRef<string | null>(null); // Ref for anti-cheat to read current participantId
 
   // Fetch simulation - pass assignmentId to get correct assignment dates
   const { data: simulation, isLoading, error } = trpc.simulations.getSimulationForStudent.useQuery(
@@ -246,10 +252,11 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     maxViolations: 10,
     onViolation: (event: { type: string; timestamp: Date; details?: string }) => {
       console.warn('[AntiCheat] Violation:', event);
-      // Log to database if in virtual room mode
-      if (isVirtualRoom && participantId) {
+      // Log to database if in virtual room mode - use ref to get current participantId
+      const currentParticipantId = participantIdRef.current;
+      if (isVirtualRoom && currentParticipantId) {
         logCheatingEvent.mutate({
-          participantId,
+          participantId: currentParticipantId,
           eventType: mapEventType(event.type),
           description: event.details,
           metadata: { timestamp: event.timestamp.toISOString() },
@@ -263,7 +270,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     onFullscreenExit: () => {
       // Fullscreen exit is handled automatically by the hook
     },
-  }), [hasStarted, simulation?.enableAntiCheat, simulation?.forceFullscreen, showError, isVirtualRoom, participantId, logCheatingEvent, mapEventType]);
+  }), [hasStarted, simulation?.enableAntiCheat, simulation?.forceFullscreen, showError, isVirtualRoom, logCheatingEvent, mapEventType]);
 
   const antiCheat = useAntiCheat(antiCheatConfig);
 
@@ -321,6 +328,16 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     };
   }, [hasStarted, simulation]);
 
+  // Keep answersRef in sync with answers state (for heartbeat interval)
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
+
+  // Keep participantIdRef in sync (for anti-cheat callbacks)
+  useEffect(() => {
+    participantIdRef.current = participantId;
+  }, [participantId]);
+
   // Virtual Room heartbeat - send progress updates
   const heartbeatMutation = trpc.virtualRoom.heartbeat.useMutation({
     onSuccess: (data) => {
@@ -340,18 +357,18 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
 
     console.log('[VirtualRoom Heartbeat] Starting interval with participantId:', participantId);
 
-    // Send heartbeat immediately once
-    const answeredCount = answers.filter(a => a.answerId !== null || a.answerText !== null).length;
-    console.log('[VirtualRoom Heartbeat] Sending initial heartbeat:', { participantId, currentQuestionIndex, answeredCount });
+    // Send heartbeat immediately once using current state
+    const initialAnsweredCount = answersRef.current.filter(a => a.answerId !== null || a.answerText !== null).length;
+    console.log('[VirtualRoom Heartbeat] Sending initial heartbeat:', { participantId, currentQuestionIndex, answeredCount: initialAnsweredCount });
     heartbeatMutation.mutate({
       participantId,
       currentQuestionIndex,
-      answeredCount,
+      answeredCount: initialAnsweredCount,
     });
 
-    // Send heartbeat every 5 seconds with current progress
+    // Send heartbeat every 5 seconds - read from ref to get latest answers
     const interval = setInterval(() => {
-      const currentAnsweredCount = answers.filter(a => a.answerId !== null || a.answerText !== null).length;
+      const currentAnsweredCount = answersRef.current.filter(a => a.answerId !== null || a.answerText !== null).length;
       console.log('[VirtualRoom Heartbeat] Sending:', { participantId, currentQuestionIndex, answeredCount: currentAnsweredCount });
       
       heartbeatMutation.mutate({
@@ -362,7 +379,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [isVirtualRoom, participantId, hasStarted, currentQuestionIndex, answers, heartbeatMutation]);
+  }, [isVirtualRoom, participantId, hasStarted, currentQuestionIndex, heartbeatMutation]);
 
   // Track question time
   const trackQuestionTime = useCallback(() => {
@@ -528,9 +545,13 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
 
   // Parse sections from simulation (if TOLC-style)
   const sections: SimulationSection[] = useMemo(() => {
-    if (!simulation?.hasSections || !simulation.sections) return [];
+    if (!simulation?.hasSections || !simulation.sections) {
+      console.log('[TOLC] No sections mode - hasSections:', simulation?.hasSections, 'sections:', simulation?.sections);
+      return [];
+    }
     try {
       const parsed = simulation.sections as unknown as SimulationSection[];
+      console.log('[TOLC] Parsed sections:', parsed);
       return Array.isArray(parsed) ? parsed : [];
     } catch {
       return [];
@@ -538,6 +559,9 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   }, [simulation?.hasSections, simulation?.sections]);
 
   const hasSectionsMode = sections.length > 0;
+  
+  // Debug log for TOLC mode
+  console.log('[TOLC] hasSectionsMode:', hasSectionsMode, 'isVirtualRoom:', isVirtualRoom, 'hasReadInstructions:', hasReadInstructions);
 
   // Get current section info
   const currentSection = hasSectionsMode ? sections[currentSectionIndex] : null;
@@ -712,6 +736,19 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
             <p className={colors.text.secondary}>Errore: manca l&apos;ID dell&apos;assegnazione per la Virtual Room.</p>
           </div>
         </div>
+      );
+    }
+    
+    // For TOLC-style simulations (with sections), show instructions first
+    if (hasSectionsMode && !hasReadInstructions) {
+      return (
+        <TolcInstructions
+          simulationTitle={simulation.title}
+          durationMinutes={simulation.durationMinutes}
+          totalQuestions={simulation.totalQuestions}
+          sectionsCount={sections.length}
+          onContinue={() => setHasReadInstructions(true)}
+        />
       );
     }
     

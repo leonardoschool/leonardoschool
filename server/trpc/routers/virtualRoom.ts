@@ -369,13 +369,7 @@ export const virtualRoomRouter = router({
             answeredCount: p.answeredCount,
             cheatingEventsCount: p.cheatingEvents.length,
             recentCheatingEvents: p.cheatingEvents,
-            hasUnreadMessages: p.messages.some(m => m.senderType === 'STUDENT' && !m.isRead),
-            recentMessages: p.messages.filter(m => m.senderType === 'STUDENT').slice(0, 3).map(m => ({
-              id: m.id,
-              message: m.message,
-              createdAt: m.createdAt,
-              isRead: m.isRead,
-            })),
+            unreadMessagesCount: p.messages.filter(m => m.senderType === 'STUDENT' && !m.isRead).length,
             // Kick status
             isKicked: p.isKicked,
             kickedReason: p.kickedReason,
@@ -544,13 +538,23 @@ export const virtualRoomRouter = router({
           ...(input.answeredCount !== undefined && { answeredCount: input.answeredCount }),
         },
         include: {
-          session: true,
+          session: {
+            include: {
+              participants: {
+                select: { isConnected: true },
+              },
+            },
+          },
           messages: {
             where: { isRead: false, senderType: 'ADMIN' },
             orderBy: { createdAt: 'desc' },
           },
         },
       });
+
+      // Count connected participants
+      const connectedCount = participant.session.participants.filter(p => p.isConnected).length;
+      const totalParticipants = participant.session.participants.length;
 
       // Debug log only - very verbose, only shown with LOG_VERBOSE=true
       log.debug('Heartbeat updated:', {
@@ -565,6 +569,8 @@ export const virtualRoomRouter = router({
         endedAt: participant.session.endedAt,
         unreadMessages: participant.messages,
         isReady: !!participant.readyAt,
+        connectedCount,
+        totalParticipants,
       };
     }),
 
