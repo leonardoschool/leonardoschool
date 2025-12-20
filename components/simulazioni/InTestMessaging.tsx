@@ -40,62 +40,104 @@ export default function InTestMessaging({
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
 
-  // Fetch messages
+  // Fetch messages - fast polling for near real-time
   const messagesQuery = trpc.virtualRoom.getMessages.useQuery(
     { participantId },
     { 
-      enabled: isOpen && !!participantId,
-      refetchInterval: isOpen ? 5000 : false, // Poll when open
+      enabled: !!participantId,
+      refetchInterval: 500, // Poll every 500ms for near real-time
+      staleTime: 400,
     }
   );
 
-  // Send message mutation
+  // Send message mutation with optimistic update
   const sendMessage = trpc.virtualRoom.sendMessage.useMutation({
-    onSuccess: () => {
+    onMutate: (variables) => {
+      // Optimistically add the message to the UI
+      if (!variables || typeof variables !== 'object') return;
+      const messageText = 'message' in variables ? (variables.message || '') : '';
+      if (!messageText) return;
+      
+      const optimisticMessage: Message = {
+        id: `temp-${Date.now()}`,
+        senderType: 'STUDENT',
+        message: messageText,
+        createdAt: new Date(),
+        isRead: true,
+      };
+      setMessages(prev => [...prev, optimisticMessage]);
       setNewMessage('');
+    },
+    onSuccess: () => {
       setIsSending(false);
+      // Refetch to get the real message with proper ID
       messagesQuery.refetch();
     },
     onError: () => {
       setIsSending(false);
+      // Remove the optimistic message on error
+      setMessages(prev => prev.filter(m => !m.id.startsWith('temp-')));
     },
   });
 
   // Mark messages as read mutation
-  const markAsRead = trpc.virtualRoom.markMessagesRead.useMutation();
+  const markAsRead = trpc.virtualRoom.markMessagesRead.useMutation({
+    onSuccess: () => {
+      // Immediately update local unread count to 0
+      onUnreadChange(0);
+      // Refetch to sync with server
+      messagesQuery.refetch();
+    },
+  });
 
   // Update messages when query data changes
   useEffect(() => {
     if (messagesQuery.data) {
-      const mappedMessages = messagesQuery.data.map(m => ({
+      const serverMessages = messagesQuery.data.map(m => ({
         id: m.id,
         senderType: m.senderType as 'ADMIN' | 'STUDENT',
         message: m.message,
         createdAt: new Date(m.createdAt),
         isRead: m.isRead,
       }));
-      setMessages(mappedMessages);
+      
+      // Merge server messages with optimistic messages (temp- prefixed)
+      // Keep optimistic messages that don't have a server counterpart yet
+      setMessages(prev => {
+        const optimisticMessages = prev.filter(m => m.id.startsWith('temp-'));
+        // Check if optimistic messages are now in server response
+        const stillPendingOptimistic = optimisticMessages.filter(optMsg => {
+          // Consider message confirmed if server has a message with same content from same sender within 30 seconds
+          return !serverMessages.some(
+            serverMsg => 
+              serverMsg.senderType === optMsg.senderType && 
+              serverMsg.message === optMsg.message &&
+              Math.abs(serverMsg.createdAt.getTime() - optMsg.createdAt.getTime()) < 30000
+          );
+        });
+        return [...serverMessages, ...stillPendingOptimistic];
+      });
       
       // Update unread count
-      const unread = mappedMessages.filter(m => m.senderType === 'ADMIN' && !m.isRead).length;
+      const unread = serverMessages.filter(m => m.senderType === 'ADMIN' && !m.isRead).length;
       onUnreadChange(unread);
     }
   }, [messagesQuery.data, onUnreadChange]);
 
-  // Mark admin messages as read when opening
+  // Mark admin messages as read when opening or when new messages arrive while open
   useEffect(() => {
-    if (isOpen && participantId && unreadCount > 0) {
+    if (isOpen && participantId && unreadCount > 0 && !markAsRead.isPending) {
       markAsRead.mutate({ participantId });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, participantId]);
+  }, [isOpen, participantId, unreadCount, markAsRead]);
 
   const handleSend = useCallback(() => {
     if (!newMessage.trim() || isSending) return;
+    const messageToSend = newMessage.trim();
     setIsSending(true);
     sendMessage.mutate({
       participantId,
-      message: newMessage.trim(),
+      message: messageToSend,
     });
   }, [newMessage, isSending, participantId, sendMessage]);
 

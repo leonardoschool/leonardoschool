@@ -21,8 +21,10 @@ import {
   Sparkles,
   XCircle,
   Users,
-  Send
+  Send,
+  AlertTriangle
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 // Student Chat Modal Component
 interface StudentChatModalProps {
@@ -171,13 +173,15 @@ interface StudentWaitingRoomProps {
   simulationTitle: string;
   durationMinutes: number;
   onSessionStart: (actualStartAt: Date, participantId: string) => void;
+  instructions?: string | null; // Optional instructions to show in waiting room
 }
 
 export default function StudentWaitingRoom({ 
   assignmentId, 
   simulationTitle,
   durationMinutes,
-  onSessionStart 
+  onSessionStart,
+  instructions,
 }: StudentWaitingRoomProps) {
   const { showSuccess } = useToast();
   const { handleMutationError } = useApiError();
@@ -197,6 +201,7 @@ export default function StudentWaitingRoom({
   const [totalParticipants, setTotalParticipants] = useState(0);
   const [replyText, setReplyText] = useState('');
   const [showContactModal, setShowContactModal] = useState(false);
+  const router = useRouter();
 
   // Check session status first - uses assignmentId for session lookup
   const { data: sessionStatus, isLoading: isCheckingSession } = trpc.virtualRoom.getStudentSessionStatus.useQuery(
@@ -403,7 +408,6 @@ export default function StudentWaitingRoom({
     );
   }
 
-  // Session ended state (by admin or kicked)
   if (sessionEnded) {
     return (
       <div className={`min-h-screen ${colors.background.primary} flex items-center justify-center p-4`}>
@@ -426,7 +430,7 @@ export default function StudentWaitingRoom({
 
             {/* Action button */}
             <Button
-              onClick={() => window.close()}
+              onClick={() => router.push('/simulazioni')} // go to simulation
               className="w-full"
             >
               Chiudi finestra
@@ -607,6 +611,22 @@ export default function StudentWaitingRoom({
                   <CheckCircle className="w-5 h-5 mr-2" />
                   {setReadyMutation.isPending ? 'Conferma...' : 'Sono pronto'}
                 </Button>
+              </div>
+            )}
+
+            {/* Instructions from admin - if provided */}
+            {instructions && (
+              <div className="px-6 lg:px-8 pb-4">
+                <div className={`p-4 rounded-xl ${colors.background.secondary} border ${colors.border.light}`}>
+                  <div className="flex items-start gap-3 mb-2">
+                    <AlertTriangle className={`w-5 h-5 ${colors.text.primary} flex-shrink-0 mt-0.5`} />
+                    <h3 className={`text-sm font-semibold ${colors.text.primary}`}>Istruzioni importanti</h3>
+                  </div>
+                  <div 
+                    className={`text-sm ${colors.text.secondary} ml-8 prose prose-sm dark:prose-invert max-w-none`}
+                    dangerouslySetInnerHTML={{ __html: instructions }}
+                  />
+                </div>
               </div>
             )}
 

@@ -23,10 +23,11 @@ import {
   Radio,
   Ban
 } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useVirtualRoomSSE, VirtualRoomData } from '@/lib/hooks/useVirtualRoomSSE';
 import { formatDistanceToNow } from 'date-fns';
 import { it } from 'date-fns/locale';
 
@@ -309,21 +310,46 @@ export default function VirtualRoomPage() {
     onError: handleMutationError,
   });
 
-  // Get session state (polling) - Staff only
-  const sessionState = trpc.virtualRoom.getSessionState.useQuery(
-    { sessionId: sessionId! },
-    { 
-      enabled: !!sessionId && isStaff,
-      refetchInterval: 2000, // Poll every 2 seconds for real-time updates
-    }
-  );
+  // SSE connection for real-time updates - Staff only
+  const [sseData, setSseData] = useState<VirtualRoomData | null>(null);
+  
+  // Memoize callback to prevent reconnections
+  const handleSSEMessage = useCallback((data: VirtualRoomData) => {
+    setSseData(data);
+  }, []);
+  
+  const { isConnected: _sseConnected, reconnect: sseReconnect } = useVirtualRoomSSE({
+    sessionId: sessionId,
+    participantId: selectedParticipantId, // Include messages for selected participant
+    enabled: !!sessionId && isStaff,
+    onMessage: handleSSEMessage,
+  });
+
+  // Transform SSE data to match the old sessionState format for compatibility
+  const sessionState = useMemo(() => {
+    if (!sseData) return { data: null, isLoading: false, refetch: sseReconnect };
+    return {
+      data: {
+        session: sseData.session,
+        simulation: sseData.simulation,
+        participants: sseData.participants,
+        invitedStudents: sseData.invitedStudents,
+        connectedCount: sseData.connectedCount,
+        totalInvited: sseData.totalInvited,
+        timeRemaining: sseData.timeRemaining,
+      },
+      isLoading: false,
+      refetch: sseReconnect,
+    };
+  }, [sseData, sseReconnect]);
 
   // Get student session status (polling) - Student only - now uses assignmentId
   const studentStatus = trpc.virtualRoom.getStudentSessionStatus.useQuery(
     { assignmentId },
     {
       enabled: isStudent,
-      refetchInterval: 2000,
+      refetchInterval: 1000, // Poll every 1 second for students
+      staleTime: 800,
     }
   );
 
@@ -400,35 +426,23 @@ export default function VirtualRoomPage() {
   const sendMessage = trpc.virtualRoom.sendMessage.useMutation({
     onSuccess: () => {
       setMessageText('');
-      // Refetch messages and session state
-      if (selectedParticipantId) {
-        messagesQuery.refetch();
-      }
-      sessionState.refetch();
+      // SSE will automatically receive the updated messages
     },
     onError: handleMutationError,
   });
 
-  // Get messages for selected participant
-  const messagesQuery = trpc.virtualRoom.getMessages.useQuery(
-    { participantId: selectedParticipantId! },
-    { 
-      enabled: !!selectedParticipantId,
-      refetchInterval: 3000, // Poll for new messages
-    }
-  );
+  // Messages come from SSE data now - no need for separate polling
+  const messagesFromSSE = useMemo(() => {
+    return sseData?.messages || [];
+  }, [sseData?.messages]);
 
   // Mark messages as read
-  const markMessagesRead = trpc.virtualRoom.markMessagesRead.useMutation({
-    onSuccess: () => {
-      sessionState.refetch();
-    },
-  });
+  const markMessagesRead = trpc.virtualRoom.markMessagesRead.useMutation();
 
   // Mark messages as read when opening chat
   useEffect(() => {
-    if (selectedParticipantId && messagesQuery.data) {
-      const unreadIds = messagesQuery.data
+    if (selectedParticipantId && messagesFromSSE.length > 0) {
+      const unreadIds = messagesFromSSE
         .filter(m => !m.isRead && m.senderType === 'STUDENT')
         .map(m => m.id);
       if (unreadIds.length > 0) {
@@ -436,7 +450,7 @@ export default function VirtualRoomPage() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedParticipantId, messagesQuery.data]);
+  }, [selectedParticipantId, messagesFromSSE]);
 
   // Kick participant mutation
   const kickParticipant = trpc.virtualRoom.kickParticipant.useMutation({
@@ -886,10 +900,11 @@ export default function VirtualRoomPage() {
               </div>
             </div>
 
-            {/* Center: Timer (when started) */}
+            {/* Center: Timer & Stats (when started) */}
             {session.status === 'STARTED' && timeRemaining !== null && (
-              <div className="absolute left-1/2 -translate-x-1/2">
-                <div className={`flex items-center gap-3 ${colors.background.card} shadow-lg border ${colors.border.primary} rounded-2xl px-6 py-3`}>
+              <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-4">
+                {/* Timer (cyan/blue) */}
+                <div className={`flex items-center gap-3 ${colors.background.card} shadow-lg border border-cyan-400 dark:border-cyan-500/40 rounded-2xl px-6 py-3`}>
                   <Clock className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
                   <span className={`text-3xl font-mono font-bold ${colors.text.primary} tracking-wider`}>
                     {formatTimeRemaining(timeRemaining)}
@@ -1005,11 +1020,11 @@ export default function VirtualRoomPage() {
 
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => sessionState.refetch()}
+                  onClick={() => sseReconnect()}
                   className={`p-3 rounded-xl ${colors.background.hover} border ${colors.border.light} hover:border-gray-400 dark:hover:border-white/20 transition-all ${colors.text.muted} hover:${colors.text.primary}`}
-                  title="Aggiorna"
+                  title="Riconnetti"
                 >
-                  <RefreshCw className={`w-5 h-5 ${sessionState.isFetching ? 'animate-spin' : ''}`} />
+                  <RefreshCw className="w-5 h-5" />
                 </button>
                 <Button
                   onClick={handleEndSession}
@@ -1223,18 +1238,14 @@ export default function VirtualRoomPage() {
             
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[200px] max-h-[400px] bg-gray-50 dark:bg-gray-800/50">
-              {messagesQuery.isLoading ? (
-                <div className="flex items-center justify-center h-full">
-                  <div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : messagesQuery.data?.length === 0 ? (
+              {messagesFromSSE.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center py-8">
                   <MessageSquare className={`w-10 h-10 ${colors.text.muted} mb-2`} />
                   <p className={`${colors.text.muted} text-sm`}>Nessun messaggio</p>
                   <p className={`${colors.text.muted} text-xs`}>Inizia una conversazione</p>
                 </div>
               ) : (
-                messagesQuery.data?.map((msg) => (
+                messagesFromSSE.map((msg) => (
                   <div 
                     key={msg.id} 
                     className={`flex ${msg.senderType === 'ADMIN' ? 'justify-end' : 'justify-start'}`}
@@ -1325,6 +1336,135 @@ export default function VirtualRoomPage() {
               >
                 <Ban className="w-4 h-4 mr-2" />
                 {kickParticipant.isPending ? 'Espulsione...' : 'Espelli Studente'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Start Session Confirmation Modal */}
+      {showStartConfirm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-500/20 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-5 border-b border-blue-200 dark:border-blue-500/20 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center">
+                <Play className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <h3 className={`font-semibold ${colors.text.primary}`}>Avviare la Simulazione?</h3>
+                <p className={`text-sm ${colors.text.muted}`}>Il timer partirà per tutti contemporaneamente</p>
+              </div>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className={`p-4 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20`}>
+                <div className="flex items-center gap-3 mb-3">
+                  <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  <span className={`font-medium ${colors.text.primary}`}>Stato Connessioni</span>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className={colors.text.muted}>Studenti connessi:</span>
+                    <span className={`font-semibold ${allConnected ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                      {connectedCount}/{totalInvited}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className={colors.text.muted}>Studenti pronti:</span>
+                    <span className={`font-semibold ${colors.text.primary}`}>
+                      {readyCount}/{connectedCount}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              {!allConnected && (
+                <div className={`p-3 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 flex items-start gap-2`}>
+                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                    Non tutti gli studenti invitati sono connessi. Puoi comunque avviare la simulazione.
+                  </p>
+                </div>
+              )}
+              
+              <p className={colors.text.secondary}>
+                Una volta avviata, il timer inizierà immediatamente per tutti i partecipanti connessi e non potrà essere messo in pausa.
+              </p>
+            </div>
+            <div className="p-5 pt-0 flex justify-end gap-3">
+              <Button
+                variant="ghost"
+                onClick={() => setShowStartConfirm(false)}
+                className={`${colors.text.muted} hover:text-gray-900 dark:hover:text-white`}
+              >
+                Annulla
+              </Button>
+              <Button
+                onClick={() => {
+                  if (sessionId) {
+                    startSession.mutate({ 
+                      sessionId, 
+                      forceStart: !allConnected 
+                    });
+                  }
+                }}
+                disabled={startSession.isPending}
+                className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white border-0 px-6"
+              >
+                <Play className="w-4 h-4 mr-2" />
+                {startSession.isPending ? 'Avvio in corso...' : 'Avvia Ora'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Force Start Confirmation Modal (when not all students connected) */}
+      {showForceStartConfirm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 border border-amber-200 dark:border-amber-500/20 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-5 border-b border-amber-200 dark:border-amber-500/20 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h3 className={`font-semibold ${colors.text.primary}`}>Non tutti sono connessi</h3>
+                <p className={`text-sm ${colors.text.muted}`}>Vuoi avviare comunque?</p>
+              </div>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className={`p-4 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20`}>
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  Solo <span className="font-semibold">{connectedCount} su {totalInvited}</span> studenti invitati sono attualmente connessi.
+                </p>
+              </div>
+              
+              <p className={colors.text.secondary}>
+                Gli studenti non connessi non potranno partecipare a questa simulazione. Sei sicuro di voler avviare comunque?
+              </p>
+            </div>
+            <div className="p-5 pt-0 flex justify-end gap-3">
+              <Button
+                variant="ghost"
+                onClick={() => setShowForceStartConfirm(false)}
+                className={`${colors.text.muted} hover:text-gray-900 dark:hover:text-white`}
+              >
+                Annulla
+              </Button>
+              <Button
+                onClick={() => {
+                  if (sessionId) {
+                    startSession.mutate({ 
+                      sessionId, 
+                      forceStart: true 
+                    });
+                  }
+                  setShowForceStartConfirm(false);
+                }}
+                disabled={startSession.isPending}
+                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 px-6"
+              >
+                <Play className="w-4 h-4 mr-2" />
+                {startSession.isPending ? 'Avvio...' : 'Avvia Comunque'}
               </Button>
             </div>
           </div>

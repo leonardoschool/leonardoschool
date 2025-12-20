@@ -445,7 +445,16 @@ export const simulationsRouter = router({
       const questionIds = questions.map(q => q.questionId);
       const existingQuestions = await ctx.prisma.question.findMany({
         where: { id: { in: questionIds } },
-        select: { id: true, status: true },
+        select: { 
+          id: true, 
+          status: true,
+          subjectId: true,
+          subject: {
+            select: {
+              name: true,
+            },
+          },
+        },
       });
 
       if (existingQuestions.length !== questionIds.length) {
@@ -466,6 +475,43 @@ export const simulationsRouter = router({
       // Calculate maxScore if not provided
       const correctPts = simulationData.correctPoints ?? 1.5;
       const calculatedMaxScore = simulationData.maxScore ?? (questions.length * correctPts);
+
+      // Auto-generate sections if hasSections=true but no sections provided
+      let sectionsData = simulationData.sections;
+      if (simulationData.hasSections && (!sectionsData || (Array.isArray(sectionsData) && sectionsData.length === 0))) {
+        // Group questions by subject
+        const questionsBySubject = new Map<string, typeof existingQuestions>();
+        for (const q of existingQuestions) {
+          const subjectId = q.subjectId || 'GENERAL';
+          if (!questionsBySubject.has(subjectId)) {
+            questionsBySubject.set(subjectId, []);
+          }
+          questionsBySubject.get(subjectId)!.push(q);
+        }
+
+        // Create a section for each subject
+        const totalDuration = simulationData.durationMinutes ?? 0;
+        const numSections = questionsBySubject.size;
+        const durationPerSection = numSections > 0 ? Math.floor(totalDuration / numSections) : 0;
+
+        const generatedSections = [];
+        let order = 0;
+        for (const [subjectId, subjectQuestions] of questionsBySubject.entries()) {
+          const subjectName = subjectQuestions[0]?.subject?.name || 'Sezione Generale';
+          generatedSections.push({
+            id: `section-${order}`,
+            name: subjectName,
+            durationMinutes: durationPerSection,
+            questionIds: subjectQuestions.map(q => q.id),
+            questionCount: subjectQuestions.length,
+            subjectId: subjectId === 'GENERAL' ? null : subjectId,
+            order,
+          });
+          order++;
+        }
+
+        sectionsData = generatedSections;
+      }
 
       // Create simulation with questions and assignments
       const simulation = await ctx.prisma.simulation.create({
@@ -505,7 +551,7 @@ export const simulationsRouter = router({
           locationType: simulationData.locationType,
           locationDetails: simulationData.locationDetails,
           hasSections: simulationData.hasSections ?? false,
-          sections: simulationData.sections ?? undefined,
+          sections: sectionsData ?? undefined,
           isScheduled: simulationData.isScheduled ?? false,
           enableAntiCheat: simulationData.enableAntiCheat ?? false,
           forceFullscreen: simulationData.forceFullscreen ?? false,
@@ -2245,9 +2291,47 @@ export const simulationsRouter = router({
       });
 
       const completedAttempts = existingResults.filter(r => r.completedAt).length;
-      const inProgressAttempt = existingResults.find(r => !r.completedAt);
+      let inProgressAttempt = existingResults.find(r => !r.completedAt);
 
-      // Return existing in-progress attempt
+      // For Virtual Room simulations, check if the in-progress attempt is for the current session
+      // If not, invalidate it (delete the old attempt) and create a new one
+      if (inProgressAttempt && assignmentId) {
+        // Check if there's an active session for this assignment
+        const currentSession = await ctx.prisma.simulationSession.findFirst({
+          where: {
+            assignmentId: assignmentId,
+            status: { in: ['WAITING', 'STARTED'] }, // Active sessions
+            participants: {
+              some: { studentId },
+            },
+          },
+          select: { id: true, createdAt: true },
+          orderBy: { createdAt: 'desc' }, // Get the most recent session
+        });
+
+        // If there's a current session, check if the in-progress attempt was created before it
+        // This means the attempt is from a previous (now closed) session
+        if (currentSession && inProgressAttempt.startedAt && inProgressAttempt.startedAt < currentSession.createdAt) {
+          // Old attempt from a closed session - delete it so student starts fresh
+          await ctx.prisma.simulationResult.delete({
+            where: { id: inProgressAttempt.id },
+          });
+          
+          log.info('Deleted old attempt from closed session - student will start fresh:', {
+            oldResultId: inProgressAttempt.id,
+            oldStartedAt: inProgressAttempt.startedAt,
+            newSessionId: currentSession.id,
+            newSessionCreatedAt: currentSession.createdAt,
+            studentId,
+            assignmentId,
+          });
+          
+          // Clear inProgressAttempt so a new one will be created below
+          inProgressAttempt = undefined;
+        }
+      }
+
+      // Return existing in-progress attempt (if still valid)
       if (inProgressAttempt) {
         // Parse saved answers - handle both old format (array) and new format (object with metadata)
         const savedData = inProgressAttempt.answers as unknown;
@@ -3371,8 +3455,8 @@ export const simulationsRouter = router({
         }
       }
 
-      // Get all completed results ordered by score
-      const results = await ctx.prisma.simulationResult.findMany({
+      // Get all completed results for this simulation
+      const allResults = await ctx.prisma.simulationResult.findMany({
         where: whereClause,
         include: {
           student: {
@@ -3382,11 +3466,30 @@ export const simulationsRouter = router({
           },
         },
         orderBy: [
-          { totalScore: 'desc' },
-          { durationSeconds: 'asc' }, // Tie-breaker: faster time wins
+          { studentId: 'asc' },
+          { completedAt: 'desc' }, // Most recent first
         ],
-        take: input.limit,
       });
+
+      // Keep only the most recent result for each student
+      const studentLatestResults = new Map<string, typeof allResults[0]>();
+      for (const result of allResults) {
+        if (!studentLatestResults.has(result.studentId)) {
+          studentLatestResults.set(result.studentId, result);
+        }
+      }
+
+      // Convert to array and sort by score
+      const results = Array.from(studentLatestResults.values())
+        .sort((a, b) => {
+          // Sort by score descending
+          if (b.totalScore !== a.totalScore) {
+            return b.totalScore - a.totalScore;
+          }
+          // Tie-breaker: faster time wins
+          return a.durationSeconds - b.durationSeconds;
+        })
+        .slice(0, input.limit);
 
       // Calculate rankings with tie handling and anonymization
       const leaderboard = results.map((result, index) => {
@@ -3751,13 +3854,14 @@ export const simulationsRouter = router({
       }
 
       // Get all completed results with full details
-      const results = await ctx.prisma.simulationResult.findMany({
+      const allResults = await ctx.prisma.simulationResult.findMany({
         where: { 
           simulationId: input.simulationId, 
           completedAt: { not: null } 
         },
         select: {
           id: true,
+          studentId: true,
           totalScore: true,
           percentageScore: true,
           correctAnswers: true,
@@ -3770,8 +3874,23 @@ export const simulationsRouter = router({
             include: { user: { select: { id: true, name: true, email: true } } },
           },
         },
-        orderBy: { percentageScore: 'desc' },
+        orderBy: [
+          { studentId: 'asc' },
+          { completedAt: 'desc' }, // Most recent first
+        ],
       });
+
+      // Keep only the most recent result for each student
+      const studentLatestResults = new Map<string, typeof allResults[0]>();
+      for (const result of allResults) {
+        if (!studentLatestResults.has(result.studentId)) {
+          studentLatestResults.set(result.studentId, result);
+        }
+      }
+
+      // Convert to array and sort by score
+      const results = Array.from(studentLatestResults.values())
+        .sort((a, b) => (b.percentageScore ?? 0) - (a.percentageScore ?? 0));
 
       // Check if there are any results
       const hasData = results.length > 0;

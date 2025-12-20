@@ -22,6 +22,8 @@ import {
   EyeOff,
   AlertCircle,
   BarChart3,
+  Medal,
+  Star,
 } from 'lucide-react';
 
 /**
@@ -62,6 +64,12 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
   const { data: result, isLoading, error } = trpc.simulations.getResultDetails.useQuery(
     resultId ? { resultId } : { simulationId },
     { enabled: !!user }
+  );
+
+  // Fetch leaderboard data
+  const { data: leaderboardData } = trpc.simulations.getLeaderboard.useQuery(
+    { simulationId, limit: 50 },
+    { enabled: !!user && !!result }
   );
 
   // Calculate statistics by subject
@@ -289,6 +297,77 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
               <span className={colors.text.muted}>Non date</span>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Leaderboard */}
+      {leaderboardData && leaderboardData.leaderboard.length > 0 && (
+        <div className={`rounded-xl ${colors.background.card} border ${colors.border.light} p-6 mb-8`}>
+          <h2 className={`text-lg font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
+            <Trophy className="w-5 h-5 text-yellow-500" />
+            Classifica
+            <span className={`text-sm font-normal ${colors.text.muted}`}>
+              ({leaderboardData.totalParticipants} partecipanti)
+            </span>
+          </h2>
+
+          <div className="space-y-2">
+            {leaderboardData.leaderboard.map((entry) => {
+              const isCurrentUser = entry.isCurrentUser;
+              const rankColor = entry.rank === 1 ? 'text-yellow-500' : entry.rank === 2 ? 'text-gray-400' : entry.rank === 3 ? 'text-amber-600' : colors.text.muted;
+              const rankIcon = entry.rank === 1 ? <Trophy className="w-5 h-5" /> : entry.rank === 2 ? <Medal className="w-5 h-5" /> : entry.rank === 3 ? <Star className="w-5 h-5" /> : null;
+
+              return (
+                <div
+                  key={entry.studentId || `anonymous-${entry.rank}`}
+                  className={`flex items-center gap-4 p-4 rounded-lg transition-colors ${
+                    isCurrentUser
+                      ? `${colors.primary.gradient} text-white`
+                      : `${colors.background.secondary} hover:bg-gray-100 dark:hover:bg-gray-700`
+                  }`}
+                >
+                  {/* Rank */}
+                  <div className={`flex items-center justify-center w-12 font-bold text-lg ${isCurrentUser ? 'text-white' : rankColor}`}>
+                    {rankIcon || `#${entry.rank}`}
+                  </div>
+
+                  {/* User info */}
+                  <div className="flex-1 min-w-0">
+                    <p className={`font-medium truncate ${isCurrentUser ? 'text-white' : colors.text.primary}`}>
+                      {entry.studentName}
+                      {isCurrentUser && <span className="ml-2 text-xs opacity-90">(Tu)</span>}
+                    </p>
+                    {leaderboardData.canSeeAllNames && entry.studentMatricola && (
+                      <p className={`text-xs ${isCurrentUser ? 'text-white/80' : colors.text.muted}`}>
+                        Matricola: {entry.studentMatricola}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Score */}
+                  <div className="text-right">
+                    <p className={`font-bold text-lg ${isCurrentUser ? 'text-white' : colors.text.primary}`}>
+                      {entry.totalScore.toFixed(2)}
+                    </p>
+                    <p className={`text-xs ${isCurrentUser ? 'text-white/80' : colors.text.muted}`}>
+                      {Math.floor(entry.durationSeconds / 60)}:{(entry.durationSeconds % 60).toString().padStart(2, '0')}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Info message */}
+          {!leaderboardData.canSeeAllNames && (
+            <div className={`mt-4 p-3 rounded-lg ${colors.background.secondary} flex items-start gap-2`}>
+              <AlertCircle className={`w-5 h-5 ${colors.text.muted} flex-shrink-0 mt-0.5`} />
+              <p className={`text-sm ${colors.text.muted}`}>
+                I nomi degli altri partecipanti sono anonimi per proteggere la privacy. 
+                Solo il tuo nome è visibile nella tua riga.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

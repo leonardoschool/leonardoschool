@@ -241,6 +241,9 @@ export const virtualRoomRouter = router({
             status: 'COMPLETED',
             endedAt: new Date(),
           },
+          include: {
+            participants: true,
+          },
         });
 
         // Disconnect all participants
@@ -250,6 +253,23 @@ export const virtualRoomRouter = router({
             isConnected: false,
           },
         });
+
+        // Delete all session messages for this session
+        // Get all participant IDs first
+        const participantIds = updatedSession.participants.map(p => p.id);
+        
+        if (participantIds.length > 0) {
+          const deletedMessages = await tx.sessionMessage.deleteMany({
+            where: {
+              participantId: { in: participantIds },
+            },
+          });
+          
+          log.info('Session ended - messages deleted:', {
+            sessionId: input.sessionId,
+            deletedCount: deletedMessages.count,
+          });
+        }
 
         return updatedSession;
       });
@@ -554,7 +574,53 @@ export const virtualRoomRouter = router({
 
       // Count connected participants
       const connectedCount = participant.session.participants.filter(p => p.isConnected).length;
-      const totalParticipants = participant.session.participants.length;
+      
+      // Get ALL invited students for this session (from all assignments of this simulation)
+      const session = await ctx.prisma.simulationSession.findUnique({
+        where: { id: participant.sessionId },
+        include: {
+          simulation: {
+            include: {
+              assignments: {
+                where: { 
+                  status: 'ACTIVE' 
+                },
+                include: {
+                  student: { include: { user: true } },
+                  group: { 
+                    include: { 
+                      members: { 
+                        include: { 
+                          student: { include: { user: true } } 
+                        } 
+                      } 
+                    } 
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // Count all unique students invited (avoid duplicates)
+      const invitedStudentIds = new Set<string>();
+      if (session?.simulation.assignments) {
+        for (const assignment of session.simulation.assignments) {
+          if (assignment.student) {
+            invitedStudentIds.add(assignment.student.id);
+          }
+          if (assignment.group) {
+            for (const member of assignment.group.members) {
+              if (member.student) {
+                invitedStudentIds.add(member.student.id);
+              }
+            }
+          }
+        }
+      }
+      
+      const totalParticipants = invitedStudentIds.size || 1;
 
       // Debug log only - very verbose, only shown with LOG_VERBOSE=true
       log.debug('Heartbeat updated:', {
@@ -900,13 +966,44 @@ export const virtualRoomRouter = router({
       participantId: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.prisma.simulationSessionParticipant.update({
+      // Update participant as disconnected
+      const participant = await ctx.prisma.simulationSessionParticipant.update({
         where: { id: input.participantId },
         data: {
           isConnected: false,
           disconnectedAt: new Date(),
         },
+        include: {
+          session: {
+            include: {
+              participants: true,
+            },
+          },
+        },
       });
+
+      // Check if this was the last connected participant in a completed session
+      const session = participant.session;
+      const hasAnyConnected = session.participants.some(p => p.isConnected && p.id !== input.participantId);
+      
+      // If session is completed and no one is connected anymore, delete all messages
+      if (session.status === 'COMPLETED' && !hasAnyConnected) {
+        const participantIds = session.participants.map(p => p.id);
+        
+        if (participantIds.length > 0) {
+          const deletedMessages = await ctx.prisma.sessionMessage.deleteMany({
+            where: {
+              participantId: { in: participantIds },
+            },
+          });
+          
+          log.info('All participants disconnected - messages deleted:', {
+            sessionId: session.id,
+            deletedCount: deletedMessages.count,
+          });
+        }
+      }
+
       return { success: true };
     }),
 

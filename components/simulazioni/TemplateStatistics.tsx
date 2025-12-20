@@ -91,6 +91,19 @@ export function TemplateStatistics({ simulationId }: TemplateStatisticsProps) {
 
   return (
     <div className="space-y-6">
+      {/* Info Banner */}
+      <div className={`p-4 rounded-xl ${colors.background.secondary} border ${colors.border.light}`}>
+        <div className="flex items-start gap-3">
+          <BarChart3 className={`w-5 h-5 ${colors.text.muted} flex-shrink-0 mt-0.5`} />
+          <div>
+            <p className={`text-sm ${colors.text.secondary}`}>
+              Le statistiche mostrano <strong>solo l&apos;ultimo tentativo</strong> di ogni studente.
+              Le percentuali si riferiscono al punteggio percentuale ottenuto rispetto al massimo disponibile.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Overview Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className={`p-5 rounded-xl ${colors.background.card} border ${colors.border.light}`}>
@@ -120,6 +133,9 @@ export function TemplateStatistics({ simulationId }: TemplateStatisticsProps) {
           </p>
           <p className={`text-sm ${colors.text.muted}`}>
             Mediana: {overview!.medianScore.toFixed(1)}%
+          </p>
+          <p className={`text-xs ${colors.text.muted} mt-1`}>
+            su {data.simulation.totalQuestions} domande
           </p>
         </div>
 

@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Settings,
-  HelpCircle,
   Flag,
   Menu,
   X,
@@ -84,14 +83,28 @@ export default function TolcSimulationLayout({
   // Get questions for current section
   const currentSectionQuestions = useMemo(() => {
     if (!currentSection) return questions;
-    return questions.filter(q => currentSection.questionIds.includes(q.questionId));
+    const filtered = questions.filter(q => currentSection.questionIds.includes(q.questionId));
+    // Debug log
+    console.log('[TOLC Layout] Section questions:', {
+      sectionName: currentSection.name,
+      sectionQuestionIds: currentSection.questionIds,
+      allQuestionIds: questions.map(q => q.questionId),
+      filteredCount: filtered.length,
+    });
+    return filtered.length > 0 ? filtered : questions; // Fallback to all if filter fails
   }, [questions, currentSection]);
 
   // Current question index within section
   const sectionQuestionIndex = useMemo(() => {
     const currentQ = questions[currentQuestionIndex];
     if (!currentQ) return 0;
-    return currentSectionQuestions.findIndex(q => q.questionId === currentQ.questionId);
+    const idx = currentSectionQuestions.findIndex(q => q.questionId === currentQ.questionId);
+    console.log('[TOLC Layout] Section question index:', {
+      currentQuestionId: currentQ.questionId,
+      sectionIndex: idx,
+      totalInSection: currentSectionQuestions.length,
+    });
+    return idx >= 0 ? idx : 0; // Fallback to 0 if not found
   }, [questions, currentQuestionIndex, currentSectionQuestions]);
 
   const currentQuestion = questions[currentQuestionIndex];
@@ -113,16 +126,9 @@ export default function TolcSimulationLayout({
     return 'unanswered';
   }, [answers]);
 
-  // Check if question is in current section
-  const isQuestionInCurrentSection = useCallback((globalIndex: number) => {
-    const q = questions[globalIndex];
-    if (!q || !currentSection) return false;
-    return currentSection.questionIds.includes(q.questionId);
-  }, [questions, currentSection]);
-
-  // Navigation bounds
-  const canGoNext = currentQuestionIndex < questions.length - 1 && isQuestionInCurrentSection(currentQuestionIndex + 1);
-  const canGoPrev = currentQuestionIndex > 0 && isQuestionInCurrentSection(currentQuestionIndex - 1);
+  // Navigation bounds - based on position within section
+  const canGoNext = sectionQuestionIndex < currentSectionQuestions.length - 1;
+  const canGoPrev = sectionQuestionIndex > 0;
 
   // Count answered in section
   const answeredInSection = currentSectionQuestions.filter(q => {
@@ -158,16 +164,14 @@ export default function TolcSimulationLayout({
             {simulationTitle}
           </h1>
 
-          {/* Right: Settings/Help icons */}
+          {/* Right: Settings icon */}
           <div className="flex items-center gap-2">
             <button 
               onClick={onReportQuestion}
               className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              title="Segnala un problema con questa domanda"
             >
               <Settings className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-            </button>
-            <button className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
-              <HelpCircle className="w-5 h-5 text-gray-500 dark:text-gray-400" />
             </button>
           </div>
         </div>
@@ -201,18 +205,29 @@ export default function TolcSimulationLayout({
                     key={q.questionId}
                     onClick={() => onGoToQuestion(globalIdx)}
                     className={`
-                      w-8 h-8 rounded text-sm font-medium transition-all
+                      relative w-8 h-8 rounded text-sm font-medium transition-all
                       ${isActive 
                         ? 'bg-gray-800 dark:bg-white text-white dark:text-gray-800 ring-2 ring-offset-2 ring-gray-800 dark:ring-white' 
                         : status === 'answered'
-                          ? 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200'
+                          ? 'bg-green-500 dark:bg-green-600 text-white'
                           : status === 'flagged'
-                            ? 'bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-300 border border-orange-300 dark:border-orange-600'
-                            : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600'
+                            ? 'bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-300 border-2 border-orange-400 dark:border-orange-500'
+                            : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-2 border-red-300 dark:border-red-500/50 hover:bg-gray-50 dark:hover:bg-gray-600'
                       }
                     `}
+                    title={
+                      status === 'answered' 
+                        ? 'Risposta data' 
+                        : status === 'flagged'
+                          ? 'Domanda segnalata'
+                          : 'Nessuna risposta'
+                    }
                   >
                     {idx + 1}
+                    {/* Red dot for unanswered questions */}
+                    {status === 'unanswered' && !isActive && (
+                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 dark:bg-red-400 rounded-full border border-white dark:border-gray-800" />
+                    )}
                   </button>
                 );
               })}
@@ -302,10 +317,10 @@ export default function TolcSimulationLayout({
             {/* Question Text */}
             <div className="mb-8">
               {/* Question Image */}
-              {currentQuestion.imageUrl && (
+              {currentQuestion.question?.imageUrl && (
                 <div className="mb-4 flex justify-center">
                   <Image
-                    src={currentQuestion.imageUrl}
+                    src={currentQuestion.question.imageUrl}
                     alt="Immagine domanda"
                     width={600}
                     height={400}
@@ -316,14 +331,14 @@ export default function TolcSimulationLayout({
               )}
 
               <div 
-                className="text-gray-700 dark:text-gray-200 text-lg leading-relaxed prose dark:prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentQuestion.text) }}
+                className={`text-lg leading-relaxed prose dark:prose-invert max-w-none ${colors.text.primary}`}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentQuestion.question?.text || '') }}
               />
             </div>
 
             {/* Answers */}
             <div className="space-y-3">
-              {currentQuestion.answers?.map((answer: { id: string; text: string; imageUrl?: string }, idx: number) => {
+              {currentQuestion.question?.answers?.map((answer: { id: string; text: string; imageUrl?: string }, idx: number) => {
                 const isSelected = currentAnswer?.answerId === answer.id;
                 const letter = answerLetters[idx] || String(idx + 1);
 
@@ -366,7 +381,7 @@ export default function TolcSimulationLayout({
                         </div>
                       )}
                       <span 
-                        className={`text-base ${isSelected ? colors.primary.text : 'text-gray-700 dark:text-gray-200'}`}
+                        className={`text-base ${isSelected ? colors.primary.text : colors.text.primary}`}
                         dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.text) }}
                       />
                     </div>
@@ -374,11 +389,6 @@ export default function TolcSimulationLayout({
                 );
               })}
             </div>
-
-            {/* Scroll hint */}
-            <p className="text-center text-xs text-gray-400 dark:text-gray-500 mt-8 italic">
-              scorri con il mouse per altri contenuti ⬇️
-            </p>
           </div>
 
           {/* Navigation Arrows - Mobile & Desktop */}
@@ -481,19 +491,17 @@ export default function TolcSimulationLayout({
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-green-500"></span>
-                <span className="text-sm text-gray-600 dark:text-gray-400">Risposte date</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">Risposta data</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded border-2 border-red-400 bg-white dark:bg-gray-700"></span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">Senza risposta</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded border-2 border-orange-400 bg-orange-100 dark:bg-orange-900"></span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">Segnalata</span>
               </div>
             </div>
-          </div>
-
-          {/* Settings & Help */}
-          <div className="mt-auto flex items-center justify-center gap-4">
-            <button className="p-3 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
-              <Settings className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-            </button>
-            <button className="p-3 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
-              <HelpCircle className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-            </button>
           </div>
         </aside>
       </div>
@@ -563,18 +571,29 @@ export default function TolcSimulationLayout({
                         setShowMobileMenu(false);
                       }}
                       className={`
-                        w-10 h-10 rounded-lg text-sm font-medium transition-all
+                        relative w-10 h-10 rounded-lg text-sm font-medium transition-all
                         ${isActive 
                           ? 'bg-gray-800 dark:bg-white text-white dark:text-gray-800 ring-2 ring-offset-2 ring-gray-800 dark:ring-white' 
                           : status === 'answered'
-                            ? 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200'
+                            ? 'bg-green-500 dark:bg-green-600 text-white'
                             : status === 'flagged'
-                              ? 'bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-300 border border-orange-300 dark:border-orange-600'
-                              : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600'
+                              ? 'bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-300 border-2 border-orange-400 dark:border-orange-500'
+                              : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-2 border-red-300 dark:border-red-500/50'
                         }
                       `}
+                      title={
+                        status === 'answered' 
+                          ? 'Risposta data' 
+                          : status === 'flagged'
+                            ? 'Domanda segnalata'
+                            : 'Nessuna risposta'
+                      }
                     >
                       {idx + 1}
+                      {/* Red dot for unanswered questions */}
+                      {status === 'unanswered' && !isActive && (
+                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 dark:bg-red-400 rounded-full border border-white dark:border-gray-800" />
+                      )}
                     </button>
                   );
                 })}

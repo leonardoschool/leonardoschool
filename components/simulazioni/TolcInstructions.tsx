@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { colors } from '@/lib/theme/colors';
 import Button from '@/components/ui/Button';
+import Checkbox from '@/components/ui/Checkbox';
 import {
   Clock,
   BookOpen,
@@ -49,29 +50,6 @@ export default function TolcInstructions({
 
   return (
     <div className={`min-h-screen ${colors.background.primary}`}>
-      {/* Header */}
-      <header className={`sticky top-0 z-10 ${colors.background.card} border-b ${colors.border.primary} shadow-sm`}>
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-xl ${colors.primary.bg} flex items-center justify-center`}>
-                <BookOpen className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className={`text-lg font-bold ${colors.text.primary}`}>
-                  Istruzioni Test
-                </h1>
-                <p className={`text-sm ${colors.text.muted}`}>
-                  {simulationTitle}
-                </p>
-              </div>
-            </div>
-            <div className={`px-3 py-1.5 rounded-full text-xs font-semibold ${colors.primary.softBg} ${colors.primary.text}`}>
-              TOLC-Style
-            </div>
-          </div>
-        </div>
-      </header>
 
       {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -296,48 +274,32 @@ export default function TolcInstructions({
         <div className={`${colors.background.card} rounded-2xl border ${colors.border.primary} p-6 sm:p-8 mb-6`}>
           <div className="space-y-4">
             {/* Checkbox: Ho letto le istruzioni */}
-            <label className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer transition-colors ${
+            <div className={`p-4 rounded-xl transition-colors ${
               hasReadAll 
                 ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' 
-                : `${colors.background.secondary} border border-transparent hover:border-gray-300 dark:hover:border-slate-600`
+                : `${colors.background.secondary} border border-transparent`
             }`}>
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={hasReadAll}
                 onChange={(e) => setHasReadAll(e.target.checked)}
-                className="w-5 h-5 rounded border-gray-300 text-green-600 focus:ring-green-500 mt-0.5"
+                label="Ho letto e compreso tutte le istruzioni"
+                description="Confermo di aver letto attentamente tutte le regole del test"
               />
-              <div>
-                <p className={`font-medium ${colors.text.primary}`}>
-                  Ho letto e compreso tutte le istruzioni
-                </p>
-                <p className={`text-sm ${colors.text.muted}`}>
-                  Confermo di aver letto attentamente tutte le regole del test
-                </p>
-              </div>
-            </label>
+            </div>
 
             {/* Checkbox: Accetto le regole */}
-            <label className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer transition-colors ${
+            <div className={`p-4 rounded-xl transition-colors ${
               acceptedRules 
                 ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' 
-                : `${colors.background.secondary} border border-transparent hover:border-gray-300 dark:hover:border-slate-600`
+                : `${colors.background.secondary} border border-transparent`
             }`}>
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={acceptedRules}
                 onChange={(e) => setAcceptedRules(e.target.checked)}
-                className="w-5 h-5 rounded border-gray-300 text-green-600 focus:ring-green-500 mt-0.5"
+                label="Accetto le regole e le misure anti-cheat"
+                description="Sono consapevole che comportamenti scorretti verranno registrati"
               />
-              <div>
-                <p className={`font-medium ${colors.text.primary}`}>
-                  Accetto le regole e le misure anti-cheat
-                </p>
-                <p className={`text-sm ${colors.text.muted}`}>
-                  Sono consapevole che comportamenti scorretti verranno registrati
-                </p>
-              </div>
-            </label>
+            </div>
           </div>
         </div>
 

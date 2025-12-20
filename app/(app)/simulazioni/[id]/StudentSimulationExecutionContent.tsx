@@ -73,7 +73,14 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   const [answers, setAnswers] = useState<Answer[]>([]);
   
   // TOLC Instructions state - for Virtual Room simulations with sections
-  const [hasReadInstructions, setHasReadInstructions] = useState(false);
+  // Persist in sessionStorage to survive page refreshes
+  const [hasReadInstructions, setHasReadInstructions] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const stored = sessionStorage.getItem(`tolc-instructions-read-${id}`);
+      return stored === 'true';
+    }
+    return false;
+  });
   
   // Virtual Room state
   const [_virtualRoomStartedAt, setVirtualRoomStartedAt] = useState<Date | null>(null);
@@ -105,11 +112,16 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   const answersInitializedRef = useRef<boolean>(false);
   const answersRef = useRef<Answer[]>([]); // Ref for heartbeat to read current answers
   const participantIdRef = useRef<string | null>(null); // Ref for anti-cheat to read current participantId
+  const lastSectionTimeUpdateRef = useRef<number>(-1); // Track last timeSpent used for section time update
 
   // Fetch simulation - pass assignmentId to get correct assignment dates
+  // Keep enabled even after hasStarted to ensure data is available for initialization
   const { data: simulation, isLoading, error } = trpc.simulations.getSimulationForStudent.useQuery(
     { id, assignmentId: assignmentId ?? undefined },
-    { enabled: !hasStarted }
+    { 
+      enabled: true, // Always enabled to ensure data is available
+      staleTime: Infinity, // Don't refetch once loaded
+    }
   );
 
   // Check if this is a virtual room simulation (after simulation is loaded)
@@ -150,17 +162,24 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     }
   }, [sessionStatus, hasStarted]);
 
+  // Persist TOLC instructions read state to sessionStorage
+  useEffect(() => {
+    if (hasReadInstructions) {
+      sessionStorage.setItem(`tolc-instructions-read-${id}`, 'true');
+    }
+  }, [hasReadInstructions, id]);
+
   // Mutations
   const startAttemptMutation = trpc.simulations.startAttempt.useMutation({
     onSuccess: (data) => {
-      console.log('[VirtualRoom] startAttemptMutation onSuccess');
+      console.log('[VirtualRoom] startAttemptMutation onSuccess, resumed:', data.resumed);
       if (data.resumed) {
         showSuccess('Ripreso', 'Hai ripreso il tuo tentativo precedente');
-        // Mark as initialized to prevent re-initialization
-        answersInitializedRef.current = true;
         // Restore saved time and answers BEFORE setting hasStarted
         if (data.savedTimeSpent) {
           setTimeSpent(data.savedTimeSpent);
+          // Set the ref to prevent section time from incrementing on first render
+          lastSectionTimeUpdateRef.current = data.savedTimeSpent;
         }
         if (data.savedAnswers && data.savedAnswers.length > 0) {
           const restoredAnswers = data.savedAnswers.map(a => ({
@@ -171,6 +190,8 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
             flagged: a.flagged || false,
           }));
           setAnswers(restoredAnswers);
+          // Mark as initialized ONLY after successfully restoring
+          answersInitializedRef.current = true;
           // Also restore question times
           const restoredQuestionTimes: Record<string, number> = {};
           data.savedAnswers.forEach(a => {
@@ -188,6 +209,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
             setCurrentSectionIndex(data.savedCurrentSectionIndex);
           }
         }
+        // If resumed but no saved answers, don't mark as initialized so they get created
       }
       // Set hasStarted AFTER restoring state to prevent re-initialization
       console.log('[VirtualRoom] Setting hasStarted = true');
@@ -204,6 +226,8 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
 
   const submitMutation = trpc.simulations.submit.useMutation({
     onSuccess: (data) => {
+      // Clear TOLC instructions state on completion
+      sessionStorage.removeItem(`tolc-instructions-read-${id}`);
       showSuccess('Completata!', 'Simulazione inviata con successo');
       router.push(`/simulazioni/${id}/risultato?resultId=${data.resultId}`);
     },
@@ -349,9 +373,14 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     },
   });
 
+  // Store current values in refs to avoid useEffect re-running
+  const currentQuestionIndexRef = useRef(currentQuestionIndex);
+  useEffect(() => {
+    currentQuestionIndexRef.current = currentQuestionIndex;
+  }, [currentQuestionIndex]);
+
   useEffect(() => {
     if (!isVirtualRoom || !participantId || !hasStarted) {
-      console.log('[VirtualRoom Heartbeat] Skipping - conditions not met:', { isVirtualRoom, participantId, hasStarted });
       return;
     }
 
@@ -359,27 +388,26 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
 
     // Send heartbeat immediately once using current state
     const initialAnsweredCount = answersRef.current.filter(a => a.answerId !== null || a.answerText !== null).length;
-    console.log('[VirtualRoom Heartbeat] Sending initial heartbeat:', { participantId, currentQuestionIndex, answeredCount: initialAnsweredCount });
     heartbeatMutation.mutate({
       participantId,
-      currentQuestionIndex,
+      currentQuestionIndex: currentQuestionIndexRef.current,
       answeredCount: initialAnsweredCount,
     });
 
-    // Send heartbeat every 5 seconds - read from ref to get latest answers
+    // Send heartbeat every 3 seconds - read from refs to get latest values
     const interval = setInterval(() => {
       const currentAnsweredCount = answersRef.current.filter(a => a.answerId !== null || a.answerText !== null).length;
-      console.log('[VirtualRoom Heartbeat] Sending:', { participantId, currentQuestionIndex, answeredCount: currentAnsweredCount });
       
       heartbeatMutation.mutate({
         participantId,
-        currentQuestionIndex,
+        currentQuestionIndex: currentQuestionIndexRef.current,
         answeredCount: currentAnsweredCount,
       });
-    }, 5000);
+    }, 3000);
 
     return () => clearInterval(interval);
-  }, [isVirtualRoom, participantId, hasStarted, currentQuestionIndex, heartbeatMutation]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVirtualRoom, participantId, hasStarted]);
 
   // Track question time
   const trackQuestionTime = useCallback(() => {
@@ -493,15 +521,55 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   };
 
   const goNext = () => {
-    if (!simulation || currentQuestionIndex >= simulation.questions.length - 1) return;
-    trackQuestionTime();
-    setCurrentQuestionIndex((prev) => prev + 1);
+    if (!simulation) return;
+    
+    if (hasSectionsMode && currentSection) {
+      // In sections mode, navigate within current section
+      const currentQ = simulation.questions[currentQuestionIndex];
+      if (!currentQ) return;
+      
+      const sectionQIndex = currentSectionQuestions.findIndex(q => q.questionId === currentQ.questionId);
+      if (sectionQIndex < currentSectionQuestions.length - 1) {
+        // Find the global index of the next section question
+        const nextSectionQ = currentSectionQuestions[sectionQIndex + 1];
+        const globalIndex = simulation.questions.findIndex(q => q.questionId === nextSectionQ.questionId);
+        if (globalIndex !== -1) {
+          trackQuestionTime();
+          setCurrentQuestionIndex(globalIndex);
+        }
+      }
+    } else {
+      // Normal mode - navigate globally
+      if (currentQuestionIndex >= simulation.questions.length - 1) return;
+      trackQuestionTime();
+      setCurrentQuestionIndex((prev) => prev + 1);
+    }
   };
 
   const goPrev = () => {
-    if (currentQuestionIndex <= 0) return;
-    trackQuestionTime();
-    setCurrentQuestionIndex((prev) => prev - 1);
+    if (!simulation) return;
+    
+    if (hasSectionsMode && currentSection) {
+      // In sections mode, navigate within current section
+      const currentQ = simulation.questions[currentQuestionIndex];
+      if (!currentQ) return;
+      
+      const sectionQIndex = currentSectionQuestions.findIndex(q => q.questionId === currentQ.questionId);
+      if (sectionQIndex > 0) {
+        // Find the global index of the previous section question
+        const prevSectionQ = currentSectionQuestions[sectionQIndex - 1];
+        const globalIndex = simulation.questions.findIndex(q => q.questionId === prevSectionQ.questionId);
+        if (globalIndex !== -1) {
+          trackQuestionTime();
+          setCurrentQuestionIndex(globalIndex);
+        }
+      }
+    } else {
+      // Normal mode - navigate globally
+      if (currentQuestionIndex <= 0) return;
+      trackQuestionTime();
+      setCurrentQuestionIndex((prev) => prev - 1);
+    }
   };
 
   // Submit simulation
@@ -591,6 +659,11 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   useEffect(() => {
     if (!hasStarted || !hasSectionsMode) return;
 
+    // Only increment if this is a new second (not a restore or duplicate)
+    // This prevents incrementing when timeSpent is restored from saved progress
+    if (timeSpent <= lastSectionTimeUpdateRef.current) return;
+    lastSectionTimeUpdateRef.current = timeSpent;
+
     // Update section time when timer changes
     setSectionTimes(prev => ({
       ...prev,
@@ -623,8 +696,15 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     // Mark section as completed
     setCompletedSections(prev => new Set([...prev, currentSectionIndex]));
     
-    // Move to next section if available
-    if (currentSectionIndex < sections.length - 1) {
+    // Close the transition modal
+    setShowSectionTransition(false);
+    
+    // Check if this is the last section
+    if (currentSectionIndex >= sections.length - 1) {
+      // Last section - show submit confirmation
+      setSubmitConfirm(true);
+    } else {
+      // Move to next section
       setCurrentSectionIndex(prev => prev + 1);
       // Find first question of next section
       const nextSection = sections[currentSectionIndex + 1];
@@ -636,7 +716,6 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
           setCurrentQuestionIndex(firstQuestionIndex);
         }
       }
-      setShowSectionTransition(false);
     }
   }, [hasSectionsMode, currentSectionIndex, sections, simulation?.questions]);
 
@@ -757,15 +836,15 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
         assignmentId={assignmentId}
         simulationTitle={simulation.title}
         durationMinutes={simulation.durationMinutes}
+        instructions={simulation.paperInstructions}
         onSessionStart={(actualStartAt, pId) => {
           console.log('[VirtualRoom] onSessionStart called with participantId:', pId);
-          // Calculate elapsed time from session start
-          const elapsed = Math.floor((Date.now() - actualStartAt.getTime()) / 1000);
+          // Store session start time for reference
           setVirtualRoomStartedAt(actualStartAt);
-          setTimeSpent(elapsed);
           setParticipantId(pId);
           console.log('[VirtualRoom] participantId set, calling startAttemptMutation');
           // Start the attempt with assignmentId
+          // Note: timeSpent will be restored from saved progress in onSuccess if resumed
           startAttemptMutation.mutate({ 
             simulationId: id,
             assignmentId: assignmentId,
@@ -957,6 +1036,23 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
           totalQuestions={simulation.totalQuestions}
         />
 
+        {/* In-test messaging for virtual room - TOLC mode */}
+        {isVirtualRoom && participantId && (
+          <>
+            <MessagingButton 
+              onClick={() => setShowMessaging(true)} 
+              unreadCount={messagingUnreadCount} 
+            />
+            <InTestMessaging 
+              participantId={participantId} 
+              isOpen={showMessaging}
+              onClose={() => setShowMessaging(false)}
+              unreadCount={messagingUnreadCount}
+              onUnreadChange={setMessagingUnreadCount}
+            />
+          </>
+        )}
+
         {/* Section Transition Modal */}
         {showSectionTransition && currentSection && (
           <ConfirmModal
@@ -986,15 +1082,18 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
 
         {/* Feedback Modal */}
         {showFeedbackModal && currentQuestion && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className={`w-full max-w-md rounded-2xl ${colors.background.card} shadow-2xl overflow-hidden`}>
-              <div className={`flex items-center justify-between px-4 py-3 border-b ${colors.border.light}`}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className={`w-full max-w-md rounded-2xl ${colors.background.card} border ${colors.border.primary} shadow-2xl overflow-hidden`}>
+              <div className={`flex items-center justify-between px-6 py-4 border-b ${colors.border.primary}`}>
                 <h3 className={`text-lg font-semibold ${colors.text.primary}`}>Segnala Problema</h3>
-                <button onClick={() => setShowFeedbackModal(false)} className={`p-1 rounded-lg ${colors.background.hover}`}>
+                <button 
+                  onClick={() => setShowFeedbackModal(false)} 
+                  className={`p-1.5 rounded-lg ${colors.background.hover} ${colors.text.secondary} hover:${colors.text.primary} transition-colors`}
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="p-4 space-y-4">
+              <div className="p-6 space-y-4">
                 <CustomSelect
                   value={feedbackType}
                   onChange={(value) => setFeedbackType(value as typeof feedbackType)}
@@ -1011,10 +1110,13 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
                   onChange={(e) => setFeedbackMessage(e.target.value)}
                   placeholder="Descrivi il problema in almeno 10 caratteri..."
                   rows={4}
-                  className={`w-full p-3 rounded-lg border ${colors.border.light} ${colors.background.secondary} ${colors.text.primary} resize-none`}
+                  className={`w-full p-3 rounded-lg border ${colors.border.primary} ${colors.background.secondary} ${colors.text.primary} placeholder-gray-500 dark:placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-[#a8012b]/50`}
                 />
                 <div className="flex gap-3">
-                  <button onClick={() => setShowFeedbackModal(false)} className={`flex-1 px-4 py-2 rounded-lg border ${colors.border.light}`}>
+                  <button 
+                    onClick={() => setShowFeedbackModal(false)} 
+                    className={`flex-1 px-4 py-2.5 rounded-lg border ${colors.border.primary} ${colors.text.primary} hover:${colors.background.hover} font-medium transition-colors`}
+                  >
                     Annulla
                   </button>
                   <button
@@ -1028,7 +1130,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
                       }
                     }}
                     disabled={feedbackMessage.length < 10 || submitFeedbackMutation.isPending}
-                    className={`flex-1 px-4 py-2 rounded-lg ${colors.primary.gradient} text-white font-medium disabled:opacity-50`}
+                    className={`flex-1 px-4 py-2.5 rounded-lg ${colors.primary.bg} hover:opacity-90 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all`}
                   >
                     {submitFeedbackMutation.isPending ? 'Invio...' : 'Invia'}
                   </button>
