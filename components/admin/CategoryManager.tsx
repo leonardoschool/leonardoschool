@@ -531,10 +531,11 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
                         </button>
                       </>
                     ) : (
-                      /* View only for collaborators */
+                      /* View materials button for collaborators */
                       <button
-                        className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500"
-                        title="Solo visualizzazione"
+                        onClick={() => handleOpenMaterialsModal(category.id)}
+                        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
+                        title="Visualizza materiali"
                       >
                         <Eye className="h-4 w-4" />
                       </button>
@@ -576,7 +577,7 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <FileText className="w-5 h-5 text-teal-600 dark:text-teal-400" />
-                Gestisci Materiali - {categories.find(c => c.id === managingCategoryId)?.name}
+                {isAdmin ? 'Gestisci' : 'Visualizza'} Materiali - {categories.find(c => c.id === managingCategoryId)?.name}
               </h2>
               <button
                 onClick={() => {
@@ -632,57 +633,61 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
                             {material.type}
                           </span>
                         </div>
-                        <button
-                          onClick={() => handleRemoveMaterialFromCategory(material.id)}
-                          disabled={updateMaterialMutation.isPending}
-                          className="p-1.5 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 transition-colors disabled:opacity-50"
-                          title="Rimuovi dalla categoria"
-                        >
-                          <Minus className="h-4 w-4" />
-                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleRemoveMaterialFromCategory(material.id)}
+                            disabled={updateMaterialMutation.isPending}
+                            className="p-1.5 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 transition-colors disabled:opacity-50"
+                            title="Rimuovi dalla categoria"
+                          >
+                            <Minus className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
                 )}
               </div>
 
-              {/* Available materials (not in this category) */}
-              <div>
-                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-                  <Plus className="h-4 w-4 text-teal-500" />
-                  Materiali disponibili ({unassignedMaterials.length})
-                </h3>
-                {unassignedMaterials.length === 0 ? (
-                  <p className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                    Tutti i materiali sono già in questa categoria
-                  </p>
-                ) : (
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {unassignedMaterials.map((material) => (
-                      <div
-                        key={material.id}
-                        className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600"
-                      >
-                        <div className="flex items-center gap-3">
-                          <FileText className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                          <span className="text-sm text-gray-900 dark:text-gray-100">{material.title}</span>
-                          <span className="text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300">
-                            {material.type}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => handleAddMaterialToCategory(material.id)}
-                          disabled={updateMaterialMutation.isPending}
-                          className="p-1.5 rounded-lg hover:bg-teal-100 dark:hover:bg-teal-900/30 text-teal-600 dark:text-teal-400 transition-colors disabled:opacity-50"
-                          title="Aggiungi alla categoria"
+              {/* Available materials (not in this category) - Only for Admin */}
+              {isAdmin && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                    <Plus className="h-4 w-4 text-teal-500" />
+                    Materiali disponibili ({unassignedMaterials.length})
+                  </h3>
+                  {unassignedMaterials.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                      Tutti i materiali sono già in questa categoria
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {unassignedMaterials.map((material) => (
+                        <div
+                          key={material.id}
+                          className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600"
                         >
-                          <Plus className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                          <div className="flex items-center gap-3">
+                            <FileText className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                            <span className="text-sm text-gray-900 dark:text-gray-100">{material.title}</span>
+                            <span className="text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300">
+                              {material.type}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleAddMaterialToCategory(material.id)}
+                            disabled={updateMaterialMutation.isPending}
+                            className="p-1.5 rounded-lg hover:bg-teal-100 dark:hover:bg-teal-900/30 text-teal-600 dark:text-teal-400 transition-colors disabled:opacity-50"
+                            title="Aggiungi alla categoria"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end">

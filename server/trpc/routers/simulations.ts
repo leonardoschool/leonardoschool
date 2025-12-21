@@ -2633,8 +2633,8 @@ export const simulationsRouter = router({
       };
     }),
 
-  // Get detailed result for review
-  getResultDetails: studentProcedure
+  // Get detailed result for review (students can view their own, staff can view any)
+  getResultDetails: protectedProcedure
     .input(z.object({ 
       resultId: z.string().optional(),
       simulationId: z.string().optional(),
@@ -2642,7 +2642,7 @@ export const simulationsRouter = router({
       message: 'Devi specificare resultId o simulationId'
     }))
     .query(async ({ ctx, input }) => {
-      const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
+      const isStaff = ctx.user.role === 'ADMIN' || ctx.user.role === 'COLLABORATOR';
       
       let result;
       
@@ -2670,18 +2670,31 @@ export const simulationsRouter = router({
               },
             },
             student: {
-              select: { id: true },
+              select: { 
+                id: true,
+                userId: true,
+              },
             },
           },
         });
       } else if (input.simulationId) {
-        // Find by simulationId - get the latest completed result for this student
+        // Find by simulationId - get the latest completed result for this student/user
+        const whereClause: {
+          simulationId: string;
+          completedAt: { not: null };
+          student?: { userId: string };
+        } = { 
+          simulationId: input.simulationId,
+          completedAt: { not: null }, // Completed results have completedAt set
+        };
+        
+        // Students can only see their own results
+        if (!isStaff) {
+          whereClause.student = { userId: ctx.user.id };
+        }
+        
         result = await ctx.prisma.simulationResult.findFirst({
-          where: { 
-            simulationId: input.simulationId,
-            student: { userId: ctx.user.id },
-            completedAt: { not: null }, // Completed results have completedAt set
-          },
+          where: whereClause,
           orderBy: { completedAt: 'desc' },
           include: {
             simulation: {
@@ -2703,7 +2716,10 @@ export const simulationsRouter = router({
               },
             },
             student: {
-              select: { id: true },
+              select: { 
+                id: true,
+                userId: true,
+              },
             },
           },
         });
@@ -2713,8 +2729,8 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Risultato non trovato' });
       }
 
-      // Verify this result belongs to the student
-      if (result.student.id !== student.id) {
+      // Verify access: staff can see any result, students only their own
+      if (!isStaff && result.student.userId !== ctx.user.id) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai accesso a questo risultato' });
       }
 

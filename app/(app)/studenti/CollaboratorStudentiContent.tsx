@@ -311,16 +311,28 @@ function StudentDetailModal({
               Chiudi
             </button>
             {student && (
-              <button
-                onClick={() => {
-                  router.push(`/messaggi?nuovo=${student.id}`);
-                  onClose();
-                }}
-                className={`flex-1 px-4 py-3 rounded-xl ${colors.primary.gradient} text-white font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2`}
-              >
-                <MessageSquare className="w-4 h-4" />
-                Contatta Studente
-              </button>
+              <>
+                <button
+                  onClick={() => {
+                    router.push(`/studenti/${studentId}/simulazioni`);
+                    onClose();
+                  }}
+                  className={`flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 text-white font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2`}
+                >
+                  <Target className="w-4 h-4" />
+                  Vedi Simulazioni
+                </button>
+                <button
+                  onClick={() => {
+                    router.push(`/messaggi?nuovo=${student.id}`);
+                    onClose();
+                  }}
+                  className={`flex-1 px-4 py-3 rounded-xl ${colors.primary.gradient} text-white font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2`}
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  Contatta Studente
+                </button>
+              </>
             )}
           </div>
         </div>

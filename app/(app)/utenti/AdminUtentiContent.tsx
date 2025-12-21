@@ -39,6 +39,7 @@ import {
   FileEdit,
   BookOpen,
   Plus,
+  Target,
   MessageSquare,
   FolderOpen,
 } from 'lucide-react';
@@ -2219,10 +2220,22 @@ export default function AdminUtentiContent() {
               })()}
             </div>
 
-            <div className={`p-6 border-t ${colors.border.primary}`}>
+            <div className={`p-6 border-t ${colors.border.primary} flex gap-3`}>
+              {viewUserModal.user.role === 'STUDENT' && viewUserModal.user.student && (
+                <button
+                  onClick={() => {
+                    router.push(`/studenti/${viewUserModal.user.student!.id}/simulazioni`);
+                    setViewUserModal({ isOpen: false, user: null });
+                  }}
+                  className={`flex-1 py-3 rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 text-white font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2`}
+                >
+                  <Target className="w-4 h-4" />
+                  Vedi Simulazioni
+                </button>
+              )}
               <button
                 onClick={() => setViewUserModal({ isOpen: false, user: null })}
-                className={`w-full py-3 rounded-lg ${colors.background.secondary} ${colors.text.primary} font-medium hover:opacity-80 transition-opacity`}
+                className={`flex-1 py-3 rounded-lg ${colors.background.secondary} ${colors.text.primary} font-medium hover:opacity-80 transition-opacity`}
               >
                 Chiudi
               </button>

@@ -821,4 +821,291 @@ export const studentsRouter = router({
         user: gm.student!.user,
       }));
   }),
+
+  // Get all simulations and results for a specific student (staff only)
+  getStudentSimulations: staffProcedure
+    .input(z.object({ 
+      studentId: z.string().min(1), // This is actually the userId from the URL
+    }))
+    .query(async ({ ctx, input }) => {
+      // Staff (ADMIN and COLLABORATOR) can view all students' simulations
+      // First, find the student record from the userId
+      const user = await ctx.prisma.user.findUnique({
+        where: { id: input.studentId },
+        include: { student: true },
+      });
+
+      if (!user || !user.student) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Studente non trovato',
+        });
+      }
+
+      const studentId = user.student.id;
+
+      // Get student with all simulation results
+      const student = await ctx.prisma.student.findUnique({
+        where: { id: studentId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          simulationResults: {
+            include: {
+              simulation: {
+                select: {
+                  id: true,
+                  title: true,
+                  type: true,
+                  totalQuestions: true,
+                  maxScore: true,
+                  passingScore: true,
+                  durationMinutes: true,
+                  correctPoints: true,
+                  wrongPoints: true,
+                  blankPoints: true,
+                },
+              },
+            },
+            orderBy: {
+              completedAt: 'desc',
+            },
+          },
+        },
+      });
+
+      if (!student) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Studente non trovato',
+        });
+      }
+
+      // Group results by simulation (keep only latest for each simulation)
+      const simulationMap = new Map<string, typeof student.simulationResults[0]>();
+      
+      for (const result of student.simulationResults) {
+        if (!result.completedAt) continue; // Skip incomplete attempts
+        
+        const simulationId = result.simulationId;
+        const existing = simulationMap.get(simulationId);
+        
+        // Keep the most recent result for each simulation
+        if (!existing || (result.completedAt && existing.completedAt && result.completedAt > existing.completedAt)) {
+          simulationMap.set(simulationId, result);
+        }
+      }
+
+      const latestResults = Array.from(simulationMap.values());
+
+      // Calculate statistics
+      const totalSimulations = latestResults.length;
+      const totalQuestions = latestResults.reduce((sum, r) => 
+        sum + (r.correctAnswers || 0) + (r.wrongAnswers || 0) + (r.blankAnswers || 0), 0
+      );
+      const totalCorrect = latestResults.reduce((sum, r) => sum + (r.correctAnswers || 0), 0);
+      const totalWrong = latestResults.reduce((sum, r) => sum + (r.wrongAnswers || 0), 0);
+      const totalBlank = latestResults.reduce((sum, r) => sum + (r.blankAnswers || 0), 0);
+      const avgScore = totalSimulations > 0 
+        ? latestResults.reduce((sum, r) => sum + (r.percentageScore || 0), 0) / totalSimulations 
+        : 0;
+      const passedCount = latestResults.filter(r => {
+        if (!r.simulation.passingScore) return null;
+        return (r.totalScore || 0) >= r.simulation.passingScore;
+      }).length;
+
+      // Map results with detailed question analysis
+      const simulationsWithDetails = await Promise.all(latestResults.map(async (result) => {
+        // Get simulation questions with details
+        const simulation = await ctx.prisma.simulation.findUnique({
+          where: { id: result.simulationId },
+          include: {
+            questions: {
+              orderBy: { order: 'asc' },
+              include: {
+                question: {
+                  select: {
+                    id: true,
+                    text: true,
+                    textLatex: true,
+                    imageUrl: true,
+                    generalExplanation: true,
+                    correctExplanation: true,
+                    wrongExplanation: true,
+                    subject: {
+                      select: {
+                        id: true,
+                        name: true,
+                        code: true,
+                        color: true,
+                      },
+                    },
+                    topic: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                    answers: {
+                      select: {
+                        id: true,
+                        text: true,
+                        isCorrect: true,
+                        order: true,
+                      },
+                      orderBy: { order: 'asc' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        if (!simulation) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Simulazione non trovata',
+          });
+        }
+
+        // Parse answers from JSON
+        const answersData = result.answers as {
+          questionId: string;
+          answerId?: string | null;
+          isCorrect: boolean | null;
+        }[];
+
+        // Group wrong answers by subject
+        const wrongBySubject = new Map<string, Array<{
+          questionId: string;
+          questionText: string;
+          selectedAnswerText: string | null;
+          correctAnswerText: string;
+          explanation: string | null;
+          topicName: string | null;
+        }>>();
+
+        // Group answers by subject for stats
+        const subjectStats = new Map<string, {
+          name: string;
+          color: string | null;
+          correct: number;
+          wrong: number;
+          blank: number;
+          total: number;
+        }>();
+
+        answersData.forEach(answer => {
+          const questionData = simulation.questions.find(q => q.questionId === answer.questionId);
+          if (!questionData) return;
+
+          const question = questionData.question;
+          const subjectCode = question.subject?.code || 'UNKNOWN';
+          const subjectName = question.subject?.name || 'Sconosciuto';
+          const subjectColor = question.subject?.color || null;
+
+          // Update subject stats
+          if (!subjectStats.has(subjectCode)) {
+            subjectStats.set(subjectCode, {
+              name: subjectName,
+              color: subjectColor,
+              correct: 0,
+              wrong: 0,
+              blank: 0,
+              total: 0,
+            });
+          }
+
+          const stats = subjectStats.get(subjectCode)!;
+          stats.total++;
+          if (answer.isCorrect === null) {
+            stats.blank++;
+          } else if (answer.isCorrect) {
+            stats.correct++;
+          } else {
+            stats.wrong++;
+          }
+
+          // Add wrong answers to list
+          if (answer.isCorrect === false) {
+            if (!wrongBySubject.has(subjectCode)) {
+              wrongBySubject.set(subjectCode, []);
+            }
+
+            const correctAnswer = question.answers.find(a => a.isCorrect);
+            const selectedAnswer = answer.answerId 
+              ? question.answers.find(a => a.id === answer.answerId) 
+              : null;
+
+            wrongBySubject.get(subjectCode)!.push({
+              questionId: answer.questionId,
+              questionText: question.text,
+              selectedAnswerText: selectedAnswer?.text || null,
+              correctAnswerText: correctAnswer?.text || 'N/A',
+              explanation: question.generalExplanation || question.correctExplanation || null,
+              topicName: question.topic?.name || null,
+            });
+          }
+        });
+
+        return {
+          resultId: result.id,
+          simulationId: result.simulationId,
+          simulationTitle: result.simulation.title,
+          simulationType: result.simulation.type,
+          completedAt: result.completedAt,
+          totalScore: result.totalScore,
+          percentageScore: result.percentageScore,
+          correctAnswers: result.correctAnswers,
+          wrongAnswers: result.wrongAnswers,
+          blankAnswers: result.blankAnswers,
+          durationSeconds: result.durationSeconds,
+          passed: result.simulation.passingScore 
+            ? (result.totalScore || 0) >= result.simulation.passingScore 
+            : null,
+          maxScore: result.simulation.maxScore,
+          passingScore: result.simulation.passingScore,
+          subjectStats: Array.from(subjectStats.entries()).map(([code, stats]) => ({
+            code,
+            ...stats,
+            percentage: stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0,
+          })),
+          wrongAnswersBySubject: Array.from(wrongBySubject.entries()).map(([code, questions]) => {
+            const subjectName = subjectStats.get(code)?.name || 'Sconosciuto';
+            return {
+              subjectCode: code,
+              subjectName,
+              count: questions.length,
+              questions,
+            };
+          }),
+        };
+      }));
+
+      return {
+        student: {
+          id: student.id,
+          name: student.user.name,
+          email: student.user.email,
+          matricola: student.matricola,
+        },
+        statistics: {
+          totalSimulations,
+          totalQuestions,
+          totalCorrect,
+          totalWrong,
+          totalBlank,
+          avgScore,
+          passedCount,
+          correctPercentage: totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0,
+        },
+        simulations: simulationsWithDetails,
+      };
+    }),
 });

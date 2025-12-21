@@ -441,12 +441,12 @@ export default function CollaboratorTagsContent() {
                 <div key={category.id}>
                   {/* Category Header */}
                   <div
-                    className={`p-4 flex items-center gap-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
+                    className={`flex items-center gap-2 w-full px-3 py-2.5 rounded-lg transition-all cursor-pointer ${colors.background.hover} ${
                       !category.isActive ? 'opacity-50' : ''
                     }`}
                     onClick={() => toggleCategory(category.id)}
                   >
-                    <button className="p-1">
+                    <button className="p-1 text-gray-600 dark:text-gray-400">
                       {expandedCategories.has(category.id) ? (
                         <ChevronDown className="w-5 h-5" />
                       ) : (
