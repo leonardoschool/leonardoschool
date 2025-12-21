@@ -24,6 +24,7 @@ import {
   BarChart3,
   Medal,
   Star,
+  Edit3,
 } from 'lucide-react';
 
 /**
@@ -151,7 +152,7 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
     );
   }
 
-  const { simulation, score, totalScore, correctAnswers, wrongAnswers, blankAnswers, timeSpent, passed } = result;
+  const { simulation, score, totalScore, correctAnswers, wrongAnswers, blankAnswers, pendingOpenAnswers = 0, timeSpent, passed } = result;
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8 max-w-5xl mx-auto">
@@ -205,8 +206,23 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
             )}
           </div>
 
+          {/* Pending review banner */}
+          {pendingOpenAnswers > 0 && (
+            <div className="mb-6 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 flex items-start gap-3">
+              <Edit3 className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-amber-800 dark:text-amber-200">
+                  {pendingOpenAnswers} {pendingOpenAnswers === 1 ? 'risposta aperta' : 'risposte aperte'} in attesa di correzione
+                </p>
+                <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                  Il punteggio finale verrà ricalcolato dopo la correzione da parte dello staff.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Stats grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          <div className={`grid grid-cols-2 ${pendingOpenAnswers > 0 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} gap-4 mb-6`}>
             <div className={`p-4 rounded-lg ${colors.background.secondary} text-center`}>
               <CheckCircle className="w-6 h-6 mx-auto text-green-500 mb-2" />
               <p className={`text-2xl font-bold ${colors.text.primary}`}>{correctAnswers}</p>
@@ -222,6 +238,13 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
               <p className={`text-2xl font-bold ${colors.text.primary}`}>{blankAnswers}</p>
               <p className={`text-sm ${colors.text.muted}`}>Non date</p>
             </div>
+            {pendingOpenAnswers > 0 && (
+              <div className={`p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-center`}>
+                <Edit3 className="w-6 h-6 mx-auto text-amber-500 mb-2" />
+                <p className={`text-2xl font-bold text-amber-600 dark:text-amber-400`}>{pendingOpenAnswers}</p>
+                <p className={`text-sm text-amber-600 dark:text-amber-400`}>Da correggere</p>
+              </div>
+            )}
             <div className={`p-4 rounded-lg ${colors.background.secondary} text-center`}>
               <Clock className="w-6 h-6 mx-auto text-blue-500 mb-2" />
               <p className={`text-xl font-bold ${colors.text.primary}`}>{formatTime(timeSpent)}</p>

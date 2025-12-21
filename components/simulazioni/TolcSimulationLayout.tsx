@@ -4,6 +4,8 @@ import { useState, useMemo, useCallback } from 'react';
 import Image from 'next/image';
 import { colors } from '@/lib/theme/colors';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
+import { TextareaWithSymbols } from '@/components/ui/SymbolKeyboard';
+import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import {
   ChevronLeft,
   ChevronRight,
@@ -47,6 +49,7 @@ interface TolcSimulationLayoutProps {
   sectionTimeRemaining: number | null;
   completedSections: Set<number>;
   onAnswerSelect: (answerId: string) => void;
+  onOpenTextChange?: (text: string) => void;
   onToggleFlag: () => void;
   onGoToQuestion: (index: number) => void;
   onGoNext: () => void;
@@ -68,6 +71,7 @@ export default function TolcSimulationLayout({
   sectionTimeRemaining,
   completedSections,
   onAnswerSelect,
+  onOpenTextChange,
   onToggleFlag,
   onGoToQuestion,
   onGoNext,
@@ -334,61 +338,89 @@ export default function TolcSimulationLayout({
                 className={`text-lg leading-relaxed prose dark:prose-invert max-w-none ${colors.text.primary}`}
                 dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentQuestion.question?.text || '') }}
               />
+              {currentQuestion.question?.textLatex && (
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <LaTeXRenderer 
+                    latex={currentQuestion.question.textLatex} 
+                    className={colors.text.primary} 
+                  />
+                </div>
+              )}
             </div>
 
-            {/* Answers */}
-            <div className="space-y-3">
-              {currentQuestion.question?.answers?.map((answer: { id: string; text: string; imageUrl?: string }, idx: number) => {
-                const isSelected = currentAnswer?.answerId === answer.id;
-                const letter = answerLetters[idx] || String(idx + 1);
+            {/* Answers - conditional based on question type */}
+            {currentQuestion.question?.type === 'OPEN_TEXT' ? (
+              /* Open text answer input with symbol keyboard */
+              <div className="space-y-3">
+                <label className={`block text-sm font-medium ${colors.text.secondary} mb-2`}>
+                  Scrivi la tua risposta:
+                </label>
+                <TextareaWithSymbols
+                  value={currentAnswer?.answerText || ''}
+                  onChange={(text) => onOpenTextChange?.(text)}
+                  placeholder="Inserisci la tua risposta..."
+                  rows={6}
+                  className={`w-full px-4 py-3 rounded-xl border ${colors.border.light} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-colors resize-y`}
+                />
+                <p className={`text-xs ${colors.text.muted}`}>
+                  Usa la tastiera dei simboli per inserire caratteri speciali e formule matematiche.
+                </p>
+              </div>
+            ) : (
+              /* Multiple choice answers */
+              <div className="space-y-3">
+                {currentQuestion.question?.answers?.map((answer: { id: string; text: string; imageUrl?: string }, idx: number) => {
+                  const isSelected = currentAnswer?.answerId === answer.id;
+                  const letter = answerLetters[idx] || String(idx + 1);
 
-                return (
-                  <button
-                    key={answer.id}
-                    onClick={() => onAnswerSelect(answer.id)}
-                    className={`
-                      w-full flex items-start gap-4 p-4 rounded-xl border-2 transition-all text-left
-                      ${isSelected
-                        ? `${colors.primary.border} ${colors.primary.softBg} ring-2 ring-offset-2 ring-red-500`
-                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-gray-50 dark:bg-gray-700/50'
-                      }
-                    `}
-                  >
-                    {/* Letter Circle */}
-                    <span className={`
-                      flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full 
-                      font-semibold text-sm
-                      ${isSelected
-                        ? `${colors.primary.bg} text-white`
-                        : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
-                      }
-                    `}>
-                      {letter}
-                    </span>
+                  return (
+                    <button
+                      key={answer.id}
+                      onClick={() => onAnswerSelect(answer.id)}
+                      className={`
+                        w-full flex items-start gap-4 p-4 rounded-xl border-2 transition-all text-left
+                        ${isSelected
+                          ? `${colors.primary.border} ${colors.primary.softBg} ring-2 ring-offset-2 ring-red-500`
+                          : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 bg-gray-50 dark:bg-gray-700/50'
+                        }
+                      `}
+                    >
+                      {/* Letter Circle */}
+                      <span className={`
+                        flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full 
+                        font-semibold text-sm
+                        ${isSelected
+                          ? `${colors.primary.bg} text-white`
+                          : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
+                        }
+                      `}>
+                        {letter}
+                      </span>
 
-                    {/* Answer Content */}
-                    <div className="flex-1">
-                      {answer.imageUrl && (
-                        <div className="mb-2">
-                          <Image
-                            src={answer.imageUrl}
-                            alt={`Opzione ${letter}`}
-                            width={200}
-                            height={120}
-                            className="rounded-lg"
-                            style={{ maxHeight: '120px', objectFit: 'contain' }}
-                          />
-                        </div>
-                      )}
-                      <span 
-                        className={`text-base ${isSelected ? colors.primary.text : colors.text.primary}`}
-                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.text) }}
-                      />
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+                      {/* Answer Content */}
+                      <div className="flex-1">
+                        {answer.imageUrl && (
+                          <div className="mb-2">
+                            <Image
+                              src={answer.imageUrl}
+                              alt={`Opzione ${letter}`}
+                              width={200}
+                              height={120}
+                              className="rounded-lg"
+                              style={{ maxHeight: '120px', objectFit: 'contain' }}
+                            />
+                          </div>
+                        )}
+                        <span 
+                          className={`text-base ${isSelected ? colors.primary.text : colors.text.primary}`}
+                          dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.text) }}
+                        />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Navigation Arrows - Mobile & Desktop */}

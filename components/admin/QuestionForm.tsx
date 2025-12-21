@@ -22,6 +22,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import TagSelector from '@/components/admin/TagSelector';
+import LaTeXEditor from '@/components/ui/LaTeXEditor';
 import {
   questionTypeLabels,
   difficultyLabels,
@@ -96,6 +97,7 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
   const [type, setType] = useState<QuestionType>(initialData?.type ?? 'SINGLE_CHOICE');
   const [_status, _setStatus] = useState<QuestionStatus>(initialData?.status ?? 'DRAFT');
   const [text, setText] = useState(initialData?.text ?? '');
+  const [textLatex, setTextLatex] = useState(initialData?.textLatex ?? '');
   const [description, setDescription] = useState(initialData?.description ?? '');
   const [imageUrl, setImageUrl] = useState(initialData?.imageUrl ?? '');
   const [subjectId, setSubjectId] = useState(initialData?.subjectId ?? '');
@@ -363,6 +365,7 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
         type,
         status: saveStatus,
         text,
+        textLatex: textLatex || null,
         description: description || null,
         imageUrl: imageUrl || null,
         subjectId: subjectId || null,
@@ -401,6 +404,7 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
       showError,
       type,
       text,
+      textLatex,
       description,
       imageUrl,
       subjectId,
@@ -497,6 +501,16 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
             </p>
           )}
         </div>
+
+        {/* LaTeX Formula (Optional) */}
+        <LaTeXEditor
+          label="Formula LaTeX (opzionale)"
+          value={textLatex}
+          onChange={setTextLatex}
+          placeholder="Inserisci formule matematiche in LaTeX..."
+          rows={3}
+          helpText="Usa questo campo per aggiungere formule matematiche che verranno visualizzate insieme al testo della domanda."
+        />
 
         {/* Categorization */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

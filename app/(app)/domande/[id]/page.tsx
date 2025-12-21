@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/Toast';
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import {
   ArrowLeft,
   Edit2,
@@ -250,6 +251,12 @@ export default function DettaglioDomandaPage() {
           <div className={`${colors.background.card} rounded-xl p-6 ${colors.effects.shadow.sm}`}>
             <h3 className={`font-semibold ${colors.text.primary} mb-4`}>Testo della domanda</h3>
             <p className={`${colors.text.primary} whitespace-pre-wrap`}>{question.text}</p>
+            {question.textLatex && (
+              <div className={`mt-4 p-4 rounded-lg ${colors.background.secondary} border ${colors.border.light}`}>
+                <p className={`text-xs font-medium ${colors.text.muted} mb-2`}>Formula LaTeX:</p>
+                <LaTeXRenderer latex={question.textLatex} className={colors.text.primary} />
+              </div>
+            )}
             {question.description && (
               <div className={`mt-4 p-4 rounded-lg ${colors.background.secondary}`}>
                 <p className={`text-sm ${colors.text.muted}`}>{question.description}</p>
@@ -475,10 +482,11 @@ export default function DettaglioDomandaPage() {
                             {tags.map((tag) => (
                               <span
                                 key={tag.id}
-                                className="px-2.5 py-1 rounded-full text-xs font-medium"
+                                className="px-2.5 py-1 rounded-full text-xs font-medium bg-opacity-30 dark:bg-opacity-40"
                                 style={{
-                                  backgroundColor: `${tag.color || category!.color}20`,
+                                  backgroundColor: `${tag.color || category!.color}33`,
                                   color: tag.color || category!.color,
+                                  textShadow: 'none',
                                 }}
                               >
                                 {tag.name}
@@ -498,7 +506,7 @@ export default function DettaglioDomandaPage() {
                                 key={tag.id}
                                 className={`px-2.5 py-1 rounded-full text-xs font-medium ${colors.background.tertiary} ${colors.text.secondary}`}
                                 style={tag.color ? {
-                                  backgroundColor: `${tag.color}20`,
+                                  backgroundColor: `${tag.color}33`,
                                   color: tag.color,
                                 } : {}}
                               >

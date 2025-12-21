@@ -862,9 +862,13 @@ export default function VirtualRoomPage() {
 
   const { session, simulation, participants, invitedStudents, connectedCount, totalInvited, timeRemaining } = sessionState.data;
 
-  // Find not connected invited students
+  // Find not connected invited students (deduplicated)
   const connectedStudentIds = new Set(participants.map(p => p.studentId));
-  const notConnectedStudents = invitedStudents.filter(s => !connectedStudentIds.has(s.id));
+  const notConnectedStudentsRaw = invitedStudents.filter(s => !connectedStudentIds.has(s.id));
+  // Deduplicate by student id
+  const notConnectedStudents = Array.from(
+    new Map(notConnectedStudentsRaw.map(s => [s.id, s])).values()
+  );
 
   const allConnected = connectedCount >= totalInvited;
   const completedCount = participants.filter(p => p.completedAt).length;

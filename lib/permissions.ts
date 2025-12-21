@@ -16,6 +16,7 @@ export const PAGE_PERMISSIONS: Record<string, PermissionRole[]> = {
   '/dashboard': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
   '/simulazioni': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
   '/simulazioni/nuova': ['ADMIN', 'COLLABORATOR'], // Create simulation page - staff only
+  '/simulazioni/risposte-aperte': ['ADMIN', 'COLLABORATOR'], // Open answer review - staff only
   '/calendario': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
   '/messaggi': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
   '/notifiche': ['ADMIN', 'COLLABORATOR', 'STUDENT'],

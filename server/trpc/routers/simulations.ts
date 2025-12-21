@@ -2461,14 +2461,17 @@ export const simulationsRouter = router({
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
       const studentId = student.id;
 
-      // Get simulation with questions
+      // Get simulation with questions (include type and keywords for OPEN_TEXT handling)
       const simulation = await ctx.prisma.simulation.findUnique({
         where: { id: simulationId },
         include: {
           questions: {
             include: {
               question: {
-                include: { answers: true },
+                include: { 
+                  answers: true,
+                  keywords: true, // Include keywords relation for OPEN_TEXT validation
+                },
               },
             },
           },
@@ -2555,8 +2558,19 @@ export const simulationsRouter = router({
         let isCorrect = false;
         let earnedPoints = 0;
 
-        if (!studentAnswer?.answerId) {
-          // Blank answer
+        // Handle OPEN_TEXT questions separately
+        if (sq.question.type === 'OPEN_TEXT') {
+          if (studentAnswer?.answerText && studentAnswer.answerText.trim().length > 0) {
+            // Has text answer - will be reviewed later, no points assigned now
+            // Don't count as blank - these are "pending review"
+            earnedPoints = 0; // Will be calculated after review
+          } else {
+            // No answer for open text question
+            blankCount++;
+            earnedPoints = simulation.blankPoints;
+          }
+        } else if (!studentAnswer?.answerId) {
+          // Blank answer for choice questions
           blankCount++;
           earnedPoints = simulation.blankPoints;
         } else if (studentAnswer.answerId === correctAnswer?.id) {
@@ -2597,8 +2611,68 @@ export const simulationsRouter = router({
         },
       });
 
+      // Create OpenAnswerSubmission records for OPEN_TEXT questions with text answers
+      const openAnswersToCreate = [];
+      for (const sq of simulation.questions) {
+        // Check if this is an OPEN_TEXT question
+        if (sq.question.type === 'OPEN_TEXT') {
+          const studentAnswer = answers.find(a => a.questionId === sq.questionId);
+          if (studentAnswer?.answerText && studentAnswer.answerText.trim().length > 0) {
+            // Auto-validate against keywords if available (keywords is a relation, not JSON)
+            const keywords = sq.question.keywords; // QuestionKeyword[]
+            const answerLower = studentAnswer.answerText.toLowerCase();
+            
+            const keywordsMatched: string[] = [];
+            const keywordsMissed: string[] = [];
+            let autoScore: number | null = null;
+
+            if (keywords.length > 0) {
+              let matchedWeight = 0;
+              let totalWeight = 0;
+
+              for (const kw of keywords) {
+                totalWeight += kw.weight;
+                if (answerLower.includes(kw.keyword.toLowerCase())) {
+                  keywordsMatched.push(kw.keyword);
+                  matchedWeight += kw.weight;
+                } else if (kw.isRequired) {
+                  keywordsMissed.push(kw.keyword);
+                }
+              }
+
+              autoScore = totalWeight > 0 ? matchedWeight / totalWeight : null;
+            }
+
+            openAnswersToCreate.push({
+              questionId: sq.questionId,
+              studentId,
+              simulationResultId: result.id,
+              answerText: studentAnswer.answerText,
+              keywordsMatched,
+              keywordsMissed,
+              autoScore,
+              finalScore: autoScore, // Will be overwritten by manual review
+              isValidated: false,
+            });
+          }
+        }
+      }
+
+      // Create open answer submissions
+      if (openAnswersToCreate.length > 0) {
+        await ctx.prisma.openAnswerSubmission.createMany({
+          data: openAnswersToCreate,
+        });
+
+        // Update result with pending count
+        await ctx.prisma.simulationResult.update({
+          where: { id: result.id },
+          data: { pendingOpenAnswers: openAnswersToCreate.length },
+        });
+      }
+
       // Count open answers that need review (answers with text but no answerId selected)
-      const openAnswersCount = evaluatedAnswers.filter(a => a.answerText && !a.answerId).length;
+      const openAnswersCount = openAnswersToCreate.length;
 
       // Notify staff about completion (background, don't block response)
       notificationService.notifySimulationCompletedByStudent(ctx.prisma, {
@@ -2748,6 +2822,7 @@ export const simulationsRouter = router({
           correctAnswers: result.correctAnswers ?? 0,
           wrongAnswers: result.wrongAnswers ?? 0,
           blankAnswers: result.blankAnswers ?? 0,
+          pendingOpenAnswers: result.pendingOpenAnswers ?? 0,
           timeSpent: result.durationSeconds ?? 0,
           passed: result.simulation.passingScore 
             ? (result.totalScore ?? 0) >= result.simulation.passingScore 
@@ -2810,6 +2885,7 @@ export const simulationsRouter = router({
         correctAnswers: result.correctAnswers ?? 0,
         wrongAnswers: result.wrongAnswers ?? 0,
         blankAnswers: result.blankAnswers ?? 0,
+        pendingOpenAnswers: result.pendingOpenAnswers ?? 0,
         timeSpent: result.durationSeconds ?? 0,
         passed: result.simulation.passingScore 
           ? (result.totalScore ?? 0) >= result.simulation.passingScore 
@@ -4368,7 +4444,371 @@ export const simulationsRouter = router({
         mostMissedQuestions,
       };
     }),
+
+  // ==================== OPEN ANSWER REVIEW ====================
+
+  // Get results with pending open answers for staff review
+  getResultsWithPendingReviews: staffProcedure
+    .input(z.object({
+      simulationId: z.string().optional(),
+      limit: z.number().min(1).max(100).default(50),
+      offset: z.number().min(0).default(0),
+    }))
+    .query(async ({ ctx, input }) => {
+      const whereClause: Prisma.SimulationResultWhereInput = {
+        pendingOpenAnswers: { gt: 0 },
+        completedAt: { not: null },
+        ...(input.simulationId ? { simulationId: input.simulationId } : {}),
+      };
+
+      const [results, total] = await Promise.all([
+        ctx.prisma.simulationResult.findMany({
+          where: whereClause,
+          include: {
+            simulation: { select: { id: true, title: true, type: true } },
+            student: { 
+              include: { 
+                user: { select: { name: true, email: true } } 
+              } 
+            },
+            openAnswerSubmissions: {
+              where: { isValidated: false },
+              include: {
+                question: { select: { id: true, text: true, points: true } },
+              },
+            },
+          },
+          orderBy: { completedAt: 'desc' },
+          take: input.limit,
+          skip: input.offset,
+        }),
+        ctx.prisma.simulationResult.count({ where: whereClause }),
+      ]);
+
+      return {
+        results: results.map(r => ({
+          id: r.id,
+          simulation: r.simulation,
+          student: {
+            id: r.student.id,
+            name: r.student.user.name,
+            email: r.student.user.email,
+          },
+          completedAt: r.completedAt,
+          totalScore: r.totalScore,
+          percentageScore: r.percentageScore,
+          pendingOpenAnswers: r.pendingOpenAnswers,
+          openAnswers: r.openAnswerSubmissions.map(oa => ({
+            id: oa.id,
+            questionId: oa.questionId,
+            questionText: oa.question.text,
+            questionPoints: oa.question.points,
+            answerText: oa.answerText,
+            autoScore: oa.autoScore,
+            keywordsMatched: oa.keywordsMatched,
+            keywordsMissed: oa.keywordsMissed,
+          })),
+        })),
+        total,
+        hasMore: input.offset + results.length < total,
+      };
+    }),
+
+  // Get open answers for a specific result
+  getOpenAnswersForResult: staffProcedure
+    .input(z.object({ resultId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const result = await ctx.prisma.simulationResult.findUnique({
+        where: { id: input.resultId },
+        include: {
+          simulation: { 
+            select: { 
+              id: true, 
+              title: true, 
+              type: true,
+              correctPoints: true,
+              wrongPoints: true,
+              blankPoints: true,
+            } 
+          },
+          student: { 
+            include: { 
+              user: { select: { name: true, email: true } } 
+            } 
+          },
+          openAnswerSubmissions: {
+            include: {
+              question: { 
+                select: { 
+                  id: true, 
+                  text: true, 
+                  textLatex: true,
+                  points: true,
+                  keywords: true,
+                  openValidationType: true,
+                  correctExplanation: true,
+                } 
+              },
+            },
+            orderBy: { submittedAt: 'asc' },
+          },
+        },
+      });
+
+      if (!result) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Risultato non trovato' });
+      }
+
+      return {
+        id: result.id,
+        simulation: {
+          id: result.simulation.id,
+          title: result.simulation.title,
+          type: result.simulation.type,
+          correctPoints: result.simulation.correctPoints,
+          wrongPoints: result.simulation.wrongPoints,
+          blankPoints: result.simulation.blankPoints,
+        },
+        student: {
+          id: result.student.id,
+          name: result.student.user.name,
+          email: result.student.user.email,
+        },
+        completedAt: result.completedAt,
+        totalScore: result.totalScore,
+        percentageScore: result.percentageScore,
+        pendingOpenAnswers: result.pendingOpenAnswers,
+        reviewedAt: result.reviewedAt,
+        openAnswers: result.openAnswerSubmissions.map(oa => ({
+          id: oa.id,
+          questionId: oa.questionId,
+          question: {
+            text: oa.question.text,
+            textLatex: oa.question.textLatex,
+            points: oa.question.points,
+            keywords: oa.question.keywords,
+            validationType: oa.question.openValidationType,
+            correctExplanation: oa.question.correctExplanation,
+          },
+          answerText: oa.answerText,
+          autoScore: oa.autoScore,
+          keywordsMatched: oa.keywordsMatched,
+          keywordsMissed: oa.keywordsMissed,
+          manualScore: oa.manualScore,
+          isValidated: oa.isValidated,
+          validatorNotes: oa.validatorNotes,
+          validatedAt: oa.validatedAt,
+          finalScore: oa.finalScore,
+        })),
+      };
+    }),
+
+  // Validate/grade a single open answer
+  validateOpenAnswer: staffProcedure
+    .input(z.object({
+      openAnswerId: z.string(),
+      manualScore: z.number().min(-1).max(1), // -1 to 1 (can be negative for wrong answers)
+      validatorNotes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const openAnswer = await ctx.prisma.openAnswerSubmission.findUnique({
+        where: { id: input.openAnswerId },
+        include: {
+          question: { select: { points: true } },
+          simulationResult: true,
+        },
+      });
+
+      if (!openAnswer) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Risposta non trovata' });
+      }
+
+      // Calculate final score based on manual score
+      const finalScore = input.manualScore;
+
+      // Update the open answer
+      await ctx.prisma.openAnswerSubmission.update({
+        where: { id: input.openAnswerId },
+        data: {
+          manualScore: input.manualScore,
+          finalScore,
+          isValidated: true,
+          validatedById: ctx.user.id,
+          validatedAt: new Date(),
+          validatorNotes: input.validatorNotes || null,
+        },
+      });
+
+      // Check if this was the last pending open answer and update result accordingly
+      if (openAnswer.simulationResultId) {
+        const remainingPending = await ctx.prisma.openAnswerSubmission.count({
+          where: {
+            simulationResultId: openAnswer.simulationResultId,
+            isValidated: false,
+          },
+        });
+
+        // Update the result's pending count
+        await ctx.prisma.simulationResult.update({
+          where: { id: openAnswer.simulationResultId },
+          data: {
+            pendingOpenAnswers: remainingPending,
+            ...(remainingPending === 0 ? {
+              reviewedAt: new Date(),
+              reviewedById: ctx.user.id,
+            } : {}),
+          },
+        });
+
+        // If all open answers are now validated, recalculate the total score
+        if (remainingPending === 0) {
+          await recalculateResultScore(ctx.prisma, openAnswer.simulationResultId);
+        }
+      }
+
+      return { success: true };
+    }),
+
+  // Batch validate multiple open answers
+  validateOpenAnswersBatch: staffProcedure
+    .input(z.object({
+      resultId: z.string(),
+      validations: z.array(z.object({
+        openAnswerId: z.string(),
+        manualScore: z.number().min(-1).max(1), // -1 to 1 (can be negative)
+        validatorNotes: z.string().optional(),
+      })),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.prisma.simulationResult.findUnique({
+        where: { id: input.resultId },
+      });
+
+      if (!result) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Risultato non trovato' });
+      }
+
+      // Update all open answers in a transaction
+      await ctx.prisma.$transaction(async (tx) => {
+        for (const validation of input.validations) {
+          await tx.openAnswerSubmission.update({
+            where: { id: validation.openAnswerId },
+            data: {
+              manualScore: validation.manualScore,
+              finalScore: validation.manualScore,
+              isValidated: true,
+              validatedById: ctx.user.id,
+              validatedAt: new Date(),
+              validatorNotes: validation.validatorNotes || null,
+            },
+          });
+        }
+
+        // Check remaining pending
+        const remainingPending = await tx.openAnswerSubmission.count({
+          where: {
+            simulationResultId: input.resultId,
+            isValidated: false,
+          },
+        });
+
+        // Update result
+        await tx.simulationResult.update({
+          where: { id: input.resultId },
+          data: {
+            pendingOpenAnswers: remainingPending,
+            ...(remainingPending === 0 ? {
+              reviewedAt: new Date(),
+              reviewedById: ctx.user.id,
+            } : {}),
+          },
+        });
+      });
+
+      // Recalculate score if all answers are validated
+      const remainingAfter = await ctx.prisma.openAnswerSubmission.count({
+        where: {
+          simulationResultId: input.resultId,
+          isValidated: false,
+        },
+      });
+
+      if (remainingAfter === 0) {
+        await recalculateResultScore(ctx.prisma, input.resultId);
+      }
+
+      return { success: true, remainingPending: remainingAfter };
+    }),
 });
+
+// Helper function to recalculate result score after open answer validation
+async function recalculateResultScore(prisma: PrismaClient, resultId: string) {
+  const result = await prisma.simulationResult.findUnique({
+    where: { id: resultId },
+    include: {
+      simulation: { select: { maxScore: true } },
+      openAnswerSubmissions: {
+        include: { question: { select: { points: true } } },
+      },
+    },
+  });
+
+  if (!result) return;
+
+  // Parse existing answers
+  const answers = result.answers as Array<{
+    questionId: string;
+    answerId: string | null;
+    answerText: string | null;
+    isCorrect: boolean;
+    earnedPoints: number;
+  }>;
+
+  // Calculate points and counts from open answers
+  let openAnswerPoints = 0;
+  let openAnswerCorrect = 0;
+  let openAnswerWrong = 0;
+
+  for (const oa of result.openAnswerSubmissions) {
+    if (oa.finalScore !== null && oa.question.points) {
+      const points = oa.finalScore * oa.question.points;
+      openAnswerPoints += points;
+      
+      // Count as correct if score >= 50%, otherwise wrong
+      if (oa.finalScore >= 0.5) {
+        openAnswerCorrect++;
+      } else {
+        openAnswerWrong++;
+      }
+    }
+  }
+
+  // Calculate new totals
+  // First, count only choice questions (answerId !== null)
+  const choiceQuestionPoints = answers
+    .filter(a => a.answerId !== null) // Only count choice questions
+    .reduce((sum, a) => sum + (a.earnedPoints || 0), 0);
+
+  // Count existing choice question stats
+  const existingCorrect = result.correctAnswers;
+  const existingWrong = result.wrongAnswers;
+
+  const newTotalScore = choiceQuestionPoints + openAnswerPoints;
+  const newPercentageScore = result.simulation.maxScore 
+    ? (newTotalScore / result.simulation.maxScore) * 100 
+    : 0;
+
+  // Update result with new totals including open answer counts
+  await prisma.simulationResult.update({
+    where: { id: resultId },
+    data: {
+      totalScore: newTotalScore,
+      percentageScore: newPercentageScore,
+      correctAnswers: existingCorrect + openAnswerCorrect,
+      wrongAnswers: existingWrong + openAnswerWrong,
+    },
+  });
+}
 
 // Helper function to calculate standard deviation
 function calculateStandardDeviation(values: number[]): number {

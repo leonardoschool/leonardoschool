@@ -641,7 +641,8 @@ export const studentsRouter = router({
   getStudentDetailForCollaborator: staffProcedure
     .input(z.object({ studentId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const user = await ctx.prisma.user.findUnique({
+      // The ID can be either a userId or a studentId, try both
+      let user = await ctx.prisma.user.findUnique({
         where: { id: input.studentId },
         include: {
           student: {
@@ -680,6 +681,52 @@ export const studentsRouter = router({
           },
         },
       });
+
+      // If not found by userId, try to find by studentId
+      if (!user || !user.student) {
+        const student = await ctx.prisma.student.findUnique({
+          where: { id: input.studentId },
+          include: {
+            user: true,
+            stats: true,
+            groupMemberships: {
+              include: {
+                group: {
+                  include: {
+                    materialAccess: {
+                      include: {
+                        material: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            simulationAssignments: {
+              include: {
+                simulation: true,
+              },
+              orderBy: { assignedAt: 'desc' },
+              take: 10,
+            },
+            materialAccess: {
+              include: {
+                material: true,
+              },
+              orderBy: { grantedAt: 'desc' },
+              take: 10,
+            },
+          },
+        });
+
+        if (student) {
+          // Reshape to match expected format
+          user = {
+            ...student.user,
+            student,
+          } as typeof user;
+        }
+      }
 
       if (!user || !user.student) {
         throw new TRPCError({
@@ -825,24 +872,37 @@ export const studentsRouter = router({
   // Get all simulations and results for a specific student (staff only)
   getStudentSimulations: staffProcedure
     .input(z.object({ 
-      studentId: z.string().min(1), // This is actually the userId from the URL
+      studentId: z.string().min(1), // This can be either userId or studentId from the URL
     }))
     .query(async ({ ctx, input }) => {
       // Staff (ADMIN and COLLABORATOR) can view all students' simulations
-      // First, find the student record from the userId
+      // The ID can be either a userId or a studentId, try both
+      
+      let studentId: string;
+      
+      // First, try to find by userId
       const user = await ctx.prisma.user.findUnique({
         where: { id: input.studentId },
         include: { student: true },
       });
 
-      if (!user || !user.student) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Studente non trovato',
+      if (user && user.student) {
+        studentId = user.student.id;
+      } else {
+        // Try to find directly as studentId
+        const student = await ctx.prisma.student.findUnique({
+          where: { id: input.studentId },
         });
+        
+        if (student) {
+          studentId = student.id;
+        } else {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Studente non trovato',
+          });
+        }
       }
-
-      const studentId = user.student.id;
 
       // Get student with all simulation results
       const student = await ctx.prisma.student.findUnique({

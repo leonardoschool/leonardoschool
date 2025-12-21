@@ -12,6 +12,8 @@ import TolcSimulationLayout from '@/components/simulazioni/TolcSimulationLayout'
 import StudentWaitingRoom from '@/components/simulazioni/StudentWaitingRoom';
 import TolcInstructions from '@/components/simulazioni/TolcInstructions';
 import InTestMessaging, { MessagingButton } from '@/components/simulazioni/InTestMessaging';
+import { TextareaWithSymbols } from '@/components/ui/SymbolKeyboard';
+import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
@@ -500,6 +502,21 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     );
   };
 
+  // Handle open text answer change
+  const handleOpenTextChange = (text: string) => {
+    if (!simulation) return;
+    const currentQuestion = simulation.questions[currentQuestionIndex];
+    if (!currentQuestion) return;
+
+    setAnswers((prev) =>
+      prev.map((a) =>
+        a.questionId === currentQuestion.questionId
+          ? { ...a, answerText: text || null }
+          : a
+      )
+    );
+  };
+
   // Handle flag toggle
   const handleToggleFlag = () => {
     if (!simulation) return;
@@ -982,7 +999,8 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   // Execution screen
   const currentQuestion = simulation.questions[currentQuestionIndex];
   const currentAnswer = answers.find((a) => a.questionId === currentQuestion?.questionId);
-  const answeredCount = answers.filter((a) => a.answerId !== null).length;
+  // Count answers including both choice answers and text answers
+  const answeredCount = answers.filter((a) => a.answerId !== null || (a.answerText && a.answerText.trim().length > 0)).length;
   const flaggedCount = answers.filter((a) => a.flagged).length;
 
   // Use TOLC layout for simulations with sections
@@ -1025,6 +1043,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
           sectionTimeRemaining={sectionTimeRemaining}
           completedSections={completedSections}
           onAnswerSelect={handleAnswerSelect}
+          onOpenTextChange={handleOpenTextChange}
           onToggleFlag={handleToggleFlag}
           onGoToQuestion={goToQuestion}
           onGoNext={goNext}
@@ -1318,41 +1337,69 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
                 className={`prose prose-sm max-w-none ${colors.text.primary}`}
                 dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentQuestion?.question.text || '') }}
               />
+              {currentQuestion?.question.textLatex && (
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <LaTeXRenderer 
+                    latex={currentQuestion.question.textLatex} 
+                    className={colors.text.primary} 
+                  />
+                </div>
+              )}
             </div>
 
-            {/* Answers */}
-            <div className="space-y-3">
-              {currentQuestion?.question.answers.map((answer, index) => {
-                const isSelected = currentAnswer?.answerId === answer.id;
-                const label = String.fromCharCode(65 + index); // A, B, C, D...
+            {/* Answers - conditional based on question type */}
+            {currentQuestion?.question.type === 'OPEN_TEXT' ? (
+              /* Open text answer input with symbol keyboard */
+              <div className="space-y-3">
+                <label className={`block text-sm font-medium ${colors.text.secondary} mb-2`}>
+                  Scrivi la tua risposta:
+                </label>
+                <TextareaWithSymbols
+                  value={currentAnswer?.answerText || ''}
+                  onChange={handleOpenTextChange}
+                  placeholder="Inserisci la tua risposta..."
+                  rows={6}
+                  className={`w-full px-4 py-3 rounded-xl border ${colors.border.light} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-colors resize-y`}
+                />
+                <p className={`text-xs ${colors.text.muted}`}>
+                  Usa la tastiera dei simboli per inserire caratteri speciali e formule matematiche.
+                </p>
+              </div>
+            ) : (
+              /* Multiple choice answers */
+              <div className="space-y-3">
+                {currentQuestion?.question.answers.map((answer, index) => {
+                  const isSelected = currentAnswer?.answerId === answer.id;
+                  const label = String.fromCharCode(65 + index); // A, B, C, D...
 
-                return (
-                  <button
-                    key={answer.id}
-                    onClick={() => handleAnswerSelect(answer.id)}
-                    className={`w-full flex items-start gap-4 p-4 rounded-xl border-2 text-left transition-all ${
-                      isSelected
-                        ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
-                        : `border-transparent ${colors.background.card} hover:border-gray-300 dark:hover:border-gray-600`
-                    }`}
-                  >
-                    <span
-                      className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-medium ${
+                  return (
+                    <button
+                      key={answer.id}
+                      onClick={() => handleAnswerSelect(answer.id)}
+                      className={`w-full flex items-start gap-4 p-4 rounded-xl border-2 text-left transition-all ${
                         isSelected
-                          ? 'bg-red-500 text-white'
-                          : `${colors.background.secondary} ${colors.text.secondary}`
+                          ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
+                          : `border-transparent ${colors.background.card} hover:border-gray-300 dark:hover:border-gray-600`
                       }`}
                     >
-                      {label}
-                    </span>
-                    <div
-                      className={`flex-1 ${colors.text.primary}`}
-                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.text) }}
-                    />
-                  </button>
-                );
-              })}
-            </div>
+                      <span
+                        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-medium ${
+                          isSelected
+                            ? 'bg-red-500 text-white'
+                            : `${colors.background.secondary} ${colors.text.secondary}`
+                        }`}
+                      >
+                        {label}
+                      </span>
+                      <div
+                        className={`flex-1 ${colors.text.primary}`}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.text) }}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Navigation buttons */}
             <div className="flex items-center justify-between mt-8">

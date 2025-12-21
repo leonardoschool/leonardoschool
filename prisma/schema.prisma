@@ -776,8 +776,9 @@ model OpenAnswerSubmission {
   submittedAt DateTime @default(now())
 
   // Relations
-  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  question         Question          @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  student          Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  simulationResult SimulationResult? @relation(fields: [simulationResultId], references: [id], onDelete: Cascade)
 
   @@index([questionId])
   @@index([studentId])
@@ -974,6 +975,11 @@ model SimulationResult {
   totalScore      Float @default(0.0)
   percentageScore Float @default(0.0)
 
+  // Open answer review status
+  pendingOpenAnswers Int       @default(0) // Number of open answers awaiting manual review
+  reviewedAt         DateTime? // When all open answers were reviewed
+  reviewedById       String?   // Who completed the review
+
   // Answers (JSON array)
   answers Json // [{questionId, answer: 'A'|'B'|'C'|'D'|'E'|'BLANK', isCorrect, timeSpent}]
 
@@ -988,6 +994,9 @@ model SimulationResult {
   student    Student               @relation(fields: [studentId], references: [id], onDelete: Cascade)
   assignment SimulationAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
 
+  // Open answer submissions for this result
+  openAnswerSubmissions OpenAnswerSubmission[]
+
   // Virtual room participant link
   sessionParticipant SimulationSessionParticipant?
 
@@ -999,6 +1008,7 @@ model SimulationResult {
   @@index([assignmentId])
   @@index([totalScore])
   @@index([completedAt])
+  @@index([pendingOpenAnswers])
   @@map("simulation_results")
 }
 
