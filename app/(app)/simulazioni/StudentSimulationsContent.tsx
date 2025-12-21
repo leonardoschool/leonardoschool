@@ -6,6 +6,7 @@ import { colors } from '@/lib/theme/colors';
 import { PageLoader } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import Link from 'next/link';
+import SelfPracticeModal from '@/components/student/SelfPracticeModal';
 import {
   Filter,
   Clock,
@@ -93,6 +94,9 @@ const studentStatusLabels: Record<string, string> = {
 };
 
 export default function StudentSimulationsContent() {
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'assigned' | 'self'>('assigned');
+
   // Filters state
   const [type, setType] = useState<SimulationType | ''>('');
   const [status, setStatus] = useState<string>('');
@@ -101,13 +105,28 @@ export default function StudentSimulationsContent() {
   const [pageSize] = useState(20);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Fetch simulations
+  // Self practice modal state
+  const [showSelfPracticeModal, setShowSelfPracticeModal] = useState(false);
+
+  // Reset page when changing tabs
+  const handleTabChange = (tab: 'assigned' | 'self') => {
+    setActiveTab(tab);
+    setPage(1);
+    setType('');
+    setStatus('');
+    setIsOfficial('');
+  };
+
+  // Fetch simulations based on active tab
   const { data: simulationsData, isLoading } = trpc.simulations.getAvailableSimulations.useQuery({
     page,
     pageSize,
     type: type || undefined,
     status: status as 'available' | 'in_progress' | 'completed' | 'expired' | undefined || undefined,
     isOfficial: isOfficial === '' ? undefined : isOfficial,
+    // Filter by self-created or assigned
+    selfCreated: activeTab === 'self' ? true : undefined,
+    assignedToMe: activeTab === 'assigned' ? true : undefined,
   });
 
   // Fetch student results for stats
@@ -157,8 +176,40 @@ export default function StudentSimulationsContent() {
         </p>
       </div>
 
+      {/* Tabs */}
+      <div className="mb-6">
+        <div className={`flex flex-col sm:flex-row gap-2 sm:gap-0 p-1 rounded-xl ${colors.background.card} border ${colors.border.light}`}>
+          <button
+            onClick={() => handleTabChange('assigned')}
+            className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${
+              activeTab === 'assigned'
+                ? `${colors.primary.bg} text-white shadow-md`
+                : `${colors.text.secondary} hover:${colors.background.hover}`
+            }`}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <Shield className="w-5 h-5" />
+              <span>Simulazioni Assegnate</span>
+            </div>
+          </button>
+          <button
+            onClick={() => handleTabChange('self')}
+            className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${
+              activeTab === 'self'
+                ? `${colors.primary.bg} text-white shadow-md`
+                : `${colors.text.secondary} hover:${colors.background.hover}`
+            }`}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <Zap className="w-5 h-5" />
+              <span>Le mie Autoesercitazioni</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
       {/* Stats cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className={`grid gap-4 mb-6 ${activeTab === 'self' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 sm:grid-cols-3'}`}>
         <div className={`p-4 rounded-xl ${colors.background.card} border ${colors.border.light}`}>
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
@@ -166,7 +217,9 @@ export default function StudentSimulationsContent() {
             </div>
             <div>
               <p className={`text-2xl font-bold ${colors.text.primary}`}>{pagination.total}</p>
-              <p className={`text-sm ${colors.text.muted}`}>Disponibili</p>
+              <p className={`text-sm ${colors.text.muted}`}>
+                {activeTab === 'assigned' ? 'Assegnate' : 'Create'}
+              </p>
             </div>
           </div>
         </div>
@@ -192,20 +245,24 @@ export default function StudentSimulationsContent() {
             </div>
           </div>
         </div>
-        <Link
-          href="/simulazioni/quiz-veloce"
-          className={`p-4 rounded-xl ${colors.primary.softBg} border border-red-200 dark:border-red-800 hover:shadow-md transition-shadow`}
-        >
-          <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${colors.primary.bg}`}>
-              <Zap className="w-5 h-5 text-white" />
+        
+        {/* Quiz Veloce button - solo nella tab autoesercitazioni */}
+        {activeTab === 'self' && (
+          <button
+            onClick={() => setShowSelfPracticeModal(true)}
+            className={`p-4 rounded-xl ${colors.primary.softBg} border border-red-200 dark:border-red-800 hover:shadow-md transition-shadow text-left w-full`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${colors.primary.bg}`}>
+                <Zap className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <p className={`font-semibold ${colors.text.primary}`}>Quiz Veloce</p>
+                <p className={`text-sm ${colors.text.muted}`}>Inizia subito →</p>
+              </div>
             </div>
-            <div>
-              <p className={`font-semibold ${colors.text.primary}`}>Quiz Veloce</p>
-              <p className={`text-sm ${colors.text.muted}`}>Inizia subito →</p>
-            </div>
-          </div>
-        </Link>
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -217,14 +274,14 @@ export default function StudentSimulationsContent() {
           >
             <Filter className="w-4 h-4" />
             Filtri
-            {(type || status || isOfficial !== '') && (
+            {(type || status || (activeTab === 'assigned' && isOfficial !== '')) && (
               <span className="w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
-                {[type, status, isOfficial !== ''].filter(Boolean).length}
+                {[type, status, activeTab === 'assigned' && isOfficial !== ''].filter(Boolean).length}
               </span>
             )}
           </button>
           
-          {/* Quick filters */}
+          {/* Quick filters - diversi per tab */}
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setStatus(status === 'available' ? '' : 'available')}
@@ -246,31 +303,38 @@ export default function StudentSimulationsContent() {
             >
               In corso
             </button>
-            <button
-              onClick={() => setIsOfficial(isOfficial === true ? '' : true)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                isOfficial === true 
-                  ? 'bg-red-500 text-white' 
-                  : `${colors.background.hover} ${colors.text.secondary}`
-              }`}
-            >
-              <Award className="w-3 h-3 inline mr-1" />
-              Ufficiali
-            </button>
+            
+            {/* Filtro "Ufficiali" solo per simulazioni assegnate */}
+            {activeTab === 'assigned' && (
+              <button
+                onClick={() => setIsOfficial(isOfficial === true ? '' : true)}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  isOfficial === true 
+                    ? 'bg-red-500 text-white' 
+                    : `${colors.background.hover} ${colors.text.secondary}`
+                }`}
+              >
+                <Award className="w-3 h-3 inline mr-1" />
+                Ufficiali
+              </button>
+            )}
           </div>
         </div>
 
         {showFilters && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <CustomSelect
-              label="Tipo"
-              value={type}
-              onChange={(v) => setType(v as SimulationType | '')}
-              options={[
-                { value: '', label: 'Tutti' },
-                ...Object.entries(filterTypeLabels).map(([value, label]) => ({ value, label })),
-              ]}
-            />
+          <div className={`grid grid-cols-1 ${activeTab === 'assigned' ? 'sm:grid-cols-3' : 'sm:grid-cols-1'} gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700`}>
+            {/* Filtro Tipo solo per simulazioni assegnate */}
+            {activeTab === 'assigned' && (
+              <CustomSelect
+                label="Tipo"
+                value={type}
+                onChange={(v) => setType(v as SimulationType | '')}
+                options={[
+                  { value: '', label: 'Tutti' },
+                  ...Object.entries(filterTypeLabels).map(([value, label]) => ({ value, label })),
+                ]}
+              />
+            )}
             <CustomSelect
               label="Stato"
               value={status}
@@ -280,19 +344,23 @@ export default function StudentSimulationsContent() {
                 { value: 'available', label: 'Disponibili' },
                 { value: 'in_progress', label: 'In corso' },
                 { value: 'completed', label: 'Completate' },
-                { value: 'expired', label: 'Scadute' },
+                ...(activeTab === 'assigned' ? [{ value: 'expired', label: 'Scadute' }] : []),
               ]}
             />
-            <CustomSelect
-              label="Ufficiale"
-              value={isOfficial === '' ? '' : isOfficial ? 'true' : 'false'}
-              onChange={(v) => setIsOfficial(v === '' ? '' : v === 'true')}
-              options={[
-                { value: '', label: 'Tutti' },
-                { value: 'true', label: 'Solo Ufficiali' },
-                { value: 'false', label: 'Non Ufficiali' },
-              ]}
-            />
+            
+            {/* Filtro Ufficiale solo per simulazioni assegnate */}
+            {activeTab === 'assigned' && (
+              <CustomSelect
+                label="Ufficiale"
+                value={isOfficial === '' ? '' : isOfficial ? 'true' : 'false'}
+                onChange={(v) => setIsOfficial(v === '' ? '' : v === 'true')}
+                options={[
+                  { value: '', label: 'Tutti' },
+                  { value: 'true', label: 'Solo Ufficiali' },
+                  { value: 'false', label: 'Non Ufficiali' },
+                ]}
+              />
+            )}
           </div>
         )}
       </div>
@@ -301,10 +369,28 @@ export default function StudentSimulationsContent() {
       {simulations.length === 0 ? (
         <div className={`text-center py-12 ${colors.background.card} rounded-xl border ${colors.border.light}`}>
           <FileText className="w-12 h-12 mx-auto text-gray-400 mb-3" />
-          <p className={colors.text.muted}>Nessuna simulazione trovata</p>
-          <p className={`text-sm ${colors.text.muted} mt-1`}>
-            Prova a modificare i filtri o torna più tardi
-          </p>
+          {activeTab === 'assigned' ? (
+            <>
+              <p className={`font-medium ${colors.text.primary} mb-1`}>Nessuna simulazione assegnata</p>
+              <p className={`text-sm ${colors.text.muted}`}>
+                I tuoi collaboratori non ti hanno ancora assegnato simulazioni
+              </p>
+            </>
+          ) : (
+            <>
+              <p className={`font-medium ${colors.text.primary} mb-1`}>Nessuna autoesercitazione creata</p>
+              <p className={`text-sm ${colors.text.muted} mb-4`}>
+                Crea il tuo primo quiz veloce per iniziare a esercitarti
+              </p>
+              <button
+                onClick={() => setShowSelfPracticeModal(true)}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.bg} text-white hover:opacity-90 transition-opacity`}
+              >
+                <Zap className="w-4 h-4" />
+                Crea Quiz Veloce
+              </button>
+            </>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -488,6 +574,12 @@ export default function StudentSimulationsContent() {
           </button>
         </div>
       )}
+
+      {/* Self Practice Modal */}
+      <SelfPracticeModal
+        isOpen={showSelfPracticeModal}
+        onClose={() => setShowSelfPracticeModal(false)}
+      />
     </div>
   );
 }

@@ -1686,7 +1686,7 @@ export const simulationsRouter = router({
   getAvailableSimulations: studentProcedure
     .input(studentSimulationFilterSchema)
     .query(async ({ ctx, input }) => {
-      const { page, pageSize, type, status, isOfficial, sortBy, sortOrder } = input;
+      const { page, pageSize, type, status, isOfficial, sortBy, sortOrder, selfCreated, assignedToMe } = input;
 
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
       const studentId = student.id;
@@ -1699,43 +1699,68 @@ export const simulationsRouter = router({
       });
       const groupIds = groupMembers.map(gm => gm.groupId);
 
-      // Get ALL assignments for this student (each assignment = separate card)
-      const assignments = await ctx.prisma.simulationAssignment.findMany({
-        where: {
-          OR: [
-            { studentId },
-            ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
-          ],
-          simulation: {
-            status: 'PUBLISHED',
-            ...(type ? { type } : {}),
-            ...(typeof isOfficial === 'boolean' ? { isOfficial } : {}),
-          },
-        },
-        include: {
-          simulation: {
+      // Determine what to fetch based on filters
+      const shouldFetchAssigned = assignedToMe === true || (assignedToMe === undefined && selfCreated !== true);
+      const shouldFetchSelfCreated = selfCreated === true || (selfCreated === undefined && assignedToMe !== true);
+
+      // Get ALL assignments for this student (if not filtering for self-created only)
+      const assignments = shouldFetchAssigned 
+        ? await ctx.prisma.simulationAssignment.findMany({
+            where: {
+              OR: [
+                { studentId },
+                ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
+              ],
+              simulation: {
+                status: 'PUBLISHED',
+                ...(type ? { type } : {}),
+                ...(typeof isOfficial === 'boolean' ? { isOfficial } : {}),
+              },
+            },
+            include: {
+              simulation: {
+                include: {
+                  createdBy: { select: { name: true } },
+                  _count: { select: { questions: true } },
+                },
+              },
+            },
+            orderBy: { startDate: sortOrder },
+          })
+        : [];
+
+      // Also get public simulations (no assignment needed - if not filtering for self-created only)
+      const publicSimulations = shouldFetchAssigned
+        ? await ctx.prisma.simulation.findMany({
+            where: {
+              status: 'PUBLISHED',
+              isPublic: true,
+              ...(type ? { type } : {}),
+              ...(typeof isOfficial === 'boolean' ? { isOfficial } : {}),
+            },
             include: {
               createdBy: { select: { name: true } },
               _count: { select: { questions: true } },
             },
-          },
-        },
-        orderBy: { startDate: sortOrder },
-      });
+          })
+        : [];
 
-      // Also get public simulations (no assignment needed)
-      const publicSimulations = await ctx.prisma.simulation.findMany({
-        where: {
-          status: 'PUBLISHED',
-          isPublic: true,
-          ...(type ? { type } : {}),
-          ...(typeof isOfficial === 'boolean' ? { isOfficial } : {}),
-        },
-        include: {
-          createdBy: { select: { name: true } },
-          _count: { select: { questions: true } },
-        },
-      });
+      // Get self-practice simulations (QUICK_QUIZ type created by student)
+      const selfPracticeSimulations = shouldFetchSelfCreated
+        ? await ctx.prisma.simulation.findMany({
+            where: {
+              status: 'PUBLISHED',
+              type: 'QUICK_QUIZ',
+              createdById: ctx.user.id,
+              ...(typeof isOfficial === 'boolean' ? { isOfficial } : {}),
+            },
+            include: {
+              createdBy: { select: { name: true } },
+              _count: { select: { questions: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+          })
+        : [];
 
       // Get ALL student's results (with assignmentId)
       const studentResults = await ctx.prisma.simulationResult.findMany({
@@ -1960,6 +1985,60 @@ export const simulationsRouter = router({
         });
       }
 
+      // Process self-practice simulations (QUICK_QUIZ created by student)
+      for (const sim of selfPracticeSimulations) {
+        // Skip if already added via assignment
+        if (simulationCards.some(c => c.id === sim.id)) {
+          continue;
+        }
+
+        // For self-practice simulations, use legacy result map (no assignmentId)
+        const resultStatus = resultBySimulationMap.get(sim.id);
+        
+        const isCompleted = resultStatus === 'completed';
+        const isInProgress = resultStatus === 'in_progress';
+
+        let studentStatus: SimulationCard['studentStatus'];
+        
+        if (isCompleted) {
+          studentStatus = 'completed';
+        } else if (isInProgress) {
+          studentStatus = 'in_progress';
+        } else {
+          studentStatus = 'available'; // Self-practice is always available
+        }
+
+        // Apply status filter (for self-practice, status can only be available/in_progress/completed)
+        if (status && status !== studentStatus) {
+          continue;
+        }
+
+        simulationCards.push({
+          id: sim.id,
+          assignmentId: null,
+          title: sim.title,
+          description: sim.description,
+          type: sim.type,
+          durationMinutes: sim.durationMinutes,
+          totalQuestions: sim.totalQuestions,
+          isOfficial: sim.isOfficial,
+          isRepeatable: sim.isRepeatable,
+          maxAttempts: sim.maxAttempts,
+          visibility: sim.visibility,
+          accessType: sim.accessType,
+          enableAntiCheat: sim.enableAntiCheat,
+          startDate: sim.startDate,
+          endDate: sim.endDate,
+          dueDate: null,
+          assignmentNotes: null,
+          assignmentType: null, // Self-created, not assigned
+          assignmentStatus: null,
+          studentStatus,
+          createdBy: sim.createdBy,
+          _count: sim._count,
+        });
+      }
+
       // Sort cards
       simulationCards.sort((a, b) => {
         const aVal = a[sortBy as keyof SimulationCard];
@@ -2057,10 +2136,12 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
       }
 
-      // Check access: public or has assignment
+      // Check access: public, has assignment, or created by this student (self-practice)
+      const isOwnSelfPractice = simulation.type === 'QUICK_QUIZ' && simulation.createdById === ctx.user.id;
       const hasAccess = 
         simulation.isPublic ||
-        simulation.assignments.length > 0;
+        simulation.assignments.length > 0 ||
+        isOwnSelfPractice;
 
       if (!hasAccess) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai accesso a questa simulazione' });
@@ -2555,19 +2636,22 @@ export const simulationsRouter = router({
         const points = sq.customPoints ?? (simulation.useQuestionPoints ? sq.question.points : simulation.correctPoints);
         const negativePoints = sq.customNegativePoints ?? (simulation.useQuestionPoints ? sq.question.negativePoints : simulation.wrongPoints);
 
-        let isCorrect = false;
+        let isCorrect: boolean | null = false; // null = pending review (for open questions)
         let earnedPoints = 0;
 
         // Handle OPEN_TEXT questions separately
         if (sq.question.type === 'OPEN_TEXT') {
           if (studentAnswer?.answerText && studentAnswer.answerText.trim().length > 0) {
-            // Has text answer - will be reviewed later, no points assigned now
-            // Don't count as blank - these are "pending review"
-            earnedPoints = 0; // Will be calculated after review
+            // Has text answer - always pending review initially
+            // If showCorrectAnswers=true, student can self-correct via UI
+            // If showCorrectAnswers=false, staff will review
+            isCorrect = null; // null indicates pending review
+            earnedPoints = 0; // Points assigned after correction
           } else {
             // No answer for open text question
             blankCount++;
             earnedPoints = simulation.blankPoints;
+            isCorrect = null;
           }
         } else if (!studentAnswer?.answerId) {
           // Blank answer for choice questions
@@ -2596,6 +2680,11 @@ export const simulationsRouter = router({
         });
       }
 
+      // Count pending open answers (isCorrect === null with text)
+      const pendingOpenCount = evaluatedAnswers.filter(a => 
+        a.isCorrect === null && a.answerText && a.answerText.trim().length > 0
+      ).length;
+
       // Update result
       const updatedResult = await ctx.prisma.simulationResult.update({
         where: { id: result.id },
@@ -2606,54 +2695,59 @@ export const simulationsRouter = router({
           correctAnswers: correctCount,
           wrongAnswers: wrongCount,
           blankAnswers: blankCount,
+          pendingOpenAnswers: pendingOpenCount,
           durationSeconds: totalTimeSpent,
           completedAt: new Date(),
         },
       });
 
       // Create OpenAnswerSubmission records for OPEN_TEXT questions with text answers
+      // BUT ONLY if showCorrectAnswers is false (staff correction required)
+      // If showCorrectAnswers is true, student can self-correct by seeing the correct answers
       const openAnswersToCreate = [];
-      for (const sq of simulation.questions) {
-        // Check if this is an OPEN_TEXT question
-        if (sq.question.type === 'OPEN_TEXT') {
-          const studentAnswer = answers.find(a => a.questionId === sq.questionId);
-          if (studentAnswer?.answerText && studentAnswer.answerText.trim().length > 0) {
-            // Auto-validate against keywords if available (keywords is a relation, not JSON)
-            const keywords = sq.question.keywords; // QuestionKeyword[]
-            const answerLower = studentAnswer.answerText.toLowerCase();
-            
-            const keywordsMatched: string[] = [];
-            const keywordsMissed: string[] = [];
-            let autoScore: number | null = null;
+      if (!simulation.showCorrectAnswers) {
+        for (const sq of simulation.questions) {
+          // Check if this is an OPEN_TEXT question
+          if (sq.question.type === 'OPEN_TEXT') {
+            const studentAnswer = answers.find(a => a.questionId === sq.questionId);
+            if (studentAnswer?.answerText && studentAnswer.answerText.trim().length > 0) {
+              // Auto-validate against keywords if available (keywords is a relation, not JSON)
+              const keywords = sq.question.keywords; // QuestionKeyword[]
+              const answerLower = studentAnswer.answerText.toLowerCase();
+              
+              const keywordsMatched: string[] = [];
+              const keywordsMissed: string[] = [];
+              let autoScore: number | null = null;
 
-            if (keywords.length > 0) {
-              let matchedWeight = 0;
-              let totalWeight = 0;
+              if (keywords.length > 0) {
+                let matchedWeight = 0;
+                let totalWeight = 0;
 
-              for (const kw of keywords) {
-                totalWeight += kw.weight;
-                if (answerLower.includes(kw.keyword.toLowerCase())) {
-                  keywordsMatched.push(kw.keyword);
-                  matchedWeight += kw.weight;
-                } else if (kw.isRequired) {
-                  keywordsMissed.push(kw.keyword);
+                for (const kw of keywords) {
+                  totalWeight += kw.weight;
+                  if (answerLower.includes(kw.keyword.toLowerCase())) {
+                    keywordsMatched.push(kw.keyword);
+                    matchedWeight += kw.weight;
+                  } else if (kw.isRequired) {
+                    keywordsMissed.push(kw.keyword);
+                  }
                 }
+
+                autoScore = totalWeight > 0 ? matchedWeight / totalWeight : null;
               }
 
-              autoScore = totalWeight > 0 ? matchedWeight / totalWeight : null;
+              openAnswersToCreate.push({
+                questionId: sq.questionId,
+                studentId,
+                simulationResultId: result.id,
+                answerText: studentAnswer.answerText,
+                keywordsMatched,
+                keywordsMissed,
+                autoScore,
+                finalScore: autoScore, // Will be overwritten by manual review
+                isValidated: false,
+              });
             }
-
-            openAnswersToCreate.push({
-              questionId: sq.questionId,
-              studentId,
-              simulationResultId: result.id,
-              answerText: studentAnswer.answerText,
-              keywordsMatched,
-              keywordsMissed,
-              autoScore,
-              finalScore: autoScore, // Will be overwritten by manual review
-              isValidated: false,
-            });
           }
         }
       }
@@ -2704,6 +2798,143 @@ export const simulationsRouter = router({
       return {
         resultId: updatedResult.id,
         message: 'Simulazione completata. I risultati saranno disponibili dopo la chiusura.',
+      };
+    }),
+
+  // Self-correct open answer (student can mark their own open answer as correct/incorrect)
+  // Only works when simulation.showCorrectAnswers = true (self-correction mode)
+  selfCorrectOpenAnswer: studentProcedure
+    .input(z.object({
+      resultId: z.string(),
+      questionId: z.string(),
+      isCorrect: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { resultId, questionId, isCorrect } = input;
+      const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
+
+      // Get the result
+      const result = await ctx.prisma.simulationResult.findUnique({
+        where: { id: resultId },
+        include: {
+          simulation: {
+            select: {
+              showCorrectAnswers: true,
+              correctPoints: true,
+              wrongPoints: true,
+              blankPoints: true,
+              useQuestionPoints: true,
+              createdById: true,
+              type: true,
+            },
+          },
+        },
+      });
+
+      if (!result) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Risultato non trovato' });
+      }
+
+      // Verify ownership: student can only self-correct their own results
+      if (result.studentId !== student.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Non puoi correggere questo risultato' });
+      }
+
+      // Verify self-correction is enabled (showCorrectAnswers must be true)
+      if (!result.simulation.showCorrectAnswers) {
+        throw new TRPCError({ 
+          code: 'FORBIDDEN', 
+          message: 'L\'autocorrezione non è abilitata per questa simulazione' 
+        });
+      }
+
+      // Get current answers
+      const currentAnswers = result.answers as Array<{
+        questionId: string;
+        answerId: string | null;
+        answerText: string | null;
+        isCorrect: boolean | null;
+        earnedPoints: number;
+        timeSpent: number;
+      }>;
+
+      // Find the answer to update
+      const answerIndex = currentAnswers.findIndex(a => a.questionId === questionId);
+      if (answerIndex === -1) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Risposta non trovata' });
+      }
+
+      const answer = currentAnswers[answerIndex];
+      
+      // Only allow correcting answers that are pending (isCorrect === null) or already corrected
+      // and have text (open questions with answers)
+      if (!answer.answerText || answer.answerText.trim().length === 0) {
+        throw new TRPCError({ 
+          code: 'BAD_REQUEST', 
+          message: 'Questa domanda non ha una risposta aperta da correggere' 
+        });
+      }
+
+      // Get question to calculate points
+      const question = await ctx.prisma.question.findUnique({
+        where: { id: questionId },
+        select: { points: true, negativePoints: true },
+      });
+
+      const points = result.simulation.useQuestionPoints && question
+        ? question.points
+        : result.simulation.correctPoints;
+
+      // Calculate point difference
+      const oldPoints = answer.earnedPoints;
+      const newPoints = isCorrect ? points : 0; // If wrong, no points (not negative for self-practice)
+      const pointDifference = newPoints - oldPoints;
+
+      // Update the answer
+      const wasCorrect = answer.isCorrect === true;
+      const wasWrong = answer.isCorrect === false;
+      const wasPending = answer.isCorrect === null;
+
+      currentAnswers[answerIndex] = {
+        ...answer,
+        isCorrect,
+        earnedPoints: newPoints,
+      };
+
+      // Calculate new counts
+      let correctDelta = 0;
+      let wrongDelta = 0;
+      let pendingDelta = 0;
+
+      if (isCorrect) {
+        correctDelta = 1;
+        if (wasWrong) wrongDelta = -1;
+        if (wasPending) pendingDelta = -1;
+        if (wasCorrect) correctDelta = 0; // Already correct, no change
+      } else {
+        wrongDelta = 1;
+        if (wasCorrect) correctDelta = -1;
+        if (wasPending) pendingDelta = -1;
+        if (wasWrong) wrongDelta = 0; // Already wrong, no change
+      }
+
+      // Update result
+      await ctx.prisma.simulationResult.update({
+        where: { id: resultId },
+        data: {
+          answers: currentAnswers as Prisma.JsonArray,
+          totalScore: (result.totalScore ?? 0) + pointDifference,
+          correctAnswers: (result.correctAnswers ?? 0) + correctDelta,
+          wrongAnswers: (result.wrongAnswers ?? 0) + wrongDelta,
+          pendingOpenAnswers: Math.max(0, (result.pendingOpenAnswers ?? 0) + pendingDelta),
+        },
+      });
+
+      return {
+        success: true,
+        newScore: (result.totalScore ?? 0) + pointDifference,
+        correctAnswers: (result.correctAnswers ?? 0) + correctDelta,
+        wrongAnswers: (result.wrongAnswers ?? 0) + wrongDelta,
       };
     }),
 
@@ -2816,6 +3047,7 @@ export const simulationsRouter = router({
       // Check if review is allowed
       if (!result.simulation.allowReview) {
         return {
+          id: result.id,
           simulation: result.simulation,
           score: result.totalScore ?? 0,
           totalScore: effectiveMaxScore,
@@ -2836,7 +3068,8 @@ export const simulationsRouter = router({
       const answersData = result.answers as Array<{
         questionId: string;
         answerId: string | null;
-        isCorrect: boolean;
+        answerText: string | null;
+        isCorrect: boolean | null;
         earnedPoints: number;
         timeSpent: number;
       }>;
@@ -2850,6 +3083,7 @@ export const simulationsRouter = router({
             select: {
               id: true,
               text: true,
+              textLatex: true,
               isCorrect: result.simulation.showCorrectAnswers,
             },
           },
@@ -2866,19 +3100,22 @@ export const simulationsRouter = router({
           question: {
             id: question?.id || '',
             text: question?.text || '',
+            textLatex: question?.textLatex || null,
             subject: question?.subject?.name || 'UNKNOWN',
             subjectColor: question?.subject?.color || null,
             explanation: question?.generalExplanation || question?.correctExplanation || null,
             answers: question?.answers || [],
           },
           selectedAnswerId: answer.answerId,
-          isCorrect: result.simulation.showCorrectAnswers ? answer.isCorrect : null,
+          answerText: answer.answerText, // Include text answer for open questions
+          isCorrect: answer.isCorrect, // Can be null for pending open answers
           earnedPoints: answer.earnedPoints,
           timeSpent: answer.timeSpent,
         };
       });
 
       return {
+        id: result.id, // Result ID for self-correction mutations
         simulation: result.simulation,
         score: result.totalScore ?? 0,
         totalScore: effectiveMaxScore,
@@ -3027,6 +3264,151 @@ export const simulationsRouter = router({
       });
 
       return { simulationId: simulation.id };
+    }),
+
+  // Create self-practice exercise (student)
+  createSelfPractice: studentProcedure
+    .input(z.object({
+      questionIds: z.array(z.string()).min(1, 'Seleziona almeno una domanda'),
+      durationMinutes: z.number().int().min(0).default(0),
+      includeOpenQuestions: z.boolean().default(false),
+      openQuestionCorrection: z.enum(['self', 'staff']).default('self'),
+      requestCorrectionFromId: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { questionIds, durationMinutes, includeOpenQuestions, openQuestionCorrection, requestCorrectionFromId } = input;
+
+      // Validate questions exist
+      const questions = await ctx.prisma.question.findMany({
+        where: {
+          id: { in: questionIds },
+          status: 'PUBLISHED',
+        },
+        include: {
+          subject: true,
+        },
+      });
+
+      if (questions.length === 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Nessuna domanda valida trovata',
+        });
+      }
+
+      // Filter out open questions if not requested
+      let finalQuestions = questions;
+      if (!includeOpenQuestions) {
+        finalQuestions = questions.filter(q => q.type !== 'OPEN_TEXT');
+      }
+
+      if (finalQuestions.length === 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Nessuna domanda disponibile con i criteri selezionati',
+        });
+      }
+
+      // Validate staff member if correction requested
+      if (openQuestionCorrection === 'staff' && requestCorrectionFromId) {
+        const staffMember = await ctx.prisma.user.findFirst({
+          where: {
+            id: requestCorrectionFromId,
+            role: { in: ['ADMIN', 'COLLABORATOR'] },
+            isActive: true,
+          },
+        });
+
+        if (!staffMember) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Docente selezionato non valido',
+          });
+        }
+      }
+
+      // Get main subject from most common subject in questions
+      const subjectCounts = finalQuestions.reduce((acc, q) => {
+        if (q.subject) {
+          acc[q.subject.name] = (acc[q.subject.name] || 0) + 1;
+        }
+        return acc;
+      }, {} as Record<string, number>);
+
+      const uniqueSubjects = Object.keys(subjectCounts);
+      
+      // Determine title based on subject distribution
+      let titleSubject: string;
+      if (uniqueSubjects.length === 0) {
+        titleSubject = 'Varie';
+      } else if (uniqueSubjects.length === 1) {
+        titleSubject = uniqueSubjects[0];
+      } else if (uniqueSubjects.length >= 4) {
+        // If 4 or more subjects, consider it "all subjects"
+        titleSubject = 'Multi-materia';
+      } else {
+        // 2-3 subjects: show most common one
+        const mainSubject = Object.entries(subjectCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+        titleSubject = mainSubject || 'Varie';
+      }
+
+      // Create simulation
+      const simulation = await ctx.prisma.simulation.create({
+        data: {
+          title: `Autoesercitazione ${titleSubject} - ${new Date().toLocaleDateString('it-IT')}`,
+          description: `Esercitazione autogenerata con ${finalQuestions.length} domande.${
+            openQuestionCorrection === 'staff' ? ' Correzione domande aperte richiesta a docente.' : ''
+          }`,
+          type: 'QUICK_QUIZ',
+          status: 'PUBLISHED',
+          visibility: 'PRIVATE',
+          createdBy: { connect: { id: ctx.user.id } },
+          creatorRole: 'STUDENT',
+          isOfficial: false,
+          durationMinutes,
+          totalQuestions: finalQuestions.length,
+          showResults: true,
+          showCorrectAnswers: openQuestionCorrection === 'self',
+          allowReview: true,
+          randomizeOrder: true,
+          randomizeAnswers: true,
+          correctPoints: 1.0,
+          wrongPoints: 0,
+          blankPoints: 0,
+          isRepeatable: true,
+          maxAttempts: null,
+          questions: {
+            create: finalQuestions.map((q, i) => ({
+              question: { connect: { id: q.id } },
+              order: i,
+            })),
+          },
+          // NO assignments - self-practice simulations don't need assignments
+        },
+        include: {
+          questions: {
+            include: {
+              question: {
+                select: {
+                  id: true,
+                  type: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // If correction requested from staff, create notification
+      if (openQuestionCorrection === 'staff' && requestCorrectionFromId) {
+        // TODO: Create notification for staff member
+        // This would require a notification service/system
+      }
+
+      return { 
+        id: simulation.id,
+        hasOpenQuestions: simulation.questions.some(q => q.question.type === 'OPEN_TEXT'),
+      };
     }),
 
   // ==================== STATISTICS ====================

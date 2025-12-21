@@ -3,11 +3,14 @@
 import { use, useState, useMemo, useEffect } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
-import { PageLoader } from '@/components/ui/loaders';
+import { PageLoader, ButtonLoader } from '@/components/ui/loaders';
+import { useToast } from '@/components/ui/Toast';
+import { useApiError } from '@/lib/hooks/useApiError';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import { auth } from '@/lib/firebase/config';
+import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import {
   ArrowLeft,
   Trophy,
@@ -25,6 +28,9 @@ import {
   Medal,
   Star,
   Edit3,
+  ThumbsUp,
+  ThumbsDown,
+  MessageSquare,
 } from 'lucide-react';
 
 /**
@@ -36,10 +42,12 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
   const searchParams = useSearchParams();
   const router = useRouter();
   const resultId = searchParams.get('resultId');
+  const { showSuccess } = useToast();
+  const { handleMutationError } = useApiError();
 
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);
   const [showAllQuestions, setShowAllQuestions] = useState(false);
-  const [filterType, setFilterType] = useState<'all' | 'correct' | 'wrong' | 'blank'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'correct' | 'wrong' | 'blank' | 'pending'>('all');
 
   // Check authentication
   const { data: user, isLoading: userLoading, error: userError } = trpc.auth.me.useQuery();
@@ -62,10 +70,19 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
   }, [userError, userLoading, user, router]);
 
   // Fetch result details - use resultId if available, otherwise use simulationId
-  const { data: result, isLoading, error } = trpc.simulations.getResultDetails.useQuery(
+  const { data: result, isLoading, error, refetch } = trpc.simulations.getResultDetails.useQuery(
     resultId ? { resultId } : { simulationId },
     { enabled: !!user }
   );
+
+  // Self-correct mutation
+  const selfCorrectMutation = trpc.simulations.selfCorrectOpenAnswer.useMutation({
+    onSuccess: () => {
+      showSuccess('Corretto!', 'La tua risposta è stata valutata.');
+      refetch();
+    },
+    onError: handleMutationError,
+  });
 
   // Fetch leaderboard data
   const { data: leaderboardData } = trpc.simulations.getLeaderboard.useQuery(
@@ -111,7 +128,13 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
       case 'wrong':
         return result.answers.filter((a: { isCorrect: boolean | null }) => a.isCorrect === false);
       case 'blank':
-        return result.answers.filter((a: { isCorrect: boolean | null }) => a.isCorrect === null);
+        return result.answers.filter((a: { isCorrect: boolean | null; answerText?: string | null }) => 
+          a.isCorrect === null && !a.answerText
+        );
+      case 'pending':
+        return result.answers.filter((a: { isCorrect: boolean | null; answerText?: string | null }) => 
+          a.isCorrect === null && !!a.answerText
+        );
       default:
         return result.answers;
     }
@@ -152,7 +175,8 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
     );
   }
 
-  const { simulation, score, totalScore, correctAnswers, wrongAnswers, blankAnswers, pendingOpenAnswers = 0, timeSpent, passed } = result;
+  const { id: currentResultId, simulation, score, totalScore, correctAnswers, wrongAnswers, blankAnswers, pendingOpenAnswers = 0, timeSpent, passed } = result;
+  const showSelfCorrection = simulation.showCorrectAnswers;
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8 max-w-5xl mx-auto">
@@ -206,16 +230,23 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
             )}
           </div>
 
-          {/* Pending review banner */}
+          {/* Pending review banner - different message based on self-correction vs staff correction */}
           {pendingOpenAnswers > 0 && (
-            <div className="mb-6 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 flex items-start gap-3">
-              <Edit3 className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
+            <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 ${
+              showSelfCorrection 
+                ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
+                : 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800'
+            }`}>
+              <Edit3 className={`w-5 h-5 mt-0.5 flex-shrink-0 ${showSelfCorrection ? 'text-blue-500' : 'text-amber-500'}`} />
               <div>
-                <p className="font-medium text-amber-800 dark:text-amber-200">
-                  {pendingOpenAnswers} {pendingOpenAnswers === 1 ? 'risposta aperta' : 'risposte aperte'} in attesa di correzione
+                <p className={`font-medium ${showSelfCorrection ? 'text-blue-800 dark:text-blue-200' : 'text-amber-800 dark:text-amber-200'}`}>
+                  {pendingOpenAnswers} {pendingOpenAnswers === 1 ? 'risposta aperta da valutare' : 'risposte aperte da valutare'}
                 </p>
-                <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                  Il punteggio finale verrà ricalcolato dopo la correzione da parte dello staff.
+                <p className={`text-sm mt-1 ${showSelfCorrection ? 'text-blue-700 dark:text-blue-300' : 'text-amber-700 dark:text-amber-300'}`}>
+                  {showSelfCorrection 
+                    ? 'Scorri le domande e valuta le tue risposte aperte cliccando su "Corretta" o "Sbagliata".'
+                    : 'Il punteggio finale verrà ricalcolato dopo la correzione da parte dello staff.'
+                  }
                 </p>
               </div>
             </div>
@@ -418,15 +449,20 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
                 { value: 'all', label: 'Tutte', count: result.answers.length },
                 { value: 'correct', label: 'Corrette', count: correctAnswers },
                 { value: 'wrong', label: 'Errate', count: wrongAnswers },
-                { value: 'blank', label: 'Non date', count: blankAnswers },
+                { value: 'blank', label: 'Non date', count: blankAnswers - pendingOpenAnswers },
+                ...(pendingOpenAnswers > 0 ? [{ value: 'pending', label: '⚡ Da valutare', count: pendingOpenAnswers }] : []),
               ].map((filter) => (
                 <button
                   key={filter.value}
                   onClick={() => setFilterType(filter.value as typeof filterType)}
                   className={`px-3 py-1.5 rounded-full text-sm ${
                     filterType === filter.value
-                      ? `${colors.primary.bg} text-white`
-                      : `${colors.background.secondary} ${colors.text.secondary}`
+                      ? filter.value === 'pending' 
+                        ? 'bg-amber-500 text-white'
+                        : `${colors.primary.bg} text-white`
+                      : filter.value === 'pending'
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 ring-2 ring-amber-400 animate-pulse'
+                        : `${colors.background.secondary} ${colors.text.secondary}`
                   }`}
                 >
                   {filter.label} ({filter.count})
@@ -441,17 +477,21 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
               question: {
                 id: string;
                 text: string;
+                textLatex?: string | null;
                 subject: string;
                 subjectColor?: string | null;
-                answers: { id: string; text: string; isCorrect: boolean }[];
+                answers: { id: string; text: string; textLatex?: string | null; isCorrect: boolean }[];
                 explanation?: string;
               };
               selectedAnswerId: string | null;
+              answerText?: string | null;
               isCorrect: boolean | null;
               timeSpent: number;
             }, index: number) => {
               const isExpanded = showAllQuestions || expandedQuestion === answer.id;
               const subjectColor = answer.question.subjectColor;
+              const isOpenQuestion = !!answer.answerText && answer.question.answers.length === 0;
+              const canSelfCorrect = isOpenQuestion && answer.isCorrect === null && simulation.showCorrectAnswers;
 
               return (
                 <div key={answer.id} className="p-4">
@@ -492,10 +532,13 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
                             isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
                           )}
                         </div>
-                        <div
-                          className={`text-sm ${colors.text.secondary} line-clamp-1 mt-1`}
-                          dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.question.text) }}
-                        />
+                        <div className={`text-sm ${colors.text.secondary} line-clamp-1 mt-1`}>
+                          {answer.question.textLatex ? (
+                            <LaTeXRenderer latex={answer.question.textLatex} className="line-clamp-1" displayMode={false} />
+                          ) : (
+                            <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.question.text) }} />
+                          )}
+                        </div>
                       </div>
                     </div>
                   </button>
@@ -503,14 +546,104 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
                   {isExpanded && (
                     <div className="mt-4 pl-11 space-y-3">
                       {/* Full question */}
-                      <div
-                        className={`p-3 rounded-lg ${colors.background.secondary} ${colors.text.primary}`}
-                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.question.text) }}
-                      />
+                      <div className={`p-3 rounded-lg ${colors.background.secondary} ${colors.text.primary} space-y-2`}>
+                        {/* Question text */}
+                        {answer.question.text && (
+                          <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.question.text) }} />
+                        )}
+                        {/* LaTeX formula if present */}
+                        {answer.question.textLatex && (
+                          <div className="mt-3">
+                            <LaTeXRenderer latex={answer.question.textLatex} className={colors.text.primary} />
+                          </div>
+                        )}
+                      </div>
 
-                      {/* Answers */}
-                      <div className="space-y-2">
-                        {answer.question.answers.map((a: { id: string; text: string; isCorrect: boolean }, i: number) => {
+                      {/* Open question - show student's answer and self-correction UI */}
+                      {isOpenQuestion ? (
+                        <div className="space-y-3">
+                          {/* Student's answer */}
+                          <div className={`p-4 rounded-lg border-2 ${
+                            answer.isCorrect === null 
+                              ? 'border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20'
+                              : answer.isCorrect 
+                              ? 'border-green-300 dark:border-green-600 bg-green-50 dark:bg-green-900/20'
+                              : 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20'
+                          }`}>
+                            <div className="flex items-center gap-2 mb-2">
+                              <MessageSquare className="w-4 h-4 text-gray-500" />
+                              <span className={`text-sm font-medium ${colors.text.secondary}`}>La tua risposta:</span>
+                            </div>
+                            <div 
+                              className={`${colors.text.primary}`}
+                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.answerText || '') }}
+                            />
+                          </div>
+
+                          {/* Self-correction buttons */}
+                          {canSelfCorrect && currentResultId && (
+                            <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                              <p className="text-sm font-medium text-blue-700 dark:text-blue-300 mb-3">
+                                Valuta la tua risposta confrontandola con la soluzione:
+                              </p>
+                              <div className="flex gap-3">
+                                <button
+                                  onClick={() => selfCorrectMutation.mutate({
+                                    resultId: currentResultId,
+                                    questionId: answer.question.id,
+                                    isCorrect: true,
+                                  })}
+                                  disabled={selfCorrectMutation.isPending}
+                                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-green-500 hover:bg-green-600 text-white font-medium transition-colors disabled:opacity-50"
+                                >
+                                  <ButtonLoader loading={selfCorrectMutation.isPending}>
+                                    <ThumbsUp className="w-5 h-5" />
+                                    <span>Corretta</span>
+                                  </ButtonLoader>
+                                </button>
+                                <button
+                                  onClick={() => selfCorrectMutation.mutate({
+                                    resultId: currentResultId,
+                                    questionId: answer.question.id,
+                                    isCorrect: false,
+                                  })}
+                                  disabled={selfCorrectMutation.isPending}
+                                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium transition-colors disabled:opacity-50"
+                                >
+                                  <ButtonLoader loading={selfCorrectMutation.isPending}>
+                                    <ThumbsDown className="w-5 h-5" />
+                                    <span>Sbagliata</span>
+                                  </ButtonLoader>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Already corrected status */}
+                          {isOpenQuestion && answer.isCorrect !== null && (
+                            <div className={`p-3 rounded-lg flex items-center gap-2 ${
+                              answer.isCorrect 
+                                ? 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                                : 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                            }`}>
+                              {answer.isCorrect ? (
+                                <>
+                                  <CheckCircle className="w-5 h-5" />
+                                  <span className="font-medium">Hai valutato questa risposta come corretta</span>
+                                </>
+                              ) : (
+                                <>
+                                  <XCircle className="w-5 h-5" />
+                                  <span className="font-medium">Hai valutato questa risposta come sbagliata</span>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* Multiple choice answers */
+                        <div className="space-y-2">
+                          {answer.question.answers.map((a: { id: string; text: string; textLatex?: string | null; isCorrect: boolean }, i: number) => {
                           const label = String.fromCharCode(65 + i);
                           const isSelected = answer.selectedAnswerId === a.id;
                           const isCorrectAnswer = a.isCorrect;
@@ -541,10 +674,13 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
                               }`}>
                                 {label}
                               </span>
-                              <div 
-                                className="flex-1"
-                                dangerouslySetInnerHTML={{ __html: sanitizeHtml(a.text) }}
-                              />
+                              <div className="flex-1">
+                                {a.textLatex ? (
+                                  <LaTeXRenderer latex={a.textLatex} displayMode={false} />
+                                ) : (
+                                  <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(a.text) }} />
+                                )}
+                              </div>
                               {isSelected && (
                                 <span className="text-xs">La tua risposta</span>
                               )}
@@ -555,6 +691,7 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
                           );
                         })}
                       </div>
+                      )}
 
                       {/* Explanation */}
                       {answer.question.explanation && (

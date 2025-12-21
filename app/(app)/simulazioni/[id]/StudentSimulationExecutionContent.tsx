@@ -1292,7 +1292,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white ${colors.primary.bg} hover:opacity-90`}
             >
               <Send className="w-4 h-4" />
-              <span className="hidden sm:inline">Consegna</span>
+              <span className="hidden sm:inline">Concludi</span>
             </button>
           </div>
         </div>

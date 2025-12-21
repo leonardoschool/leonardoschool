@@ -824,4 +824,28 @@ export const usersRouter = router({
       });
       return { success: true };
     }),
+
+  /**
+   * Get all staff members (admin + collaborators) for selection
+   */
+  getStaff: protectedProcedure.query(async ({ ctx }) => {
+    const staff = await ctx.prisma.user.findMany({
+      where: {
+        role: { in: ['ADMIN', 'COLLABORATOR'] },
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+      },
+      orderBy: [
+        { role: 'asc' }, // ADMIN first
+        { name: 'asc' },
+      ],
+    });
+
+    return staff;
+  }),
 });

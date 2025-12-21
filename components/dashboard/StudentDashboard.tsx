@@ -6,6 +6,7 @@ import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
+import SelfPracticeModal from '@/components/student/SelfPracticeModal';
 import {
   User,
   FileText,
@@ -27,6 +28,7 @@ import {
   Eye,
   X,
   FolderOpen,
+  Zap,
 } from 'lucide-react';
 
 type ContractStatus = 'PENDING' | 'SIGNED' | 'EXPIRED' | 'CANCELLED';
@@ -53,6 +55,7 @@ interface StudentDashboardProps {
 
 export function StudentDashboard({ user }: StudentDashboardProps) {
   const [showContractModal, setShowContractModal] = useState(false);
+  const [showSelfPracticeModal, setShowSelfPracticeModal] = useState(false);
 
   // Get student's contract - only if user is a student with student data
   const { data: contract } = trpc.contracts.getMyContract.useQuery(
@@ -495,7 +498,38 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
 
       {/* Quick Actions (only if active) */}
       {user?.isActive && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="space-y-6">
+          {/* Auto-Practice CTA */}
+          <button
+            onClick={() => setShowSelfPracticeModal(true)}
+            className="w-full group relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 p-8 hover:shadow-2xl transition-all duration-300"
+          >
+            <div className="absolute inset-0 bg-white/10 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="relative flex items-center justify-between gap-6">
+              <div className="flex-1 text-left">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                    <Zap className="w-6 h-6 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-white">
+                    Autoesercitazione
+                  </h3>
+                </div>
+                <p className="text-white/90">
+                  Crea il tuo quiz personalizzato e allenati quando vuoi. Scegli materie, difficoltà e numero di domande. 
+                  Puoi anche richiedere la correzione delle domande aperte ai tuoi docenti!
+                </p>
+              </div>
+              <div className="flex-shrink-0">
+                <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <BookOpen className="w-8 h-8 text-white" />
+                </div>
+              </div>
+            </div>
+          </button>
+
+          {/* Other Quick Actions */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Link href="/simulazioni" className={`${colors.background.card} rounded-2xl ${colors.effects.shadow.lg} p-6 hover:shadow-xl transition-shadow cursor-pointer group`}>
             <div className={`w-12 h-12 rounded-xl ${colors.subjects.biologia.bg} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
               <BookOpen className="w-6 h-6 text-white" />
@@ -527,6 +561,7 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
             <h3 className={`font-semibold ${colors.text.primary} mb-1`}>Il mio Gruppo</h3>
             <p className={`text-sm ${colors.text.secondary}`}>Visualizza il tuo gruppo di studio</p>
           </Link>
+          </div>
         </div>
       )}
 
@@ -647,6 +682,12 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
           </div>
         </div>
       )}
+      
+      {/* Self Practice Modal */}
+      <SelfPracticeModal
+        isOpen={showSelfPracticeModal}
+        onClose={() => setShowSelfPracticeModal(false)}
+      />
     </div>
   );
 }

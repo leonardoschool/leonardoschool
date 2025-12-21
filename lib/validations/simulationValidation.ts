@@ -249,6 +249,8 @@ export const studentSimulationFilterSchema = z.object({
   type: SimulationTypeEnum.optional(),
   status: z.enum(['available', 'in_progress', 'completed', 'expired']).optional(),
   isOfficial: z.boolean().optional(),
+  selfCreated: z.boolean().optional(), // Filter for self-practice simulations
+  assignedToMe: z.boolean().optional(), // Filter for assigned simulations
   
   // Sorting
   sortBy: z.enum(['startDate', 'endDate', 'dueDate', 'title']).default('startDate'),
@@ -478,3 +480,73 @@ export const bulkPaperResultsSchema = z.object({
 });
 
 export type BulkPaperResultsInput = z.infer<typeof bulkPaperResultsSchema>;
+
+// ==================== SMART RANDOM QUESTION GENERATION ====================
+
+// Preset for smart random generation
+export const SmartRandomPresetEnum = z.enum([
+  'PROPORTIONAL',  // Distribution proportional to available questions per subject
+  'BALANCED',      // Equal distribution across subjects
+  'SINGLE_SUBJECT', // Focus on single subject
+  'CUSTOM',        // User-defined distribution
+]);
+export type SmartRandomPreset = z.infer<typeof SmartRandomPresetEnum>;
+
+// Difficulty mix options
+export const DifficultyMixEnum = z.enum([
+  'BALANCED',    // 30% easy, 50% medium, 20% hard
+  'EASY_FOCUS',  // 50% easy, 40% medium, 10% hard
+  'HARD_FOCUS',  // 10% easy, 40% medium, 50% hard
+  'MEDIUM_ONLY', // 100% medium
+  'MIXED',       // Equal mix 33/34/33
+]);
+export type DifficultyMix = z.infer<typeof DifficultyMixEnum>;
+
+// Smart random generation input schema
+export const smartRandomGenerationSchema = z.object({
+  // Required: how many questions (minimum 5, no maximum)
+  totalQuestions: z.number().int().min(5),
+  
+  // Distribution preset
+  preset: SmartRandomPresetEnum.default('BALANCED'),
+  
+  // For SINGLE_SUBJECT preset
+  focusSubjectId: z.string().optional().nullable(),
+  
+  // For CUSTOM preset - manual distribution { subjectId: numberOfQuestions }
+  customSubjectDistribution: z.record(z.string(), z.number().int().min(0)).optional().nullable(),
+  
+  // Difficulty distribution
+  difficultyMix: DifficultyMixEnum.default('BALANCED'),
+  
+  // Smart features
+  avoidRecentlyUsed: z.boolean().default(true),     // Avoid questions used in recent simulations
+  maximizeTopicCoverage: z.boolean().default(true), // Cover more topics rather than repeating same
+  preferRecentQuestions: z.boolean().default(false), // Prefer newly added questions
+  
+  // Optional tag filters (if user wants to limit to specific tags)
+  tagIds: z.array(z.string()).optional().nullable(),
+  
+  // Exclude specific questions
+  excludeQuestionIds: z.array(z.string()).optional().nullable(),
+});
+
+export type SmartRandomGenerationInput = z.infer<typeof smartRandomGenerationSchema>;
+
+// Helper to get difficulty ratios from mix
+export const getDifficultyRatios = (mix: DifficultyMix): { EASY: number; MEDIUM: number; HARD: number } => {
+  switch (mix) {
+    case 'BALANCED':
+      return { EASY: 0.30, MEDIUM: 0.50, HARD: 0.20 };
+    case 'EASY_FOCUS':
+      return { EASY: 0.50, MEDIUM: 0.40, HARD: 0.10 };
+    case 'HARD_FOCUS':
+      return { EASY: 0.10, MEDIUM: 0.40, HARD: 0.50 };
+    case 'MEDIUM_ONLY':
+      return { EASY: 0, MEDIUM: 1.0, HARD: 0 };
+    case 'MIXED':
+      return { EASY: 0.33, MEDIUM: 0.34, HARD: 0.33 };
+    default:
+      return { EASY: 0.30, MEDIUM: 0.50, HARD: 0.20 };
+  }
+};

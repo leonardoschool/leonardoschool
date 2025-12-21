@@ -12,6 +12,10 @@ import {
   validateQuestionKeywords,
   importQuestionRowSchema,
 } from '@/lib/validations/questionValidation';
+import {
+  smartRandomGenerationSchema,
+  getDifficultyRatios,
+} from '@/lib/validations/simulationValidation';
 import * as notificationService from '@/server/services/notificationService';
 
 export const questionsRouter = router({
@@ -1574,4 +1578,426 @@ export const questionsRouter = router({
       })),
     }));
   }),
+
+  // Get questions by IDs for study mode
+  getByIds: protectedProcedure
+    .input(z.object({
+      ids: z.array(z.string()).min(1).max(100),
+    }))
+    .query(async ({ ctx, input }) => {
+      const questions = await ctx.prisma.question.findMany({
+        where: {
+          id: { in: input.ids },
+          status: 'PUBLISHED',
+        },
+        select: {
+          id: true,
+          text: true,
+          textLatex: true,
+          difficulty: true,
+          generalExplanation: true,
+          type: true,
+          subject: {
+            select: { id: true, name: true, color: true },
+          },
+          topic: {
+            select: { id: true, name: true },
+          },
+          answers: {
+            select: {
+              id: true,
+              text: true,
+              isCorrect: true,
+              order: true,
+            },
+            orderBy: { order: 'asc' },
+          },
+        },
+      });
+
+      // Sort by the order of input IDs
+      const idOrder = new Map(input.ids.map((id, index) => [id, index]));
+      questions.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
+
+      return questions;
+    }),
+
+  // ==================== SMART RANDOM GENERATION ====================
+  
+  /**
+   * Generate smart random questions for simulation creation.
+   * Uses intelligent algorithms to create balanced simulations based on:
+   * - Subject distribution (TOLC-MED, balanced, or custom)
+   * - Difficulty mix (easy/medium/hard ratios)
+   * - Topic coverage (maximize variety)
+   * - Question freshness (prefer less used questions)
+   */
+  generateSmartRandomQuestions: protectedProcedure
+    .input(smartRandomGenerationSchema)
+    .mutation(async ({ ctx, input }) => {
+      const {
+        totalQuestions,
+        preset,
+        focusSubjectId,
+        customSubjectDistribution,
+        difficultyMix,
+        avoidRecentlyUsed,
+        maximizeTopicCoverage,
+        preferRecentQuestions,
+        tagIds,
+        excludeQuestionIds,
+      } = input;
+
+      // Step 1: Get all subjects with their question counts
+      const subjects = await ctx.prisma.customSubject.findMany({
+        where: { isActive: true },
+        include: {
+          _count: {
+            select: {
+              questions: {
+                where: { status: 'PUBLISHED' },
+              },
+            },
+          },
+        },
+      });
+
+      // Map subjects by id
+      const subjectsById = new Map(subjects.map(s => [s.id, s]));
+
+      // Step 2: Calculate target distribution per subject
+      const targetDistribution: Map<string, number> = new Map();
+      
+      if (preset === 'PROPORTIONAL') {
+        // Distribution proportional to available questions per subject
+        const activeSubjectsWithQuestions = subjects.filter(s => s._count.questions > 0);
+        const totalAvailable = activeSubjectsWithQuestions.reduce((sum, s) => sum + s._count.questions, 0);
+        
+        if (totalAvailable > 0) {
+          let distributed = 0;
+          activeSubjectsWithQuestions.forEach((s, idx) => {
+            const proportion = s._count.questions / totalAvailable;
+            const count = idx === activeSubjectsWithQuestions.length - 1
+              ? totalQuestions - distributed // Last subject gets remainder
+              : Math.round(proportion * totalQuestions);
+            targetDistribution.set(s.id, count);
+            distributed += count;
+          });
+        }
+      } else if (preset === 'BALANCED') {
+        // Equal distribution across all subjects
+        const activeSubjectsWithQuestions = subjects.filter(s => s._count.questions > 0);
+        const perSubject = Math.floor(totalQuestions / activeSubjectsWithQuestions.length);
+        const remainder = totalQuestions % activeSubjectsWithQuestions.length;
+        activeSubjectsWithQuestions.forEach((s, idx) => {
+          targetDistribution.set(s.id, perSubject + (idx < remainder ? 1 : 0));
+        });
+      } else if (preset === 'SINGLE_SUBJECT' && focusSubjectId) {
+        // All questions from single subject
+        targetDistribution.set(focusSubjectId, totalQuestions);
+      } else if (preset === 'CUSTOM' && customSubjectDistribution) {
+        // User-defined distribution
+        for (const [subjectId, count] of Object.entries(customSubjectDistribution)) {
+          if (count > 0) {
+            targetDistribution.set(subjectId, count);
+          }
+        }
+      } else {
+        // Fallback: proportional distribution
+        const activeSubjectsWithQuestions = subjects.filter(s => s._count.questions > 0);
+        const totalAvailable = activeSubjectsWithQuestions.reduce((sum, s) => sum + s._count.questions, 0);
+        
+        if (totalAvailable > 0) {
+          let distributed = 0;
+          activeSubjectsWithQuestions.forEach((s, idx) => {
+            const proportion = s._count.questions / totalAvailable;
+            const count = idx === activeSubjectsWithQuestions.length - 1
+              ? totalQuestions - distributed
+              : Math.round(proportion * totalQuestions);
+            targetDistribution.set(s.id, count);
+            distributed += count;
+          });
+        }
+      }
+
+      // Ensure total matches requested
+      const currentTotal = Array.from(targetDistribution.values()).reduce((a, b) => a + b, 0);
+      if (currentTotal < totalQuestions && targetDistribution.size > 0) {
+        // Add remainder to first subject
+        const firstKey = Array.from(targetDistribution.keys())[0];
+        targetDistribution.set(firstKey, (targetDistribution.get(firstKey) || 0) + (totalQuestions - currentTotal));
+      }
+
+      // Step 3: Get difficulty ratios
+      const difficultyRatios = getDifficultyRatios(difficultyMix);
+
+      // Step 4: Build base query for available questions
+      const baseWhere: Record<string, unknown> = {
+        status: 'PUBLISHED',
+      };
+
+      if (excludeQuestionIds && excludeQuestionIds.length > 0) {
+        baseWhere.id = { notIn: excludeQuestionIds };
+      }
+
+      if (tagIds && tagIds.length > 0) {
+        baseWhere.questionTags = {
+          some: {
+            tagId: { in: tagIds },
+          },
+        };
+      }
+
+      // Step 5: Select questions per subject with smart ordering
+      const selectedQuestions: Array<{
+        questionId: string;
+        order: number;
+        question: {
+          id: string;
+          text: string;
+          type: string;
+          difficulty: string;
+          subject?: { id: string; name: string; color: string | null };
+          topic?: { id: string; name: string };
+        };
+      }> = [];
+
+      let orderCounter = 0;
+
+      for (const [subjectId, targetCount] of targetDistribution.entries()) {
+        if (targetCount === 0) continue;
+
+        const subject = subjectsById.get(subjectId);
+        if (!subject) continue;
+
+        // Calculate difficulty counts for this subject
+        const difficultyTargets = {
+          EASY: Math.round(targetCount * difficultyRatios.EASY),
+          MEDIUM: Math.round(targetCount * difficultyRatios.MEDIUM),
+          HARD: Math.round(targetCount * difficultyRatios.HARD),
+        };
+
+        // Ensure we get exactly targetCount
+        const diffTotal = difficultyTargets.EASY + difficultyTargets.MEDIUM + difficultyTargets.HARD;
+        if (diffTotal < targetCount) {
+          difficultyTargets.MEDIUM += targetCount - diffTotal;
+        } else if (diffTotal > targetCount) {
+          // Reduce from hard first, then medium
+          const excess = diffTotal - targetCount;
+          if (difficultyTargets.HARD >= excess) {
+            difficultyTargets.HARD -= excess;
+          } else {
+            difficultyTargets.MEDIUM -= (excess - difficultyTargets.HARD);
+            difficultyTargets.HARD = 0;
+          }
+        }
+
+        // Get questions for each difficulty level
+        const selectedForSubject: string[] = [];
+
+        for (const [difficulty, count] of Object.entries(difficultyTargets)) {
+          if (count === 0) continue;
+
+          // Build order by clause for smart selection
+          const orderByClause: Array<{ [key: string]: 'asc' | 'desc' }> = [];
+          
+          if (avoidRecentlyUsed) {
+            orderByClause.push({ timesUsed: 'asc' }); // Prefer less used
+          }
+          if (preferRecentQuestions) {
+            orderByClause.push({ createdAt: 'desc' }); // Prefer newer
+          }
+          if (maximizeTopicCoverage) {
+            // We'll handle this with grouping later
+            orderByClause.push({ topicId: 'asc' }); // Group by topic
+          }
+          // Add some randomness by also ordering randomly
+          orderByClause.push({ id: 'asc' }); // Stable fallback
+
+          const questions = await ctx.prisma.question.findMany({
+            where: {
+              ...baseWhere,
+              subjectId,
+              difficulty: difficulty as 'EASY' | 'MEDIUM' | 'HARD',
+              id: { notIn: selectedForSubject },
+            },
+            take: count * 3, // Get more than needed for shuffling
+            orderBy: orderByClause,
+            select: {
+              id: true,
+              text: true,
+              type: true,
+              difficulty: true,
+              topicId: true,
+              timesUsed: true,
+              createdAt: true,
+              subject: {
+                select: { id: true, name: true, color: true },
+              },
+              topic: {
+                select: { id: true, name: true },
+              },
+            },
+          });
+
+          // Apply topic coverage maximization
+          let finalQuestions = questions;
+          if (maximizeTopicCoverage && questions.length > count) {
+            // Group by topic and pick one from each topic first
+            const byTopic = new Map<string | null, typeof questions>();
+            for (const q of questions) {
+              const topicId = q.topicId;
+              if (!byTopic.has(topicId)) {
+                byTopic.set(topicId, []);
+              }
+              byTopic.get(topicId)!.push(q);
+            }
+
+            // Round-robin pick from topics
+            const result: typeof questions = [];
+            const topicIterators = Array.from(byTopic.values()).map(arr => ({ arr, idx: 0 }));
+            let topicIdx = 0;
+            
+            while (result.length < count && topicIterators.some(t => t.idx < t.arr.length)) {
+              const iterator = topicIterators[topicIdx % topicIterators.length];
+              if (iterator.idx < iterator.arr.length) {
+                result.push(iterator.arr[iterator.idx]);
+                iterator.idx++;
+              }
+              topicIdx++;
+            }
+            
+            finalQuestions = result;
+          }
+
+          // Shuffle and take only what we need
+          const shuffled = [...finalQuestions].sort(() => Math.random() - 0.5);
+          const picked = shuffled.slice(0, count);
+
+          for (const q of picked) {
+            selectedForSubject.push(q.id);
+            selectedQuestions.push({
+              questionId: q.id,
+              order: orderCounter++,
+              question: {
+                id: q.id,
+                text: q.text,
+                type: q.type,
+                difficulty: q.difficulty,
+                subject: q.subject ?? undefined,
+                topic: q.topic ?? undefined,
+              },
+            });
+          }
+        }
+
+        // If we didn't get enough questions, try to fill the gap while respecting difficulty ratios
+        const remainingNeeded = targetCount - selectedForSubject.length;
+        if (remainingNeeded > 0) {
+          // Calculate how many of each difficulty we still need, respecting original ratios
+          const remainingDifficultyTargets = {
+            EASY: Math.round(remainingNeeded * difficultyRatios.EASY),
+            MEDIUM: Math.round(remainingNeeded * difficultyRatios.MEDIUM),
+            HARD: Math.round(remainingNeeded * difficultyRatios.HARD),
+          };
+
+          // Ensure total matches
+          const diffTotal = remainingDifficultyTargets.EASY + remainingDifficultyTargets.MEDIUM + remainingDifficultyTargets.HARD;
+          if (diffTotal < remainingNeeded) {
+            remainingDifficultyTargets.MEDIUM += remainingNeeded - diffTotal;
+          }
+
+          // Try to get remaining questions for each difficulty level
+          for (const [difficulty, count] of Object.entries(remainingDifficultyTargets)) {
+            if (count === 0) continue;
+
+            const extraQuestions = await ctx.prisma.question.findMany({
+              where: {
+                ...baseWhere,
+                subjectId,
+                difficulty: difficulty as 'EASY' | 'MEDIUM' | 'HARD',
+                id: { notIn: selectedForSubject },
+              },
+              take: count,
+              orderBy: avoidRecentlyUsed ? { timesUsed: 'asc' } : { createdAt: 'desc' },
+              select: {
+                id: true,
+                text: true,
+                type: true,
+                difficulty: true,
+                subject: {
+                  select: { id: true, name: true, color: true },
+                },
+                topic: {
+                  select: { id: true, name: true },
+                },
+              },
+            });
+
+            for (const q of extraQuestions) {
+              selectedForSubject.push(q.id);
+              selectedQuestions.push({
+                questionId: q.id,
+                order: orderCounter++,
+                question: {
+                  id: q.id,
+                  text: q.text,
+                  type: q.type,
+                  difficulty: q.difficulty,
+                  subject: q.subject ?? undefined,
+                  topic: q.topic ?? undefined,
+                },
+              });
+            }
+          }
+        }
+      }
+
+      // Final shuffle to mix subjects together
+      const finalQuestions = [...selectedQuestions]
+        .sort(() => Math.random() - 0.5)
+        .map((q, idx) => ({ ...q, order: idx }));
+
+      // Calculate statistics for the generated set
+      const stats = {
+        total: finalQuestions.length,
+        bySubject: {} as Record<string, { name: string; count: number; color: string | null }>,
+        byDifficulty: { EASY: 0, MEDIUM: 0, HARD: 0 } as Record<string, number>,
+        topicsCovered: new Set<string>(),
+      };
+
+      for (const q of finalQuestions) {
+        // Subject stats
+        const subjectName = q.question.subject?.name || 'Sconosciuta';
+        if (!stats.bySubject[subjectName]) {
+          stats.bySubject[subjectName] = { 
+            name: subjectName, 
+            count: 0, 
+            color: q.question.subject?.color || null 
+          };
+        }
+        stats.bySubject[subjectName].count++;
+
+        // Difficulty stats
+        stats.byDifficulty[q.question.difficulty]++;
+
+        // Topic coverage
+        if (q.question.topic) {
+          stats.topicsCovered.add(q.question.topic.id);
+        }
+      }
+
+      return {
+        questions: finalQuestions,
+        stats: {
+          ...stats,
+          topicsCovered: stats.topicsCovered.size,
+        },
+        requestedTotal: totalQuestions,
+        achievedTotal: finalQuestions.length,
+        warning: finalQuestions.length < totalQuestions 
+          ? `Sono state trovate solo ${finalQuestions.length} domande corrispondenti ai criteri (richieste: ${totalQuestions}).`
+          : undefined,
+      };
+    }),
 });

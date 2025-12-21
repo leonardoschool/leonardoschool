@@ -75,6 +75,12 @@ function getErrorCode(error: unknown): string {
     // tRPC v11 error shape
     if (err.data && typeof err.data === 'object') {
       const data = err.data as Record<string, unknown>;
+      
+      // Zod validation error
+      if (data.zodError) {
+        return 'BAD_REQUEST';
+      }
+      
       if (typeof data.code === 'string') return data.code;
     }
     
@@ -93,12 +99,76 @@ function getErrorCode(error: unknown): string {
 }
 
 /**
+ * Translate Zod error messages to Italian
+ */
+function translateZodMessage(message: string, path: string[]): string {
+  const fieldName = path.length > 0 ? path.join(' → ') : 'campo';
+  
+  // Common Zod error patterns with Italian translations
+  const translations: Record<string, string> = {
+    'Required': 'Campo obbligatorio',
+    'Expected string, received': 'Deve essere un testo',
+    'Expected number, received': 'Deve essere un numero',
+    'Expected boolean, received': 'Deve essere vero o falso',
+    'Invalid email': 'Email non valida',
+    'String must contain at least': 'Deve contenere almeno',
+    'String must contain at most': 'Deve contenere al massimo',
+    'Number must be greater than': 'Deve essere maggiore di',
+    'Number must be greater than or equal to': 'Deve essere almeno',
+    'Number must be less than': 'Deve essere minore di',
+    'Number must be less than or equal to': 'Deve essere al massimo',
+    'Invalid input': 'Input non valido',
+    'Invalid': 'Non valido',
+  };
+  
+  // Try to find and replace with Italian
+  for (const [english, italian] of Object.entries(translations)) {
+    if (message.includes(english)) {
+      const translated = message.replace(english, italian);
+      return `${fieldName}: ${translated}`;
+    }
+  }
+  
+  // Specific patterns
+  if (message.match(/must be greater than or equal to (\d+)/)) {
+    const min = message.match(/(\d+)/)?.[1];
+    return `${fieldName}: Deve essere almeno ${min}`;
+  }
+  
+  if (message.match(/must be less than or equal to (\d+)/)) {
+    const max = message.match(/(\d+)/)?.[1];
+    return `${fieldName}: Deve essere al massimo ${max}`;
+  }
+  
+  // Fallback to original with field name
+  return `${fieldName}: ${message}`;
+}
+
+/**
  * Extract custom message from error if available
  */
 function getCustomMessage(error: unknown): string | null {
   if (!error || typeof error !== 'object') return null;
   
   const err = error as Record<string, unknown>;
+  
+  // Check for Zod validation errors first
+  if (err.data && typeof err.data === 'object') {
+    const data = err.data as Record<string, unknown>;
+    
+    // Zod validation error (contains zodError array)
+    if (data.zodError && Array.isArray(data.zodError)) {
+      const zodErrors = data.zodError as Array<{ path: string[]; message: string }>;
+      if (zodErrors.length > 0) {
+        // Translate and format first error
+        const firstError = zodErrors[0];
+        return translateZodMessage(firstError.message, firstError.path);
+      }
+    }
+    
+    // Generic message in data
+    if (typeof data.message === 'string') return data.message;
+  }
   
   // tRPC custom message
   if (err.message && typeof err.message === 'string') {
@@ -108,12 +178,6 @@ function getCustomMessage(error: unknown): string | null {
       err.message?.toString().toLowerCase().includes(g)
     );
     if (!isGeneric) return err.message;
-  }
-  
-  // Nested message in data
-  if (err.data && typeof err.data === 'object') {
-    const data = err.data as Record<string, unknown>;
-    if (typeof data.message === 'string') return data.message;
   }
   
   return null;

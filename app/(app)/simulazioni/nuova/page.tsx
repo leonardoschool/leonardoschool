@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import type { SimulationType, LocationType } from '@/lib/validations/simulationValidation';
 import { SIMULATION_PRESETS } from '@/lib/validations/simulationValidation';
+import type { SmartRandomPreset, DifficultyMix } from '@/lib/validations/simulationValidation';
 
 // Step definitions (no assignments step - added post-creation)
 const STEPS = [
@@ -176,8 +177,17 @@ export default function NewSimulationPage() {
   const [questionSubjectFilter, setQuestionSubjectFilter] = useState('');
   const [questionDifficultyFilter, setQuestionDifficultyFilter] = useState('');
   const [questionTagFilter, setQuestionTagFilter] = useState<string[]>([]);
-  const [selectionMode, setSelectionMode] = useState<'manual' | 'random'>('manual');
+  const [selectionMode, setSelectionMode] = useState<'manual' | 'random' | 'smart'>('manual');
   const [randomCount, setRandomCount] = useState(10);
+  
+  // Smart generation settings
+  const [smartTotalQuestions, setSmartTotalQuestions] = useState(50);
+  const [smartPreset, setSmartPreset] = useState<SmartRandomPreset>('BALANCED');
+  const [smartDifficultyMix, setSmartDifficultyMix] = useState<DifficultyMix>('BALANCED');
+  const [smartFocusSubjectId, setSmartFocusSubjectId] = useState<string>('');
+  const [smartAvoidRecentlyUsed, setSmartAvoidRecentlyUsed] = useState(true);
+  const [smartMaximizeTopicCoverage, setSmartMaximizeTopicCoverage] = useState(true);
+  const [smartIsGenerating, setSmartIsGenerating] = useState(false);
   
   // Question detail modal
   const [previewQuestion, setPreviewQuestion] = useState<string | null>(null);
@@ -215,6 +225,44 @@ export default function NewSimulationPage() {
     },
     onError: handleMutationError,
   });
+
+  // Smart random generation mutation
+  const smartRandomMutation = trpc.questions.generateSmartRandomQuestions.useMutation({
+    onSuccess: (data) => {
+      // Replace current questions with generated ones
+      setSelectedQuestions(data.questions);
+      setSmartIsGenerating(false);
+      
+      if (data.warning) {
+        showSuccess('Generazione completata', data.warning);
+      } else {
+        showSuccess(
+          'Generazione completata', 
+          `${data.achievedTotal} domande generate con successo!`
+        );
+      }
+    },
+    onError: (error) => {
+      setSmartIsGenerating(false);
+      handleMutationError(error);
+    },
+  });
+
+  // Handle smart generation
+  const handleSmartGeneration = () => {
+    setSmartIsGenerating(true);
+    
+    smartRandomMutation.mutate({
+      totalQuestions: smartTotalQuestions,
+      preset: smartPreset,
+      focusSubjectId: smartPreset === 'SINGLE_SUBJECT' ? smartFocusSubjectId || undefined : undefined,
+      difficultyMix: smartDifficultyMix,
+      avoidRecentlyUsed: smartAvoidRecentlyUsed,
+      maximizeTopicCoverage: smartMaximizeTopicCoverage,
+      tagIds: questionTagFilter.length > 0 ? questionTagFilter : undefined,
+      excludeQuestionIds: selectedQuestions.map(q => q.questionId),
+    });
+  };
 
   // Apply preset
   const applyPreset = (type: SimulationType) => {
@@ -987,8 +1035,144 @@ export default function NewSimulationPage() {
                 >
                   Casuale
                 </button>
+                <button
+                  onClick={() => setSelectionMode('smart')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                    selectionMode === 'smart' 
+                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' 
+                      : `${colors.background.secondary} ${colors.text.muted}`
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  Smart
+                </button>
               </div>
             </div>
+
+            {/* Smart generation panel */}
+            {selectionMode === 'smart' && (
+              <div className={`p-5 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800`}>
+                <div className="flex items-center gap-2 mb-4">
+                  <Zap className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                  <h3 className={`font-semibold text-purple-900 dark:text-purple-200`}>
+                    Generazione Intelligente
+                  </h3>
+                </div>
+                <p className={`text-sm text-purple-700 dark:text-purple-300 mb-5`}>
+                  L&apos;algoritmo creerà una simulazione bilanciata automaticamente, distribuendo le domande per materia, 
+                  difficoltà e argomenti. Perfetto per creare simulazioni realistiche in pochi secondi.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                  {/* Number of questions */}
+                  <div>
+                    <label className={`block text-sm font-medium text-purple-900 dark:text-purple-200 mb-1.5`}>
+                      Numero di domande
+                    </label>
+                    <input
+                      type="number"
+                      value={smartTotalQuestions}
+                      onChange={(e) => setSmartTotalQuestions(Math.max(5, Math.min(100, parseInt(e.target.value) || 5)))}
+                      min={5}
+                      max={100}
+                      className={`w-full px-3 py-2 rounded-lg border border-purple-200 dark:border-purple-700 bg-white dark:bg-gray-800 ${colors.text.primary} text-sm`}
+                    />
+                  </div>
+
+                  {/* Preset selection */}
+                  <div>
+                    <CustomSelect
+                      label="Distribuzione materie"
+                      value={smartPreset}
+                      onChange={(value) => setSmartPreset(value as SmartRandomPreset)}
+                      options={[
+                        { value: 'PROPORTIONAL', label: 'Proporzionale (in base alle domande disponibili)' },
+                        { value: 'BALANCED', label: 'Bilanciata (equa tra materie)' },
+                        { value: 'SINGLE_SUBJECT', label: 'Singola materia' },
+                      ]}
+                      className="text-purple-900 dark:text-purple-200"
+                    />
+                  </div>
+
+                  {/* Focus subject (only for SINGLE_SUBJECT) */}
+                  {smartPreset === 'SINGLE_SUBJECT' && (
+                    <div>
+                      <CustomSelect
+                        label="Materia focus"
+                        value={smartFocusSubjectId}
+                        onChange={setSmartFocusSubjectId}
+                        options={[
+                          { value: '', label: 'Seleziona materia...' },
+                          ...(subjectsData?.map((s) => ({
+                            value: s.id,
+                            label: `${s.name} (${s._count?.questions || 0} domande)`,
+                          })) || []),
+                        ]}
+                        className="text-purple-900 dark:text-purple-200"
+                      />
+                    </div>
+                  )}
+
+                  {/* Difficulty mix */}
+                  <div>
+                    <CustomSelect
+                      label="Mix difficoltà"
+                      value={smartDifficultyMix}
+                      onChange={(value) => setSmartDifficultyMix(value as DifficultyMix)}
+                      options={[
+                        { value: 'BALANCED', label: 'Bilanciata (30% F, 50% M, 20% D)' },
+                        { value: 'EASY_FOCUS', label: 'Più facili (50% F, 40% M, 10% D)' },
+                        { value: 'HARD_FOCUS', label: 'Più difficili (10% F, 40% M, 50% D)' },
+                        { value: 'MEDIUM_ONLY', label: 'Solo medie' },
+                        { value: 'MIXED', label: 'Equa (33/34/33)' },
+                      ]}
+                      className="text-purple-900 dark:text-purple-200"
+                    />
+                  </div>
+                </div>
+
+                {/* Smart options */}
+                <div className="flex flex-wrap gap-4 mb-5">
+                  <Checkbox
+                    checked={smartAvoidRecentlyUsed}
+                    onChange={(e) => setSmartAvoidRecentlyUsed(e.target.checked)}
+                    label="Evita domande usate recentemente"
+                    className="text-purple-900 dark:text-purple-200"
+                  />
+                  <Checkbox
+                    checked={smartMaximizeTopicCoverage}
+                    onChange={(e) => setSmartMaximizeTopicCoverage(e.target.checked)}
+                    label="Massimizza copertura argomenti"
+                    className="text-purple-900 dark:text-purple-200"
+                  />
+                </div>
+
+                {/* Generate button */}
+                <button
+                  onClick={handleSmartGeneration}
+                  disabled={smartIsGenerating || (smartPreset === 'SINGLE_SUBJECT' && !smartFocusSubjectId)}
+                  className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-medium hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                >
+                  {smartIsGenerating ? (
+                    <>
+                      <Spinner size="sm" variant="white" />
+                      Generazione in corso...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-5 h-5" />
+                      Genera {smartTotalQuestions} Domande Smart
+                    </>
+                  )}
+                </button>
+
+                {selectedQuestions.length > 0 && (
+                  <p className={`text-xs text-purple-600 dark:text-purple-400 mt-2 text-center`}>
+                    La generazione sostituirà le {selectedQuestions.length} domande attualmente selezionate
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Random selection panel */}
             {selectionMode === 'random' && (
