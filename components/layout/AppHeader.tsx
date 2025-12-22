@@ -39,6 +39,7 @@ import {
   GraduationCap,
   Tag,
   UserMinus,
+  Menu,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -111,6 +112,8 @@ export default function AppHeader() {
   const [gestioneMenuOpen, setGestioneMenuOpen] = useState(false);
   const [registroMenuOpen, setRegistroMenuOpen] = useState(false);
   const [didatticaMenuOpen, setDidatticaMenuOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [currentTheme, setCurrentTheme] = useState<Theme>('system');
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -475,6 +478,15 @@ export default function AppHeader() {
     <header className={`sticky top-0 z-50 ${colors.background.card} border-b ${colors.border.primary} shadow-sm`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
+          {/* Hamburger Menu Button (Mobile/Tablet) */}
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className={`lg:hidden p-2 rounded-lg ${colors.effects.hover.bgSubtle} ${colors.icon.interactive} transition-colors mr-2`}
+            aria-label="Apri menu"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+
           {/* Logo */}
           <Link href="/dashboard" className="flex items-center gap-3">
             <div className="relative w-14 h-14 rounded-lg p-1">
@@ -922,141 +934,426 @@ export default function AppHeader() {
         </div>
       </div>
 
-      {/* Mobile Navigation (Staff) */}
-      {isStaff && collaboratorCanNavigate && (
-        <div className={`lg:hidden border-t ${colors.border.primary} overflow-x-auto`}>
-          <nav className="flex items-center gap-1 px-4 py-2">
-            {/* Dashboard */}
-            {navItems.slice(0, 1).map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
-                    isActive
-                      ? `${colors.primary.softBg} ${colors.primary.text}`
-                      : `${colors.text.secondary} ${colors.effects.hover.bgSubtle}`
-                  }`}
-                >
-                  <item.icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{item.label}</span>
-                </Link>
-              );
-            })}
-            
-            {/* Gestione items for mobile (Admin & Collaborator) */}
-            {isStaff && gestioneItems.map((item) => {
-              const isActive = pathname.startsWith(item.href);
-              const badgeCount = isAdmin ? (
-                item.href === '/utenti' ? pendingContractUsersCount :
-                item.href === '/candidature' ? pendingApplicationsCount :
-                item.href === '/richieste' ? pendingContactRequestsCount : 0
-              ) : 0;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
-                    isActive
-                      ? `${colors.primary.softBg} ${colors.primary.text}`
-                      : `${colors.text.secondary} ${colors.effects.hover.bgSubtle}`
-                  }`}
-                >
-                  <item.icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{item.label}</span>
-                  {badgeCount > 0 && (
-                    <span className={`min-w-5 h-5 px-1.5 rounded-full text-xs font-bold flex items-center justify-center ${colors.primary.gradient} text-white`}>
-                      {badgeCount > 99 ? '99+' : badgeCount}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-            
-            {/* Didattica items for mobile */}
-            {didatticaItems.map((item) => {
-              const isActive = pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
-                    isActive
-                      ? `${colors.primary.softBg} ${colors.primary.text}`
-                      : `${colors.text.secondary} ${colors.effects.hover.bgSubtle}`
-                  }`}
-                >
-                  <item.icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{item.label}</span>
-                </Link>
-              );
-            })}
-            
-            {/* Registro items for mobile */}
-            {registroItems.map((item) => {
-              const isActive = pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
-                    isActive
-                      ? `${colors.primary.softBg} ${colors.primary.text}`
-                      : `${colors.text.secondary} ${colors.effects.hover.bgSubtle}`
-                  }`}
-                >
-                  <item.icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{item.label}</span>
-                </Link>
-              );
-            })}
-            
-            {/* Statistiche */}
-            {navItems.slice(1).map((item) => {
-              const isActive = pathname === item.href || pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
-                    isActive
-                      ? `${colors.primary.softBg} ${colors.primary.text}`
-                      : `${colors.text.secondary} ${colors.effects.hover.bgSubtle}`
-                  }`}
-                >
-                  <item.icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{item.label}</span>
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-      )}
+      {/* Mobile Navigation - Full Screen Menu */}
+      {mobileMenuOpen && (
+        <div className={`fixed inset-0 ${colors.background.primary} z-50 lg:hidden flex flex-col`}>
+          {/* Header */}
+          <div className={`flex items-center justify-between p-4 border-b ${colors.border.primary} ${colors.background.card}`}>
+            <div className="flex items-center gap-3">
+              <div className="relative w-10 h-10">
+                <Image
+                  src="/images/logo.png"
+                  alt="Leonardo School"
+                  fill
+                  className="object-contain"
+                />
+              </div>
+              <span className={`font-bold text-lg ${colors.text.primary}`}>Leonardo School</span>
+            </div>
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                setExpandedSection(null);
+              }}
+              className={`p-2.5 rounded-xl ${colors.background.secondary} ${colors.icon.interactive}`}
+              aria-label="Chiudi menu"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
 
-      {/* Mobile Navigation (Student) - only visible when account is active */}
-      {isStudent && studentCanNavigate && (
-        <div className={`lg:hidden border-t ${colors.border.primary} overflow-x-auto`}>
-          <nav className="flex items-center gap-1 px-4 py-2">
-            {studentNavItems.map((item) => {
-              const isActive = pathname === item.href || 
-                (item.href !== '/dashboard' && pathname.startsWith(item.href));
-              return (
+          {/* User Info Card */}
+          <div className="p-4">
+            <div className={`p-4 rounded-2xl ${colors.primary.gradient}`}>
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-xl">
+                  {user?.name?.charAt(0).toUpperCase() || 'U'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-white text-lg truncate">{user?.name}</p>
+                  <p className="text-sm text-white/80">
+                    {isAdmin ? '👑 Amministratore' : isCollaborator ? '🤝 Collaboratore' : '📚 Studente'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto px-4 pb-4">
+            {/* Staff Navigation */}
+            {isStaff && collaboratorCanNavigate && (
+              <div className="space-y-3">
+                {/* Dashboard - Direct Link */}
                 <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
-                    isActive
-                      ? `${colors.primary.softBg} ${colors.primary.text}`
-                      : `${colors.text.secondary} ${colors.effects.hover.bgSubtle}`
+                  href="/dashboard"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setExpandedSection(null);
+                  }}
+                  className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${
+                    pathname === '/dashboard'
+                      ? `${colors.primary.gradient} text-white shadow-lg`
+                      : `${colors.background.card} ${colors.text.primary} hover:shadow-md`
                   }`}
                 >
-                  <item.icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{item.label}</span>
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                    pathname === '/dashboard' ? 'bg-white/20' : 'bg-blue-100 dark:bg-blue-900/30'
+                  }`}>
+                    <Home className={`w-6 h-6 ${pathname === '/dashboard' ? 'text-white' : 'text-blue-600 dark:text-blue-400'}`} />
+                  </div>
+                  <span className="font-semibold text-lg">Dashboard</span>
                 </Link>
-              );
-            })}
-          </nav>
+
+                {/* Gestione Section */}
+                <div className={`rounded-2xl overflow-hidden ${colors.background.card}`}>
+                  <button
+                    onClick={() => setExpandedSection(expandedSection === 'gestione' ? null : 'gestione')}
+                    className={`w-full flex items-center justify-between p-4 transition-all ${
+                      isGestioneActive ? colors.primary.text : colors.text.primary
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                        isGestioneActive ? colors.primary.softBg : 'bg-purple-100 dark:bg-purple-900/30'
+                      }`}>
+                        <ClipboardList className={`w-6 h-6 ${isGestioneActive ? colors.primary.text : 'text-purple-600 dark:text-purple-400'}`} />
+                      </div>
+                      <div className="text-left">
+                        <span className="font-semibold text-lg">Gestione</span>
+                        {isAdmin && totalGestionePending > 0 && (
+                          <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold ${colors.primary.gradient} text-white`}>
+                            {totalGestionePending}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${expandedSection === 'gestione' ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {expandedSection === 'gestione' && (
+                    <div className={`px-4 pb-4 pt-2 border-t ${colors.border.primary}`}>
+                      <div className="space-y-1">
+                        {gestioneItems.map((item) => {
+                          const isActive = pathname.startsWith(item.href);
+                          const badgeCount = isAdmin ? (
+                            item.href === '/utenti' ? pendingContractUsersCount :
+                            item.href === '/candidature' ? pendingApplicationsCount :
+                            item.href === '/richieste' ? pendingContactRequestsCount : 0
+                          ) : 0;
+                          return (
+                            <Link
+                              key={item.href}
+                              href={item.href}
+                              onClick={() => {
+                                setMobileMenuOpen(false);
+                                setExpandedSection(null);
+                              }}
+                              className={`flex items-center justify-between px-4 py-3 rounded-xl transition-colors ${
+                                isActive
+                                  ? `${colors.primary.softBg} ${colors.primary.text}`
+                                  : `${colors.text.secondary} hover:${colors.background.secondary}`
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <item.icon className="w-5 h-5" />
+                                <span className="font-medium">{item.label}</span>
+                              </div>
+                              {badgeCount > 0 && (
+                                <span className={`min-w-[24px] h-6 px-2 rounded-full text-xs font-bold flex items-center justify-center ${colors.primary.gradient} text-white`}>
+                                  {badgeCount}
+                                </span>
+                              )}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Didattica Section */}
+                <div className={`rounded-2xl overflow-hidden ${colors.background.card}`}>
+                  <button
+                    onClick={() => setExpandedSection(expandedSection === 'didattica' ? null : 'didattica')}
+                    className={`w-full flex items-center justify-between p-4 transition-all ${
+                      isDidatticaActive ? colors.primary.text : colors.text.primary
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                        isDidatticaActive ? colors.primary.softBg : 'bg-green-100 dark:bg-green-900/30'
+                      }`}>
+                        <BookOpen className={`w-6 h-6 ${isDidatticaActive ? colors.primary.text : 'text-green-600 dark:text-green-400'}`} />
+                      </div>
+                      <span className="font-semibold text-lg">Didattica</span>
+                    </div>
+                    <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${expandedSection === 'didattica' ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {expandedSection === 'didattica' && (
+                    <div className={`px-4 pb-4 pt-2 border-t ${colors.border.primary}`}>
+                      <div className="space-y-1">
+                        {didatticaItems.map((item) => {
+                          const isActive = pathname.startsWith(item.href);
+                          return (
+                            <Link
+                              key={item.href}
+                              href={item.href}
+                              onClick={() => {
+                                setMobileMenuOpen(false);
+                                setExpandedSection(null);
+                              }}
+                              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
+                                isActive
+                                  ? `${colors.primary.softBg} ${colors.primary.text}`
+                                  : `${colors.text.secondary} hover:${colors.background.secondary}`
+                              }`}
+                            >
+                              <item.icon className="w-5 h-5" />
+                              <span className="font-medium">{item.label}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Registro Section */}
+                <div className={`rounded-2xl overflow-hidden ${colors.background.card}`}>
+                  <button
+                    onClick={() => setExpandedSection(expandedSection === 'registro' ? null : 'registro')}
+                    className={`w-full flex items-center justify-between p-4 transition-all ${
+                      isRegistroActive ? colors.primary.text : colors.text.primary
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                        isRegistroActive ? colors.primary.softBg : 'bg-amber-100 dark:bg-amber-900/30'
+                      }`}>
+                        <ClipboardCheck className={`w-6 h-6 ${isRegistroActive ? colors.primary.text : 'text-amber-600 dark:text-amber-400'}`} />
+                      </div>
+                      <span className="font-semibold text-lg">Registro</span>
+                    </div>
+                    <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${expandedSection === 'registro' ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {expandedSection === 'registro' && (
+                    <div className={`px-4 pb-4 pt-2 border-t ${colors.border.primary}`}>
+                      <div className="space-y-1">
+                        {registroItems.map((item) => {
+                          const isActive = pathname.startsWith(item.href);
+                          return (
+                            <Link
+                              key={item.href}
+                              href={item.href}
+                              onClick={() => {
+                                setMobileMenuOpen(false);
+                                setExpandedSection(null);
+                              }}
+                              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
+                                isActive
+                                  ? `${colors.primary.softBg} ${colors.primary.text}`
+                                  : `${colors.text.secondary} hover:${colors.background.secondary}`
+                              }`}
+                            >
+                              <item.icon className="w-5 h-5" />
+                              <span className="font-medium">{item.label}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Direct Links: Calendario, Statistiche, Messaggi */}
+                <div className="grid grid-cols-2 gap-3">
+                  {navItems.filter(item => item.href !== '/dashboard').map((item) => {
+                    const isActive = pathname === item.href || pathname.startsWith(item.href);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          setExpandedSection(null);
+                        }}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl transition-all ${
+                          isActive
+                            ? `${colors.primary.gradient} text-white shadow-lg`
+                            : `${colors.background.card} ${colors.text.primary} hover:shadow-md`
+                        }`}
+                      >
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                          isActive ? 'bg-white/20' : colors.background.secondary
+                        }`}>
+                          <item.icon className="w-6 h-6" />
+                        </div>
+                        <span className="font-medium text-sm">{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                  <Link
+                    href="/messaggi"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      setExpandedSection(null);
+                    }}
+                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl transition-all relative ${
+                      pathname === '/messaggi'
+                        ? `${colors.primary.gradient} text-white shadow-lg`
+                        : `${colors.background.card} ${colors.text.primary} hover:shadow-md`
+                    }`}
+                  >
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center relative ${
+                      pathname === '/messaggi' ? 'bg-white/20' : colors.background.secondary
+                    }`}>
+                      <MessageSquare className="w-6 h-6" />
+                      {unreadMessagesCount > 0 && (
+                        <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-red-500 text-white text-[11px] rounded-full flex items-center justify-center font-bold">
+                          {unreadMessagesCount > 9 ? '9+' : unreadMessagesCount}
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-medium text-sm">Messaggi</span>
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* Student Navigation */}
+            {isStudent && studentCanNavigate && (
+              <div className="space-y-3">
+                {/* Grid layout for student nav items */}
+                <div className="grid grid-cols-2 gap-3">
+                  {studentNavItems.map((item) => {
+                    const isActive = pathname === item.href || 
+                      (item.href !== '/dashboard' && pathname.startsWith(item.href));
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          setExpandedSection(null);
+                        }}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl transition-all ${
+                          isActive
+                            ? `${colors.primary.gradient} text-white shadow-lg`
+                            : `${colors.background.card} ${colors.text.primary} hover:shadow-md`
+                        }`}
+                      >
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                          isActive ? 'bg-white/20' : colors.background.secondary
+                        }`}>
+                          <item.icon className="w-6 h-6" />
+                        </div>
+                        <span className="font-medium text-sm text-center">{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+
+                {/* Communication Links */}
+                <div className={`rounded-2xl ${colors.background.card} p-4`}>
+                  <h3 className={`text-xs font-semibold uppercase tracking-wider ${colors.text.muted} mb-3`}>
+                    Comunicazione
+                  </h3>
+                  <div className="space-y-2">
+                    <Link
+                      href="/messaggi"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        setExpandedSection(null);
+                      }}
+                      className={`flex items-center justify-between p-3 rounded-xl transition-colors ${
+                        pathname === '/messaggi'
+                          ? `${colors.primary.softBg} ${colors.primary.text}`
+                          : `${colors.background.secondary} ${colors.text.primary}`
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <MessageSquare className="w-5 h-5" />
+                        <span className="font-medium">Messaggi</span>
+                      </div>
+                      {unreadMessagesCount > 0 && (
+                        <span className="min-w-[24px] h-6 px-2 rounded-full text-xs font-bold flex items-center justify-center bg-red-500 text-white">
+                          {unreadMessagesCount}
+                        </span>
+                      )}
+                    </Link>
+                    <Link
+                      href="/notifiche"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        setExpandedSection(null);
+                      }}
+                      className={`flex items-center justify-between p-3 rounded-xl transition-colors ${
+                        pathname === '/notifiche'
+                          ? `${colors.primary.softBg} ${colors.primary.text}`
+                          : `${colors.background.secondary} ${colors.text.primary}`
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Bell className="w-5 h-5" />
+                        <span className="font-medium">Notifiche</span>
+                      </div>
+                      {unreadCount > 0 && (
+                        <span className="min-w-[24px] h-6 px-2 rounded-full text-xs font-bold flex items-center justify-center bg-red-500 text-white">
+                          {unreadCount}
+                        </span>
+                      )}
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Actions */}
+          <div className={`p-4 border-t ${colors.border.primary} ${colors.background.card}`}>
+            <div className="flex items-center gap-3">
+              <Link
+                href="/profilo"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setExpandedSection(null);
+                }}
+                className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl ${colors.background.secondary} ${colors.text.primary} transition-colors`}
+              >
+                <Eye className="w-5 h-5" />
+                <span className="font-medium">Profilo</span>
+              </Link>
+              <Link
+                href="/impostazioni"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setExpandedSection(null);
+                }}
+                className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl ${colors.background.secondary} ${colors.text.primary} transition-colors`}
+              >
+                <Settings className="w-5 h-5" />
+                <span className="font-medium">Impostazioni</span>
+              </Link>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setExpandedSection(null);
+                  handleLogout();
+                }}
+                disabled={loggingOut}
+                className="p-3 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 transition-colors"
+              >
+                {loggingOut ? (
+                  <div className="w-5 h-5 border-2 border-red-600 dark:border-red-400 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <LogOut className="w-5 h-5" />
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </header>

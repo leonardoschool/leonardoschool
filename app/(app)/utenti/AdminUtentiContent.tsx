@@ -893,12 +893,28 @@ export default function AdminUtentiContent() {
   const [status, setStatus] = useState<StatusFilter>('all');
   const [page, setPage] = useState(1);
 
-  // Initialize search from URL params on mount
+  // Initialize filters from URL params on mount
   useEffect(() => {
     const searchParam = searchParams.get('search');
+    const roleParam = searchParams.get('role');
+    const statusParam = searchParams.get('status');
+    
     if (searchParam) {
       setSearch(decodeURIComponent(searchParam));
     }
+    
+    // Set role filter from URL
+    if (roleParam && ['ALL', 'ADMIN', 'COLLABORATOR', 'STUDENT'].includes(roleParam)) {
+      setRole(roleParam as RoleFilter);
+    }
+    
+    // Set status filter from URL
+    if (statusParam && statusOptions.some(opt => opt.value === statusParam)) {
+      setStatus(statusParam as StatusFilter);
+    }
+    
+    // Reset page when filters change from URL
+    setPage(1);
   }, [searchParams]);
 
   // Modal states
