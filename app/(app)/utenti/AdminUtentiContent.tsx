@@ -1431,7 +1431,7 @@ export default function AdminUtentiContent() {
                 const hasActiveContract = lastContract && (lastContract.status === 'PENDING' || lastContract.status === 'SIGNED');
                 const hasPendingContract = lastContract?.status === 'PENDING';
                 const canAssignContract = isStudentOrCollab && hasProfileCompleted && !hasActiveContract && targetId && !isSelf;
-                const hasSignedContract = lastContract?.status === 'SIGNED' || (user.isActive && lastContract);
+                const hasSignedContract = lastContract?.status === 'SIGNED';
                 const contractId = lastContract?.id;
 
                 return (
@@ -1630,7 +1630,7 @@ export default function AdminUtentiContent() {
                     const hasActiveContract = lastContract && (lastContract.status === 'PENDING' || lastContract.status === 'SIGNED');
                     const hasPendingContract = lastContract?.status === 'PENDING';
                     const canAssignContract = isStudentOrCollab && hasProfileCompleted && !hasActiveContract && targetId && !isSelf;
-                    const hasSignedContract = lastContract?.status === 'SIGNED' || (user.isActive && lastContract);
+                    const hasSignedContract = lastContract?.status === 'SIGNED';
                     const contractId = lastContract?.id;
 
                     return (
