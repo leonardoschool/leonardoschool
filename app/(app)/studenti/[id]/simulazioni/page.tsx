@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { PageLoader } from '@/components/ui/loaders';
+import { getSimulationTypeLabel, getSimulationTypeColors } from '@/lib/utils/simulationLabels';
 import {
   ArrowLeft,
   Trophy,
@@ -254,12 +255,8 @@ export default function StudentSimulationsPage({ params }: { params: Promise<{ i
               <div className="space-y-4">
                 {simulations.map((sim) => {
                   const isExpanded = expandedSimulation === sim.resultId;
-                  const typeColors = {
-                    PRACTICE: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400' },
-                EXAM: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-400' },
-                QUIZ: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400' },
-              };
-              const typeColor = typeColors[sim.simulationType as keyof typeof typeColors] || typeColors.PRACTICE;
+                  const typeColor = getSimulationTypeColors(sim.simulationType || 'PRACTICE');
+                  const typeLabel = getSimulationTypeLabel(sim.simulationType || 'PRACTICE');
 
               return (
                 <div
@@ -278,7 +275,7 @@ export default function StudentSimulationsPage({ params }: { params: Promise<{ i
                             {sim.simulationTitle}
                           </h3>
                           <span className={`text-xs px-2 py-1 rounded-full ${typeColor.bg} ${typeColor.text} uppercase font-medium`}>
-                            {sim.simulationType}
+                            {typeLabel}
                           </span>
                           {sim.passed !== null && (
                             <span className={`text-xs px-2 py-1 rounded-full ${

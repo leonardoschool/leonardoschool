@@ -526,6 +526,343 @@ export const studentsRouter = router({
   }),
 
   /**
+   * Get detailed statistics for student's statistics page
+   * Includes: simulation breakdown by type, trends over time, subject analysis, difficulty stats
+   */
+  getDetailedStats: protectedProcedure.query(async ({ ctx }) => {
+    if (!ctx.user) {
+      throw new TRPCError({
+        code: 'UNAUTHORIZED',
+        message: 'Not authenticated',
+      });
+    }
+
+    const student = await ctx.prisma.student.findUnique({
+      where: { userId: ctx.user.id },
+      include: {
+        stats: true,
+      },
+    });
+
+    if (!student) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: 'Profilo studente non trovato',
+      });
+    }
+
+    // Get ALL simulation results for this student (completed ones)
+    const allResults = await ctx.prisma.simulationResult.findMany({
+      where: { 
+        studentId: student.id,
+        completedAt: { not: null },
+      },
+      orderBy: { completedAt: 'asc' },
+      include: {
+        simulation: {
+          select: {
+            id: true,
+            title: true,
+            type: true,
+            isOfficial: true,
+            durationMinutes: true,
+            totalQuestions: true,
+            subjectDistribution: true,
+            questions: {
+              include: {
+                question: {
+                  select: {
+                    id: true,
+                    difficulty: true,
+                    subjectId: true,
+                    subject: {
+                      select: {
+                        id: true,
+                        name: true,
+                        code: true,
+                        color: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Get recent results (last 20) for the activity section
+    const recentResults = allResults.slice(-20).reverse();
+
+    // === OVERVIEW STATS ===
+    const totalSimulations = allResults.length;
+    const totalQuestions = allResults.reduce((sum, r) => sum + r.totalQuestions, 0);
+    const totalCorrect = allResults.reduce((sum, r) => sum + r.correctAnswers, 0);
+    const totalWrong = allResults.reduce((sum, r) => sum + r.wrongAnswers, 0);
+    const totalBlank = allResults.reduce((sum, r) => sum + r.blankAnswers, 0);
+    const avgPercentage = totalSimulations > 0 
+      ? allResults.reduce((sum, r) => sum + r.percentageScore, 0) / totalSimulations 
+      : 0;
+    const bestScore = allResults.length > 0 
+      ? Math.max(...allResults.map(r => r.percentageScore)) 
+      : 0;
+    const worstScore = allResults.length > 0 
+      ? Math.min(...allResults.map(r => r.percentageScore)) 
+      : 0;
+
+    // Calculate improvement (last 5 vs first 5)
+    const first5Avg = allResults.length >= 5 
+      ? allResults.slice(0, 5).reduce((sum, r) => sum + r.percentageScore, 0) / 5 
+      : allResults.reduce((sum, r) => sum + r.percentageScore, 0) / Math.max(allResults.length, 1);
+    const last5Avg = allResults.length >= 5 
+      ? allResults.slice(-5).reduce((sum, r) => sum + r.percentageScore, 0) / 5 
+      : allResults.reduce((sum, r) => sum + r.percentageScore, 0) / Math.max(allResults.length, 1);
+    const improvement = last5Avg - first5Avg;
+
+    // Simulations this month
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const simulationsThisMonth = allResults.filter(r => 
+      r.completedAt && r.completedAt >= startOfMonth
+    ).length;
+
+    // === SIMULATION TYPE BREAKDOWN ===
+    const typeBreakdown: Record<string, { count: number; avgScore: number; totalScore: number }> = {};
+    for (const result of allResults) {
+      const type = result.simulation.type;
+      if (!typeBreakdown[type]) {
+        typeBreakdown[type] = { count: 0, avgScore: 0, totalScore: 0 };
+      }
+      typeBreakdown[type].count++;
+      typeBreakdown[type].totalScore += result.percentageScore;
+    }
+    for (const type of Object.keys(typeBreakdown)) {
+      typeBreakdown[type].avgScore = typeBreakdown[type].totalScore / typeBreakdown[type].count;
+    }
+
+    // === TREND DATA (last 12 simulations or all if less) ===
+    const trendData = allResults.slice(-12).map((r, index) => ({
+      index: index + 1,
+      date: r.completedAt?.toISOString() || '',
+      score: r.percentageScore,
+      simulationTitle: r.simulation.title,
+      type: r.simulation.type,
+    }));
+
+    // === MONTHLY TREND (group by month) ===
+    const monthlyData: Record<string, { month: string; count: number; avgScore: number; totalScore: number }> = {};
+    for (const result of allResults) {
+      if (!result.completedAt) continue;
+      const monthKey = `${result.completedAt.getFullYear()}-${String(result.completedAt.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = { 
+          month: monthKey, 
+          count: 0, 
+          avgScore: 0, 
+          totalScore: 0 
+        };
+      }
+      monthlyData[monthKey].count++;
+      monthlyData[monthKey].totalScore += result.percentageScore;
+    }
+    const monthlyTrend = Object.values(monthlyData)
+      .map(m => ({
+        ...m,
+        avgScore: m.totalScore / m.count,
+      }))
+      .sort((a, b) => a.month.localeCompare(b.month))
+      .slice(-6); // Last 6 months
+
+    // === SUBJECT STATS (calculate from results' subjectScores) ===
+    const subjectAccumulator: Record<string, { total: number; correct: number; wrong: number; blank: number }> = {};
+    for (const result of allResults) {
+      const subjectScores = result.subjectScores as Record<string, { correct: number; wrong: number; blank: number }> | null;
+      if (subjectScores) {
+        for (const [subject, scores] of Object.entries(subjectScores)) {
+          if (!subjectAccumulator[subject]) {
+            subjectAccumulator[subject] = { total: 0, correct: 0, wrong: 0, blank: 0 };
+          }
+          subjectAccumulator[subject].correct += scores.correct || 0;
+          subjectAccumulator[subject].wrong += scores.wrong || 0;
+          subjectAccumulator[subject].blank += scores.blank || 0;
+          subjectAccumulator[subject].total += (scores.correct || 0) + (scores.wrong || 0) + (scores.blank || 0);
+        }
+      }
+    }
+
+    const subjectStats = Object.entries(subjectAccumulator).map(([subject, data]) => ({
+      subject,
+      totalQuestions: data.total,
+      correctAnswers: data.correct,
+      wrongAnswers: data.wrong,
+      blankAnswers: data.blank,
+      accuracy: data.total > 0 ? (data.correct / data.total) * 100 : 0,
+    })).sort((a, b) => b.totalQuestions - a.totalQuestions);
+
+    // Best and worst subjects
+    const sortedByAccuracy = [...subjectStats].filter(s => s.totalQuestions >= 5).sort((a, b) => b.accuracy - a.accuracy);
+    const bestSubject = sortedByAccuracy[0] || null;
+    const worstSubject = sortedByAccuracy[sortedByAccuracy.length - 1] || null;
+
+    // === ANSWER DISTRIBUTION (for pie chart) ===
+    const answerDistribution = {
+      correct: totalCorrect,
+      wrong: totalWrong,
+      blank: totalBlank,
+    };
+
+    // === DIFFICULTY BREAKDOWN ===
+    const difficultyStats: Record<string, { total: number; correct: number }> = {
+      EASY: { total: 0, correct: 0 },
+      MEDIUM: { total: 0, correct: 0 },
+      HARD: { total: 0, correct: 0 },
+    };
+
+    // Calculate from answers in results
+    for (const result of allResults) {
+      const answers = result.answers as Array<{
+        questionId: string;
+        isCorrect: boolean;
+        difficulty?: string;
+      }> | null;
+      
+      if (answers && Array.isArray(answers)) {
+        for (const answer of answers) {
+          // Try to get difficulty from the answer or from the simulation's questions
+          let difficulty = answer.difficulty;
+          if (!difficulty) {
+            const simQuestion = result.simulation.questions.find(q => q.questionId === answer.questionId);
+            difficulty = simQuestion?.question?.difficulty || 'MEDIUM';
+          }
+          
+          if (difficultyStats[difficulty]) {
+            difficultyStats[difficulty].total++;
+            if (answer.isCorrect) {
+              difficultyStats[difficulty].correct++;
+            }
+          }
+        }
+      }
+    }
+
+    const difficultyBreakdown = Object.entries(difficultyStats).map(([difficulty, data]) => ({
+      difficulty,
+      total: data.total,
+      correct: data.correct,
+      accuracy: data.total > 0 ? (data.correct / data.total) * 100 : 0,
+    }));
+
+    // === TIME STATS ===
+    const completedWithTime = allResults.filter(r => r.durationSeconds && r.durationSeconds > 0);
+    const avgTimeSeconds = completedWithTime.length > 0
+      ? completedWithTime.reduce((sum, r) => sum + (r.durationSeconds || 0), 0) / completedWithTime.length
+      : 0;
+    const totalStudyMinutes = student.stats?.totalStudyTimeMinutes || 
+      Math.round(completedWithTime.reduce((sum, r) => sum + (r.durationSeconds || 0), 0) / 60);
+
+    // === ACHIEVEMENTS/MILESTONES ===
+    const achievements: Array<{
+      id: string;
+      title: string;
+      description: string;
+      icon: string;
+      unlocked: boolean;
+      progress?: number;
+      target?: number;
+    }> = [];
+    if (totalSimulations >= 1) achievements.push({ id: 'first_sim', title: 'Prima Simulazione', description: 'Hai completato la tua prima simulazione!', icon: '🎯', unlocked: true });
+    if (totalSimulations >= 10) achievements.push({ id: 'ten_sims', title: '10 Simulazioni', description: '10 simulazioni completate', icon: '🔟', unlocked: true });
+    if (totalSimulations >= 50) achievements.push({ id: 'fifty_sims', title: '50 Simulazioni', description: '50 simulazioni completate', icon: '🏆', unlocked: true });
+    if (bestScore >= 90) achievements.push({ id: 'score_90', title: 'Eccellenza', description: 'Hai raggiunto il 90%!', icon: '⭐', unlocked: true });
+    if (bestScore >= 100) achievements.push({ id: 'perfect', title: 'Punteggio Perfetto', description: '100% in una simulazione!', icon: '💯', unlocked: true });
+    if (student.stats?.longestStreak && student.stats.longestStreak >= 7) {
+      achievements.push({ id: 'streak_7', title: 'Settimana Perfetta', description: '7 giorni consecutivi', icon: '🔥', unlocked: true });
+    }
+    if (student.stats?.longestStreak && student.stats.longestStreak >= 30) {
+      achievements.push({ id: 'streak_30', title: 'Mese Perfetto', description: '30 giorni consecutivi', icon: '🌟', unlocked: true });
+    }
+
+    // Potential achievements (not yet unlocked)
+    if (totalSimulations < 10) achievements.push({ id: 'ten_sims', title: '10 Simulazioni', description: `${totalSimulations}/10 completate`, icon: '🔟', unlocked: false, progress: totalSimulations, target: 10 });
+    if (totalSimulations >= 10 && totalSimulations < 50) achievements.push({ id: 'fifty_sims', title: '50 Simulazioni', description: `${totalSimulations}/50 completate`, icon: '🏆', unlocked: false, progress: totalSimulations, target: 50 });
+    if (bestScore < 90) achievements.push({ id: 'score_90', title: 'Eccellenza', description: `Raggiungi il 90%`, icon: '⭐', unlocked: false, progress: bestScore, target: 90 });
+
+    // === OFFICIAL SIMULATIONS STATS ===
+    const officialResults = allResults.filter(r => r.simulation.isOfficial);
+    const officialStats = {
+      count: officialResults.length,
+      avgScore: officialResults.length > 0 
+        ? officialResults.reduce((sum, r) => sum + r.percentageScore, 0) / officialResults.length 
+        : 0,
+      bestScore: officialResults.length > 0 
+        ? Math.max(...officialResults.map(r => r.percentageScore)) 
+        : 0,
+    };
+
+    return {
+      // Overview
+      overview: {
+        totalSimulations,
+        totalQuestions,
+        totalCorrect,
+        totalWrong,
+        totalBlank,
+        averageScore: avgPercentage,
+        bestScore,
+        worstScore,
+        improvement,
+        simulationsThisMonth,
+        totalTimeSpent: totalStudyMinutes,
+        averageTime: Math.round(avgTimeSeconds / 60),
+        currentStreak: student.stats?.currentStreak || 0,
+        longestStreak: student.stats?.longestStreak || 0,
+        lastActivityDate: student.stats?.lastActivityDate,
+      },
+
+      // Breakdown by simulation type
+      typeBreakdown: Object.entries(typeBreakdown).map(([type, data]) => ({
+        type,
+        count: data.count,
+        averageScore: data.avgScore,
+      })),
+
+      // Trend data for charts
+      trendData,
+      monthlyTrend,
+
+      // Subject stats
+      subjectStats,
+      bestSubject,
+      worstSubject,
+
+      // Answer distribution
+      answerDistribution,
+
+      // Difficulty breakdown
+      difficultyBreakdown,
+
+      // Achievements
+      achievements,
+
+      // Official simulations
+      officialStats,
+
+      // Recent results
+      recentResults: recentResults.map(r => ({
+        id: r.id,
+        title: r.simulation.title,
+        type: r.simulation.type,
+        isOfficial: r.simulation.isOfficial,
+        score: r.percentageScore,
+        correct: r.correctAnswers,
+        total: r.totalQuestions,
+        date: r.completedAt?.toISOString() || r.startedAt.toISOString(),
+      })),
+    };
+  }),
+
+  /**
    * Get current student's group (for student group page)
    */
   getMyGroup: protectedProcedure.query(async ({ ctx }) => {

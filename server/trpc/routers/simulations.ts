@@ -272,6 +272,12 @@ export const simulationsRouter = router({
       if (createdById) where.createdById = createdById;
       if (creatorRole) where.creatorRole = creatorRole;
       
+      // Exclude simulations created by students (self-practice)
+      // Only show simulations created by admins or collaborators
+      if (!creatorRole) {
+        where.creatorRole = { not: 'STUDENT' };
+      }
+      
       // Filter by group (simulations assigned to a specific group)
       if (groupId) {
         andConditions.push({
@@ -3725,6 +3731,11 @@ export const simulationsRouter = router({
 
       // Note: Collaborators can now see ALL assignments (not filtered by creator)
       // but they can only take actions on assignments they created (enforced in frontend)
+
+      // Exclude assignments for simulations created by students (self-practice)
+      where.simulation = {
+        creatorRole: { not: 'STUDENT' },
+      };
 
       if (simulationId) {
         where.simulationId = simulationId;
