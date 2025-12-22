@@ -223,6 +223,7 @@ export const usersRouter = router({
                 // Groups the student belongs to
                 groupMemberships: {
                   select: {
+                    groupId: true,
                     group: {
                       select: {
                         id: true,
@@ -231,6 +232,57 @@ export const usersRouter = router({
                       },
                     },
                   },
+                },
+                // Materials explicitly assigned to the student
+                materialAccess: {
+                  select: {
+                    id: true,
+                    grantedAt: true,
+                    material: {
+                      select: {
+                        id: true,
+                        title: true,
+                        type: true,
+                      },
+                    },
+                  },
+                  orderBy: { grantedAt: 'desc' },
+                  take: 10,
+                },
+                // Simulation assignments
+                simulationAssignments: {
+                  select: {
+                    id: true,
+                    assignedAt: true,
+                    status: true,
+                    dueDate: true,
+                    startDate: true,
+                    endDate: true,
+                    simulation: {
+                      select: {
+                        id: true,
+                        title: true,
+                        type: true,
+                      },
+                    },
+                  },
+                  orderBy: { assignedAt: 'desc' },
+                  take: 10,
+                },
+                // Simulation results to show completion status
+                simulationResults: {
+                  select: {
+                    id: true,
+                    completedAt: true,
+                    totalScore: true,
+                    percentageScore: true,
+                    simulationId: true,
+                  },
+                  where: {
+                    completedAt: { not: null },
+                  },
+                  orderBy: { completedAt: 'desc' },
+                  take: 10,
                 },
               },
             },
@@ -308,8 +360,71 @@ export const usersRouter = router({
         ctx.prisma.user.count({ where }),
       ]);
 
+      // Enrich students with all accessible materials (including ALL_STUDENTS and GROUP_BASED)
+      const enrichedUsers = await Promise.all(
+        users.map(async (user) => {
+          if (!user.student) return user;
+
+          const student = user.student as any;
+          const studentId = student.id;
+          const groupIds = student.groupMemberships?.map((m: any) => m.groupId) || [];
+
+          // Get all materials accessible to this student
+          const accessibleMaterials = await ctx.prisma.material.findMany({
+            where: {
+              isActive: true,
+              OR: [
+                // Materials visible to all students
+                { visibility: 'ALL_STUDENTS' },
+                // Materials assigned to student's groups
+                groupIds.length > 0 ? {
+                  visibility: 'GROUP_BASED',
+                  groupAccess: {
+                    some: { groupId: { in: groupIds } },
+                  },
+                } : { id: 'never' },
+                // Materials explicitly assigned to this student
+                {
+                  visibility: 'SELECTED_STUDENTS',
+                  studentAccess: {
+                    some: { studentId },
+                  },
+                },
+              ],
+            },
+            select: {
+              id: true,
+              title: true,
+              type: true,
+              createdAt: true,
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+          });
+
+          // Transform materials to match the materialAccess structure
+          const materialAccessList = accessibleMaterials.map(material => ({
+            id: `synthetic-${material.id}`, // Synthetic ID to avoid conflicts
+            grantedAt: material.createdAt,
+            material: {
+              id: material.id,
+              title: material.title,
+              type: material.type,
+            },
+          }));
+
+          return {
+            ...user,
+            student: {
+              ...student,
+              materialAccess: materialAccessList,
+            },
+          };
+        })
+      );
+
       return {
-        users,
+        users: enrichedUsers,
         pagination: {
           page,
           limit,
@@ -847,5 +962,450 @@ export const usersRouter = router({
     });
 
     return staff;
+  }),
+
+  /**
+   * Get collaborator dashboard stats
+   * Returns statistics about simulations, questions, materials, and students
+   */
+  getCollaboratorDashboardStats: protectedProcedure.query(async ({ ctx }) => {
+    if (!ctx.user || (ctx.user.role !== 'COLLABORATOR' && ctx.user.role !== 'ADMIN')) {
+      throw new TRPCError({
+        code: 'FORBIDDEN',
+        message: 'Solo i collaboratori possono accedere a questa risorsa',
+      });
+    }
+
+    const userId = ctx.user.id;
+
+    // Get collaborator record for this user
+    const collaborator = await ctx.prisma.collaborator.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!collaborator) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: 'Profilo collaboratore non trovato',
+      });
+    }
+
+    // Get collaborator's assigned groups via GroupMember
+    const collaboratorGroupMemberships = await ctx.prisma.groupMember.findMany({
+      where: {
+        collaboratorId: collaborator.id,
+      },
+      select: { groupId: true },
+    });
+
+    const groupIds = collaboratorGroupMemberships.map(m => m.groupId);
+
+    // Get counts in parallel
+    const [
+      mySimulationsCount,
+      myQuestionsCount,
+      myMaterialsCount,
+      myStudentsCount,
+      recentSimulations,
+      upcomingEvents,
+    ] = await Promise.all([
+      // Simulations created by this collaborator
+      ctx.prisma.simulation.count({
+        where: { 
+          createdById: userId,
+          creatorRole: { not: 'STUDENT' },
+        },
+      }),
+      // Questions created by this collaborator
+      ctx.prisma.question.count({
+        where: { createdById: userId },
+      }),
+      // Materials uploaded by this collaborator
+      ctx.prisma.material.count({
+        where: { createdBy: userId },
+      }),
+      // Students in collaborator's groups only
+      ctx.prisma.groupMember.count({
+        where: { 
+          groupId: { in: groupIds },
+          studentId: { not: null },
+          student: {
+            user: { isActive: true },
+          },
+        },
+      }),
+      // Recent simulations by this collaborator (last 5)
+      ctx.prisma.simulation.findMany({
+        where: { 
+          createdById: userId,
+          creatorRole: { not: 'STUDENT' },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          status: true,
+          createdAt: true,
+          _count: {
+            select: { results: true, assignments: true },
+          },
+        },
+      }),
+      // Upcoming events for next 7 days - only for collaborator's groups or direct invites
+      ctx.prisma.calendarEvent.findMany({
+        where: {
+          OR: [
+            {
+              // Events where collaborator is directly invited
+              invitations: {
+                some: { userId: userId },
+              },
+            },
+            {
+              // Events where collaborator's groups are invited
+              invitations: {
+                some: {
+                  groupId: { in: groupIds },
+                },
+              },
+            },
+          ],
+          startDate: { gte: new Date() },
+          endDate: { lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+          isCancelled: false,
+        },
+        orderBy: { startDate: 'asc' },
+        take: 5,
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          startDate: true,
+          endDate: true,
+          isAllDay: true,
+          locationType: true,
+          locationDetails: true,
+        },
+      }),
+    ]);
+
+    return {
+      stats: {
+        mySimulations: mySimulationsCount,
+        myQuestions: myQuestionsCount,
+        myMaterials: myMaterialsCount,
+        totalStudents: myStudentsCount,
+      },
+      recentSimulations,
+      upcomingEvents,
+    };
+  }),
+
+  /**
+   * Get comprehensive admin platform statistics
+   * Returns detailed analytics for the entire platform
+   */
+  getAdminPlatformStats: adminProcedure.query(async ({ ctx }) => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+    // ============ USER STATS ============
+    const [
+      totalUsers,
+      totalStudents,
+      totalCollaborators,
+      totalAdmins,
+      activeUsers,
+      newUsersThisMonth,
+      newUsersLastMonth,
+    ] = await Promise.all([
+      ctx.prisma.user.count(),
+      ctx.prisma.user.count({ where: { role: 'STUDENT' } }),
+      ctx.prisma.user.count({ where: { role: 'COLLABORATOR' } }),
+      ctx.prisma.user.count({ where: { role: 'ADMIN' } }),
+      ctx.prisma.user.count({ where: { isActive: true } }),
+      ctx.prisma.user.count({ where: { createdAt: { gte: startOfMonth } } }),
+      ctx.prisma.user.count({ where: { createdAt: { gte: startOfLastMonth, lt: startOfMonth } } }),
+    ]);
+
+    // User growth trend (last 12 months)
+    const userGrowthTrend = await Promise.all(
+      Array.from({ length: 12 }, async (_, i) => {
+        const monthStart = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() - 10 + i, 0);
+        const count = await ctx.prisma.user.count({
+          where: { 
+            createdAt: { gte: monthStart, lte: monthEnd },
+            role: 'STUDENT',
+          },
+        });
+        // Format: "Dic '25" - clearer that 25 is year, not day
+        const monthName = monthStart.toLocaleDateString('it-IT', { month: 'short' });
+        const year = monthStart.getFullYear().toString().slice(-2);
+        return {
+          month: `${monthName.charAt(0).toUpperCase()}${monthName.slice(1)} '${year}`,
+          students: count,
+        };
+      })
+    );
+
+    // ============ REVENUE STATS ============
+    // Get signed contracts with template prices
+    const signedContracts = await ctx.prisma.contract.findMany({
+      where: { status: 'SIGNED' },
+      include: { template: { select: { price: true, name: true } } },
+    });
+
+    const totalRevenue = signedContracts.reduce((sum, c) => sum + (c.template.price || 0), 0);
+    
+    // Monthly revenue (last 12 months)
+    const revenueByMonth = await Promise.all(
+      Array.from({ length: 12 }, async (_, i) => {
+        const monthStart = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() - 10 + i, 0);
+        const contracts = await ctx.prisma.contract.findMany({
+          where: { 
+            status: 'SIGNED',
+            signedAt: { gte: monthStart, lte: monthEnd },
+          },
+          include: { template: { select: { price: true } } },
+        });
+        const revenue = contracts.reduce((sum, c) => sum + (c.template.price || 0), 0);
+        // Format: "Dic '25" - clearer that 25 is year, not day
+        const monthName = monthStart.toLocaleDateString('it-IT', { month: 'short' });
+        const year = monthStart.getFullYear().toString().slice(-2);
+        return {
+          month: `${monthName.charAt(0).toUpperCase()}${monthName.slice(1)} '${year}`,
+          revenue,
+          contracts: contracts.length,
+        };
+      })
+    );
+
+    const thisMonthRevenue = revenueByMonth[11]?.revenue || 0;
+    const lastMonthRevenue = revenueByMonth[10]?.revenue || 0;
+
+    // ============ SIMULATION & PERFORMANCE STATS ============
+    const [
+      totalSimulations,
+      totalResults,
+      completedResultsThisMonth,
+      avgScoreResult,
+    ] = await Promise.all([
+      ctx.prisma.simulation.count({ where: { status: 'PUBLISHED' } }),
+      ctx.prisma.simulationResult.count(),
+      ctx.prisma.simulationResult.count({ 
+        where: { completedAt: { gte: startOfMonth } } 
+      }),
+      ctx.prisma.simulationResult.aggregate({
+        _avg: { percentageScore: true },
+        where: { completedAt: { not: null } },
+      }),
+    ]);
+
+    // Performance by subject (from subjectScores JSON field)
+    const allResults = await ctx.prisma.simulationResult.findMany({
+      where: { completedAt: { not: null } },
+      select: { subjectScores: true },
+      take: 1000, // Limit for performance
+      orderBy: { completedAt: 'desc' },
+    });
+
+    type SubjectAccumulator = { correct: number; wrong: number; blank: number; total: number };
+    const subjectPerformance: Record<string, SubjectAccumulator> = {};
+    
+    for (const result of allResults) {
+      if (result.subjectScores && typeof result.subjectScores === 'object') {
+        const scores = result.subjectScores as Record<string, { correct?: number; wrong?: number; blank?: number }>;
+        for (const [subject, data] of Object.entries(scores)) {
+          if (!subjectPerformance[subject]) {
+            subjectPerformance[subject] = { correct: 0, wrong: 0, blank: 0, total: 0 };
+          }
+          subjectPerformance[subject].correct += data.correct || 0;
+          subjectPerformance[subject].wrong += data.wrong || 0;
+          subjectPerformance[subject].blank += data.blank || 0;
+          subjectPerformance[subject].total += (data.correct || 0) + (data.wrong || 0) + (data.blank || 0);
+        }
+      }
+    }
+
+    const subjectStats = Object.entries(subjectPerformance).map(([subject, data]) => ({
+      subject,
+      correct: data.correct,
+      wrong: data.wrong,
+      blank: data.blank,
+      total: data.total,
+      successRate: data.total > 0 ? Math.round((data.correct / data.total) * 100) : 0,
+    })).sort((a, b) => a.successRate - b.successRate); // Sort by lowest success rate first
+
+    // ============ QUESTION STATS ============
+    const [
+      totalQuestions,
+      publishedQuestions,
+      draftQuestions,
+    ] = await Promise.all([
+      ctx.prisma.question.count(),
+      ctx.prisma.question.count({ where: { status: 'PUBLISHED' } }),
+      ctx.prisma.question.count({ where: { status: 'DRAFT' } }),
+    ]);
+
+    // ============ COLLABORATOR STATS ============
+    const collaboratorStats = await ctx.prisma.collaborator.findMany({
+      include: {
+        user: { select: { id: true, name: true, email: true, isActive: true } },
+        groupMemberships: { include: { group: { select: { name: true } } } },
+      },
+    });
+
+    const collaboratorActivity = await Promise.all(
+      collaboratorStats.map(async (collab) => {
+        const [questionsCreated, materialsCreated, simulationsCreated] = await Promise.all([
+          ctx.prisma.question.count({ where: { createdById: collab.user.id } }),
+          ctx.prisma.material.count({ where: { createdBy: collab.user.id } }),
+          ctx.prisma.simulation.count({ where: { createdById: collab.user.id, creatorRole: { not: 'STUDENT' } } }),
+        ]);
+        return {
+          id: collab.id,
+          userId: collab.user.id,
+          name: collab.user.name,
+          email: collab.user.email,
+          isActive: collab.user.isActive,
+          groups: collab.groupMemberships.map(gm => gm.group.name),
+          questionsCreated,
+          materialsCreated,
+          simulationsCreated,
+          totalActivity: questionsCreated + materialsCreated + simulationsCreated,
+        };
+      })
+    );
+
+    // ============ STUDENT PERFORMANCE OVERVIEW ============
+    const studentPerformance = await ctx.prisma.student.findMany({
+      include: {
+        user: { select: { name: true, email: true, isActive: true, createdAt: true } },
+        simulationResults: {
+          where: { completedAt: { not: null } },
+          select: {
+            percentageScore: true,
+            correctAnswers: true,
+            wrongAnswers: true,
+            blankAnswers: true,
+            completedAt: true,
+          },
+          orderBy: { completedAt: 'desc' },
+          take: 10,
+        },
+        _count: { select: { simulationResults: true } },
+      },
+      take: 50,
+    });
+
+    // Sort by user createdAt manually
+    const sortedStudentPerformance = studentPerformance.sort((a, b) => 
+      b.user.createdAt.getTime() - a.user.createdAt.getTime()
+    );
+
+    const studentStats = sortedStudentPerformance.map((student) => {
+      const results = student.simulationResults;
+      const avgScore = results.length > 0 
+        ? results.reduce((sum, r) => sum + r.percentageScore, 0) / results.length 
+        : 0;
+      const totalCorrect = results.reduce((sum, r) => sum + r.correctAnswers, 0);
+      const totalWrong = results.reduce((sum, r) => sum + r.wrongAnswers, 0);
+      const totalBlank = results.reduce((sum, r) => sum + r.blankAnswers, 0);
+      
+      return {
+        id: student.id,
+        matricola: student.matricola || 'N/A',
+        name: student.user.name,
+        email: student.user.email,
+        isActive: student.user.isActive,
+        totalSimulations: student._count.simulationResults,
+        avgScore: Math.round(avgScore * 10) / 10,
+        totalCorrect,
+        totalWrong,
+        totalBlank,
+        lastActivity: results[0]?.completedAt || null,
+      };
+    }).sort((a, b) => b.avgScore - a.avgScore);
+
+    // ============ ACTIVITY TRENDS ============
+    const activityByMonth = await Promise.all(
+      Array.from({ length: 6 }, async (_, i) => {
+        const monthStart = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() - 4 + i, 0);
+        const [simulations, questions, materials] = await Promise.all([
+          ctx.prisma.simulationResult.count({
+            where: { completedAt: { gte: monthStart, lte: monthEnd } },
+          }),
+          ctx.prisma.question.count({
+            where: { createdAt: { gte: monthStart, lte: monthEnd } },
+          }),
+          ctx.prisma.material.count({
+            where: { createdAt: { gte: monthStart, lte: monthEnd } },
+          }),
+        ]);
+        return {
+          // Format: "Dic '25" - consistent with other charts
+          month: `${monthStart.toLocaleDateString('it-IT', { month: 'short' }).charAt(0).toUpperCase()}${monthStart.toLocaleDateString('it-IT', { month: 'short' }).slice(1)} '${monthStart.getFullYear().toString().slice(-2)}`,
+          simulations,
+          questions,
+          materials,
+        };
+      })
+    );
+
+    return {
+      // Overview
+      overview: {
+        totalUsers,
+        totalStudents,
+        totalCollaborators,
+        totalAdmins,
+        activeUsers,
+        newUsersThisMonth,
+        newUsersLastMonth,
+        userGrowthPercent: newUsersLastMonth > 0 
+          ? Math.round(((newUsersThisMonth - newUsersLastMonth) / newUsersLastMonth) * 100) 
+          : newUsersThisMonth > 0 ? 100 : 0,
+      },
+      // Revenue
+      revenue: {
+        total: totalRevenue,
+        thisMonth: thisMonthRevenue,
+        lastMonth: lastMonthRevenue,
+        growthPercent: lastMonthRevenue > 0 
+          ? Math.round(((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100) 
+          : thisMonthRevenue > 0 ? 100 : 0,
+        byMonth: revenueByMonth,
+      },
+      // Simulations
+      simulations: {
+        total: totalSimulations,
+        totalResults,
+        completedThisMonth: completedResultsThisMonth,
+        avgScore: Math.round((avgScoreResult._avg.percentageScore || 0) * 10) / 10,
+      },
+      // Questions
+      questions: {
+        total: totalQuestions,
+        published: publishedQuestions,
+        draft: draftQuestions,
+      },
+      // Charts data
+      charts: {
+        userGrowth: userGrowthTrend,
+        revenueByMonth,
+        activityByMonth,
+        subjectPerformance: subjectStats,
+      },
+      // Detailed lists
+      collaborators: collaboratorActivity.sort((a, b) => b.totalActivity - a.totalActivity),
+      students: studentStats,
+    };
   }),
 });

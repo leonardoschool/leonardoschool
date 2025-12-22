@@ -937,6 +937,28 @@ export default function AdminUtentiContent() {
     user: null,
   });
 
+  const [simulationsModal, setSimulationsModal] = useState<{
+    isOpen: boolean;
+    assignments: any[];
+    results: any[];
+    studentName: string;
+  }>({
+    isOpen: false,
+    assignments: [],
+    results: [],
+    studentName: '',
+  });
+
+  const [materialsModal, setMaterialsModal] = useState<{
+    isOpen: boolean;
+    materials: any[];
+    studentName: string;
+  }>({
+    isOpen: false,
+    materials: [],
+    studentName: '',
+  });
+
   const [subjectsModal, setSubjectsModal] = useState<{
     isOpen: boolean;
     collaboratorId: string;
@@ -2118,66 +2140,72 @@ export default function AdminUtentiContent() {
                 return null;
               })()}
 
-              {/* Simulazioni e Materiali Assegnati (solo studenti) */}
+              {/* Simulazioni e Materiali Assegnati (solo studenti) - Badge Cliccabili */}
               {viewUserModal.user.role === 'STUDENT' && viewUserModal.user.student && (
-                <div className="space-y-6">
-                  {/* Simulazioni */}
-                  <div>
-                    <h4 className={`font-semibold ${colors.text.primary}`}>Simulazioni Assegnate</h4>
-                    {viewUserModal.user.student.simulationAssignments && viewUserModal.user.student.simulationAssignments.length > 0 ? (
-                      <div className="space-y-2">
-                        {viewUserModal.user.student.simulationAssignments.slice(0, 5).map((sim: any) => (
-                          <div key={sim.id} className={`flex items-center justify-between p-3 rounded-lg ${colors.background.secondary}`}>
-                            <div className="flex items-center gap-3">
-                              <BookOpen className={`w-4 h-4 ${colors.text.muted}`} />
-                              <div>
-                                <p className={`font-medium ${colors.text.primary} text-sm`}>{sim.simulation?.title || 'Simulazione'}</p>
-                                <p className={`text-xs ${colors.text.muted}`}>Assegnata il {sim.assignedAt ? new Date(sim.assignedAt).toLocaleDateString('it-IT') : '-'}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {sim.completedAt ? (
-                                <span className={`text-sm font-semibold ${sim.score && sim.score >= 60 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                                  {sim.score?.toFixed(0)}%
-                                </span>
-                              ) : sim.startedAt ? (
-                                <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                                  In corso
-                                </span>
-                              ) : (
-                                <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-                                  Non iniziata
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                <div>
+                  <h4 className={`font-semibold ${colors.text.primary} mb-4`}>Contenuti Assegnati</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {/* Badge Simulazioni */}
+                    <button
+                      onClick={() => {
+                        const assignments = viewUserModal.user.student.simulationAssignments || [];
+                        const results = viewUserModal.user.student.simulationResults || [];
+                        console.log('📚 Simulazioni:', { assignments, results }); // Debug
+                        setSimulationsModal({
+                          isOpen: true,
+                          assignments,
+                          results,
+                          studentName: viewUserModal.user.name,
+                        });
+                      }}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl ${colors.primary.softBg} hover:scale-105 transition-transform shadow-sm`}
+                    >
+                      <div className={`p-2 rounded-lg ${colors.primary.bg}`}>
+                        <BookOpen className="w-5 h-5 text-white" />
                       </div>
-                    ) : (
-                      <div className={`p-3 rounded-lg ${colors.background.secondary}`}>
-                        <p className={`text-sm ${colors.text.muted}`}>Nessuna simulazione assegnata</p>
+                      <div className="text-left">
+                        <p className={`text-xs ${colors.text.muted} mb-0.5`}>Simulazioni</p>
+                        <p className={`text-2xl font-bold ${colors.primary.text}`}>
+                          {viewUserModal.user.student.simulationAssignments?.length || 0}
+                        </p>
                       </div>
-                    )}
-                  </div>
+                    </button>
 
-                  {/* Materiali */}
-                  <div>
-                    <h4 className={`font-semibold ${colors.text.primary}`}>Materiali Assegnati</h4>
-                    {viewUserModal.user.student.materialAccess && viewUserModal.user.student.materialAccess.length > 0 ? (
-                      <div className="space-y-2">
-                        {viewUserModal.user.student.materialAccess.slice(0, 5).map((mat: any) => (
-                          <div key={mat.id} className={`flex items-center p-3 rounded-lg ${colors.background.secondary}`}>
-                            <FolderOpen className={`w-4 h-4 mr-2 ${colors.text.muted}`} />
-                            <div>
-                              <p className={`font-medium ${colors.text.primary} text-sm`}>{mat.material?.title || 'Materiale'}</p>
-                              <p className={`text-xs ${colors.text.muted}`}>{mat.material?.type || ''} • Assegnato il {mat.grantedAt ? new Date(mat.grantedAt).toLocaleDateString('it-IT') : '-'}</p>
-                            </div>
-                          </div>
-                        ))}
+                    {/* Badge Materiali */}
+                    <button
+                      onClick={() => {
+                        const materials = viewUserModal.user.student.materialAccess || [];
+                        setMaterialsModal({
+                          isOpen: true,
+                          materials,
+                          studentName: viewUserModal.user.name,
+                        });
+                      }}
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl bg-green-50 dark:bg-green-900/20 hover:scale-105 transition-transform shadow-sm"
+                    >
+                      <div className="p-2 rounded-lg bg-green-100 dark:bg-green-800/50">
+                        <FolderOpen className="w-5 h-5 text-green-600 dark:text-green-400" />
                       </div>
-                    ) : (
-                      <div className={`p-3 rounded-lg ${colors.background.secondary}`}>
-                        <p className={`text-sm ${colors.text.muted}`}>Nessun materiale assegnato</p>
+                      <div className="text-left">
+                        <p className={`text-xs ${colors.text.muted} mb-0.5`}>Materiali</p>
+                        <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                          {viewUserModal.user.student.materialAccess?.length || 0}
+                        </p>
+                      </div>
+                    </button>
+
+                    {/* Badge Simulazioni Completate */}
+                    {viewUserModal.user.student.simulationResults && viewUserModal.user.student.simulationResults.length > 0 && (
+                      <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 shadow-sm">
+                        <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-800/50">
+                          <CheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <div className="text-left">
+                          <p className={`text-xs ${colors.text.muted} mb-0.5`}>Completate</p>
+                          <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                            {viewUserModal.user.student.simulationResults.length}
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -2242,6 +2270,151 @@ export default function AdminUtentiContent() {
             </div>
           </div>
         </div>
+        </Portal>
+      )}
+
+      {/* Simulazioni Modal */}
+      {simulationsModal.isOpen && (
+        <Portal>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]" onClick={() => setSimulationsModal({ isOpen: false, assignments: [], results: [], studentName: '' })}>
+            <div className={`${colors.background.card} rounded-2xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-hidden`} onClick={(e) => e.stopPropagation()}>
+              <div className={`p-6 border-b ${colors.border.primary}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className={`text-2xl font-bold ${colors.text.primary}`}>Simulazioni Assegnate</h2>
+                    <p className={`text-sm ${colors.text.muted} mt-1`}>{simulationsModal.studentName}</p>
+                  </div>
+                  <button
+                    onClick={() => setSimulationsModal({ isOpen: false, assignments: [], results: [], studentName: '' })}
+                    className={`p-2 rounded-lg ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              <div className="p-6 overflow-y-auto max-h-[calc(80vh-140px)]">
+                {simulationsModal.assignments.length > 0 ? (
+                  <div className="space-y-3">
+                    {simulationsModal.assignments.map((assignment: any) => {
+                      // Find the corresponding result for this simulation
+                      const result = simulationsModal.results?.find(
+                        (r: any) => r.simulationId === assignment.simulation?.id
+                      );
+                      
+                      return (
+                        <div key={assignment.id} className={`p-4 rounded-xl border ${colors.border.primary} ${colors.background.secondary}`}>
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <BookOpen className={`w-5 h-5 ${colors.primary.text}`} />
+                                <h3 className={`font-semibold ${colors.text.primary}`}>{assignment.simulation?.title || 'Simulazione'}</h3>
+                              </div>
+                              <div className="space-y-1">
+                                <p className={`text-sm ${colors.text.muted}`}>
+                                  <span className="font-medium">Assegnata:</span> {assignment.assignedAt ? new Date(assignment.assignedAt).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}
+                                </p>
+                                {assignment.dueDate && (
+                                  <p className={`text-sm ${colors.text.muted}`}>
+                                    <span className="font-medium">Scadenza:</span> {new Date(assignment.dueDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                  </p>
+                                )}
+                                {assignment.startDate && (
+                                  <p className={`text-sm ${colors.text.muted}`}>
+                                    <span className="font-medium">Inizio:</span> {new Date(assignment.startDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-2">
+                              {result ? (
+                                <>
+                                  <div className={`px-3 py-1.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400`}>
+                                    Completata
+                                  </div>
+                                  <div className={`text-2xl font-bold ${result.percentageScore && result.percentageScore >= 60 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                    {result.percentageScore?.toFixed(0)}%
+                                  </div>
+                                  <p className={`text-xs ${colors.text.muted}`}>
+                                    {result.completedAt ? new Date(result.completedAt).toLocaleDateString('it-IT') : ''}
+                                  </p>
+                                </>
+                              ) : (
+                                <div className={`px-3 py-1.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400`}>
+                                  Non completata
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className={`text-center py-12`}>
+                    <BookOpen className={`w-12 h-12 mx-auto mb-3 ${colors.text.muted}`} />
+                    <p className={`text-lg font-medium ${colors.text.primary}`}>Nessuna simulazione assegnata</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </Portal>
+      )}
+
+      {/* Materiali Modal */}
+      {materialsModal.isOpen && (
+        <Portal>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]" onClick={() => setMaterialsModal({ isOpen: false, materials: [], studentName: '' })}>
+            <div className={`${colors.background.card} rounded-2xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-hidden`} onClick={(e) => e.stopPropagation()}>
+              <div className={`p-6 border-b ${colors.border.primary}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className={`text-2xl font-bold ${colors.text.primary}`}>Materiali Assegnati</h2>
+                    <p className={`text-sm ${colors.text.muted} mt-1`}>{materialsModal.studentName}</p>
+                  </div>
+                  <button
+                    onClick={() => setMaterialsModal({ isOpen: false, materials: [], studentName: '' })}
+                    className={`p-2 rounded-lg ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              <div className="p-6 overflow-y-auto max-h-[calc(80vh-140px)]">
+                {materialsModal.materials.length > 0 ? (
+                  <div className="space-y-3">
+                    {materialsModal.materials.map((mat: any) => (
+                      <div key={mat.id} className={`p-4 rounded-xl border ${colors.border.primary} ${colors.background.secondary}`}>
+                        <div className="flex items-start gap-4">
+                          <div className={`p-3 rounded-lg bg-green-100 dark:bg-green-900/30`}>
+                            <FolderOpen className="w-6 h-6 text-green-600 dark:text-green-400" />
+                          </div>
+                          <div className="flex-1">
+                            <h3 className={`font-semibold ${colors.text.primary} mb-1`}>{mat.material?.title || 'Materiale'}</h3>
+                            <div className="flex items-center gap-3 text-sm">
+                              {mat.material?.type && (
+                                <span className={`px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400`}>
+                                  {mat.material.type}
+                                </span>
+                              )}
+                              <span className={colors.text.muted}>
+                                Assegnato il {mat.grantedAt ? new Date(mat.grantedAt).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={`text-center py-12`}>
+                    <FolderOpen className={`w-12 h-12 mx-auto mb-3 ${colors.text.muted}`} />
+                    <p className={`text-lg font-medium ${colors.text.primary}`}>Nessun materiale assegnato</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </Portal>
       )}
 

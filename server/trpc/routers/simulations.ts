@@ -123,7 +123,8 @@ async function createCalendarEventsForAssignments(
         endDate,
         // For multi-day events, mark as all-day for cleaner calendar display
         isAllDay: isMultiDay,
-        isPublic: simulation.isOfficial,
+        // Events are never public - visibility is controlled by invitations
+        isPublic: false,
         createdById: assignerId,
         invitations,
       });
@@ -2548,7 +2549,7 @@ export const simulationsRouter = router({
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
       const studentId = student.id;
 
-      // Get simulation with questions (include type and keywords for OPEN_TEXT handling)
+      // Get simulation with questions (include type, subject and keywords for OPEN_TEXT handling)
       const simulation = await ctx.prisma.simulation.findUnique({
         where: { id: simulationId },
         include: {
@@ -2558,6 +2559,7 @@ export const simulationsRouter = router({
                 include: { 
                   answers: true,
                   keywords: true, // Include keywords relation for OPEN_TEXT validation
+                  subject: { select: { name: true } }, // Include subject for subjectScores calculation
                 },
               },
             },
@@ -2633,11 +2635,20 @@ export const simulationsRouter = router({
       let blankCount = 0;
       let totalScore = 0;
 
+      // Track subject-level statistics for subjectScores field
+      const subjectScores: Record<string, { correct: number; wrong: number; blank: number }> = {};
+
       const evaluatedAnswers = [];
 
       for (const sq of simulation.questions) {
         const studentAnswer = answers.find(a => a.questionId === sq.questionId);
         const correctAnswer = sq.question.answers.find(a => a.isCorrect);
+        const subject = sq.question.subject?.name; // Get subject name for each question
+
+        // Initialize subject stats if not exists
+        if (subject && !subjectScores[subject]) {
+          subjectScores[subject] = { correct: 0, wrong: 0, blank: 0 };
+        }
 
         const points = sq.customPoints ?? (simulation.useQuestionPoints ? sq.question.points : simulation.correctPoints);
         const negativePoints = sq.customNegativePoints ?? (simulation.useQuestionPoints ? sq.question.negativePoints : simulation.wrongPoints);
@@ -2658,20 +2669,28 @@ export const simulationsRouter = router({
             blankCount++;
             earnedPoints = simulation.blankPoints;
             isCorrect = null;
+            // Track blank for subject
+            if (subject) subjectScores[subject].blank++;
           }
         } else if (!studentAnswer?.answerId) {
           // Blank answer for choice questions
           blankCount++;
           earnedPoints = simulation.blankPoints;
+          // Track blank for subject
+          if (subject) subjectScores[subject].blank++;
         } else if (studentAnswer.answerId === correctAnswer?.id) {
           // Correct answer
           isCorrect = true;
           correctCount++;
           earnedPoints = points;
+          // Track correct for subject
+          if (subject) subjectScores[subject].correct++;
         } else {
           // Wrong answer
           wrongCount++;
           earnedPoints = negativePoints;
+          // Track wrong for subject
+          if (subject) subjectScores[subject].wrong++;
         }
 
         totalScore += earnedPoints;
@@ -2691,7 +2710,7 @@ export const simulationsRouter = router({
         a.isCorrect === null && a.answerText && a.answerText.trim().length > 0
       ).length;
 
-      // Update result
+      // Update result with subjectScores for per-subject statistics
       const updatedResult = await ctx.prisma.simulationResult.update({
         where: { id: result.id },
         data: {
@@ -2704,6 +2723,7 @@ export const simulationsRouter = router({
           pendingOpenAnswers: pendingOpenCount,
           durationSeconds: totalTimeSpent,
           completedAt: new Date(),
+          subjectScores: Object.keys(subjectScores).length > 0 ? subjectScores : undefined,
         },
       });
 

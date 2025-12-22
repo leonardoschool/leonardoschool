@@ -87,6 +87,23 @@ export const calendarRouter = router({
         }
       }
 
+      // Get collaborator's groups if user is a collaborator
+      let collaboratorGroupIds: string[] = [];
+      if (ctx.user?.role === 'COLLABORATOR') {
+        const collaborator = await ctx.prisma.collaborator.findUnique({
+          where: { userId: ctx.user.id },
+          select: { id: true },
+        });
+        
+        if (collaborator) {
+          const groupMembers = await ctx.prisma.groupMember.findMany({
+            where: { collaboratorId: collaborator.id },
+            select: { groupId: true },
+          });
+          collaboratorGroupIds = groupMembers.map(gm => gm.groupId);
+        }
+      }
+
       // Only my events (created by me or invited) - takes precedence over public filter
       if (onlyMyEvents && ctx.user) {
         type WhereCondition = Parameters<typeof ctx.prisma.calendarEvent.findMany>[0]['where'];
@@ -98,6 +115,11 @@ export const calendarRouter = router({
         // Add group invitations for students
         if (studentGroupIds.length > 0) {
           orConditions.push({ invitations: { some: { groupId: { in: studentGroupIds } } } });
+        }
+        
+        // Add group invitations for collaborators
+        if (collaboratorGroupIds.length > 0) {
+          orConditions.push({ invitations: { some: { groupId: { in: collaboratorGroupIds } } } });
         }
         
         where.OR = orConditions;
@@ -113,6 +135,21 @@ export const calendarRouter = router({
         
         if (studentGroupIds.length > 0) {
           orConditions.push({ invitations: { some: { groupId: { in: studentGroupIds } } } });
+        }
+        
+        where.OR = orConditions;
+      }
+      // Collaborators see: public events, events created by them, events they're invited to directly, or events their groups are invited to
+      else if (ctx.user?.role === 'COLLABORATOR') {
+        type WhereCondition = Parameters<typeof ctx.prisma.calendarEvent.findMany>[0]['where'];
+        const orConditions: WhereCondition[] = [
+          { isPublic: true },
+          { createdById: ctx.user.id },
+          { invitations: { some: { userId: ctx.user.id } } },
+        ];
+        
+        if (collaboratorGroupIds.length > 0) {
+          orConditions.push({ invitations: { some: { groupId: { in: collaboratorGroupIds } } } });
         }
         
         where.OR = orConditions;
@@ -1445,6 +1482,40 @@ export const calendarRouter = router({
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
+    // For collaborators, only count events they can see (created by them or invited to)
+    // For admins, count all events
+    let eventFilter: Parameters<typeof ctx.prisma.calendarEvent.count>[0]['where'] = { isCancelled: false };
+    
+    if (ctx.user.role === 'COLLABORATOR') {
+      // Get collaborator's groups
+      const collaborator = await ctx.prisma.collaborator.findUnique({
+        where: { userId: ctx.user.id },
+        select: { id: true },
+      });
+      
+      let collaboratorGroupIds: string[] = [];
+      if (collaborator) {
+        const groupMembers = await ctx.prisma.groupMember.findMany({
+          where: { collaboratorId: collaborator.id },
+          select: { groupId: true },
+        });
+        collaboratorGroupIds = groupMembers.map(gm => gm.groupId);
+      }
+
+      // Collaborators see: public events, events created by them, events they're invited to, or events their groups are invited to
+      eventFilter = {
+        isCancelled: false,
+        OR: [
+          { isPublic: true },
+          { createdById: ctx.user.id },
+          { invitations: { some: { userId: ctx.user.id } } },
+          ...(collaboratorGroupIds.length > 0 
+            ? [{ invitations: { some: { groupId: { in: collaboratorGroupIds } } } }] 
+            : []),
+        ],
+      };
+    }
+
     const [
       totalEvents,
       eventsThisMonth,
@@ -1453,17 +1524,17 @@ export const calendarRouter = router({
       myEventsCount,
     ] = await Promise.all([
       ctx.prisma.calendarEvent.count({
-        where: { isCancelled: false },
+        where: eventFilter,
       }),
       ctx.prisma.calendarEvent.count({
         where: {
-          isCancelled: false,
+          ...eventFilter,
           startDate: { gte: startOfMonth, lte: endOfMonth },
         },
       }),
       ctx.prisma.calendarEvent.count({
         where: {
-          isCancelled: false,
+          ...eventFilter,
           startDate: { gte: now },
         },
       }),
