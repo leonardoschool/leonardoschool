@@ -287,7 +287,7 @@ export function AdminDashboard({ userName }: AdminDashboardProps) {
     (contactRequestsStats?.pending || 0);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+    <div className="w-full overflow-x-hidden space-y-6">
       {/* Welcome Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -341,20 +341,20 @@ export function AdminDashboard({ userName }: AdminDashboardProps) {
           <BarChart3 className="w-5 h-5" />
           Panoramica Piattaforma
         </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {platformStats.map((stat) => (
             <Link
               key={stat.label}
               href={stat.href}
-              className={`${colors.background.card} rounded-xl p-4 sm:p-5 ${colors.effects.shadow.md} hover:shadow-lg transition-all group border ${colors.border.primary} hover:border-transparent`}
+              className={`${colors.background.card} rounded-xl p-3 sm:p-4 lg:p-5 ${colors.effects.shadow.md} hover:shadow-lg transition-all group border ${colors.border.primary} hover:border-transparent`}
             >
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl ${stat.color} flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform`}>
-                  <stat.icon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className={`w-9 h-9 sm:w-10 sm:h-10 lg:w-12 lg:h-12 rounded-xl ${stat.color} flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform`}>
+                  <stat.icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-white" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className={`text-xs sm:text-sm ${colors.text.muted}`}>{stat.label}</p>
-                  <p className={`text-xl sm:text-2xl font-bold ${colors.text.primary}`}>{stat.value}</p>
+                  <p className={`text-[11px] sm:text-xs lg:text-sm ${colors.text.muted} truncate`}>{stat.label}</p>
+                  <p className={`text-lg sm:text-xl lg:text-2xl font-bold ${colors.text.primary}`}>{stat.value}</p>
                 </div>
               </div>
             </Link>

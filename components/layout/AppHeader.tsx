@@ -123,6 +123,7 @@ export default function AppHeader() {
   const gestioneMenuRef = useRef<HTMLDivElement>(null);
   const registroMenuRef = useRef<HTMLDivElement>(null);
   const didatticaMenuRef = useRef<HTMLDivElement>(null);
+  const currentColorTheme = localStorage.getItem('theme') || 'light';
 
   // Polling interval for real-time updates (30 seconds)
   const POLLING_INTERVAL = 30 * 1000;
@@ -476,36 +477,37 @@ export default function AppHeader() {
 
   return (
     <header className={`sticky top-0 z-50 ${colors.background.card} border-b ${colors.border.primary} shadow-sm`}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+      <div className="w-full px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-20 gap-3">
           {/* Hamburger Menu Button (Mobile/Tablet) */}
           <button
             onClick={() => setMobileMenuOpen(true)}
-            className={`lg:hidden p-2 rounded-lg ${colors.effects.hover.bgSubtle} ${colors.icon.interactive} transition-colors mr-2`}
+            className={`lg:hidden p-2 rounded-lg ${colors.effects.hover.bgSubtle} ${colors.icon.interactive} transition-colors flex-shrink-0`}
             aria-label="Apri menu"
           >
-            <Menu className="w-6 h-6" />
+            <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
 
-          {/* Logo */}
-          <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="relative w-14 h-14 rounded-lg p-1">
+          {/* Logo based on dark or light mode */}
+          <Link href="/dashboard" className="flex items-center flex-shrink-0">
+            <div className="relative w-[10rem] h-[10rem] mt-3">
               <Image
-                src="/images/logo.png"
+                src={`/images/logo-${currentColorTheme}.png`}
                 alt="Leonardo School"
                 fill
-                className="object-contain"
+                className="object-contain object-left"
+                priority
               />
             </div>
           </Link>
 
           {/* Staff Navigation (desktop) - Admin & Collaborator */}
           {isStaff && collaboratorCanNavigate && (
-            <nav className="hidden lg:flex items-center gap-1">
+            <nav className="hidden lg:flex items-center justify-center flex-1 gap-4 xl:gap-6">
               {/* Dashboard link */}
               <Link
                 href="/dashboard"
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
                   pathname === '/dashboard'
                     ? `${colors.primary.softBg} ${colors.primary.text}`
                     : `${colors.text.primary} ${colors.effects.hover.bgSubtle}`
@@ -520,7 +522,7 @@ export default function AppHeader() {
                 <div ref={gestioneMenuRef} className="relative">
                     <button
                       onClick={() => setGestioneMenuOpen(!gestioneMenuOpen)}
-                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
                         isGestioneActive
                           ? `${colors.primary.softBg} ${colors.primary.text}`
                           : `${colors.text.primary} ${colors.effects.hover.bgSubtle}`
@@ -577,7 +579,7 @@ export default function AppHeader() {
                 <div ref={didatticaMenuRef} className="relative">
                   <button
                     onClick={() => setDidatticaMenuOpen(!didatticaMenuOpen)}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
                       isDidatticaActive
                         ? `${colors.primary.softBg} ${colors.primary.text}`
                         : `${colors.text.primary} ${colors.effects.hover.bgSubtle}`
@@ -617,7 +619,7 @@ export default function AppHeader() {
                 <div ref={registroMenuRef} className="relative">
                   <button
                     onClick={() => setRegistroMenuOpen(!registroMenuOpen)}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
                       isRegistroActive
                         ? `${colors.primary.softBg} ${colors.primary.text}`
                         : `${colors.text.primary} ${colors.effects.hover.bgSubtle}`
@@ -659,7 +661,7 @@ export default function AppHeader() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
                       isActive
                         ? `${colors.primary.softBg} ${colors.primary.text}`
                         : `${colors.text.primary} ${colors.effects.hover.bgSubtle}`
@@ -675,7 +677,7 @@ export default function AppHeader() {
 
           {/* Student Navigation (desktop) - only visible when account is active */}
           {isStudent && studentCanNavigate && (
-            <nav className="hidden lg:flex items-center gap-1">
+            <nav className="hidden lg:flex items-center justify-center flex-1 gap-6 xl:gap-8">
               {studentNavItems.map((item) => {
                 const isActive = pathname === item.href || 
                   (item.href !== '/dashboard' && pathname.startsWith(item.href));
@@ -683,7 +685,7 @@ export default function AppHeader() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
                       isActive
                         ? `${colors.primary.softBg} ${colors.primary.text}`
                         : `${colors.text.primary} ${colors.effects.hover.bgSubtle}`
@@ -698,12 +700,12 @@ export default function AppHeader() {
           )}
 
           {/* Right side actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
             {/* Theme Toggle */}
             <div ref={themeMenuRef} className="relative">
               <button
                 onClick={() => setThemeMenuOpen(!themeMenuOpen)}
-                className={`p-2 rounded-lg ${colors.effects.hover.bgSubtle} ${colors.icon.interactive} transition-colors`}
+                className={`p-1.5 sm:p-2 rounded-lg ${colors.effects.hover.bgSubtle} ${colors.icon.interactive} transition-colors`}
                 title="Cambia tema"
               >
                 {currentTheme === 'dark' ? (
@@ -740,12 +742,12 @@ export default function AppHeader() {
             {user && (
               <Link
                 href="/messaggi"
-                className={`p-2 rounded-lg ${colors.effects.hover.bgSubtle} ${colors.icon.interactive} transition-colors relative`}
+                className={`p-1.5 sm:p-2 rounded-lg ${colors.effects.hover.bgSubtle} ${colors.icon.interactive} transition-colors relative`}
                 title="Messaggi"
               >
                 <MessageSquare className="w-5 h-5" />
                 {unreadMessagesCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-red-500 text-white text-[11px] leading-none rounded-full flex items-center justify-center font-bold">
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] leading-none rounded-full flex items-center justify-center font-bold">
                     {unreadMessagesCount > 9 ? '9+' : unreadMessagesCount}
                   </span>
                 )}
@@ -757,11 +759,11 @@ export default function AppHeader() {
               <div ref={notificationsRef} className="relative">
                 <button
                   onClick={() => setNotificationsOpen(!notificationsOpen)}
-                  className={`p-2 rounded-lg ${colors.effects.hover.bgSubtle} ${colors.icon.interactive} transition-colors relative`}
+                  className={`p-1.5 sm:p-2 rounded-lg ${colors.effects.hover.bgSubtle} ${colors.icon.interactive} transition-colors relative`}
                 >
                   <Bell className="w-5 h-5" />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-red-500 text-white text-[11px] leading-none rounded-full flex items-center justify-center font-bold">
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] leading-none rounded-full flex items-center justify-center font-bold">
                       {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
                   )}
@@ -847,15 +849,15 @@ export default function AppHeader() {
             <div ref={userMenuRef} className="relative">
               <button
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg ${colors.effects.hover.bgSubtle} transition-colors`}
+                className={`flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-1.5 sm:py-2 rounded-lg ${colors.effects.hover.bgSubtle} transition-colors`}
               >
-                <div className={`w-8 h-8 rounded-full ${colors.primary.bg} flex items-center justify-center text-white font-semibold text-sm leading-none`}>
+                <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full ${colors.primary.bg} flex items-center justify-center text-white font-semibold text-xs sm:text-sm leading-none flex-shrink-0`}>
                   {user?.name?.charAt(0).toUpperCase() || 'U'}
                 </div>
-                <span className={`hidden sm:block text-sm font-medium max-w-[120px] truncate ${colors.text.primary}`}>
+                <span className={`hidden sm:block text-sm font-medium max-w-[100px] truncate ${colors.text.primary}`}>
                   {user?.name?.split(' ')[0] || 'Utente'}
                 </span>
-                <ChevronDown className={`w-4 h-4 ${colors.icon.primary} transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-3 h-3 sm:w-4 sm:h-4 ${colors.icon.primary} transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {userMenuOpen && (
@@ -979,8 +981,8 @@ export default function AppHeader() {
             </div>
           </div>
 
-          {/* Scrollable Content */}
-          <div className="flex-1 overflow-y-auto px-4 pb-4">
+          {/* Scrollable Content - hidden scrollbar */}
+          <div className="flex-1 overflow-y-auto px-4 pb-4 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {/* Staff Navigation */}
             {isStaff && collaboratorCanNavigate && (
               <div className="space-y-3">
@@ -1169,7 +1171,7 @@ export default function AppHeader() {
                 </div>
 
                 {/* Direct Links: Calendario, Statistiche, Messaggi */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-3">
                   {navItems.filter(item => item.href !== '/dashboard').map((item) => {
                     const isActive = pathname === item.href || pathname.startsWith(item.href);
                     return (
@@ -1180,7 +1182,7 @@ export default function AppHeader() {
                           setMobileMenuOpen(false);
                           setExpandedSection(null);
                         }}
-                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl transition-all ${
+                        className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${
                           isActive
                             ? `${colors.primary.gradient} text-white shadow-lg`
                             : `${colors.background.card} ${colors.text.primary} hover:shadow-md`
@@ -1191,7 +1193,7 @@ export default function AppHeader() {
                         }`}>
                           <item.icon className="w-6 h-6" />
                         </div>
-                        <span className="font-medium text-sm">{item.label}</span>
+                        <span className="font-semibold text-lg">{item.label}</span>
                       </Link>
                     );
                   })}
@@ -1201,7 +1203,7 @@ export default function AppHeader() {
                       setMobileMenuOpen(false);
                       setExpandedSection(null);
                     }}
-                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl transition-all relative ${
+                    className={`flex items-center gap-4 p-4 rounded-2xl transition-all relative ${
                       pathname === '/messaggi'
                         ? `${colors.primary.gradient} text-white shadow-lg`
                         : `${colors.background.card} ${colors.text.primary} hover:shadow-md`
@@ -1217,7 +1219,7 @@ export default function AppHeader() {
                         </span>
                       )}
                     </div>
-                    <span className="font-medium text-sm">Messaggi</span>
+                    <span className="font-semibold text-lg">Messaggi</span>
                   </Link>
                 </div>
               </div>
