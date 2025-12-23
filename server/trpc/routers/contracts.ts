@@ -932,6 +932,13 @@ export const contractsRouter = router({
             duration: true,
           },
         },
+        student: {
+          include: {
+            user: {
+              select: { name: true, email: true },
+            },
+          },
+        },
       },
       orderBy: { assignedAt: 'desc' },
     });
@@ -966,6 +973,13 @@ export const contractsRouter = router({
             description: true,
             price: true,
             duration: true,
+          },
+        },
+        collaborator: {
+          include: {
+            user: {
+              select: { name: true, email: true },
+            },
           },
         },
       },

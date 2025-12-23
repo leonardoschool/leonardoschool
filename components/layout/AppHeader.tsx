@@ -7,6 +7,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { firebaseAuth } from '@/lib/firebase/auth';
 import { colors } from '@/lib/theme/colors';
+import { playNotificationSound } from '@/lib/utils/notificationSound';
 import {
   Bell,
   Settings,
@@ -155,6 +156,25 @@ export default function AppHeader() {
   // Filter out MESSAGE_RECEIVED notifications for the bell (they show on message icon instead)
   const filteredNotifications = notifications.filter(n => n.type !== 'MESSAGE_RECEIVED');
   const unreadCount = filteredNotifications.filter(n => !n.isRead).length;
+
+  // Track previous unread count to detect new notifications
+  const prevUnreadCountRef = useRef<number | null>(null);
+  
+  // Play sound when new notifications arrive
+  useEffect(() => {
+    // Skip initial load (when prevUnreadCountRef is null)
+    if (prevUnreadCountRef.current === null) {
+      prevUnreadCountRef.current = unreadCount;
+      return;
+    }
+    
+    // If unread count increased, play notification sound
+    if (unreadCount > prevUnreadCountRef.current) {
+      playNotificationSound(0.5);
+    }
+    
+    prevUnreadCountRef.current = unreadCount;
+  }, [unreadCount]);
 
   // Get job applications stats (admin only) - for badge count
   const { data: jobApplicationsStats } = trpc.jobApplications.getStats.useQuery(

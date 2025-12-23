@@ -632,7 +632,7 @@ export default function StudentWaitingRoom({
 
             {/* Tips - Modern gradient style */}
             <div className="bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-purple-500/10 dark:from-cyan-500/5 dark:via-blue-500/5 dark:to-purple-500/5 border-t border-cyan-500/20 dark:border-cyan-500/10 p-5 lg:p-6">
-              <div className="flex items-start justify-between gap-4 items-center">
+              <div className="flex justify-between gap-4 items-center">
                 <div className="flex items-start gap-4 flex-1">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center flex-shrink-0 shadow-md">
                     <Sparkles className="w-5 h-5 text-white" />
