@@ -87,33 +87,11 @@ function RootLayoutNav() {
           }}
         />
         
-        {/* Simulation player */}
+        {/* Simulation routes */}
         <Stack.Screen
-          name="simulation/[id]"
+          name="simulation"
           options={{
             headerShown: false,
-            presentation: 'fullScreenModal',
-            gestureEnabled: false,
-          }}
-        />
-        
-        {/* Simulation result */}
-        <Stack.Screen
-          name="simulation/result/[id]"
-          options={{
-            headerShown: true,
-            title: 'Risultati',
-            headerBackTitle: 'Indietro',
-          }}
-        />
-        
-        {/* Settings */}
-        <Stack.Screen
-          name="settings"
-          options={{
-            headerShown: true,
-            title: 'Impostazioni',
-            presentation: 'modal',
           }}
         />
       </Stack>

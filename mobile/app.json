@@ -9,20 +9,14 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/splash.png",
+      "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#a8012b"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.leonardoschool.app",
-      "buildNumber": "1",
-      "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"],
-        "NSCameraUsageDescription": "Utilizziamo la fotocamera per scansionare documenti e QR code.",
-        "NSPhotoLibraryUsageDescription": "Utilizziamo la galleria per caricare immagini del profilo."
-      },
-      "googleServicesFile": "./GoogleService-Info.plist"
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
@@ -33,12 +27,8 @@
       "versionCode": 1,
       "permissions": [
         "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.VIBRATE",
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
-      ],
-      "googleServicesFile": "./google-services.json"
+        "android.permission.VIBRATE"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -48,18 +38,7 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-secure-store",
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/images/notification-icon.png",
-          "color": "#a8012b",
-          "sounds": ["./assets/sounds/notification.wav"]
-        }
-      ],
-      "@react-native-firebase/app",
-      "@react-native-firebase/auth",
-      "@react-native-firebase/messaging"
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
@@ -67,9 +46,6 @@
     "extra": {
       "router": {
         "origin": false
-      },
-      "eas": {
-        "projectId": "your-project-id"
       }
     }
   }
