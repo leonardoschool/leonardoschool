@@ -8,6 +8,10 @@ import Constants from 'expo-constants';
 
 // Get API URL from environment or use default
 const getApiUrl = (): string => {
+  // Check for environment variable first (works in both dev and prod)
+  const envApiUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (envApiUrl) return envApiUrl;
+  
   // For development
   if (__DEV__) {
     // Use the local network IP for development

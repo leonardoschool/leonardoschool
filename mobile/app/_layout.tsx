@@ -15,6 +15,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { TRPCProvider, createTRPCReactClient } from '../lib/trpc';
 import { useAuthStore } from '../stores/authStore';
+import { AuthGuard } from '../components/auth';
 import { colors } from '../lib/theme/colors';
 import { config } from '../lib/config';
 
@@ -58,7 +59,7 @@ function RootLayoutNav() {
   }, [initialize]);
 
   return (
-    <>
+    <AuthGuard>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
@@ -95,7 +96,7 @@ function RootLayoutNav() {
           }}
         />
       </Stack>
-    </>
+    </AuthGuard>
   );
 }
 

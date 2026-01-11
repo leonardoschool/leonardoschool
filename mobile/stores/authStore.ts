@@ -5,8 +5,10 @@
  */
 
 import { create } from 'zustand';
+import { onAuthStateChanged } from 'firebase/auth';
 import { storage, secureStorage } from '../lib/storage';
 import { config } from '../lib/config';
+import { auth } from '../lib/firebase/config';
 import type { User, StudentProfile, AuthState } from '../types';
 
 interface AuthActions {
@@ -125,35 +127,69 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     try {
       set({ isLoading: true });
       
-      // Check for stored token
-      const token = await secureStorage.getAuthToken();
-      if (!token) {
-        set({ isLoading: false, isAuthenticated: false, isInitialized: true });
-        return;
-      }
-
-      // Get stored user data
-      const user = await storage.getUser<User>();
-      if (!user) {
-        // Token exists but no user data - clear token
+      // Wait for Firebase to restore auth state from AsyncStorage
+      const firebaseUser = await new Promise<typeof auth.currentUser>((resolve) => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+          unsubscribe();
+          resolve(user);
+        });
+        // Timeout after 5 seconds
+        setTimeout(() => resolve(auth.currentUser), 5000);
+      });
+      
+      if (firebaseUser) {
+        // Firebase has a user - get fresh token and verify with backend
+        console.log('[AuthStore] Firebase user found:', firebaseUser.email);
+        const freshToken = await firebaseUser.getIdToken(true); // force refresh
+        
+        // Get stored user data for initial render
+        const cachedUser = await storage.getUser<User>();
+        
+        if (cachedUser) {
+          // Show cached user immediately
+          set({
+            user: cachedUser,
+            isAuthenticated: true,
+            isLoading: false,
+            isInitialized: true,
+          });
+          
+          // Update token in secure storage
+          await secureStorage.setAuthToken(freshToken);
+          
+          // Verify with server in background
+          verifyTokenWithServer(freshToken, cachedUser).catch(console.warn);
+        } else {
+          // No cached user - verify with server now
+          const response = await fetch(`${config.api.baseUrl}/api/auth/me`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: freshToken }),
+          });
+          
+          if (response.ok) {
+            const user = await response.json();
+            await secureStorage.setAuthToken(freshToken);
+            await storage.setUser(user);
+            set({
+              user,
+              isAuthenticated: true,
+              isLoading: false,
+              isInitialized: true,
+            });
+          } else {
+            // Token/user invalid
+            console.warn('[AuthStore] Backend rejected token');
+            set({ isLoading: false, isAuthenticated: false, isInitialized: true });
+          }
+        }
+      } else {
+        // No Firebase user
+        console.log('[AuthStore] No Firebase user found');
         await secureStorage.deleteAuthToken();
+        await storage.deleteUser();
         set({ isLoading: false, isAuthenticated: false, isInitialized: true });
-        return;
       }
-
-      // Restore state
-      set({
-        user,
-        isAuthenticated: true,
-        isLoading: false,
-        isInitialized: true,
-      });
-
-      // Verify token with server in background (non-blocking)
-      verifyTokenWithServer(token, user).catch((error) => {
-        console.warn('[AuthStore] Token verification failed:', error);
-      });
-
     } catch (error) {
       console.error('[AuthStore] Initialize error:', error);
       set({ 
@@ -178,8 +214,8 @@ async function verifyTokenWithServer(token: string, cachedUser: User): Promise<v
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
       },
+      body: JSON.stringify({ token }),
     });
     
     if (!response.ok) {
@@ -189,17 +225,13 @@ async function verifyTokenWithServer(token: string, cachedUser: User): Promise<v
       return;
     }
     
-    const data = await response.json();
+    // La risposta contiene i dati utente direttamente (non wrappati in .user)
+    const user = await response.json();
     
     // Update user if data changed
-    if (data.user && JSON.stringify(data.user) !== JSON.stringify(cachedUser)) {
-      useAuthStore.getState().setUser(data.user);
-      await storage.setUser(data.user);
-    }
-    
-    // Update student profile if available
-    if (data.studentProfile) {
-      useAuthStore.getState().setStudentProfile(data.studentProfile);
+    if (user && user.id && JSON.stringify(user) !== JSON.stringify(cachedUser)) {
+      useAuthStore.getState().setUser(user);
+      await storage.setUser(user);
     }
   } catch (error) {
     // Network error - keep cached data but log warning

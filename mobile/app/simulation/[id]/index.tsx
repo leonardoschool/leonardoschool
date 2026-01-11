@@ -1,6 +1,7 @@
 /**
  * Schermata esecuzione simulazione
  * Gestisce il timer, le domande e le risposte durante una simulazione
+ * Utilizza le API tRPC reali per caricamento e invio.
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
@@ -28,6 +29,7 @@ import { spacing } from '../../../lib/theme/spacing';
 import { typography } from '../../../lib/theme/typography';
 import { showConfirmAlert } from '../../../lib/errorHandler';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { trpc } from '../../../lib/trpc';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -36,12 +38,11 @@ interface Question {
   id: string;
   text: string;
   difficulty: 'FACILE' | 'MEDIA' | 'DIFFICILE';
-  type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'OPEN';
+  type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'OPEN' | 'OPEN_TEXT';
   points: number;
   options: {
     id: string;
     text: string;
-    isCorrect: boolean;
   }[];
   subjectId: string;
 }
@@ -62,21 +63,31 @@ interface SimulationConfig {
 }
 
 export default function SimulationExecutionScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, assignmentId } = useLocalSearchParams<{ id: string; assignmentId?: string }>();
   const router = useRouter();
   const { themed } = useTheme();
 
   // Stati
   const [loading, setLoading] = useState(true);
   const [simulation, setSimulation] = useState<SimulationConfig | null>(null);
+  const [_attemptId, setAttemptId] = useState<string | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [timeRemaining, setTimeRemaining] = useState(0); // secondi
   const [showQuestionNav, setShowQuestionNav] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [startTime] = useState(Date.now());
 
   // Animazioni
   const progressScale = useSharedValue(1);
+
+  // tRPC mutations - usa ref per evitare ri-esecuzione useEffect
+  const startAttemptMutation = trpc.simulations.startAttempt.useMutation();
+  const startAttemptRef = React.useRef(startAttemptMutation);
+  startAttemptRef.current = startAttemptMutation;
+  
+  const submitMutation = trpc.simulations.submit.useMutation();
+  const saveProgressMutation = trpc.simulations.saveProgress.useMutation();
 
   // Styles dinamici
   const dynamicStyles = useMemo(
@@ -92,52 +103,79 @@ export default function SimulationExecutionScreen() {
     [themed]
   );
 
+  // Ref per submitSimulation per evitare re-render
+  const submitSimulationRef = React.useRef<(() => Promise<void>) | null>(null);
+
   // Tempo scaduto
   const handleTimeExpired = useCallback(() => {
     Alert.alert(
       'Tempo scaduto',
       'Il tempo a disposizione è terminato. La simulazione verrà consegnata automaticamente.',
-      [{ text: 'OK', onPress: () => router.replace(`/simulation/${id}/result`) }]
+      [{ text: 'OK', onPress: () => submitSimulationRef.current?.() }]
     );
-  }, [id, router]);
+  }, []);
 
   // Funzione per gestire uscita
   const handleExitConfirm = useCallback(() => {
     router.back();
   }, [router]);
 
-  // Caricamento simulazione
+  // Caricamento simulazione con API reale
   useEffect(() => {
     const loadSimulation = async () => {
+      if (!id) {
+        Alert.alert('Errore', 'ID simulazione mancante');
+        router.back();
+        return;
+      }
+
       try {
-        // API Integration: Sostituire con trpc.simulations.getById.query({ id })
-        // quando il router tRPC sarà integrato
-        // Simulazione mock per test
-        const mockSimulation: SimulationConfig = {
-          id: id || '1',
-          title: 'Simulazione Test Medicina 2024',
-          duration: 100, // 100 minuti
-          questions: Array.from({ length: 60 }, (_, i) => ({
-            id: `q-${i + 1}`,
-            text: `Domanda ${i + 1}: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua?`,
-            difficulty: (i % 3 === 0 ? 'FACILE' : i % 3 === 1 ? 'MEDIA' : 'DIFFICILE') as 'FACILE' | 'MEDIA' | 'DIFFICILE',
-            type: 'MULTIPLE_CHOICE' as const,
-            points: 1,
-            options: [
-              { id: `o-${i}-1`, text: 'Opzione A - risposta possibile', isCorrect: i % 4 === 0 },
-              { id: `o-${i}-2`, text: 'Opzione B - risposta possibile', isCorrect: i % 4 === 1 },
-              { id: `o-${i}-3`, text: 'Opzione C - risposta possibile', isCorrect: i % 4 === 2 },
-              { id: `o-${i}-4`, text: 'Opzione D - risposta possibile', isCorrect: i % 4 === 3 },
-              { id: `o-${i}-5`, text: 'Opzione E - risposta possibile', isCorrect: false },
-            ],
-            subjectId: ['BIO', 'CHI', 'FIS', 'MAT', 'LOG'][i % 5],
+        // Start attempt - ottieni i dati della simulazione usando la ref
+        const result = await startAttemptRef.current.mutateAsync({
+          simulationId: id,
+          assignmentId: assignmentId || undefined,
+        });
+
+        if (!result) {
+          throw new Error('Nessun risultato');
+        }
+
+        // Trasforma i dati nel formato locale
+        const questions: Question[] = result.questions.map((sq: {
+          id: string;
+          question: {
+            text: string;
+            difficulty: string;
+            type: string;
+            points: number;
+            answers: Array<{ id: string; text?: string | null; textLatex?: string | null }>;
+            subject?: { id: string } | null;
+          };
+        }) => ({
+          id: sq.id,
+          text: sq.question.text,
+          difficulty: sq.question.difficulty as 'FACILE' | 'MEDIA' | 'DIFFICILE',
+          type: sq.question.type as Question['type'],
+          points: sq.question.points,
+          options: sq.question.answers.map((a: { id: string; text?: string | null; textLatex?: string | null }) => ({
+            id: a.id,
+            text: a.textLatex || a.text || '',
           })),
+          subjectId: sq.question.subject?.id || '',
+        }));
+
+        const simConfig: SimulationConfig = {
+          id: result.simulation.id,
+          title: result.simulation.title,
+          duration: result.simulation.duration,
+          questions,
         };
 
-        setSimulation(mockSimulation);
-        setTimeRemaining(mockSimulation.duration * 60);
+        setSimulation(simConfig);
+        setAttemptId(result.resultId);
+        setTimeRemaining(result.remainingTime || result.simulation.duration * 60);
         setAnswers(
-          mockSimulation.questions.map((q) => ({
+          questions.map((q) => ({
             questionId: q.id,
             selectedOptionId: null,
             isMarked: false,
@@ -146,13 +184,14 @@ export default function SimulationExecutionScreen() {
         setLoading(false);
       } catch (error) {
         console.error('Errore caricamento simulazione:', error);
-        Alert.alert('Errore', 'Impossibile caricare la simulazione');
+        const message = error instanceof Error ? error.message : 'Impossibile caricare la simulazione';
+        Alert.alert('Errore', message);
         router.back();
       }
     };
 
     loadSimulation();
-  }, [id, router]);
+  }, [id, assignmentId, router]);
 
   // Timer countdown
   useEffect(() => {
@@ -241,22 +280,70 @@ export default function SimulationExecutionScreen() {
     }
   };
 
-  // Invio simulazione
+  // Invio simulazione con API reale
   const submitSimulation = async () => {
+    if (!simulation || !id) return;
+    
     setIsSubmitting(true);
     try {
-      // API Integration: Sostituire con trpc.simulations.submit.mutate(...)
-      // quando il router tRPC sarà integrato
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Calcola tempo totale trascorso in secondi
+      const totalTimeSpent = Math.floor((Date.now() - startTime) / 1000);
+      
+      // Prepara le risposte nel formato API
+      const apiAnswers = answers.map((a) => ({
+        questionId: a.questionId,
+        answerId: a.selectedOptionId,
+      }));
+
+      await submitMutation.mutateAsync({
+        simulationId: id,
+        answers: apiAnswers,
+        totalTimeSpent,
+      });
 
       // Naviga ai risultati
       router.replace(`/simulation/${id}/result`);
     } catch (error) {
       console.error('Errore invio simulazione:', error);
-      Alert.alert('Errore', "Impossibile inviare la simulazione. Riprova.");
+      const message = error instanceof Error ? error.message : 'Impossibile inviare la simulazione. Riprova.';
+      Alert.alert('Errore', message);
       setIsSubmitting(false);
     }
   };
+
+  // Aggiorna la ref per handleTimeExpired
+  submitSimulationRef.current = submitSimulation;
+
+  // Salva progresso periodicamente
+  const saveProgress = useCallback(async () => {
+    if (!simulation || !id) return;
+    
+    try {
+      const apiAnswers = answers.map((a) => ({
+        questionId: a.questionId,
+        answerId: a.selectedOptionId,
+      }));
+
+      await saveProgressMutation.mutateAsync({
+        simulationId: id,
+        answers: apiAnswers,
+        currentQuestion: currentQuestionIndex,
+      });
+    } catch (error) {
+      console.error('Errore salvataggio progresso:', error);
+    }
+  }, [simulation, id, answers, currentQuestionIndex, saveProgressMutation]);
+
+  // Salva progresso ogni 30 secondi
+  useEffect(() => {
+    if (loading || !simulation) return;
+
+    const interval = setInterval(() => {
+      saveProgress();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [loading, simulation, saveProgress]);
 
   // Conferma invio
   const confirmSubmit = () => {

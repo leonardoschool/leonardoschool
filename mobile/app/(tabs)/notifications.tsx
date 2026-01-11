@@ -2,15 +2,17 @@
  * Leonardo School Mobile - Notifications Screen
  * 
  * Lista notifiche utente.
+ * Dati caricati dalle API tRPC reali.
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   ScrollView,
   StyleSheet,
   RefreshControl,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,66 +20,52 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Text, Body, Caption } from '../../components/ui/Text';
 import { useThemedColors } from '../../contexts/ThemeContext';
-import { useNotificationStore } from '../../stores/notificationStore';
+import { useAuthStore } from '../../stores/authStore';
+import { trpc } from '../../lib/trpc';
 import { colors } from '../../lib/theme/colors';
 import { spacing, layout } from '../../lib/theme/spacing';
-import type { Notification, NotificationType } from '../../types';
+import type { NotificationType } from '../../types';
 
-// Mock data
-const mockNotifications: Notification[] = [
-  {
-    id: '1',
-    type: 'SIMULATION_ASSIGNED',
-    title: 'Nuova Simulazione Assegnata',
-    body: 'Ti è stata assegnata la simulazione "TOLC-MED 2026". Scadenza: 15 Gennaio.',
-    isRead: false,
-    createdAt: '2026-01-11T10:30:00',
-  },
-  {
-    id: '2',
-    type: 'SIMULATION_RESULTS',
-    title: 'Risultati Disponibili',
-    body: 'I risultati della simulazione "Quiz Chimica" sono ora disponibili.',
-    isRead: false,
-    createdAt: '2026-01-10T15:45:00',
-  },
-  {
-    id: '3',
-    type: 'EVENT_REMINDER',
-    title: 'Promemoria Lezione',
-    body: 'La lezione di Biologia inizierà tra 1 ora.',
-    isRead: true,
-    createdAt: '2026-01-10T08:00:00',
-  },
-  {
-    id: '4',
-    type: 'MATERIAL_AVAILABLE',
-    title: 'Nuovo Materiale',
-    body: 'Sono stati aggiunti nuovi materiali di Fisica nella tua area didattica.',
-    isRead: true,
-    createdAt: '2026-01-09T12:00:00',
-  },
-  {
-    id: '5',
-    type: 'ACCOUNT_ACTIVATED',
-    title: 'Benvenuto!',
-    body: 'Il tuo account è stato attivato. Inizia subito a prepararti!',
-    isRead: true,
-    createdAt: '2026-01-05T09:00:00',
-  },
-];
+// Type for notification from API
+interface NotificationItem {
+  id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  isRead: boolean;
+  createdAt: string | Date;
+}
 
 export default function NotificationsScreen() {
   const themedColors = useThemedColors();
-  const { markAsRead: _markAsRead, markAllAsRead } = useNotificationStore();
-  const [refreshing, setRefreshing] = useState(false);
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const { user } = useAuthStore();
+
+  // Fetch notifications from API
+  const {
+    data: notificationsData,
+    isLoading,
+    refetch,
+    isRefetching,
+  } = trpc.notifications.getMyNotifications.useQuery(
+    { page: 1, pageSize: 50 },
+    { enabled: !!user }
+  );
+
+  // Mark as read mutation
+  const markAsReadMutation = trpc.notifications.markAsRead.useMutation({
+    onSuccess: () => refetch(),
+  });
+
+  // Mark all as read mutation
+  const markAllAsReadMutation = trpc.notifications.markAllAsRead.useMutation({
+    onSuccess: () => refetch(),
+  });
 
   const onRefresh = async () => {
-    setRefreshing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setRefreshing(false);
+    await refetch();
   };
+
+  const notifications: NotificationItem[] = (notificationsData?.notifications || []) as NotificationItem[];
 
   const getNotificationIcon = (type: NotificationType): keyof typeof Ionicons.glyphMap => {
     const iconMap: Record<NotificationType, keyof typeof Ionicons.glyphMap> = {
@@ -115,7 +103,7 @@ export default function NotificationsScreen() {
     return colorMap[type] || colors.neutral[500];
   };
 
-  const formatDate = (dateStr: string) => {
+  const formatDate = (dateStr: string | Date) => {
     const date = new Date(dateStr);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -129,12 +117,11 @@ export default function NotificationsScreen() {
     return date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
   };
 
-  const handleNotificationPress = (notification: Notification) => {
-    // Mark as read
-    const updated = notifications.map(n =>
-      n.id === notification.id ? { ...n, isRead: true } : n
-    );
-    setNotifications(updated);
+  const handleNotificationPress = (notification: NotificationItem) => {
+    // Mark as read via API
+    if (!notification.isRead) {
+      markAsReadMutation.mutate({ notificationId: notification.id });
+    }
 
     // Navigate based on type
     switch (notification.type) {
@@ -158,20 +145,33 @@ export default function NotificationsScreen() {
   };
 
   const handleMarkAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, isRead: true })));
-    markAllAsRead();
+    markAllAsReadMutation.mutate();
   };
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={['top']}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary.main} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={['top']}>
       {/* Header actions */}
       {unreadCount > 0 && (
         <View style={styles.headerActions}>
-          <TouchableOpacity onPress={handleMarkAllAsRead}>
+          <TouchableOpacity 
+            onPress={handleMarkAllAsRead}
+            disabled={markAllAsReadMutation.isPending}
+          >
             <Text variant="bodySmall" style={{ color: colors.primary.main }}>
-              Segna tutto come letto
+              {markAllAsReadMutation.isPending ? 'Attendere...' : 'Segna tutto come letto'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -183,7 +183,7 @@ export default function NotificationsScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
+            refreshing={isRefetching}
             onRefresh={onRefresh}
             tintColor={colors.primary.main}
           />
@@ -261,6 +261,11 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerActions: {
     paddingHorizontal: spacing[4],

@@ -1,10 +1,10 @@
 /**
  * Leonardo School Mobile - Login Screen
  * 
- * Schermata di login con email e password.
+ * Schermata di login moderna con design professionale.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   ScrollView,
@@ -12,10 +12,23 @@ import {
   Platform,
   StyleSheet,
   TouchableOpacity,
+  Image,
+  Dimensions,
 } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  FadeInUp,
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 
 import { Text, Heading2, Body } from '../../components/ui/Text';
 import { Button } from '../../components/ui/Button';
@@ -27,6 +40,50 @@ import { spacing, layout } from '../../lib/theme/spacing';
 import { showErrorAlert, logError, parseError } from '../../lib/errorHandler';
 import { firebaseAuth } from '../../lib/firebase/auth';
 import { config } from '../../lib/config';
+
+// Import logo
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const logoImage = require('../../assets/images/icon.png');
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Decorative floating circles for modern look
+const FloatingCircle = ({ size, delay, x, y }: { size: number; delay: number; x: number; y: number }) => {
+  const translateY = useSharedValue(0);
+  
+  useEffect(() => {
+    // Use requestAnimationFrame to avoid the React strict mode warning
+    const timeoutId = setTimeout(() => {
+      translateY.value = withRepeat(
+        withTiming(15, { duration: 3000 + delay, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true
+      );
+    }, 100);
+    return () => clearTimeout(timeoutId);
+  }, [delay, translateY]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        {
+          position: 'absolute',
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: 'rgba(255, 255, 255, 0.08)',
+          left: x,
+          top: y,
+        },
+        animatedStyle,
+      ]}
+    />
+  );
+};
 
 export default function LoginScreen() {
   const themedColors = useThemedColors();
@@ -65,30 +122,46 @@ export default function LoginScreen() {
 
     try {
       // 1. Login with Firebase
+      console.log('[Login] Starting Firebase login...');
       const userCredential = await firebaseAuth.login(email, password);
       const firebaseUser = userCredential.user;
+      console.log('[Login] Firebase login successful, UID:', firebaseUser.uid);
       
       // 2. Get Firebase ID token
       const token = await firebaseUser.getIdToken();
+      console.log('[Login] Got ID token, length:', token.length);
       
       // 3. Sync with backend (PostgreSQL) - call /api/auth/me
+      console.log('[Login] Calling backend:', `${config.api.baseUrl}/api/auth/me`);
       const response = await fetch(`${config.api.baseUrl}/api/auth/me`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
+        body: JSON.stringify({ token }),
       });
       
+      console.log('[Login] Backend response status:', response.status);
+      const responseText = await response.text();
+      console.log('[Login] Backend response body:', responseText.substring(0, 500));
+      
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Errore durante la sincronizzazione');
+        let errorMessage = `Errore dal server: ${response.status}`;
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch {
+          // Ignore parse errors
+        }
+        throw new Error(errorMessage);
       }
       
-      const data = await response.json();
+      // La risposta contiene i dati utente direttamente (non wrappati in .user)
+      const user = JSON.parse(responseText);
+      console.log('[Login] Parsed user:', user.name, user.role);
       
       // 4. Check if profile is completed
-      if (!data.user.profileCompleted) {
+      if (!user.profileCompleted) {
         // User needs to complete profile
         showErrorAlert('Per favore completa il tuo profilo nella webapp.');
         await firebaseAuth.logout();
@@ -96,14 +169,14 @@ export default function LoginScreen() {
       }
       
       // 5. Check if account is active
-      if (!data.user.isActive) {
+      if (!user.isActive) {
         showErrorAlert('Il tuo account è in attesa di approvazione.');
         await firebaseAuth.logout();
         return;
       }
       
       // 6. Save to auth store and navigate
-      await login(data.user, token, data.studentProfile);
+      await login(user, token, undefined);
       router.replace('/(tabs)');
       
     } catch (error) {
@@ -115,7 +188,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]}>
+    <View style={[styles.container, { backgroundColor: themedColors.background }]}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -124,66 +197,102 @@ export default function LoginScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          bounces={false}
         >
-          {/* Header with gradient */}
+          {/* Modern Header with gradient and decorations */}
           <LinearGradient
-            colors={[colors.primary.main, colors.primary.dark]}
+            colors={[colors.primary.main, colors.primary.dark, '#6B0F2B']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
             style={styles.header}
           >
-            {/* Logo placeholder */}
-            <View style={styles.logoContainer}>
-              <Text variant="h1" style={styles.logoText}>LS</Text>
+            {/* Floating decorative circles */}
+            <FloatingCircle size={120} delay={0} x={-30} y={20} />
+            <FloatingCircle size={80} delay={500} x={SCREEN_WIDTH - 60} y={60} />
+            <FloatingCircle size={50} delay={1000} x={SCREEN_WIDTH / 2 - 25} y={-10} />
+            <FloatingCircle size={40} delay={750} x={50} y={150} />
+            <FloatingCircle size={60} delay={250} x={SCREEN_WIDTH - 100} y={180} />
+
+            <SafeAreaView edges={['top']} style={styles.headerContent}>
+              {/* Logo */}
+              <Animated.View 
+                entering={FadeIn.delay(200).duration(800)}
+                style={styles.logoWrapper}
+              >
+                <Image
+                  source={logoImage}
+                  style={styles.logo}
+                  resizeMode="contain"
+                  alt="Leonardo School Logo"
+                />
+              </Animated.View>
+
+              {/* Welcome text */}
+              <Animated.View entering={FadeInUp.delay(400).duration(600)} style={styles.welcomeContainer}>
+                <Text style={styles.welcomeText}>Bentornato!</Text>
+              </Animated.View>
+            </SafeAreaView>
+
+            {/* Curved bottom edge */}
+            <View style={styles.curvedEdge}>
+              <View style={[styles.curvedEdgeInner, { backgroundColor: themedColors.background }]} />
             </View>
-            <Text variant="h3" style={styles.brandName}>Leonardo School</Text>
-            <Text variant="body" style={styles.tagline}>
-              Preparati ai test universitari
-            </Text>
           </LinearGradient>
 
           {/* Login form */}
-          <View style={styles.formContainer}>
-            <Heading2 style={styles.formTitle}>Accedi</Heading2>
-            <Body color="muted" style={styles.formSubtitle}>
-              Inserisci le tue credenziali per continuare
-            </Body>
+          <Animated.View 
+            entering={FadeInDown.delay(500).duration(600)}
+            style={[styles.formContainer, { backgroundColor: themedColors.background }]}
+          >
+            <View style={styles.formHeader}>
+              <View style={styles.formTitleRow}>
+                <View style={styles.formTitleIndicator} />
+                <Heading2>Accedi</Heading2>
+              </View>
+              <Body color="muted">
+                Inserisci le tue credenziali
+              </Body>
+            </View>
 
-            <Input
-              label="Email"
-              placeholder="La tua email"
-              value={email}
-              onChangeText={(text) => {
-                setEmail(text);
-                if (errors.email) setErrors({ ...errors, email: undefined });
-              }}
-              error={errors.email}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              leftIcon="mail-outline"
-            />
+            <View style={styles.inputsContainer}>
+              <Input
+                label="Email"
+                placeholder="nome@esempio.com"
+                value={email}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  if (errors.email) setErrors({ ...errors, email: undefined });
+                }}
+                error={errors.email}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                leftIcon="mail-outline"
+              />
 
-            <Input
-              label="Password"
-              placeholder="La tua password"
-              value={password}
-              onChangeText={(text) => {
-                setPassword(text);
-                if (errors.password) setErrors({ ...errors, password: undefined });
-              }}
-              error={errors.password}
-              secureTextEntry
-              autoComplete="password"
-              leftIcon="lock-closed-outline"
-            />
+              <Input
+                label="Password"
+                placeholder="••••••••"
+                value={password}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  if (errors.password) setErrors({ ...errors, password: undefined });
+                }}
+                error={errors.password}
+                secureTextEntry
+                autoComplete="password"
+                leftIcon="lock-closed-outline"
+              />
 
-            <TouchableOpacity
-              style={styles.forgotPassword}
-              onPress={() => router.push('/(auth)/forgot-password')}
-            >
-              <Text variant="bodySmall" color="primary" style={{ color: colors.primary.main }}>
-                Password dimenticata?
-              </Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.forgotPassword}
+                onPress={() => router.push('/(auth)/forgot-password')}
+              >
+                <Text variant="bodySmall" style={{ color: colors.primary.main, fontWeight: '500' }}>
+                  Password dimenticata?
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             <Button
               onPress={handleLogin}
@@ -192,23 +301,40 @@ export default function LoginScreen() {
               size="lg"
               style={styles.loginButton}
             >
-              Accedi
+              <View style={styles.buttonContent}>
+                <Text style={styles.buttonText}>Accedi</Text>
+                <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+              </View>
             </Button>
 
+            {/* Divider */}
+            <View style={styles.divider}>
+              <View style={[styles.dividerLine, { backgroundColor: themedColors.border }]} />
+              <Text variant="bodySmall" color="muted" style={styles.dividerText}>
+                oppure
+              </Text>
+              <View style={[styles.dividerLine, { backgroundColor: themedColors.border }]} />
+            </View>
+
+            {/* Register link */}
             <View style={styles.registerContainer}>
               <Text variant="body" color="muted">
-                Non hai un account?{' '}
+                Non hai ancora un account?
               </Text>
-              <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-                <Text variant="body" style={{ color: colors.primary.main, fontWeight: '600' }}>
-                  Registrati
+              <TouchableOpacity 
+                onPress={() => router.push('/(auth)/register')}
+                style={styles.registerButton}
+              >
+                <Text style={styles.registerText}>
+                  Registrati ora
                 </Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.primary.main} />
               </TouchableOpacity>
             </View>
-          </View>
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -223,56 +349,129 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   header: {
-    paddingTop: spacing[16],
-    paddingBottom: spacing[12],
-    paddingHorizontal: spacing[6],
-    alignItems: 'center',
-    borderBottomLeftRadius: layout.borderRadius['3xl'],
-    borderBottomRightRadius: layout.borderRadius['3xl'],
+    height: SCREEN_HEIGHT * 0.30,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: layout.borderRadius.xl,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
+  headerContent: {
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing[6],
+    paddingBottom: spacing[8],
+  },
+  logoWrapper: {
     marginBottom: spacing[4],
   },
-  logoText: {
-    color: '#FFFFFF',
-    fontSize: 32,
-    fontWeight: '700',
+  logo: {
+    width: 100,
+    height: 100,
   },
-  brandName: {
+  welcomeContainer: {
+    paddingHorizontal: spacing[4],
+  },
+  welcomeText: {
+    fontSize: 26,
+    fontWeight: '700',
     color: '#FFFFFF',
+    textAlign: 'center',
     marginBottom: spacing[1],
   },
-  tagline: {
-    color: 'rgba(255, 255, 255, 0.8)',
+  welcomeSubtext: {
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.85)',
+    textAlign: 'center',
+  },
+  curvedEdge: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 30,
+    overflow: 'hidden',
+  },
+  curvedEdgeInner: {
+    width: SCREEN_WIDTH * 1.5,
+    height: 60,
+    borderTopLeftRadius: SCREEN_WIDTH,
+    borderTopRightRadius: SCREEN_WIDTH,
+    alignSelf: 'center',
+    marginTop: 0,
   },
   formContainer: {
     flex: 1,
-    padding: spacing[6],
-    paddingTop: spacing[8],
+    paddingHorizontal: spacing[6],
+    paddingTop: spacing[2],
+    paddingBottom: spacing[8],
+    marginTop: -spacing[4],
   },
-  formTitle: {
+  formHeader: {
+    marginBottom: spacing[6],
+  },
+  formTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
     marginBottom: spacing[1],
   },
-  formSubtitle: {
-    marginBottom: spacing[6],
+  formTitleIndicator: {
+    width: 4,
+    height: 24,
+    borderRadius: 2,
+    backgroundColor: colors.primary.main,
+  },
+  inputsContainer: {
+    gap: spacing[1],
+    marginBottom: spacing[4],
   },
   forgotPassword: {
     alignSelf: 'flex-end',
-    marginBottom: spacing[6],
-    marginTop: -spacing[2],
+    paddingVertical: spacing[2],
   },
   loginButton: {
-    marginBottom: spacing[6],
+    marginBottom: spacing[5],
+    borderRadius: layout.borderRadius.xl,
+    height: 56,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing[5],
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    paddingHorizontal: spacing[4],
   },
   registerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
+    gap: spacing[2],
+  },
+  registerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    paddingVertical: spacing[2],
+    paddingHorizontal: spacing[3],
+    borderRadius: layout.borderRadius.lg,
+    backgroundColor: `${colors.primary.main}10`,
+  },
+  registerText: {
+    color: colors.primary.main,
+    fontWeight: '600',
+    fontSize: 15,
   },
 });

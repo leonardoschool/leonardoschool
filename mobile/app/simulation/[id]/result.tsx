@@ -2,9 +2,10 @@
  * Leonardo School Mobile - Simulation Result Screen
  * 
  * Schermata risultati dopo aver completato una simulazione.
+ * Dati caricati dalle API tRPC reali.
  */
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   View,
   ScrollView,
@@ -15,54 +16,36 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Text, Heading3, Caption } from '../../../components/ui/Text';
+import { Text, Heading3, Caption, Body } from '../../../components/ui/Text';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { PageLoader } from '../../../components/ui/Loader';
 import { useThemedColors } from '../../../contexts/ThemeContext';
-import { colors, getLegacySubjectColor, getLegacySubjectName } from '../../../lib/theme/colors';
-import type { LegacySubject } from '../../../lib/theme/colors';
+import { colors, getSubjectColor } from '../../../lib/theme/colors';
 import { spacing } from '../../../lib/theme/spacing';
+import { trpc } from '../../../lib/trpc';
 
 const _SCREEN_WIDTH = Dimensions.get('window').width;
 
-// Mock result data - in produzione questi dati vengono dall'API con colori dinamici
-const mockResult = {
-  simulationId: '1',
-  simulationTitle: 'TOLC-MED 2026 Preparazione',
-  completedAt: '2026-01-12T14:30:00',
-  duration: 78 * 60, // 78 minutes in seconds
-  totalQuestions: 50,
-  correctAnswers: 38,
-  wrongAnswers: 8,
-  unanswered: 4,
-  score: 32.5,
-  maxScore: 50,
-  percentile: 75,
-  passed: true,
-  subjectResults: [
-    { subject: 'BIOLOGIA' as LegacySubject, correct: 12, wrong: 2, unanswered: 1, total: 15 },
-    { subject: 'CHIMICA' as LegacySubject, correct: 10, wrong: 3, unanswered: 2, total: 15 },
-    { subject: 'MATEMATICA' as LegacySubject, correct: 8, wrong: 1, unanswered: 1, total: 10 },
-    { subject: 'FISICA' as LegacySubject, correct: 5, wrong: 2, unanswered: 0, total: 7 },
-    { subject: 'LOGICA' as LegacySubject, correct: 3, wrong: 0, unanswered: 0, total: 3 },
-  ],
-};
+// Types for result data
+interface SubjectResult {
+  subject: string;
+  correct: number;
+  wrong: number;
+  blank: number;
+  total: number;
+}
 
 export default function SimulationResultScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const themedColors = useThemedColors();
-  const [isLoading, setIsLoading] = useState(true);
-  const [result, _setResult] = useState(mockResult);
 
-  useEffect(() => {
-    const loadResults = async () => {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setIsLoading(false);
-    };
-    loadResults();
-  }, [id]);
+  // Fetch result from API
+  const { data: result, isLoading, error } = trpc.simulations.getResultDetails.useQuery(
+    { simulationId: id || '' },
+    { enabled: !!id }
+  );
 
   const formatDuration = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -79,10 +62,49 @@ export default function SimulationResultScreen() {
     return colors.status.error.main;
   };
 
-  const scorePercentage = (result.score / result.maxScore) * 100;
-
   if (isLoading) {
     return <PageLoader />;
+  }
+
+  if (error || !result) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={['bottom']}>
+        <View style={styles.loadingContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color={colors.status.error.main} />
+          <Text variant="h5" color="muted">
+            Risultato non disponibile
+          </Text>
+          <Body color="muted" align="center">
+            {error?.message || 'Impossibile caricare i risultati della simulazione.'}
+          </Body>
+          <Button
+            onPress={() => router.back()}
+            style={{ marginTop: spacing[4] }}
+          >
+            Torna indietro
+          </Button>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const scorePercentage = result.totalScore > 0 
+    ? (result.score / result.totalScore) * 100 
+    : 0;
+
+  // Parse subject scores from result
+  const subjectResults: SubjectResult[] = [];
+  if (result.subjectScores && typeof result.subjectScores === 'object') {
+    const scores = result.subjectScores as Record<string, { correct: number; wrong: number; blank: number }>;
+    Object.entries(scores).forEach(([subject, data]) => {
+      subjectResults.push({
+        subject,
+        correct: data.correct || 0,
+        wrong: data.wrong || 0,
+        blank: data.blank || 0,
+        total: (data.correct || 0) + (data.wrong || 0) + (data.blank || 0),
+      });
+    });
   }
 
   return (
@@ -94,16 +116,18 @@ export default function SimulationResultScreen() {
       >
         {/* Header/Title */}
         <View style={styles.header}>
-          <Text variant="h4" align="center">{result.simulationTitle}</Text>
-          <Caption align="center">
-            Completata il {new Date(result.completedAt).toLocaleDateString('it-IT', {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </Caption>
+          <Text variant="h4" align="center">{result.simulation.title}</Text>
+          {result.completedAt && (
+            <Caption align="center">
+              Completata il {new Date(result.completedAt).toLocaleDateString('it-IT', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </Caption>
+          )}
         </View>
 
         {/* Main Score Card */}
@@ -118,7 +142,7 @@ export default function SimulationResultScreen() {
               <Text variant="h1" style={{ color: getScoreColor(scorePercentage) }}>
                 {result.score.toFixed(1)}
               </Text>
-              <Caption>/ {result.maxScore}</Caption>
+              <Caption>/ {result.totalScore}</Caption>
             </View>
           </View>
 
@@ -163,48 +187,51 @@ export default function SimulationResultScreen() {
         </View>
 
         {/* Subject Results */}
-        <View style={styles.section}>
-          <Heading3 style={styles.sectionTitle}>Risultati per Materia</Heading3>
-          
-          {result.subjectResults.map((subjectResult) => {
-            const percentage = (subjectResult.correct / subjectResult.total) * 100;
-            const subjectColor = getLegacySubjectColor(subjectResult.subject);
+        {subjectResults.length > 0 && (
+          <View style={styles.section}>
+            <Heading3 style={styles.sectionTitle}>Risultati per Materia</Heading3>
+            
+            {subjectResults.map((subjectResult: SubjectResult) => {
+              const percentage = subjectResult.total > 0 
+                ? (subjectResult.correct / subjectResult.total) * 100 
+                : 0;
+              const subjectColor = getSubjectColor(subjectResult.subject) || colors.primary.main;
 
-            return (
-              <Card
-                key={subjectResult.subject}
-                variant="outlined"
-                style={styles.subjectCard}
-              >
-                <View style={styles.subjectHeader}>
-                  <View style={styles.subjectInfo}>
-                    <View
-                      style={[
-                        styles.subjectDot,
-                        { backgroundColor: subjectColor },
-                      ]}
-                    />
-                    <Text variant="body" style={{ fontWeight: '600' }}>
-                      {getLegacySubjectName(subjectResult.subject)}
+              return (
+                <Card
+                  key={subjectResult.subject}
+                  variant="outlined"
+                  style={styles.subjectCard}
+                >
+                  <View style={styles.subjectHeader}>
+                    <View style={styles.subjectInfo}>
+                      <View
+                        style={[
+                          styles.subjectDot,
+                          { backgroundColor: subjectColor },
+                        ]}
+                      />
+                      <Text variant="body" style={{ fontWeight: '600' }}>
+                        {subjectResult.subject}
+                      </Text>
+                    </View>
+                    <Text
+                      variant="body"
+                      style={{ color: getScoreColor(percentage), fontWeight: '600' }}
+                    >
+                      {subjectResult.correct}/{subjectResult.total}
                     </Text>
                   </View>
-                  <Text
-                    variant="body"
-                    style={{ color: getScoreColor(percentage), fontWeight: '600' }}
-                  >
-                    {subjectResult.correct}/{subjectResult.total}
-                  </Text>
-                </View>
 
-                {/* Progress Bar */}
-                <View style={[styles.progressBar, { backgroundColor: themedColors.backgroundSecondary }]}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      {
-                        width: `${percentage}%`,
-                        backgroundColor: subjectColor,
-                      },
+                  {/* Progress Bar */}
+                  <View style={[styles.progressBar, { backgroundColor: themedColors.backgroundSecondary }]}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        {
+                          width: `${percentage}%`,
+                          backgroundColor: subjectColor,
+                        },
                     ]}
                   />
                 </View>
@@ -217,13 +244,14 @@ export default function SimulationResultScreen() {
                     ✗ {subjectResult.wrong} errate
                   </Caption>
                   <Caption>
-                    - {subjectResult.unanswered} saltate
+                    - {subjectResult.blank} saltate
                   </Caption>
                 </View>
               </Card>
             );
           })}
         </View>
+        )}
       </ScrollView>
 
       {/* Footer Actions */}

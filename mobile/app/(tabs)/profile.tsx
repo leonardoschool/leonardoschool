@@ -117,12 +117,8 @@ export default function ProfileScreen() {
     }
   };
 
-  // Mock user for demo
-  const displayUser = user || {
-    name: 'Mario Rossi',
-    email: 'mario.rossi@email.com',
-    role: 'STUDENT',
-  };
+  // Utente reale dall'auth store (garantito dall'AuthGuard)
+  if (!user) return null;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={['top']}>
@@ -135,11 +131,11 @@ export default function ProfileScreen() {
         <View style={styles.profileHeader}>
           <View style={[styles.avatarContainer, { backgroundColor: colors.primary.main }]}>
             <Text variant="h2" style={styles.avatarText}>
-              {displayUser.name.charAt(0).toUpperCase()}
+              {user.name.charAt(0).toUpperCase()}
             </Text>
           </View>
-          <Text variant="h4">{displayUser.name}</Text>
-          <Caption>{displayUser.email}</Caption>
+          <Text variant="h4">{user.name}</Text>
+          <Caption>{user.email}</Caption>
           <Badge variant="primary" size="sm">
             Studente
           </Badge>

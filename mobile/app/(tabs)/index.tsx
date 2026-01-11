@@ -2,6 +2,7 @@
  * Leonardo School Mobile - Dashboard Screen
  * 
  * Schermata principale dello studente con overview.
+ * Dati caricati dalle API tRPC reali.
  */
 
 import React from 'react';
@@ -11,6 +12,7 @@ import {
   StyleSheet,
   RefreshControl,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,46 +21,42 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { Text, Heading3, Caption } from '../../components/ui/Text';
 import { Card } from '../../components/ui/Card';
-import { LegacySubjectBadge } from '../../components/ui/Badge';
 import { useThemedColors } from '../../contexts/ThemeContext';
 import { useAuthStore } from '../../stores/authStore';
-import { colors, getLegacySubjectColor } from '../../lib/theme/colors';
-import type { LegacySubject } from '../../lib/theme/colors';
+import { trpc } from '../../lib/trpc';
+import { colors } from '../../lib/theme/colors';
 import { spacing, layout } from '../../lib/theme/spacing';
-
-// Mock data per la demo - in produzione questi dati vengono dall'API con colori dinamici
-const mockStats = {
-  totalSimulations: 15,
-  averageScore: 72,
-  lastScore: 78,
-  pendingSimulations: 3,
-};
-
-const mockRecentSimulations = [
-  { id: '1', title: 'TOLC-MED Simulazione #5', score: 78, date: '2026-01-10', subject: 'BIOLOGIA' as LegacySubject },
-  { id: '2', title: 'Quiz Chimica Organica', score: 65, date: '2026-01-08', subject: 'CHIMICA' as LegacySubject },
-  { id: '3', title: 'TOLC-MED Simulazione #4', score: 82, date: '2026-01-05', subject: 'FISICA' as LegacySubject },
-];
-
-const mockSubjectProgress = [
-  { subject: 'BIOLOGIA' as LegacySubject, percentage: 75 },
-  { subject: 'CHIMICA' as LegacySubject, percentage: 62 },
-  { subject: 'FISICA' as LegacySubject, percentage: 58 },
-  { subject: 'MATEMATICA' as LegacySubject, percentage: 80 },
-  { subject: 'LOGICA' as LegacySubject, percentage: 70 },
-];
 
 export default function DashboardScreen() {
   const themedColors = useThemedColors();
   const { user } = useAuthStore();
-  const [refreshing, setRefreshing] = React.useState(false);
+  
+  // Fetch stats from API
+  const { 
+    data: statsData, 
+    isLoading: statsLoading, 
+    refetch: refetchStats,
+    isRefetching: statsRefetching,
+  } = trpc.students.getMyStats.useQuery(undefined, {
+    enabled: !!user,
+  });
+
+  // Fetch pending simulations count
+  const {
+    data: simulationsData,
+    isLoading: simulationsLoading,
+    refetch: refetchSimulations,
+    isRefetching: simulationsRefetching,
+  } = trpc.simulations.getAvailableSimulations.useQuery(
+    { page: 1, pageSize: 10, status: 'pending' },
+    { enabled: !!user }
+  );
+
+  const isLoading = statsLoading || simulationsLoading;
+  const isRefetching = statsRefetching || simulationsRefetching;
 
   const onRefresh = async () => {
-    setRefreshing(true);
-    // API Integration: Chiamare trpc.dashboard.getStats.query() quando disponibile
-    // Per ora simula il refresh
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setRefreshing(false);
+    await Promise.all([refetchStats(), refetchSimulations()]);
   };
 
   const getGreeting = () => {
@@ -70,6 +68,38 @@ export default function DashboardScreen() {
 
   const firstName = user?.name?.split(' ')[0] || 'Studente';
 
+  // Define type for recent results
+  interface RecentResult {
+    id: string;
+    simulationId: string;
+    simulationTitle: string;
+    simulationType: string;
+    totalScore: number | null;
+    percentageScore: number | null;
+    startedAt: Date;
+    completedAt: Date | null;
+  }
+
+  // Calculate stats from API data
+  const stats = {
+    totalSimulations: statsData?.overview?.totalSimulations || 0,
+    averageScore: Math.round(statsData?.overview?.avgScore || 0),
+    lastScore: statsData?.recentResults?.[0]?.percentageScore 
+      ? Math.round(statsData.recentResults[0].percentageScore) 
+      : 0,
+    pendingSimulations: simulationsData?.pagination?.total || 0,
+  };
+
+  const recentResults: RecentResult[] = statsData?.recentResults || [];
+
+  // Get subject progress from subjectStats
+  const subjectProgress = Object.entries(statsData?.subjectStats || {}).map(([subject, data]) => ({
+    subject,
+    percentage: Math.round((data as { avg?: number }).avg || 0),
+  })).slice(0, 5);
+
+  if (!user) return null;
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={['top']}>
       <ScrollView
@@ -78,7 +108,7 @@ export default function DashboardScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
+            refreshing={isRefetching}
             onRefresh={onRefresh}
             tintColor={colors.primary.main}
           />
@@ -92,147 +122,184 @@ export default function DashboardScreen() {
           </View>
           <TouchableOpacity
             style={[styles.settingsButton, { backgroundColor: themedColors.backgroundSecondary }]}
-            onPress={() => router.push('/settings')}
+            onPress={() => router.push('/(tabs)/profile')}
           >
             <Ionicons name="settings-outline" size={22} color={themedColors.text} />
           </TouchableOpacity>
         </View>
 
-        {/* Stats Cards */}
-        <View style={styles.statsGrid}>
-          <Card variant="elevated" style={styles.statCard}>
-            <LinearGradient
-              colors={[colors.primary.main, colors.primary.dark]}
-              style={StyleSheet.absoluteFill}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            />
-            <View style={styles.statContent}>
-              <Ionicons name="trophy-outline" size={24} color="#FFFFFF" />
-              <Text variant="h3" style={styles.statValue}>{mockStats.averageScore}%</Text>
-              <Caption style={styles.statLabel}>Media Punteggio</Caption>
-            </View>
-          </Card>
-
-          <Card variant="outlined" style={styles.statCard}>
-            <View style={styles.statContent}>
-              <Ionicons name="document-text-outline" size={24} color={colors.primary.main} />
-              <Text variant="h3" style={styles.statValueDark}>{mockStats.totalSimulations}</Text>
-              <Caption>Simulazioni Completate</Caption>
-            </View>
-          </Card>
-
-          <Card variant="outlined" style={styles.statCard}>
-            <View style={styles.statContent}>
-              <Ionicons name="time-outline" size={24} color={colors.status.warning.main} />
-              <Text variant="h3" style={styles.statValueDark}>{mockStats.pendingSimulations}</Text>
-              <Caption>In Attesa</Caption>
-            </View>
-          </Card>
-
-          <Card variant="outlined" style={styles.statCard}>
-            <View style={styles.statContent}>
-              <Ionicons name="trending-up-outline" size={24} color={colors.status.success.main} />
-              <Text variant="h3" style={styles.statValueDark}>{mockStats.lastScore}%</Text>
-              <Caption>Ultimo Test</Caption>
-            </View>
-          </Card>
-        </View>
-
-        {/* Quick Actions */}
-        <View style={styles.section}>
-          <Heading3 style={styles.sectionTitle}>Azioni Rapide</Heading3>
-          <View style={styles.actionsRow}>
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: colors.primary.main }]}
-              onPress={() => router.push('/(tabs)/simulations')}
-            >
-              <Ionicons name="play-circle" size={28} color="#FFFFFF" />
-              <Text variant="buttonSmall" style={styles.actionButtonText}>
-                Nuova Simulazione
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: themedColors.backgroundSecondary }]}
-              onPress={() => router.push('/(tabs)/statistics')}
-            >
-              <Ionicons name="analytics" size={28} color={colors.primary.main} />
-              <Text variant="buttonSmall" color="primary">
-                Vedi Statistiche
-              </Text>
-            </TouchableOpacity>
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary.main} />
+            <Caption style={styles.loadingText}>Caricamento dati...</Caption>
           </View>
-        </View>
-
-        {/* Subject Progress */}
-        <View style={styles.section}>
-          <Heading3 style={styles.sectionTitle}>Progresso per Materia</Heading3>
-          <Card variant="outlined" padding="md">
-            {mockSubjectProgress.map((item, index) => (
-              <View key={item.subject} style={[styles.progressItem, index > 0 && styles.progressItemBorder]}>
-                <View style={styles.progressHeader}>
-                  <LegacySubjectBadge subject={item.subject} size="sm" />
-                  <Text variant="bodySmall" color="muted">{item.percentage}%</Text>
+        ) : (
+          <>
+            {/* Stats Cards */}
+            <View style={styles.statsGrid}>
+              <Card variant="elevated" style={styles.statCard}>
+                <LinearGradient
+                  colors={[colors.primary.main, colors.primary.dark]}
+                  style={StyleSheet.absoluteFill}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                />
+                <View style={styles.statContent}>
+                  <Ionicons name="trophy-outline" size={24} color="#FFFFFF" />
+                  <Text variant="h3" style={styles.statValue}>{stats.averageScore}%</Text>
+                  <Caption style={styles.statLabel}>Media Punteggio</Caption>
                 </View>
-                <View style={[styles.progressBar, { backgroundColor: themedColors.border }]}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      {
-                        width: `${item.percentage}%`,
-                        backgroundColor: getLegacySubjectColor(item.subject),
-                      },
-                    ]}
-                  />
-                </View>
-              </View>
-            ))}
-          </Card>
-        </View>
+              </Card>
 
-        {/* Recent Simulations */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Heading3 style={styles.sectionTitle}>Simulazioni Recenti</Heading3>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/simulations')}>
-              <Text variant="bodySmall" style={{ color: colors.primary.main }}>
-                Vedi tutte
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {mockRecentSimulations.map((sim) => (
-            <Card
-              key={sim.id}
-              variant="outlined"
-              padding="md"
-              style={styles.simulationCard}
-              onPress={() => router.push(`/simulation/result/${sim.id}`)}
-            >
-              <View style={styles.simulationHeader}>
-                <View style={styles.simulationInfo}>
-                  <Text variant="body" numberOfLines={1}>{sim.title}</Text>
-                  <Caption>{new Date(sim.date).toLocaleDateString('it-IT')}</Caption>
+              <Card variant="outlined" style={styles.statCard}>
+                <View style={styles.statContent}>
+                  <Ionicons name="document-text-outline" size={24} color={colors.primary.main} />
+                  <Text variant="h3" style={styles.statValueDark}>{stats.totalSimulations}</Text>
+                  <Caption>Simulazioni Completate</Caption>
                 </View>
-                <View style={styles.simulationScore}>
-                  <Text
-                    variant="h4"
-                    style={{
-                      color: sim.score >= 70
-                        ? colors.status.success.main
-                        : sim.score >= 50
-                        ? colors.status.warning.main
-                        : colors.status.error.main,
-                    }}
-                  >
-                    {sim.score}%
+              </Card>
+
+              <Card variant="outlined" style={styles.statCard}>
+                <View style={styles.statContent}>
+                  <Ionicons name="time-outline" size={24} color={colors.status.warning.main} />
+                  <Text variant="h3" style={styles.statValueDark}>{stats.pendingSimulations}</Text>
+                  <Caption>In Attesa</Caption>
+                </View>
+              </Card>
+
+              <Card variant="outlined" style={styles.statCard}>
+                <View style={styles.statContent}>
+                  <Ionicons name="trending-up-outline" size={24} color={colors.status.success.main} />
+                  <Text variant="h3" style={styles.statValueDark}>{stats.lastScore}%</Text>
+                  <Caption>Ultimo Test</Caption>
+                </View>
+              </Card>
+            </View>
+
+            {/* Quick Actions */}
+            <View style={styles.section}>
+              <Heading3 style={styles.sectionTitle}>Azioni Rapide</Heading3>
+              <View style={styles.actionsRow}>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: colors.primary.main }]}
+                  onPress={() => router.push('/(tabs)/simulations')}
+                >
+                  <Ionicons name="play-circle" size={28} color="#FFFFFF" />
+                  <Text variant="buttonSmall" style={styles.actionButtonText}>
+                    Nuova Simulazione
                   </Text>
-                </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: themedColors.backgroundSecondary }]}
+                  onPress={() => router.push('/(tabs)/statistics')}
+                >
+                  <Ionicons name="analytics" size={28} color={colors.primary.main} />
+                  <Text variant="buttonSmall" color="primary">
+                    Vedi Statistiche
+                  </Text>
+                </TouchableOpacity>
               </View>
-            </Card>
-          ))}
-        </View>
+            </View>
+
+            {/* Subject Progress */}
+            {subjectProgress.length > 0 && (
+              <View style={styles.section}>
+                <Heading3 style={styles.sectionTitle}>Progresso per Materia</Heading3>
+                <Card variant="outlined" padding="md">
+                  {subjectProgress.map((item, index) => (
+                    <View key={item.subject} style={[styles.progressItem, index > 0 && styles.progressItemBorder]}>
+                      <View style={styles.progressHeader}>
+                        <Text variant="body">{item.subject}</Text>
+                        <Text variant="bodySmall" color="muted">{item.percentage}%</Text>
+                      </View>
+                      <View style={[styles.progressBar, { backgroundColor: themedColors.border }]}>
+                        <View
+                          style={[
+                            styles.progressFill,
+                            {
+                              width: `${item.percentage}%`,
+                              backgroundColor: colors.primary.main,
+                            },
+                          ]}
+                        />
+                      </View>
+                    </View>
+                  ))}
+                </Card>
+              </View>
+            )}
+
+            {/* Recent Simulations */}
+            {recentResults.length > 0 && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Heading3 style={styles.sectionTitle}>Simulazioni Recenti</Heading3>
+                  <TouchableOpacity onPress={() => router.push('/(tabs)/statistics')}>
+                    <Text variant="bodySmall" style={{ color: colors.primary.main }}>
+                      Vedi tutte
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {recentResults.slice(0, 3).map((result) => (
+                  <Card
+                    key={result.id}
+                    variant="outlined"
+                    padding="md"
+                    style={styles.simulationCard}
+                    onPress={() => router.push(`/simulation/result/${result.simulationId}`)}
+                  >
+                    <View style={styles.simulationHeader}>
+                      <View style={styles.simulationInfo}>
+                        <Text variant="body" numberOfLines={1}>{result.simulationTitle}</Text>
+                        <Caption>
+                          {result.completedAt 
+                            ? new Date(result.completedAt).toLocaleDateString('it-IT')
+                            : 'In corso'}
+                        </Caption>
+                      </View>
+                      <View style={styles.simulationScore}>
+                        <Text
+                          variant="h4"
+                          style={{
+                            color: (result.percentageScore || 0) >= 70
+                              ? colors.status.success.main
+                              : (result.percentageScore || 0) >= 50
+                              ? colors.status.warning.main
+                              : colors.status.error.main,
+                          }}
+                        >
+                          {Math.round(result.percentageScore || 0)}%
+                        </Text>
+                      </View>
+                    </View>
+                  </Card>
+                ))}
+              </View>
+            )}
+
+            {/* Empty state */}
+            {stats.totalSimulations === 0 && (
+              <View style={styles.emptyState}>
+                <Ionicons name="school-outline" size={64} color={themedColors.textMuted} />
+                <Text variant="h4" style={styles.emptyTitle}>Inizia il tuo percorso!</Text>
+                <Caption style={styles.emptyText}>
+                  Non hai ancora completato nessuna simulazione.{'\n'}
+                  Inizia subito a prepararti per il TOLC!
+                </Caption>
+                <TouchableOpacity
+                  style={[styles.emptyButton, { backgroundColor: colors.primary.main }]}
+                  onPress={() => router.push('/(tabs)/simulations')}
+                >
+                  <Text variant="button" style={{ color: '#FFFFFF' }}>
+                    Inizia Ora
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
+        )}
 
         {/* Bottom spacing */}
         <View style={styles.bottomSpacer} />
@@ -358,5 +425,32 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: spacing[8],
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: spacing[16],
+  },
+  loadingText: {
+    marginTop: spacing[3],
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: spacing[12],
+    paddingHorizontal: spacing[6],
+  },
+  emptyTitle: {
+    marginTop: spacing[4],
+    marginBottom: spacing[2],
+  },
+  emptyText: {
+    textAlign: 'center',
+    marginBottom: spacing[6],
+  },
+  emptyButton: {
+    paddingHorizontal: spacing[8],
+    paddingVertical: spacing[4],
+    borderRadius: layout.borderRadius.lg,
   },
 });

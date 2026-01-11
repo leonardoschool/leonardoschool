@@ -2,6 +2,7 @@
  * Leonardo School Mobile - Statistics Screen
  * 
  * Statistiche e progressi dello studente.
+ * Dati caricati dalle API tRPC reali.
  */
 
 import React, { useState } from 'react';
@@ -12,69 +13,40 @@ import {
   RefreshControl,
   TouchableOpacity,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Text, Heading3, Caption } from '../../components/ui/Text';
 import { Card } from '../../components/ui/Card';
-import { SubjectBadge } from '../../components/ui/Badge';
 import { useThemedColors } from '../../contexts/ThemeContext';
-import { colors, getLegacySubjectColor, getLegacySubjectName } from '../../lib/theme/colors';
-import type { LegacySubject } from '../../lib/theme/colors';
+import { useAuthStore } from '../../stores/authStore';
+import { trpc } from '../../lib/trpc';
+import { colors } from '../../lib/theme/colors';
 import { spacing, layout } from '../../lib/theme/spacing';
 
 const _SCREEN_WIDTH = Dimensions.get('window').width;
-
-// Mock data - in produzione questi dati vengono dall'API con colori dinamici
-const mockOverview = {
-  totalSimulations: 24,
-  averageScore: 72,
-  totalTime: 1840, // minutes
-  bestSubject: 'MATEMATICA' as LegacySubject,
-  worstSubject: 'FISICA' as LegacySubject,
-};
-
-const mockSubjectStats: Array<{
-  subject: LegacySubject;
-  totalQuestions: number;
-  correctAnswers: number;
-  percentage: number;
-  trend: 'up' | 'down' | 'stable';
-}> = [
-  { subject: 'MATEMATICA', totalQuestions: 150, correctAnswers: 120, percentage: 80, trend: 'up' },
-  { subject: 'BIOLOGIA', totalQuestions: 200, correctAnswers: 150, percentage: 75, trend: 'up' },
-  { subject: 'LOGICA', totalQuestions: 100, correctAnswers: 70, percentage: 70, trend: 'stable' },
-  { subject: 'CHIMICA', totalQuestions: 180, correctAnswers: 117, percentage: 65, trend: 'down' },
-  { subject: 'FISICA', totalQuestions: 120, correctAnswers: 72, percentage: 60, trend: 'up' },
-  { subject: 'CULTURA_GENERALE', totalQuestions: 80, correctAnswers: 52, percentage: 65, trend: 'stable' },
-];
-
-const mockProgressData = [
-  { date: '01/01', score: 65 },
-  { date: '05/01', score: 70 },
-  { date: '08/01', score: 68 },
-  { date: '10/01', score: 78 },
-  { date: '11/01', score: 75 },
-];
 
 type Period = 'week' | 'month' | 'all';
 
 export default function StatisticsScreen() {
   const themedColors = useThemedColors();
-  const [refreshing, setRefreshing] = useState(false);
+  const { user } = useAuthStore();
   const [period, setPeriod] = useState<Period>('month');
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setRefreshing(false);
-  };
+  // Fetch detailed stats from API
+  const {
+    data: statsData,
+    isLoading,
+    refetch,
+    isRefetching,
+  } = trpc.students.getDetailedStats.useQuery(undefined, {
+    enabled: !!user,
+  });
 
-  const formatTime = (minutes: number) => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+  const onRefresh = async () => {
+    await refetch();
   };
 
   const getTrendIcon = (trend: 'up' | 'down' | 'stable') => {
@@ -94,8 +66,35 @@ export default function StatisticsScreen() {
   };
 
   // Simple chart rendering (bar chart)
-  const maxScore = Math.max(...mockProgressData.map(d => d.score));
+  const trendData = statsData?.trendData || [];
   const chartHeight = 120;
+  const maxScore = trendData.length > 0 
+    ? Math.max(...trendData.map((d: { score: number }) => d.score)) 
+    : 100;
+
+  // Subject stats
+  interface SubjectStat {
+    subjectId: string;
+    subjectName: string;
+    subjectColor: string;
+    total: number;
+    correct: number;
+    wrong: number;
+    blank: number;
+    avgScore: number;
+    trend: 'up' | 'down' | 'stable';
+  }
+  const subjectStats: SubjectStat[] = statsData?.subjectStats || [];
+
+  // Overview data
+  const overview = statsData?.overview || {
+    totalSimulations: 0,
+    totalQuestions: 0,
+    avgPercentage: 0,
+    bestScore: 0,
+  };
+
+  if (!user) return null;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={['top']}>
@@ -105,7 +104,7 @@ export default function StatisticsScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
+            refreshing={isRefetching}
             onRefresh={onRefresh}
             tintColor={colors.primary.main}
           />
@@ -134,131 +133,157 @@ export default function StatisticsScreen() {
           ))}
         </View>
 
-        {/* Overview Cards */}
-        <View style={styles.overviewGrid}>
-          <Card variant="outlined" style={styles.overviewCard}>
-            <Ionicons name="trophy" size={24} color={colors.status.warning.main} />
-            <Text variant="h3" style={styles.overviewValue}>{mockOverview.averageScore}%</Text>
-            <Caption>Media Generale</Caption>
-          </Card>
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary.main} />
+            <Caption style={styles.loadingText}>Caricamento statistiche...</Caption>
+          </View>
+        ) : overview.totalSimulations === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="analytics-outline" size={64} color={themedColors.textMuted} />
+            <Text variant="h4" style={styles.emptyTitle}>Nessuna statistica disponibile</Text>
+            <Caption style={styles.emptyText}>
+              Completa almeno una simulazione per vedere le tue statistiche.
+            </Caption>
+          </View>
+        ) : (
+          <>
+            {/* Overview Cards */}
+            <View style={styles.overviewGrid}>
+              <Card variant="outlined" style={styles.overviewCard}>
+                <Ionicons name="trophy" size={24} color={colors.status.warning.main} />
+                <Text variant="h3" style={styles.overviewValue}>
+                  {Math.round(overview.avgPercentage)}%
+                </Text>
+                <Caption>Media Generale</Caption>
+              </Card>
 
-          <Card variant="outlined" style={styles.overviewCard}>
-            <Ionicons name="document-text" size={24} color={colors.primary.main} />
-            <Text variant="h3" style={styles.overviewValue}>{mockOverview.totalSimulations}</Text>
-            <Caption>Simulazioni</Caption>
-          </Card>
+              <Card variant="outlined" style={styles.overviewCard}>
+                <Ionicons name="document-text" size={24} color={colors.primary.main} />
+                <Text variant="h3" style={styles.overviewValue}>{overview.totalSimulations}</Text>
+                <Caption>Simulazioni</Caption>
+              </Card>
 
-          <Card variant="outlined" style={styles.overviewCard}>
-            <Ionicons name="time" size={24} color={colors.status.info.main} />
-            <Text variant="h3" style={styles.overviewValue}>{formatTime(mockOverview.totalTime)}</Text>
-            <Caption>Tempo Totale</Caption>
-          </Card>
+              <Card variant="outlined" style={styles.overviewCard}>
+                <Ionicons name="checkmark-circle" size={24} color={colors.status.success.main} />
+                <Text variant="h3" style={styles.overviewValue}>{overview.totalQuestions}</Text>
+                <Caption>Domande Totali</Caption>
+              </Card>
 
-          <Card variant="outlined" style={styles.overviewCard}>
-            <Ionicons name="star" size={24} color={colors.status.success.main} />
-            <View style={styles.overviewSubject}>
-              <SubjectBadge subject={mockOverview.bestSubject} size="sm" />
+              <Card variant="outlined" style={styles.overviewCard}>
+                <Ionicons name="star" size={24} color={colors.status.info.main} />
+                <Text variant="h3" style={styles.overviewValue}>
+                  {Math.round(overview.bestScore)}%
+                </Text>
+                <Caption>Miglior Punteggio</Caption>
+              </Card>
             </View>
-            <Caption>Miglior Materia</Caption>
-          </Card>
-        </View>
 
-        {/* Progress Chart */}
-        <View style={styles.section}>
-          <Heading3 style={styles.sectionTitle}>Andamento Punteggi</Heading3>
-          <Card variant="outlined" padding="md">
-            <View style={[styles.chart, { height: chartHeight }]}>
-              {mockProgressData.map((point, index) => {
-                const barHeight = (point.score / maxScore) * chartHeight * 0.8;
-                return (
-                  <View key={index} style={styles.chartBar}>
-                    <View
-                      style={[
-                        styles.bar,
-                        {
-                          height: barHeight,
-                          backgroundColor: colors.primary.main,
-                        },
-                      ]}
-                    />
-                    <Caption style={styles.barLabel}>{point.date}</Caption>
-                    <Caption style={styles.barValue}>{point.score}%</Caption>
+            {/* Progress Chart */}
+            {trendData.length > 0 && (
+              <View style={styles.section}>
+                <Heading3 style={styles.sectionTitle}>Andamento Punteggi</Heading3>
+                <Card variant="outlined" padding="md">
+                  <View style={[styles.chart, { height: chartHeight }]}>
+                    {trendData.slice(-5).map((point: { score: number; date: string }, index: number) => {
+                      const barHeight = (point.score / maxScore) * chartHeight * 0.8;
+                      const dateLabel = point.date 
+                        ? new Date(point.date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })
+                        : '';
+                      return (
+                        <View key={index} style={styles.chartBar}>
+                          <View
+                            style={[
+                              styles.bar,
+                              {
+                                height: barHeight,
+                                backgroundColor: colors.primary.main,
+                              },
+                            ]}
+                          />
+                          <Caption style={styles.barLabel}>{dateLabel}</Caption>
+                          <Caption style={styles.barValue}>{Math.round(point.score)}%</Caption>
+                        </View>
+                      );
+                    })}
                   </View>
-                );
-              })}
-            </View>
-          </Card>
-        </View>
+                </Card>
+              </View>
+            )}
 
-        {/* Subject Stats */}
-        <View style={styles.section}>
-          <Heading3 style={styles.sectionTitle}>Statistiche per Materia</Heading3>
-          
-          {mockSubjectStats.map((stat) => (
-            <Card
-              key={stat.subject}
-              variant="outlined"
-              padding="md"
-              style={styles.subjectCard}
-            >
-              <View style={styles.subjectHeader}>
-                <View style={styles.subjectInfo}>
-                  <View
-                    style={[
-                      styles.subjectDot,
-                      { backgroundColor: getLegacySubjectColor(stat.subject) },
-                    ]}
-                  />
-                  <Text variant="h5">{getLegacySubjectName(stat.subject)}</Text>
-                </View>
-                <View style={styles.trendContainer}>
-                  <Ionicons
-                    name={getTrendIcon(stat.trend) as keyof typeof Ionicons.glyphMap}
-                    size={16}
-                    color={getTrendColor(stat.trend)}
-                  />
-                  <Text
-                    variant="h4"
-                    style={{ color: getLegacySubjectColor(stat.subject) }}
+            {/* Subject Stats */}
+            {subjectStats.length > 0 && (
+              <View style={styles.section}>
+                <Heading3 style={styles.sectionTitle}>Statistiche per Materia</Heading3>
+                
+                {subjectStats.map((stat) => (
+                  <Card
+                    key={stat.subjectId}
+                    variant="outlined"
+                    padding="md"
+                    style={styles.subjectCard}
                   >
-                    {stat.percentage}%
-                  </Text>
-                </View>
-              </View>
+                    <View style={styles.subjectHeader}>
+                      <View style={styles.subjectInfo}>
+                        <View
+                          style={[
+                            styles.subjectDot,
+                            { backgroundColor: stat.subjectColor || colors.primary.main },
+                          ]}
+                        />
+                        <Text variant="h5">{stat.subjectName}</Text>
+                      </View>
+                      <View style={styles.trendContainer}>
+                        <Ionicons
+                          name={getTrendIcon(stat.trend) as keyof typeof Ionicons.glyphMap}
+                          size={16}
+                          color={getTrendColor(stat.trend)}
+                        />
+                        <Text
+                          variant="h4"
+                          style={{ color: stat.subjectColor || colors.primary.main }}
+                        >
+                          {Math.round(stat.avgScore)}%
+                        </Text>
+                      </View>
+                    </View>
 
-              <View style={[styles.progressBar, { backgroundColor: themedColors.border }]}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    {
-                      width: `${stat.percentage}%`,
-                      backgroundColor: getLegacySubjectColor(stat.subject),
-                    },
-                  ]}
-                />
-              </View>
+                    <View style={[styles.progressBar, { backgroundColor: themedColors.border }]}>
+                      <View
+                        style={[
+                          styles.progressFill,
+                          {
+                            width: `${Math.min(stat.avgScore, 100)}%`,
+                            backgroundColor: stat.subjectColor || colors.primary.main,
+                          },
+                        ]}
+                      />
+                    </View>
 
-              <View style={styles.subjectStats}>
-                <View style={styles.subjectStat}>
-                  <Caption>Domande</Caption>
-                  <Text variant="body">{stat.totalQuestions}</Text>
-                </View>
-                <View style={styles.subjectStat}>
-                  <Caption>Corrette</Caption>
-                  <Text variant="body" style={{ color: colors.status.success.main }}>
-                    {stat.correctAnswers}
-                  </Text>
-                </View>
-                <View style={styles.subjectStat}>
-                  <Caption>Errate</Caption>
-                  <Text variant="body" style={{ color: colors.status.error.main }}>
-                    {stat.totalQuestions - stat.correctAnswers}
-                  </Text>
-                </View>
+                    <View style={styles.subjectStats}>
+                      <View style={styles.subjectStat}>
+                        <Caption>Domande</Caption>
+                        <Text variant="body">{stat.total}</Text>
+                      </View>
+                      <View style={styles.subjectStat}>
+                        <Caption>Corrette</Caption>
+                        <Text variant="body" style={{ color: colors.status.success.main }}>
+                          {stat.correct}
+                        </Text>
+                      </View>
+                      <View style={styles.subjectStat}>
+                        <Caption>Errate</Caption>
+                        <Text variant="body" style={{ color: colors.status.error.main }}>
+                          {stat.wrong}
+                        </Text>
+                      </View>
+                    </View>
+                  </Card>
+                ))}
               </View>
-            </Card>
-          ))}
-        </View>
+            )}
+          </>
+        )}
 
         {/* Bottom spacing */}
         <View style={styles.bottomSpacer} />
@@ -301,9 +326,6 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   overviewValue: {
-    marginTop: spacing[1],
-  },
-  overviewSubject: {
     marginTop: spacing[1],
   },
   section: {
@@ -378,5 +400,27 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: spacing[8],
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: spacing[16],
+  },
+  loadingText: {
+    marginTop: spacing[3],
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: spacing[12],
+    paddingHorizontal: spacing[6],
+  },
+  emptyTitle: {
+    marginTop: spacing[4],
+    marginBottom: spacing[2],
+  },
+  emptyText: {
+    textAlign: 'center',
+    marginBottom: spacing[6],
   },
 });

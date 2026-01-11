@@ -2,6 +2,7 @@
  * Leonardo School Mobile - Simulations Screen
  * 
  * Lista simulazioni assegnate e disponibili.
+ * Dati caricati dalle API tRPC reali.
  */
 
 import React, { useState } from 'react';
@@ -11,6 +12,7 @@ import {
   StyleSheet,
   RefreshControl,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,115 +21,80 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text, Body, Caption } from '../../components/ui/Text';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Badge, LegacySubjectBadge } from '../../components/ui/Badge';
+import { Badge } from '../../components/ui/Badge';
 import { useThemedColors } from '../../contexts/ThemeContext';
+import { useAuthStore } from '../../stores/authStore';
+import { trpc } from '../../lib/trpc';
 import { colors } from '../../lib/theme/colors';
-import type { LegacySubject } from '../../lib/theme/colors';
 import { spacing, layout } from '../../lib/theme/spacing';
-import type { SimulationType } from '../../types';
-
-// Mock data - in produzione i dati vengono dall'API con materie dinamiche
-const mockSimulations: Array<{
-  id: string;
-  title: string;
-  type: SimulationType;
-  durationMinutes: number;
-  totalQuestions: number;
-  subjects: LegacySubject[];
-  startDate?: string;
-  endDate?: string;
-  attemptsUsed: number;
-  maxAttempts?: number;
-  isCompleted: boolean;
-}> = [
-  {
-    id: '1',
-    title: 'TOLC-MED 2026 - Simulazione Ufficiale',
-    type: 'OFFICIAL',
-    durationMinutes: 90,
-    totalQuestions: 50,
-    subjects: ['BIOLOGIA', 'CHIMICA', 'FISICA', 'MATEMATICA', 'LOGICA'],
-    startDate: '2026-01-10T09:00:00',
-    endDate: '2026-01-15T23:59:00',
-    attemptsUsed: 0,
-    maxAttempts: 1,
-    isCompleted: false,
-  },
-  {
-    id: '2',
-    title: 'Quiz Rapido - Chimica Organica',
-    type: 'QUICK_QUIZ',
-    durationMinutes: 15,
-    totalQuestions: 10,
-    subjects: ['CHIMICA'],
-    attemptsUsed: 2,
-    isCompleted: false,
-  },
-  {
-    id: '3',
-    title: 'Pratica Biologia Cellulare',
-    type: 'PRACTICE',
-    durationMinutes: 30,
-    totalQuestions: 20,
-    subjects: ['BIOLOGIA'],
-    attemptsUsed: 1,
-    isCompleted: true,
-  },
-  {
-    id: '4',
-    title: 'Simulazione Fisica + Matematica',
-    type: 'CUSTOM',
-    durationMinutes: 45,
-    totalQuestions: 30,
-    subjects: ['FISICA', 'MATEMATICA'],
-    startDate: '2026-01-12T14:00:00',
-    endDate: '2026-01-12T18:00:00',
-    attemptsUsed: 0,
-    maxAttempts: 2,
-    isCompleted: false,
-  },
-];
 
 type TabFilter = 'all' | 'pending' | 'completed';
 
+// Type for simulation from API
+interface Simulation {
+  id: string;
+  assignmentId?: string | null;
+  title: string;
+  type: string;
+  durationMinutes: number;
+  totalQuestions: number;
+  startDate?: string | Date | null;
+  endDate?: string | Date | null;
+  maxAttempts?: number | null;
+  status: 'pending' | 'completed' | 'in_progress';
+  attemptsUsed?: number;
+  isCompleted?: boolean;
+  studentStatus?: string;
+}
+
 export default function SimulationsScreen() {
   const themedColors = useThemedColors();
-  const [refreshing, setRefreshing] = useState(false);
+  const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
 
+  // Fetch simulations from API
+  const {
+    data: simulationsData,
+    isLoading,
+    refetch,
+    isRefetching,
+  } = trpc.simulations.getAvailableSimulations.useQuery(
+    { 
+      page: 1, 
+      pageSize: 50,
+      status: activeTab === 'completed' ? 'completed' : activeTab === 'pending' ? 'pending' : undefined,
+    },
+    { enabled: !!user }
+  );
+
   const onRefresh = async () => {
-    setRefreshing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setRefreshing(false);
+    await refetch();
   };
 
-  const filteredSimulations = mockSimulations.filter(sim => {
-    if (activeTab === 'pending') return !sim.isCompleted;
-    if (activeTab === 'completed') return sim.isCompleted;
-    return true;
-  });
+  // Get simulations from API response
+  const simulations: Simulation[] = (simulationsData?.simulations || []) as Simulation[];
 
-  const getTypeLabel = (type: SimulationType) => {
-    const labels: Record<SimulationType, string> = {
+  const getTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
       OFFICIAL: 'Ufficiale',
       PRACTICE: 'Pratica',
       CUSTOM: 'Personalizzata',
       QUICK_QUIZ: 'Quiz Rapido',
     };
-    return labels[type];
+    return labels[type] || type;
   };
 
-  const getTypeColor = (type: SimulationType) => {
-    const colorMap: Record<SimulationType, string> = {
+  const getTypeColor = (type: string) => {
+    const colorMap: Record<string, string> = {
       OFFICIAL: colors.status.error.main,
       PRACTICE: colors.status.info.main,
       CUSTOM: colors.primary.main,
       QUICK_QUIZ: colors.status.success.main,
     };
-    return colorMap[type];
+    return colorMap[type] || colors.primary.main;
   };
 
-  const formatDate = (dateStr: string) => {
+  const formatDate = (dateStr: string | Date) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('it-IT', {
       day: 'numeric',
@@ -137,18 +104,25 @@ export default function SimulationsScreen() {
     });
   };
 
-  const renderSimulationCard = (simulation: typeof mockSimulations[0]) => {
-    const isAvailable = !simulation.isCompleted && 
-      (!simulation.maxAttempts || simulation.attemptsUsed < simulation.maxAttempts);
+  const renderSimulationCard = (simulation: Simulation) => {
+    const isCompleted = simulation.studentStatus === 'completed' || simulation.status === 'completed' || simulation.isCompleted;
+    const attemptsUsed = simulation.attemptsUsed || 0;
+    const isAvailable = !isCompleted && 
+      (!simulation.maxAttempts || attemptsUsed < simulation.maxAttempts);
     
     const hasTimeWindow = simulation.startDate && simulation.endDate;
     const now = new Date();
     const isInTimeWindow = !hasTimeWindow || 
       (new Date(simulation.startDate!) <= now && new Date(simulation.endDate!) >= now);
 
+    // Use unique key combining simulation id and assignment id
+    const uniqueKey = simulation.assignmentId 
+      ? `${simulation.id}-${simulation.assignmentId}` 
+      : simulation.id;
+
     return (
       <Card
-        key={simulation.id}
+        key={uniqueKey}
         variant="outlined"
         padding="md"
         style={styles.simulationCard}
@@ -161,7 +135,7 @@ export default function SimulationsScreen() {
               {getTypeLabel(simulation.type)}
             </Text>
           </View>
-          {simulation.isCompleted && (
+          {isCompleted && (
             <Badge variant="success" size="sm">Completata</Badge>
           )}
         </View>
@@ -184,20 +158,8 @@ export default function SimulationsScreen() {
           {simulation.maxAttempts && (
             <View style={styles.infoItem}>
               <Ionicons name="repeat-outline" size={16} color={themedColors.textMuted} />
-              <Caption>{simulation.attemptsUsed}/{simulation.maxAttempts}</Caption>
+              <Caption>{attemptsUsed}/{simulation.maxAttempts}</Caption>
             </View>
-          )}
-        </View>
-
-        {/* Subjects */}
-        <View style={styles.subjectsRow}>
-          {simulation.subjects.slice(0, 3).map((subject) => (
-            <LegacySubjectBadge key={subject} subject={subject} size="sm" />
-          ))}
-          {simulation.subjects.length > 3 && (
-            <Badge variant="default" size="sm">
-              +{simulation.subjects.length - 3}
-            </Badge>
           )}
         </View>
 
@@ -220,7 +182,7 @@ export default function SimulationsScreen() {
           onPress={() => router.push(`/simulation/${simulation.id}`)}
           style={styles.actionButton}
         >
-          {simulation.isCompleted
+          {isCompleted
             ? 'Vedi Risultati'
             : !isInTimeWindow && hasTimeWindow
             ? 'Non ancora disponibile'
@@ -232,6 +194,8 @@ export default function SimulationsScreen() {
       </Card>
     );
   };
+
+  if (!user) return null;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={['top']}>
@@ -266,13 +230,18 @@ export default function SimulationsScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
+            refreshing={isRefetching}
             onRefresh={onRefresh}
             tintColor={colors.primary.main}
           />
         }
       >
-        {filteredSimulations.length === 0 ? (
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary.main} />
+            <Caption style={styles.loadingText}>Caricamento simulazioni...</Caption>
+          </View>
+        ) : simulations.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons
               name="document-text-outline"
@@ -291,7 +260,7 @@ export default function SimulationsScreen() {
             </Body>
           </View>
         ) : (
-          filteredSimulations.map(renderSimulationCard)
+          simulations.map(renderSimulationCard)
         )}
       </ScrollView>
     </SafeAreaView>
@@ -358,12 +327,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing[1],
   },
-  subjectsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing[1.5],
-    marginBottom: spacing[3],
-  },
   timeWindow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -375,6 +338,15 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     marginTop: spacing[1],
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: spacing[16],
+  },
+  loadingText: {
+    marginTop: spacing[3],
   },
   emptyState: {
     flex: 1,
