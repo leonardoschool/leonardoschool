@@ -862,7 +862,7 @@ export const notifications = {
   },
 
   /**
-   * Notifica risposta aperta da correggere
+   * Notifica risposta aperta da correggere (a tutto lo staff)
    */
   async openAnswerToReview(
     prisma: PrismaClient,
@@ -877,6 +877,31 @@ export const notifications = {
       type: 'OPEN_ANSWER_TO_REVIEW',
       title: 'Risposte da correggere',
       message: `${params.studentName} ha completato la simulazione "${params.simulationTitle}" con ${params.answersCount} risposte aperte da valutare`,
+      linkUrl: `/simulazioni/${params.simulationId}/correzioni`,
+      linkType: 'simulation',
+      linkEntityId: params.simulationId,
+    });
+  },
+
+  /**
+   * Notifica risposta aperta da correggere (a uno staff member specifico)
+   * Usato quando lo studente richiede la correzione da un docente specifico
+   */
+  async openAnswerToReviewForStaff(
+    prisma: PrismaClient,
+    params: {
+      staffUserId: string;
+      simulationId: string;
+      simulationTitle: string;
+      studentName: string;
+      openQuestionsCount: number;
+    }
+  ) {
+    return createNotification(prisma, {
+      userId: params.staffUserId,
+      type: 'OPEN_ANSWER_TO_REVIEW',
+      title: 'Richiesta correzione domande aperte',
+      message: `${params.studentName} ha richiesto la tua correzione per ${params.openQuestionsCount} domande aperte nella simulazione "${params.simulationTitle}"`,
       linkUrl: `/simulazioni/${params.simulationId}/correzioni`,
       linkType: 'simulation',
       linkEntityId: params.simulationId,

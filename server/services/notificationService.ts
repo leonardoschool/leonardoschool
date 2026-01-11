@@ -393,7 +393,8 @@ export async function notifyContractReminder(
     contractId: string;
     contractName: string;
     expiresAt: Date;
-    signLink: string;
+    signLink: string; // Relative link for in-app
+    signLinkAbsolute: string; // Absolute link for email
   }
 ): Promise<void> {
   await notifications.contractReminder(prisma, {
@@ -404,8 +405,16 @@ export async function notifyContractReminder(
     signLink: params.signLink,
   });
 
-  // TODO: Add sendContractReminderEmail to emailService when needed
-  // await emailService.sendContractReminderEmail({...})
+  // Send reminder email
+  await emailService.sendContractReminderEmail({
+    recipientName: params.recipientName,
+    recipientEmail: params.recipientEmail,
+    contractName: params.contractName,
+    expiresAt: params.expiresAt,
+    signLink: params.signLinkAbsolute,
+  }).catch(err => {
+    console.error('[NotificationService] Failed to send contract reminder email:', err);
+  });
 }
 
 /**
@@ -427,8 +436,14 @@ export async function notifyContractExpired(
     contractName: params.contractName,
   });
 
-  // TODO: Add sendContractExpiredEmail to emailService when needed
-  // await emailService.sendContractExpiredEmail({...})
+  // Send expired email
+  await emailService.sendContractExpiredEmail({
+    recipientName: params.recipientName,
+    recipientEmail: params.recipientEmail,
+    contractName: params.contractName,
+  }).catch(err => {
+    console.error('[NotificationService] Failed to send contract expired email:', err);
+  });
 }
 
 /**
@@ -454,7 +469,9 @@ export async function notifySimulationResultsAvailable(
     ranking: params.ranking,
   });
 
-  // TODO: Add email for simulation results when template is ready
+  // NOTE: Email for simulation results is optional and not yet implemented.
+  // The in-app notification is sufficient for most use cases.
+  // Future enhancement: await emailService.sendSimulationResultsEmail({...})
 }
 
 /**
@@ -517,6 +534,23 @@ export async function notifyQuestionFeedback(
   }
 ): Promise<void> {
   await notifications.questionFeedback(prisma, params);
+}
+
+/**
+ * Notify a specific staff member about open questions to review
+ * Used when a student requests correction from a specific teacher
+ */
+export async function notifyOpenAnswerCorrectionRequest(
+  prisma: PrismaClient,
+  params: {
+    staffUserId: string;
+    simulationId: string;
+    simulationTitle: string;
+    studentName: string;
+    openQuestionsCount: number;
+  }
+): Promise<void> {
+  await notifications.openAnswerToReviewForStaff(prisma, params);
 }
 
 /**
