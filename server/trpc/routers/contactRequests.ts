@@ -2,6 +2,7 @@
 import { router, adminProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import { createCachedQuery, CACHE_TIMES } from '@/lib/cache/serverCache';
 
 export const contactRequestsRouter = router({
   /**
@@ -189,20 +190,28 @@ export const contactRequestsRouter = router({
    * Get statistics for contact requests
    */
   getStats: adminProcedure.query(async ({ ctx }) => {
-    const [total, pending, read, replied, archived] = await Promise.all([
-      ctx.prisma.contactRequest.count(),
-      ctx.prisma.contactRequest.count({ where: { status: 'PENDING' } }),
-      ctx.prisma.contactRequest.count({ where: { status: 'READ' } }),
-      ctx.prisma.contactRequest.count({ where: { status: 'REPLIED' } }),
-      ctx.prisma.contactRequest.count({ where: { status: 'ARCHIVED' } }),
-    ]);
+    const getCachedStats = createCachedQuery(
+      async () => {
+        const [total, pending, read, replied, archived] = await Promise.all([
+          ctx.prisma.contactRequest.count(),
+          ctx.prisma.contactRequest.count({ where: { status: 'PENDING' } }),
+          ctx.prisma.contactRequest.count({ where: { status: 'READ' } }),
+          ctx.prisma.contactRequest.count({ where: { status: 'REPLIED' } }),
+          ctx.prisma.contactRequest.count({ where: { status: 'ARCHIVED' } }),
+        ]);
 
-    return {
-      total,
-      pending,
-      read,
-      replied,
-      archived,
-    };
+        return {
+          total,
+          pending,
+          read,
+          replied,
+          archived,
+        };
+      },
+      ['contact-requests-stats'],
+      { revalidate: CACHE_TIMES.MEDIUM } // 5 minutes
+    );
+
+    return await getCachedStats();
   }),
 });

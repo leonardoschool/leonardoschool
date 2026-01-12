@@ -8,6 +8,7 @@ import { TRPCError } from '@trpc/server';
 import { adminAuth } from '@/lib/firebase/admin';
 import { Prisma } from '@prisma/client';
 import { generateMatricola } from '@/lib/utils/matricolaUtils';
+import { createCachedQuery, CACHE_TIMES, CACHE_TAGS } from '@/lib/cache/serverCache';
 
 export const usersRouter = router({
   /**
@@ -506,7 +507,10 @@ export const usersRouter = router({
     const roleFilter = input?.role || 'ALL';
     const roleWhere = roleFilter !== 'ALL' ? { role: roleFilter } : {};
 
-    const [total, students, collaborators, admins, active, pendingProfile] = await Promise.all([
+    // Cache stats for 2 minutes - they don't change frequently
+    const getCachedStats = createCachedQuery(
+      async () => {
+        const [total, students, collaborators, admins, active, pendingProfile] = await Promise.all([
       ctx.prisma.user.count({ where: roleWhere }),
       ctx.prisma.user.count({ where: { role: 'STUDENT' } }),
       ctx.prisma.user.count({ where: { role: 'COLLABORATOR' as any } }),
@@ -602,6 +606,12 @@ export const usersRouter = router({
       inactive: inactiveCount,
       noSignedContract: noSignedContractCount,
     };
+      },
+      [CACHE_TAGS.STATS, CACHE_TAGS.USERS, `user-stats-${roleFilter}`],
+      { revalidate: CACHE_TIMES.SHORT } // 1 minute cache
+    );
+
+    return await getCachedStats();
   }),
 
   /**

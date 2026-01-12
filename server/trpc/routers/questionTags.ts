@@ -17,6 +17,7 @@ import {
   listCategoriesFilterSchema,
 } from '@/lib/validations/questionTagValidation';
 import type { Prisma } from '@prisma/client';
+import { createCachedQuery, CACHE_TIMES, CACHE_TAGS } from '@/lib/cache/serverCache';
 
 export const questionTagsRouter = router({
   // ==================== CATEGORIES ====================
@@ -27,43 +28,55 @@ export const questionTagsRouter = router({
   getCategories: staffProcedure
     .input(listCategoriesFilterSchema.optional())
     .query(async ({ ctx, input }) => {
-      const where: Prisma.QuestionTagCategoryWhereInput = {};
+      const includeInactive = input?.includeInactive || false;
+      const search = input?.search || '';
+      
+      // Cache for 15 minutes - categories and tags change infrequently
+      const getCachedCategories = createCachedQuery(
+        async () => {
+          const where: Prisma.QuestionTagCategoryWhereInput = {};
 
-      if (!input?.includeInactive) {
-        where.isActive = true;
-      }
+          if (!includeInactive) {
+            where.isActive = true;
+          }
 
-      if (input?.search) {
-        where.name = { contains: input.search, mode: 'insensitive' };
-      }
+          if (search) {
+            where.name = { contains: search, mode: 'insensitive' };
+          }
 
-      const categories = await ctx.prisma.questionTagCategory.findMany({
-        where,
-        orderBy: [{ order: 'asc' }, { name: 'asc' }],
-        include: {
-          tags: {
-            where: input?.includeInactive ? {} : { isActive: true },
-            orderBy: { name: 'asc' },
-            select: {
-              id: true,
-              name: true,
-              description: true,
-              color: true,
-              categoryId: true,
-              isActive: true,
-              createdBy: true,
+          const categories = await ctx.prisma.questionTagCategory.findMany({
+            where,
+            orderBy: [{ order: 'asc' }, { name: 'asc' }],
+            include: {
+              tags: {
+                where: includeInactive ? {} : { isActive: true },
+                orderBy: { name: 'asc' },
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  color: true,
+                  categoryId: true,
+                  isActive: true,
+                  createdBy: true,
+                  _count: {
+                    select: { questions: true },
+                  },
+                },
+              },
               _count: {
-                select: { questions: true },
+                select: { tags: true },
               },
             },
-          },
-          _count: {
-            select: { tags: true },
-          },
-        },
-      });
+          });
 
-      return categories;
+          return categories;
+        },
+        [CACHE_TAGS.TAGS, 'categories', `inactive-${includeInactive}`, `search-${search}`],
+        { revalidate: CACHE_TIMES.LONG } // 15 minutes
+      );
+
+      return await getCachedCategories();
     }),
 
   /**
