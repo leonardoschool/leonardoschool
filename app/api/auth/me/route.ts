@@ -71,6 +71,28 @@ export async function POST(request: NextRequest) {
     // Check if student needs to provide parent data
     const parentDataRequired = user.student?.requiresParentData && !user.student?.parentGuardian;
 
+    // Check if user has a pending contract to sign
+    let pendingContractToken: string | null = null;
+    if (user.role === 'STUDENT' && user.student) {
+      const pendingContract = await prisma.contract.findFirst({
+        where: {
+          studentId: user.student.id,
+          status: 'PENDING',
+        },
+        select: { signToken: true },
+      });
+      pendingContractToken = pendingContract?.signToken || null;
+    } else if (user.role === 'COLLABORATOR' && user.collaborator) {
+      const pendingContract = await prisma.contract.findFirst({
+        where: {
+          collaboratorId: user.collaborator.id,
+          status: 'PENDING',
+        },
+        select: { signToken: true },
+      });
+      pendingContractToken = pendingContract?.signToken || null;
+    }
+
     // Crea response con dati utente
     const response = NextResponse.json({
       id: user.id,
@@ -82,6 +104,7 @@ export async function POST(request: NextRequest) {
       profileCompleted: user.profileCompleted,
       emailVerified: user.emailVerified,
       parentDataRequired: parentDataRequired || false,
+      pendingContractToken: pendingContractToken,
     });
 
     // Cookie duration: 7 days (refresh happens on each /api/auth/me call)
@@ -131,6 +154,26 @@ export async function POST(request: NextRequest) {
       maxAge: cookieMaxAge,
       path: '/',
     });
+
+    // Cookie for pending contract token (if user has a contract to sign)
+    if (pendingContractToken) {
+      response.cookies.set('pending-contract', pendingContractToken, {
+        httpOnly: false,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: cookieMaxAge,
+        path: '/',
+      });
+    } else {
+      // Clear the cookie if no pending contract
+      response.cookies.set('pending-contract', '', {
+        httpOnly: false,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 0, // Expire immediately
+        path: '/',
+      });
+    }
 
     return response;
   } catch (error) {

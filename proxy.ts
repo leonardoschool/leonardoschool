@@ -87,6 +87,7 @@ export function proxy(request: NextRequest) {
   const profileCompleted = request.cookies.get('profile-completed')?.value === 'true';
   const parentDataRequired = request.cookies.get('parent-data-required')?.value === 'true';
   const userActive = request.cookies.get('user-active')?.value !== 'false'; // Default to true if not set
+  const pendingContract = request.cookies.get('pending-contract')?.value;
   
   // Check if it's a protected route
   const isProtectedRoute = isUnifiedProtectedRoute(pathname);
@@ -126,6 +127,14 @@ export function proxy(request: NextRequest) {
       // Still block all routes except profile and complete-profile
       if (!pathname.startsWith('/profilo') && !pathname.startsWith('/auth/complete-profile')) {
         return NextResponse.redirect(new URL('/profilo?section=genitore', request.url));
+      }
+    }
+
+    // Check if user has a pending contract to sign (blocks platform access until signed)
+    if (pendingContract && (userRole === 'STUDENT' || userRole === 'COLLABORATOR')) {
+      // Allow access ONLY to the contract signing page
+      if (!pathname.startsWith('/contratto')) {
+        return NextResponse.redirect(new URL(`/contratto/${pendingContract}`, request.url));
       }
     }
     

@@ -59,7 +59,7 @@ export const usersRouter = router({
         graduationYear: user.student.graduationYear,
         requiresParentData: user.student.requiresParentData,
         parentDataRequestedAt: user.student.parentDataRequestedAt?.toISOString(),
-        parentDataRequestedBy: user.student.parentDataRequestedBy,
+        parentDataRequestedById: user.student.parentDataRequestedById,
         parentGuardian: user.student.parentGuardian,
       } : undefined,
     };
@@ -274,6 +274,7 @@ export const usersRouter = router({
                     id: true,
                     status: true,
                     signedAt: true,
+                    canDownload: true,
                     template: {
                       select: { name: true },
                     },
@@ -384,6 +385,7 @@ export const usersRouter = router({
                     id: true,
                     status: true,
                     signedAt: true,
+                    canDownload: true,
                     template: {
                       select: { name: true },
                     },

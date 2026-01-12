@@ -4,10 +4,12 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { Spinner, ButtonLoader } from '@/components/ui/loaders';
 import { Portal } from '@/components/ui/Portal';
+import Checkbox from '@/components/ui/Checkbox';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import {
   Users,
@@ -47,6 +49,7 @@ import {
   CreditCard,
   MapPin,
   XCircle,
+  Download,
 } from 'lucide-react';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
@@ -457,7 +460,7 @@ function AssignContractModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onAssign: (data: { templateId: string; customContent?: string; customPrice?: number; adminNotes?: string; expiresInDays: number }) => void;
+  onAssign: (data: { templateId: string; customContent?: string; customPrice?: number; adminNotes?: string; expiresInDays: number; canDownload: boolean }) => void;
   templates: any[];
   isLoading: boolean;
   targetId: string;
@@ -471,6 +474,7 @@ function AssignContractModal({
   const [expiresInDays, setExpiresInDays] = useState(7);
   const [showPreview, setShowPreview] = useState(false);
   const [templateFilter, setTemplateFilter] = useState<'ALL' | 'STUDENT' | 'COLLABORATOR'>(targetType);
+  const [canDownload, setCanDownload] = useState(false);
 
   // Filter templates based on selected filter
   const filteredTemplates = templates?.filter(t => 
@@ -496,6 +500,7 @@ function AssignContractModal({
     setAdminNotes('');
     setExpiresInDays(7);
     setShowPreview(false);
+    setCanDownload(false);
   };
 
   // Handle close with reset
@@ -543,6 +548,7 @@ function AssignContractModal({
       customPrice: customPrice ? parseFloat(customPrice) : undefined,
       adminNotes: adminNotes || undefined,
       expiresInDays,
+      canDownload,
     });
   };
 
@@ -803,6 +809,16 @@ function AssignContractModal({
                       rows={2}
                       className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.text.primary} ${colors.border.primary} border focus:ring-2 focus:ring-red-500`}
                       placeholder="Note interne..."
+                    />
+                  </div>
+
+                  {/* Download Permission Toggle */}
+                  <div className={`p-4 rounded-xl border ${colors.border.primary} ${colors.background.secondary}`}>
+                    <Checkbox
+                      checked={canDownload}
+                      onChange={(e) => setCanDownload(e.target.checked)}
+                      label="Permetti download contratto"
+                      description="Se abilitato, l'utente potrà scaricare il PDF del contratto firmato"
                     />
                   </div>
                 </>
@@ -1115,6 +1131,7 @@ function ManageSubjectsModal({
 export default function AdminUtentiContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<RoleFilter>('ALL');
   const [status, setStatus] = useState<StatusFilter>('all');
@@ -1147,7 +1164,7 @@ export default function AdminUtentiContent() {
   // Modal states
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
-    type: 'delete' | 'toggleActive' | 'changeRole' | 'revokeContract';
+    type: 'delete' | 'toggleActive' | 'changeRole' | 'revokeContract' | 'revokeSignedContract';
     userId: string;
     userName: string;
     currentActive?: boolean;
@@ -1294,6 +1311,29 @@ export default function AdminUtentiContent() {
     onError: handleMutationError,
   });
 
+  const toggleDownloadMutation = trpc.contracts.toggleContractDownload.useMutation({
+    onSuccess: (data) => {
+      utils.users.getAll.invalidate();
+      showSuccess(
+        data.canDownload ? 'Download abilitato' : 'Download disabilitato',
+        data.canDownload 
+          ? 'L\'utente può ora scaricare il contratto.' 
+          : 'L\'utente non può più scaricare il contratto.'
+      );
+    },
+    onError: handleMutationError,
+  });
+
+  const revokeSignedContractMutation = trpc.contracts.revokeSignedContract.useMutation({
+    onSuccess: () => {
+      utils.users.getAll.invalidate();
+      utils.users.getStats.invalidate();
+      closeConfirmModal();
+      showSuccess('Contratto revocato', 'Il contratto firmato è stato revocato. Ora puoi assegnare un nuovo contratto.');
+    },
+    onError: handleMutationError,
+  });
+
   const closeConfirmModal = () => {
     setConfirmModal(prev => ({ ...prev, isOpen: false }));
   };
@@ -1339,6 +1379,16 @@ export default function AdminUtentiContent() {
     });
   };
 
+  const openRevokeSignedContractModal = (contractId: string, userName: string) => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'revokeSignedContract',
+      userId: '',
+      userName,
+      contractId,
+    });
+  };
+
   const handleConfirm = () => {
     switch (confirmModal.type) {
       case 'delete':
@@ -1357,6 +1407,11 @@ export default function AdminUtentiContent() {
           revokeContractMutation.mutate({ contractId: confirmModal.contractId });
         }
         break;
+      case 'revokeSignedContract':
+        if (confirmModal.contractId) {
+          revokeSignedContractMutation.mutate({ contractId: confirmModal.contractId });
+        }
+        break;
     }
   };
 
@@ -1365,7 +1420,8 @@ export default function AdminUtentiContent() {
     customContent?: string; 
     customPrice?: number; 
     adminNotes?: string; 
-    expiresInDays: number 
+    expiresInDays: number;
+    canDownload: boolean;
   }) => {
     if (contractModal.targetId) {
       if (contractModal.targetType === 'COLLABORATOR') {
@@ -1376,6 +1432,7 @@ export default function AdminUtentiContent() {
           customContent: data.customContent,
           customPrice: data.customPrice,
           adminNotes: data.adminNotes,
+          canDownload: data.canDownload,
         });
       } else {
         assignContractMutation.mutate({
@@ -1385,6 +1442,7 @@ export default function AdminUtentiContent() {
           customContent: data.customContent,
           customPrice: data.customPrice,
           adminNotes: data.adminNotes,
+          canDownload: data.canDownload,
         });
       }
     }
@@ -1431,6 +1489,14 @@ export default function AdminUtentiContent() {
           confirmLabel: 'Revoca Contratto',
           variant: 'warning' as const,
           isLoading: revokeContractMutation.isPending,
+        };
+      case 'revokeSignedContract':
+        return {
+          title: 'Revoca Contratto Firmato',
+          message: `⚠️ ATTENZIONE: Stai per revocare un contratto già firmato da "${confirmModal.userName}". Il contratto verrà archiviato come "Revocato" e potrai assegnarne uno nuovo. L'utente verrà notificato della revoca.`,
+          confirmLabel: 'Revoca Contratto Firmato',
+          variant: 'danger' as const,
+          isLoading: revokeSignedContractMutation.isPending,
         };
       default:
         return { title: '', message: '', confirmLabel: '', variant: 'info' as const, isLoading: false };
@@ -1742,13 +1808,41 @@ export default function AdminUtentiContent() {
                         </button>
                       )}
                       {hasSignedContract && contractId && (
-                        <button
-                          onClick={() => window.open(`/api/contracts/${contractId}/view`, '_blank')}
-                          className={`p-2 rounded-lg ${colors.status.success.softBg} ${colors.status.success.text}`}
-                          title="Visualizza contratto"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
+                        <>
+                          <button
+                            onClick={() => window.open(`/api/contracts/${contractId}/view`, '_blank')}
+                            className={`p-2 rounded-lg ${colors.status.success.softBg} ${colors.status.success.text}`}
+                            title="Visualizza contratto"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          {/* Toggle download permission */}
+                          <button
+                            onClick={() => toggleDownloadMutation.mutate({ 
+                              contractId, 
+                              canDownload: !lastContract?.canDownload 
+                            })}
+                            disabled={toggleDownloadMutation.isPending}
+                            className={`p-2 rounded-lg ${
+                              lastContract?.canDownload 
+                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                                : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                            }`}
+                            title={lastContract?.canDownload ? 'Download abilitato (clicca per disabilitare)' : 'Download disabilitato (clicca per abilitare)'}
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                          {/* Revoke signed contract */}
+                          {!isSelf && (
+                            <button
+                              onClick={() => openRevokeSignedContractModal(contractId, user.name)}
+                              className={`p-2 rounded-lg ${colors.status.error.softBg} ${colors.status.error.text}`}
+                              title="Revoca contratto firmato"
+                            >
+                              <FileX className="w-4 h-4" />
+                            </button>
+                          )}
+                        </>
                       )}
                       {hasPendingContract && contractId && (
                         <>
@@ -2023,13 +2117,41 @@ export default function AdminUtentiContent() {
                               </button>
                             )}
                             {hasSignedContract && contractId && (
-                              <button
-                                onClick={() => window.open(`/api/contracts/${contractId}/view`, '_blank')}
-                                className={`p-1.5 rounded-lg ${colors.status.success.softBg} ${colors.status.success.text} hover:opacity-80 transition-opacity`}
-                                title="Visualizza contratto firmato"
-                              >
-                                <FileText className="w-3.5 h-3.5" />
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => window.open(`/api/contracts/${contractId}/view`, '_blank')}
+                                  className={`p-1.5 rounded-lg ${colors.status.success.softBg} ${colors.status.success.text} hover:opacity-80 transition-opacity`}
+                                  title="Visualizza contratto firmato"
+                                >
+                                  <FileText className="w-3.5 h-3.5" />
+                                </button>
+                                {/* Toggle download permission */}
+                                <button
+                                  onClick={() => toggleDownloadMutation.mutate({ 
+                                    contractId, 
+                                    canDownload: !lastContract?.canDownload 
+                                  })}
+                                  disabled={toggleDownloadMutation.isPending}
+                                  className={`p-1.5 rounded-lg hover:opacity-80 transition-opacity ${
+                                    lastContract?.canDownload 
+                                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                                      : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                                  }`}
+                                  title={lastContract?.canDownload ? 'Download abilitato (clicca per disabilitare)' : 'Download disabilitato (clicca per abilitare)'}
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                </button>
+                                {/* Revoke signed contract */}
+                                {!isSelf && (
+                                  <button
+                                    onClick={() => openRevokeSignedContractModal(contractId, user.name)}
+                                    className={`p-1.5 rounded-lg ${colors.status.error.softBg} ${colors.status.error.text} hover:opacity-80 transition-opacity`}
+                                    title="Revoca contratto firmato"
+                                  >
+                                    <FileX className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </>
                             )}
                             {hasPendingContract && contractId && (
                               <>

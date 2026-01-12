@@ -127,6 +127,7 @@ enum ContractStatus {
   SIGNED // Contratto firmato dallo studente
   EXPIRED // Contratto scaduto (non firmato in tempo)
   CANCELLED // Contratto annullato dall'admin
+  REVOKED // Contratto firmato ma poi revocato dall'admin (storico)
 }
 
 enum NotificationType {
@@ -1506,9 +1507,17 @@ model Contract {
   signToken          String    @unique @default(cuid())
   signTokenExpiresAt DateTime?
 
+  // Download permission - admin controls if user can download the signed contract
+  canDownload Boolean @default(false)
+
   // Timestamps
   assignedAt DateTime  @default(now())
   expiresAt  DateTime? // Deadline for signing
+
+  // Revocation info (for revoked contracts that were previously signed)
+  revokedAt   DateTime?
+  revokedBy   String? // Admin userId who revoked
+  revokeNotes String? @db.Text // Reason for revocation
 
   // Admin notes
   adminNotes String? @db.Text

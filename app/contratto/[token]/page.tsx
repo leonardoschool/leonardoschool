@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { auth } from '@/lib/firebase/config';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import Preloader from '@/components/ui/Preloader';
@@ -51,9 +52,30 @@ export default function ContractSignPage() {
 
   // Sign mutation
   const signMutation = trpc.contracts.signContract.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
       setSuccess(true);
       showSuccess('Contratto firmato', 'Il contratto è stato firmato con successo!');
+      
+      // Sync auth cookies to clear the pending-contract cookie
+      const user = auth.currentUser;
+      if (user) {
+        try {
+          const firebaseToken = await user.getIdToken();
+          await fetch('/api/auth/me', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: firebaseToken }),
+            cache: 'no-store',
+          });
+        } catch (error) {
+          console.error('[ContractSign] Failed to sync auth cookies:', error);
+        }
+      }
+      
+      // Redirect to dashboard after a short delay
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 2000);
     },
     onError: (err) => {
       const parsed = parseError(err);
@@ -407,14 +429,17 @@ export default function ContractSignPage() {
                 </p>
               </div>
             </div>
-            <button
-              onClick={handleDownloadPDF}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${colors.background.secondary} ${colors.text.primary} hover:${colors.background.tertiary} border ${colors.border.primary} transition-colors`}
-              title="Scarica contratto in PDF"
-            >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Scarica PDF</span>
-            </button>
+            {/* Only show download button if canDownload is true */}
+            {contract.canDownload && (
+              <button
+                onClick={handleDownloadPDF}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg ${colors.background.secondary} ${colors.text.primary} hover:${colors.background.tertiary} border ${colors.border.primary} transition-colors`}
+                title="Scarica contratto in PDF"
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden sm:inline">Scarica PDF</span>
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

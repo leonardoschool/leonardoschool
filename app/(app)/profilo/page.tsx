@@ -410,8 +410,8 @@ function SignedContractCard({ contract }: { contract: any }) {
             </p>
           )}
         </div>
-        {/* Download button - only show if contract is signed and has content */}
-        {contract.status === 'SIGNED' && contract.contentSnapshot && (
+        {/* Download button - only show if contract is signed, has content, AND admin enabled download */}
+        {contract.status === 'SIGNED' && contract.contentSnapshot && contract.canDownload && (
           <button
             onClick={handleDownload}
             className={`w-full sm:w-auto mt-2 sm:mt-0 px-3 py-2 rounded-lg border ${colors.status.success.border} ${colors.status.success.text} font-medium flex items-center justify-center gap-2 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors text-sm`}
