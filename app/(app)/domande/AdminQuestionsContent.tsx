@@ -712,9 +712,9 @@ export default function AdminQuestionsContent() {
                         </p>
                         {question.legacyTags.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1 max-w-full">
-                            {question.legacyTags.slice(0, 3).map((tag) => (
+                            {question.legacyTags.slice(0, 3).map((tag, tagIndex) => (
                               <span
-                                key={tag}
+                                key={`${question.id}-tag-${tagIndex}`}
                                 className={`text-xs px-1.5 py-0.5 rounded truncate max-w-[100px] ${colors.background.secondary} ${colors.text.muted}`}
                               >
                                 {tag}

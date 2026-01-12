@@ -16,7 +16,10 @@
     "seed": "tsx scripts/seed.ts",
     "cleanup": "tsx scripts/cleanup.ts",
     "cleanup:dry": "tsx scripts/cleanup.ts --dry-run",
-    "cleanup:stats": "tsx scripts/cleanup.ts --stats"
+    "cleanup:stats": "tsx scripts/cleanup.ts --stats",
+    "migrate:questions": "dotenv -e .env.local -- tsx scripts/migrate-questions-from-firestore.ts",
+    "migrate:questions:dry": "dotenv -e .env.local -- tsx scripts/migrate-questions-from-firestore.ts --dry-run",
+    "migrate:questions:inspect": "dotenv -e .env.local -- tsx scripts/migrate-questions-from-firestore.ts --inspect"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
