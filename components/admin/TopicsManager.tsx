@@ -7,6 +7,7 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { Spinner } from '@/components/ui/loaders';
 import { Portal } from '@/components/ui/Portal';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import CustomSelect from '@/components/ui/CustomSelect';
 import {
   X,
@@ -83,6 +84,13 @@ export default function TopicsManager({
   const [editingSubTopicId, setEditingSubTopicId] = useState<string | null>(null);
   const [showAddTopic, setShowAddTopic] = useState(false);
   const [addingSubTopicToId, setAddingSubTopicToId] = useState<string | null>(null);
+
+  // Delete confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    type: 'topic' | 'subTopic';
+    id: string;
+    name: string;
+  } | null>(null);
 
   // Form states
   const [topicForm, setTopicForm] = useState({
@@ -438,11 +446,11 @@ export default function TopicsManager({
                             <Edit2 className="w-4 h-4 text-gray-500" />
                           </button>
                           <button
-                            onClick={() => {
-                              if (confirm('Eliminare questo argomento e tutti i suoi sotto-argomenti?')) {
-                                deleteTopicMutation.mutate({ id: topic.id });
-                              }
-                            }}
+                            onClick={() => setDeleteConfirm({
+                              type: 'topic',
+                              id: topic.id,
+                              name: topic.name,
+                            })}
                             className={`p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20`}
                             title="Elimina"
                           >
@@ -513,11 +521,11 @@ export default function TopicsManager({
                                       <Edit2 className="w-3 h-3 text-gray-500" />
                                     </button>
                                     <button
-                                      onClick={() => {
-                                        if (confirm('Eliminare questo sotto-argomento?')) {
-                                          deleteSubTopicMutation.mutate({ id: subTopic.id });
-                                        }
-                                      }}
+                                      onClick={() => setDeleteConfirm({
+                                        type: 'subTopic',
+                                        id: subTopic.id,
+                                        name: subTopic.name,
+                                      })}
                                       className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30"
                                     >
                                       <Trash2 className="w-3 h-3 text-red-500" />
@@ -611,6 +619,32 @@ export default function TopicsManager({
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={() => {
+          if (deleteConfirm) {
+            if (deleteConfirm.type === 'topic') {
+              deleteTopicMutation.mutate({ id: deleteConfirm.id });
+            } else {
+              deleteSubTopicMutation.mutate({ id: deleteConfirm.id });
+            }
+            setDeleteConfirm(null);
+          }
+        }}
+        title={deleteConfirm?.type === 'topic' ? 'Elimina argomento' : 'Elimina sotto-argomento'}
+        message={
+          deleteConfirm?.type === 'topic'
+            ? `Sei sicuro di voler eliminare l'argomento "${deleteConfirm?.name}" e tutti i suoi sotto-argomenti?\n\nQuesta azione non può essere annullata.`
+            : `Sei sicuro di voler eliminare il sotto-argomento "${deleteConfirm?.name}"?\n\nQuesta azione non può essere annullata.`
+        }
+        confirmLabel="Elimina"
+        cancelLabel="Annulla"
+        variant="danger"
+        isLoading={deleteTopicMutation.isPending || deleteSubTopicMutation.isPending}
+      />
     </Portal>
   );
 }

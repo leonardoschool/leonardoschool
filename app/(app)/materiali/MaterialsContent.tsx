@@ -9,6 +9,7 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import TopicsManager from '@/components/admin/TopicsManager';
 import CategoryManager from '@/components/admin/CategoryManager';
 import { GroupInfoModal } from '@/components/ui/GroupInfoModal';
@@ -189,6 +190,13 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
   
   // Group info modal
   const [selectedGroupInfo, setSelectedGroupInfo] = useState<string | null>(null);
+
+  // Delete confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    type: 'subject' | 'material';
+    id: string;
+    name: string;
+  } | null>(null);
   
   // Filters
   const [filterType, setFilterType] = useState<MaterialType | ''>('');
@@ -903,11 +911,11 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                           {/* Delete button - visible only for admins */}
                           {subject.canDelete && (
                             <button
-                              onClick={() => {
-                                if (confirm('Sei sicuro di voler eliminare questa materia?')) {
-                                  deleteSubjectMutation.mutate({ id: subject.id });
-                                }
-                              }}
+                              onClick={() => setDeleteConfirm({
+                                type: 'subject',
+                                id: subject.id,
+                                name: subject.name,
+                              })}
                               className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
                               title="Elimina"
                               disabled={(subject._count?.materials || 0) > 0}
@@ -1628,11 +1636,11 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                               <Edit2 className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                             </button>
                             <button
-                              onClick={() => {
-                                if (confirm('Sei sicuro di voler eliminare questo materiale?')) {
-                                  deleteMaterialMutation.mutate({ id: material.id });
-                                }
-                              }}
+                              onClick={() => setDeleteConfirm({
+                                type: 'material',
+                                id: material.id,
+                                name: material.title,
+                              })}
                               className="p-2.5 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                               title="Elimina"
                             >
@@ -2099,6 +2107,32 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
           isLoading={updateMaterialFromModalMutation.isPending}
         />
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={() => {
+          if (deleteConfirm) {
+            if (deleteConfirm.type === 'subject') {
+              deleteSubjectMutation.mutate({ id: deleteConfirm.id });
+            } else {
+              deleteMaterialMutation.mutate({ id: deleteConfirm.id });
+            }
+            setDeleteConfirm(null);
+          }
+        }}
+        title={deleteConfirm?.type === 'subject' ? 'Elimina materia' : 'Elimina materiale'}
+        message={
+          deleteConfirm?.type === 'subject'
+            ? `Sei sicuro di voler eliminare la materia "${deleteConfirm?.name}"?\n\nQuesta azione non può essere annullata.`
+            : `Sei sicuro di voler eliminare il materiale "${deleteConfirm?.name}"?\n\nQuesta azione non può essere annullata.`
+        }
+        confirmLabel="Elimina"
+        cancelLabel="Annulla"
+        variant="danger"
+        isLoading={deleteSubjectMutation.isPending || deleteMaterialMutation.isPending}
+      />
     </div>
   );
 }

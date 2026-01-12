@@ -135,7 +135,6 @@ interface MigrationStats {
   errors: number;
   subjects: Map<string, number>;
   topics: Map<string, number>;
-  subTopics: Map<string, number>;
   databases: Map<string, number>;
   difficulties: Map<string, number>;
 }
@@ -310,52 +309,6 @@ async function getOrCreateTopic(
 }
 
 /**
- * Ottiene o crea un subtopic basato sul nome e topicId
- */
-async function getOrCreateSubTopic(
-  subTopicName: string, 
-  topicId: string | null, 
-  subTopicsCache: Map<string, string>
-): Promise<string | null> {
-  if (!subTopicName || !topicId) return null;
-  
-  const cacheKey = `${topicId}:${subTopicName}`;
-  
-  if (subTopicsCache.has(cacheKey)) {
-    return subTopicsCache.get(cacheKey)!;
-  }
-  
-  const normalizedName = subTopicName.trim();
-  
-  let subTopic = await prisma.subTopic.findFirst({
-    where: {
-      topicId: topicId,
-      name: { contains: normalizedName, mode: 'insensitive' }
-    }
-  });
-  
-  if (!subTopic && !DRY_RUN) {
-    subTopic = await prisma.subTopic.create({
-      data: {
-        name: normalizedName,
-        topicId: topicId,
-        description: `Sotto-argomento importato da Firestore`,
-        isActive: true,
-        order: 99
-      }
-    });
-    console.log(`   📑 Created new subTopic: ${subTopic.name}`);
-  }
-  
-  if (subTopic) {
-    subTopicsCache.set(cacheKey, subTopic.id);
-    return subTopic.id;
-  }
-  
-  return null;
-}
-
-/**
  * Ottiene o crea un tag per il database
  */
 async function getOrCreateDatabaseTag(
@@ -467,13 +420,11 @@ async function migrateQuestions(): Promise<void> {
     errors: 0,
     subjects: new Map(),
     topics: new Map(),
-    subTopics: new Map(),
     databases: new Map(),
     difficulties: new Map()
   };
   const subjectsCache = new Map<string, string>();
   const topicsCache = new Map<string, string>();
-  const subTopicsCache = new Map<string, string>();
   const tagsCache = new Map<string, string>();
   
   try {
@@ -567,16 +518,6 @@ async function migrateQuestions(): Promise<void> {
           stats.topics.set(firestoreQuestion.subject, (stats.topics.get(firestoreQuestion.subject) || 0) + 1);
         }
         
-        const subTopicId = await getOrCreateSubTopic(
-          firestoreQuestion.argument || '',
-          topicId,
-          subTopicsCache
-        );
-        
-        if (firestoreQuestion.argument) {
-          stats.subTopics.set(firestoreQuestion.argument, (stats.subTopics.get(firestoreQuestion.argument) || 0) + 1);
-        }
-        
         const difficulty = mapSeverityToDifficulty(
           simulationConfig?.severities?.[firestoreQuestion.severity || ''] || firestoreQuestion.severity
         );
@@ -606,7 +547,7 @@ async function migrateQuestions(): Promise<void> {
             // Categorization
             subjectId: subjectId,
             topicId: topicId,
-            subTopicId: subTopicId,
+            // subTopicId non utilizzato - nel vecchio sistema si usavano solo gli argomenti
             difficulty: difficulty,
             
             // Images (prendi la prima se presente)

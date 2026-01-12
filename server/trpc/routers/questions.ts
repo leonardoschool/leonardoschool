@@ -772,6 +772,63 @@ export const questionsRouter = router({
       return { updated: result.count };
     }),
 
+  // Bulk add tags to questions
+  bulkAddTags: adminProcedure
+    .input(z.object({
+      ids: z.array(z.string()),
+      tagIds: z.array(z.string()),
+      mode: z.enum(['add', 'remove']).default('add'),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify tags exist
+      const tags = await ctx.prisma.questionTag.findMany({
+        where: { id: { in: input.tagIds } },
+        select: { id: true, name: true },
+      });
+
+      if (tags.length !== input.tagIds.length) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Uno o più tag non trovati.',
+        });
+      }
+
+      if (input.mode === 'remove') {
+        // Remove selected tags from selected questions
+        await ctx.prisma.questionTagAssignment.deleteMany({
+          where: { 
+            questionId: { in: input.ids },
+            tagId: { in: input.tagIds },
+          },
+        });
+      } else {
+        // Add mode: Create new associations (skip duplicates)
+        const associations = input.ids.flatMap(questionId =>
+          input.tagIds.map(tagId => ({
+            questionId,
+            tagId,
+          }))
+        );
+
+        await ctx.prisma.questionTagAssignment.createMany({
+          data: associations,
+          skipDuplicates: true,
+        });
+      }
+
+      // Update questions' updatedById
+      await ctx.prisma.question.updateMany({
+        where: { id: { in: input.ids } },
+        data: { updatedById: ctx.user.id },
+      });
+
+      return { 
+        updated: input.ids.length,
+        tags: tags.map(t => t.name).join(', '),
+        mode: input.mode,
+      };
+    }),
+
   // Bulk update subject
   bulkUpdateSubject: adminProcedure
     .input(z.object({
