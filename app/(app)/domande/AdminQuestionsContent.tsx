@@ -878,24 +878,6 @@ export default function AdminQuestionsContent() {
                         >
                           {question.text}
                         </p>
-                        {question.legacyTags.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {question.legacyTags.slice(0, 2).map((tag, tagIndex) => (
-                              <span
-                                key={`${question.id}-tag-${tagIndex}`}
-                                className={`text-xs px-1.5 py-0.5 rounded ${colors.background.secondary} ${colors.text.muted}`}
-                                title={tag}
-                              >
-                                {tag.length > 15 ? tag.substring(0, 15) + '...' : tag}
-                              </span>
-                            ))}
-                            {question.legacyTags.length > 2 && (
-                              <span className={`text-xs ${colors.text.muted}`}>
-                                +{question.legacyTags.length - 2}
-                              </span>
-                            )}
-                          </div>
-                        )}
                       </div>
                     </td>
                     <td className="px-3 py-3 hidden lg:table-cell">
@@ -905,6 +887,13 @@ export default function AdminQuestionsContent() {
                           title={question.createdBy.name}
                         >
                           {question.createdBy.name}
+                        </span>
+                      ) : question.source ? (
+                        <span 
+                          className={`text-sm ${colors.text.muted} truncate block max-w-[100px] italic`}
+                          title={`Importata: ${question.source}`}
+                        >
+                          {question.source}
                         </span>
                       ) : (
                         <span className={`text-sm ${colors.text.muted}`}>-</span>
