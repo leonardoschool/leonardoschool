@@ -27,7 +27,6 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageSquare,
-  Star,
   BookOpen,
   Layers,
   FileText,
@@ -827,10 +826,6 @@ export default function AdminQuestionsContent() {
                         <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400" title="Usata in simulazioni">
                           <Layers className="w-4 h-4" />
                           {question._count.simulationQuestions}
-                        </span>
-                        <span className="flex items-center gap-1 text-amber-500 dark:text-amber-400" title="Preferiti">
-                          <Star className="w-4 h-4" />
-                          {question._count.favorites}
                         </span>
                       </div>
                     </td>
