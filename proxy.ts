@@ -85,6 +85,8 @@ export function proxy(request: NextRequest) {
   const authToken = request.cookies.get('auth-token')?.value;
   const userRole = request.cookies.get('user-role')?.value;
   const profileCompleted = request.cookies.get('profile-completed')?.value === 'true';
+  const parentDataRequired = request.cookies.get('parent-data-required')?.value === 'true';
+  const userActive = request.cookies.get('user-active')?.value !== 'false'; // Default to true if not set
   
   // Check if it's a protected route
   const isProtectedRoute = isUnifiedProtectedRoute(pathname);
@@ -103,6 +105,28 @@ export function proxy(request: NextRequest) {
     if ((userRole === 'STUDENT' || userRole === 'COLLABORATOR') && !profileCompleted && !pathname.startsWith('/auth/complete-profile')) {
       // Profile incomplete, redirect to complete profile page
       return NextResponse.redirect(new URL('/auth/complete-profile', request.url));
+    }
+
+    // Check if user account is deactivated
+    if (!userActive) {
+      // If student has parentDataRequired, they can still access /profilo and /auth/complete-profile to add parent data
+      if (userRole === 'STUDENT' && parentDataRequired) {
+        if (!pathname.startsWith('/profilo') && !pathname.startsWith('/auth/complete-profile')) {
+          return NextResponse.redirect(new URL('/profilo?section=genitore', request.url));
+        }
+        // Allow access to profile page and complete-profile page
+      } else {
+        // Account manually deactivated - redirect to login with message
+        const loginUrl = new URL('/auth/login', request.url);
+        loginUrl.searchParams.set('error', 'account-deactivated');
+        return NextResponse.redirect(loginUrl);
+      }
+    } else if (userRole === 'STUDENT' && parentDataRequired) {
+      // Account is active but parent data is required (edge case)
+      // Still block all routes except profile and complete-profile
+      if (!pathname.startsWith('/profilo') && !pathname.startsWith('/auth/complete-profile')) {
+        return NextResponse.redirect(new URL('/profilo?section=genitore', request.url));
+      }
     }
     
     // Check role-based access using PAGE_PERMISSIONS
@@ -134,8 +158,20 @@ export function proxy(request: NextRequest) {
   
   // If user with completed profile tries to access complete-profile page, redirect to dashboard
   // Also redirect ADMIN users - they never need to complete profile
+  // BUT allow students with parentDataRequired to access it (they need to add parent data)
+  // AND allow access with ?edit=true query param for profile editing
+  // AND allow access with ?parentData=true for adding/editing parent data
   if (authToken && pathname.startsWith('/auth/complete-profile')) {
-    if (userRole === 'ADMIN' || profileCompleted) {
+    const isEditMode = request.nextUrl.searchParams.get('edit') === 'true';
+    const isParentDataMode = request.nextUrl.searchParams.get('parentData') === 'true';
+    
+    if (userRole === 'ADMIN') {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+    // Allow students with parentDataRequired even if profile is completed
+    // Allow edit mode for users who want to update their profile
+    // Allow parent data mode for adding/editing parent data
+    if (profileCompleted && !isEditMode && !isParentDataMode && !(userRole === 'STUDENT' && parentDataRequired)) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
   }

@@ -14,13 +14,54 @@ export const usersRouter = router({
    * Get current user information
    */
   me: protectedProcedure.query(async ({ ctx }) => {
+    // Get fresh user data including student info
+    const user = await ctx.prisma.user.findUnique({
+      where: { id: ctx.user.id },
+      include: {
+        student: {
+          include: {
+            parentGuardian: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      return {
+        id: ctx.user.id,
+        name: ctx.user.name,
+        email: ctx.user.email,
+        role: ctx.user.role,
+        isActive: ctx.user.isActive,
+        profileCompleted: ctx.user.profileCompleted,
+      };
+    }
+
     return {
-      id: ctx.user.id,
-      name: ctx.user.name,
-      email: ctx.user.email,
-      role: ctx.user.role,
-      isActive: ctx.user.isActive,
-      profileCompleted: ctx.user.profileCompleted,
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive,
+      profileCompleted: user.profileCompleted,
+      student: user.student ? {
+        fiscalCode: user.student.fiscalCode,
+        dateOfBirth: user.student.dateOfBirth?.toISOString(),
+        phone: user.student.phone,
+        address: user.student.address,
+        city: user.student.city,
+        province: user.student.province,
+        postalCode: user.student.postalCode,
+        id: user.student.id,
+        userId: user.student.userId,
+        matricola: user.student.matricola,
+        enrollmentDate: user.student.enrollmentDate?.toISOString(),
+        graduationYear: user.student.graduationYear,
+        requiresParentData: user.student.requiresParentData,
+        parentDataRequestedAt: user.student.parentDataRequestedAt?.toISOString(),
+        parentDataRequestedBy: user.student.parentDataRequestedBy,
+        parentGuardian: user.student.parentGuardian,
+      } : undefined,
     };
   }),
 
@@ -208,6 +249,24 @@ export const usersRouter = router({
                 city: true,
                 province: true,
                 postalCode: true,
+                // Parent data requirement and parent guardian
+                requiresParentData: true,
+                parentDataRequestedAt: true,
+                parentGuardian: {
+                  select: {
+                    id: true,
+                    relationship: true,
+                    firstName: true,
+                    lastName: true,
+                    fiscalCode: true,
+                    phone: true,
+                    email: true,
+                    address: true,
+                    city: true,
+                    province: true,
+                    postalCode: true,
+                  },
+                },
                 contracts: {
                   orderBy: { assignedAt: 'desc' },
                   take: 1,

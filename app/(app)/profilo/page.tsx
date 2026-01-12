@@ -21,7 +21,10 @@ import {
   GraduationCap,
   Briefcase,
   Users,
-  Download
+  Download,
+  UserPlus,
+  Heart,
+  Home
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import Link from 'next/link';
@@ -34,7 +37,7 @@ import { useToast } from '@/components/ui/Toast';
  * Displays pending contracts if any
  */
 export default function ProfiloPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, emailVerified } = useAuth();
   
   // Fetch complete user data with profile based on role
   const { data: studentProfile, isLoading: studentLoading } = trpc.students.getProfile.useQuery(undefined, {
@@ -62,8 +65,18 @@ export default function ProfiloPage() {
     enabled: !!user && user.role === 'STUDENT',
   });
 
+  // Fetch parent/guardian data for students
+  const { data: parentGuardian, isLoading: parentLoading } = trpc.students.getMyParentGuardian.useQuery(undefined, {
+    enabled: !!user && user.role === 'STUDENT',
+  });
+
+  // Check if admin has requested parent data
+  const { data: parentDataRequirement } = trpc.students.getParentDataRequirement.useQuery(undefined, {
+    enabled: !!user && user.role === 'STUDENT',
+  });
+
   const isLoading = loading || 
-    (user?.role === 'STUDENT' && (studentLoading || studentContractLoading)) || 
+    (user?.role === 'STUDENT' && (studentLoading || studentContractLoading || parentLoading)) || 
     (user?.role === 'COLLABORATOR' && (collaboratorLoading || collaboratorContractLoading));
 
   if (isLoading) {
@@ -125,7 +138,7 @@ export default function ProfiloPage() {
               
               {/* Edit Button */}
               <Link 
-                href="/auth/complete-profile"
+                href="/auth/complete-profile?edit=true"
                 className={`px-3 sm:px-4 py-2 rounded-lg ${colors.primary.bg} text-white font-medium flex items-center gap-2 hover:opacity-90 transition-opacity text-sm sm:text-base`}
               >
                 <Edit2 className="w-4 h-4" />
@@ -220,10 +233,23 @@ export default function ProfiloPage() {
 
         {/* Role-specific sections */}
         {user.role === 'STUDENT' && (
-          <StudentSection 
-            profile={studentProfile} 
-            groups={(groupsData as { id?: string; name?: string; color?: string | null }[] | undefined) || []} 
-          />
+          <>
+            {/* Parent Data Request Alert */}
+            {parentDataRequirement?.requestedByAdmin && !parentGuardian && (
+              <ParentDataRequestAlert requestedAt={(parentDataRequirement as any)?.requestedAt ?? null} />
+            )}
+            
+            <StudentSection 
+              profile={studentProfile} 
+              groups={(groupsData as { id?: string; name?: string; color?: string | null }[] | undefined) || []} 
+            />
+            
+            {/* Parent/Guardian Section */}
+            <ParentGuardianSection 
+              parentGuardian={parentGuardian}
+              requiresParentData={parentDataRequirement?.requestedByAdmin ?? false}
+            />
+          </>
         )}
         
         {user.role === 'COLLABORATOR' && (
@@ -244,9 +270,9 @@ export default function ProfiloPage() {
           />
           <StatusCard 
             label="Email Verificata" 
-            value={user.emailVerified ? 'Sì' : 'No'} 
-            status={user.emailVerified ? 'success' : 'warning'} 
-            icon={user.emailVerified ? CheckCircle : AlertTriangle}
+            value={emailVerified ? 'Sì' : 'No'} 
+            status={emailVerified ? 'success' : 'warning'} 
+            icon={emailVerified ? CheckCircle : AlertTriangle}
           />
           <StatusCard 
             label="Profilo Completo" 
@@ -393,6 +419,174 @@ function SignedContractCard({ contract }: { contract: any }) {
             <Download className="w-4 h-4" />
             Scarica PDF
           </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Alert shown to students when admin has requested parent/guardian data
+function ParentDataRequestAlert({ requestedAt }: { requestedAt?: Date | null }) {
+  return (
+    <div className={`${colors.status.error.bgLight} border-2 ${colors.status.error.border} rounded-xl p-4 sm:p-6 animate-pulse`}>
+      <div className="flex items-start gap-3">
+        <div className={`p-2 rounded-full ${colors.status.error.bg}`}>
+          <AlertTriangle className={`w-5 h-5 text-white`} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className={`text-lg font-bold ${colors.status.error.text}`}>
+            ⚠️ Account Bloccato - Azione Richiesta
+          </h3>
+          <p className={`mt-1 ${colors.text.secondary}`}>
+            <strong>Il tuo account è temporaneamente sospeso</strong> fino all&apos;inserimento dei dati del genitore/tutore legale richiesti dall&apos;amministrazione.
+            Per riattivare il tuo account, compila i dati cliccando sul pulsante qui sotto.
+          </p>
+          {requestedAt && (
+            <p className={`mt-2 text-sm ${colors.text.muted}`}>
+              Richiesta effettuata il {new Date(requestedAt).toLocaleDateString('it-IT', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+              })}
+            </p>
+          )}
+          <a 
+            href="/auth/complete-profile"
+            className={`mt-4 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg ${colors.status.error.bg} text-white font-semibold hover:opacity-90 transition-opacity shadow-lg`}
+          >
+            <Edit2 className="w-4 h-4" />
+            Compila dati genitore per sbloccare
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Parent/Guardian section for students
+interface ParentGuardianData {
+  id?: string;
+  relationship?: string;
+  firstName?: string;
+  lastName?: string;
+  fiscalCode?: string;
+  phone?: string;
+  email?: string | null;
+  address?: string | null;
+  city?: string | null;
+  province?: string | null;
+  postalCode?: string | null;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+  studentId?: string;
+}
+
+function ParentGuardianSection({ 
+  parentGuardian, 
+  requiresParentData 
+}: { 
+  parentGuardian: ParentGuardianData | null | undefined;
+  requiresParentData: boolean;
+}) {
+  // Map relationship codes to Italian labels
+  const relationshipLabels: Record<string, string> = {
+    MOTHER: 'Madre',
+    FATHER: 'Padre',
+    LEGAL_GUARDIAN: 'Tutore Legale',
+    OTHER: 'Altro',
+  };
+
+  // If no parent data and not required, don't show anything
+  if (!parentGuardian && !requiresParentData) return null;
+  
+  // If no parent data but required, show a prompt
+  if (!parentGuardian && requiresParentData) {
+    return (
+      <div className={`${colors.background.card} rounded-xl shadow border ${colors.border.primary} p-4 sm:p-6`}>
+        <h2 className={`text-base sm:text-lg font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
+          <Heart className="w-5 h-5" />
+          Genitore/Tutore Legale
+        </h2>
+        <p className={`${colors.text.secondary}`}>
+          I dati del genitore/tutore legale non sono ancora stati inseriti.
+        </p>
+        <a 
+          href="/auth/complete-profile?parentData=true"
+          className={`mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.bg} text-white font-medium hover:opacity-90 transition-opacity`}
+        >
+          <Edit2 className="w-4 h-4" />
+          Aggiungi dati genitore
+        </a>
+      </div>
+    );
+  }
+
+  // Format address if available
+  const formatParentAddress = () => {
+    if (!parentGuardian) return null;
+    const parts = [
+      parentGuardian.address,
+      parentGuardian.city,
+      parentGuardian.province ? `(${parentGuardian.province})` : null,
+      parentGuardian.postalCode
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(', ') : null;
+  };
+
+  const formattedAddress = formatParentAddress();
+
+  return (
+    <div className={`${colors.background.card} rounded-xl shadow border ${colors.border.primary} p-4 sm:p-6`}>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className={`text-base sm:text-lg font-semibold ${colors.text.primary} flex items-center gap-2`}>
+          <Heart className="w-5 h-5" />
+          Genitore/Tutore Legale
+        </h2>
+        <Link 
+          href="/auth/complete-profile?parentData=true"
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm ${colors.primary.softBg} ${colors.primary.text} font-medium hover:opacity-80 transition-opacity`}
+        >
+          <Edit2 className="w-3.5 h-3.5" />
+          Modifica
+        </Link>
+      </div>
+      
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <InfoRow 
+          icon={User} 
+          label="Parentela" 
+          value={relationshipLabels[parentGuardian?.relationship || ''] || parentGuardian?.relationship || '-'} 
+        />
+        <InfoRow 
+          icon={User} 
+          label="Nome completo" 
+          value={`${parentGuardian?.firstName} ${parentGuardian?.lastName}`} 
+        />
+        <InfoRow 
+          icon={CreditCard} 
+          label="Codice Fiscale" 
+          value={parentGuardian?.fiscalCode || '-'} 
+        />
+        <InfoRow 
+          icon={Phone} 
+          label="Telefono" 
+          value={parentGuardian?.phone || '-'} 
+        />
+        {parentGuardian?.email && (
+          <InfoRow 
+            icon={Mail} 
+            label="Email" 
+            value={parentGuardian.email} 
+          />
+        )}
+        {formattedAddress && (
+          <div className="sm:col-span-2">
+            <InfoRow 
+              icon={Home} 
+              label="Indirizzo" 
+              value={formattedAddress} 
+            />
+          </div>
         )}
       </div>
     </div>

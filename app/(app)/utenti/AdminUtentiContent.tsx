@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
-import { Spinner } from '@/components/ui/loaders';
+import { Spinner, ButtonLoader } from '@/components/ui/loaders';
 import { Portal } from '@/components/ui/Portal';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import {
@@ -42,6 +42,11 @@ import {
   Target,
   MessageSquare,
   FolderOpen,
+  Heart,
+  Phone,
+  CreditCard,
+  MapPin,
+  XCircle,
 } from 'lucide-react';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
@@ -59,6 +64,228 @@ const statusOptions: { value: StatusFilter; label: string; shortLabel: string; i
   { value: 'inactive', label: 'Disattivati', shortLabel: 'Disatt.', icon: Ban, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-100 dark:bg-red-900/30', activeColor: 'bg-red-600' },
   { value: 'no_signed_contract', label: 'Senza contratto firmato', shortLabel: 'No Firma', icon: FileX, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-100 dark:bg-rose-900/30', activeColor: 'bg-rose-600' },
 ];
+
+// Helper to calculate age from date of birth
+const calculateAge = (dateOfBirth: Date | string | null | undefined): number | null => {
+  if (!dateOfBirth) return null;
+  const dob = new Date(dateOfBirth);
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+    age--;
+  }
+  return age;
+};
+
+// Relationship type labels
+const relationshipLabels: Record<string, string> = {
+  PADRE: 'Padre',
+  MADRE: 'Madre',
+  TUTORE_LEGALE: 'Tutore Legale',
+  ALTRO: 'Altro',
+};
+
+// Helper to format date
+const formatParentDate = (date: Date | string | null | undefined) => {
+  if (!date) return '-';
+  return new Intl.DateTimeFormat('it-IT', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(date));
+};
+
+// Parent/Guardian Section Component for admin view
+function ParentGuardianSection({ 
+  student, 
+  studentId,
+  onDataUpdated 
+}: { 
+  student: any;
+  studentId: string;
+  onDataUpdated: () => void;
+}) {
+  const { handleMutationError } = useApiError();
+  const { showSuccess } = useToast();
+  const [isRequesting, setIsRequesting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  const requestParentDataMutation = trpc.students.requestParentData.useMutation({
+    onSuccess: () => {
+      showSuccess('Richiesta inviata', 'Lo studente riceverà una notifica per inserire i dati del genitore.');
+      // Call onDataUpdated which will trigger refetch in parent component
+      onDataUpdated();
+    },
+    onError: handleMutationError,
+  });
+
+  const cancelParentDataRequestMutation = trpc.students.cancelParentDataRequest.useMutation({
+    onSuccess: () => {
+      showSuccess('Richiesta annullata', 'La richiesta dei dati del genitore è stata annullata.');
+      // Call onDataUpdated which will trigger refetch in parent component
+      onDataUpdated();
+    },
+    onError: handleMutationError,
+  });
+
+  const handleRequestParentData = async () => {
+    setIsRequesting(true);
+    try {
+      await requestParentDataMutation.mutateAsync({ studentId });
+    } catch (error) {
+      console.error('Error requesting parent data:', error);
+    } finally {
+      setIsRequesting(false);
+    }
+  };
+
+  const handleCancelRequest = async () => {
+    setIsCancelling(true);
+    try {
+      await cancelParentDataRequestMutation.mutateAsync({ studentId });
+    } catch (error) {
+      console.error('Error cancelling request:', error);
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const age = student?.dateOfBirth ? calculateAge(student.dateOfBirth) : null;
+  const isMinor = age !== null && age < 18;
+  const parentGuardian = student?.parentGuardian;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className={`font-semibold ${colors.text.primary} flex items-center gap-2`}>
+          <Heart className="w-4 h-4" />
+          Genitore/Tutore
+          {isMinor && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+              Minorenne
+            </span>
+          )}
+        </h4>
+
+        {/* Request/Cancel Button */}
+        {!parentGuardian && !isMinor && !student?.requiresParentData && (
+          <button
+            onClick={handleRequestParentData}
+            disabled={isRequesting}
+            className={`px-3 py-1.5 rounded-lg ${colors.primary.bg} text-white text-xs font-medium hover:opacity-90 transition-opacity flex items-center gap-1.5 disabled:opacity-50`}
+          >
+            <ButtonLoader loading={isRequesting} loadingText="...">
+              <Send className="w-3.5 h-3.5" />
+              Richiedi
+            </ButtonLoader>
+          </button>
+        )}
+
+        {student?.requiresParentData && !parentGuardian && (
+          <button
+            onClick={handleCancelRequest}
+            disabled={isCancelling}
+            className={`px-3 py-1.5 rounded-lg border ${colors.border.primary} ${colors.text.secondary} text-xs font-medium hover:opacity-80 transition-opacity flex items-center gap-1.5 disabled:opacity-50`}
+          >
+            <ButtonLoader loading={isCancelling} loadingText="...">
+              <XCircle className="w-3.5 h-3.5" />
+              Annulla
+            </ButtonLoader>
+          </button>
+        )}
+      </div>
+
+      {/* Request Pending Banner */}
+      {student?.requiresParentData && !parentGuardian && (
+        <div className="p-3 rounded-lg bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              Richiesta in attesa
+              {student.parentDataRequestedAt && (
+                <span className="ml-1 text-xs opacity-80">
+                  (dal {formatParentDate(student.parentDataRequestedAt)})
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {parentGuardian ? (
+        <div className="grid grid-cols-2 gap-3">
+          {/* Relationship */}
+          <div className={`p-3 rounded-lg ${colors.background.secondary}`}>
+            <p className={`text-xs ${colors.text.muted} mb-1`}>Parentela</p>
+            <p className={`text-sm font-medium ${colors.text.primary}`}>
+              {relationshipLabels[parentGuardian.relationship] || parentGuardian.relationship}
+            </p>
+          </div>
+
+          {/* Name */}
+          <div className={`p-3 rounded-lg ${colors.background.secondary}`}>
+            <p className={`text-xs ${colors.text.muted} mb-1`}>Nome Completo</p>
+            <p className={`text-sm font-medium ${colors.text.primary}`}>
+              {parentGuardian.firstName} {parentGuardian.lastName}
+            </p>
+          </div>
+
+          {/* Fiscal Code */}
+          <div className={`p-3 rounded-lg ${colors.background.secondary}`}>
+            <div className="flex items-center gap-1.5 mb-1">
+              <CreditCard className={`w-3 h-3 ${colors.text.muted}`} />
+              <p className={`text-xs ${colors.text.muted}`}>Codice Fiscale</p>
+            </div>
+            <p className={`text-sm font-medium font-mono ${colors.text.primary}`}>{parentGuardian.fiscalCode}</p>
+          </div>
+
+          {/* Phone */}
+          <div className={`p-3 rounded-lg ${colors.background.secondary}`}>
+            <div className="flex items-center gap-1.5 mb-1">
+              <Phone className={`w-3 h-3 ${colors.text.muted}`} />
+              <p className={`text-xs ${colors.text.muted}`}>Telefono</p>
+            </div>
+            <p className={`text-sm font-medium ${colors.text.primary}`}>{parentGuardian.phone}</p>
+          </div>
+
+          {/* Email */}
+          {parentGuardian.email && (
+            <div className={`p-3 rounded-lg ${colors.background.secondary}`}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <Mail className={`w-3 h-3 ${colors.text.muted}`} />
+                <p className={`text-xs ${colors.text.muted}`}>Email</p>
+              </div>
+              <p className={`text-sm font-medium ${colors.text.primary} break-all`}>{parentGuardian.email}</p>
+            </div>
+          )}
+
+          {/* Address */}
+          {(parentGuardian.address || parentGuardian.city) && (
+            <div className={`p-3 rounded-lg ${colors.background.secondary} ${parentGuardian.email ? '' : 'col-span-2'}`}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <MapPin className={`w-3 h-3 ${colors.text.muted}`} />
+                <p className={`text-xs ${colors.text.muted}`}>Indirizzo</p>
+              </div>
+              <p className={`text-sm font-medium ${colors.text.primary}`}>
+                {[parentGuardian.address, parentGuardian.city, parentGuardian.province, parentGuardian.postalCode].filter(Boolean).join(', ')}
+              </p>
+            </div>
+          )}
+        </div>
+      ) : !student?.requiresParentData ? (
+        <div className={`p-4 rounded-lg ${colors.background.secondary} text-center`}>
+          <p className={`text-sm ${colors.text.muted}`}>
+            {isMinor 
+              ? 'Dati genitore/tutore non ancora forniti (obbligatorio per minorenni)'
+              : 'Nessun dato genitore/tutore fornito'
+            }
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 // Role dropdown component
 function RoleDropdown({
@@ -993,7 +1220,7 @@ export default function AdminUtentiContent() {
   const { showSuccess } = useToast();
 
   // Fetch users
-  const { data: usersData, isLoading } = trpc.users.getAll.useQuery({
+  const { data: usersData, isLoading, refetch } = trpc.users.getAll.useQuery({
     search: search || undefined,
     role,
     status: status === 'all' ? 'ALL' 
@@ -2227,6 +2454,26 @@ export default function AdminUtentiContent() {
                   </div>
                 </div>
               )}
+
+              {/* Parent/Guardian Section (solo studenti) */}
+              {viewUserModal.user.role === 'STUDENT' && viewUserModal.user.student && (
+                <ParentGuardianSection 
+                  student={viewUserModal.user.student} 
+                  studentId={viewUserModal.user.id}
+                  onDataUpdated={async () => {
+                    // Refetch the users list
+                    const result = await refetch();
+                    // Update the modal state with fresh data
+                    if (result.data) {
+                      const updatedUser = result.data.users.find((u: any) => u.id === viewUserModal.user.id);
+                      if (updatedUser) {
+                        setViewUserModal({ isOpen: true, user: updatedUser });
+                      }
+                    }
+                  }}
+                />
+              )}
+
               {/* Contract Info */}
               {(() => {
                 const contract = viewUserModal.user.student?.contracts?.[0] || viewUserModal.user.collaborator?.contracts?.[0];

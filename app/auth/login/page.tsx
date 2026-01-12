@@ -13,6 +13,7 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const _redirect = searchParams.get('redirect') || '/app';
+  const errorParam = searchParams.get('error');
   const { showError } = useToast();
 
   const [email, setEmail] = useState('');
@@ -22,6 +23,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [isDarkTheme, setIsDarkTheme] = useState(false);
+
+  // Show error from URL params (e.g., account deactivated)
+  useEffect(() => {
+    if (errorParam === 'account-deactivated') {
+      setError('Il tuo account è stato disattivato. Contatta l\'amministrazione per maggiori informazioni.');
+    }
+  }, [errorParam]);
 
   // Detect and update theme dynamically
   useEffect(() => {

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Home, Search, BookOpen, Mail, ArrowLeft } from 'lucide-react';
 
-export default function NotFound() {
+export default function MarketingCatchAllPage() {
   return (
     <div className="min-h-screen bg-black flex items-center justify-center px-4 py-16">
       <div className="relative z-10 max-w-4xl w-full">

@@ -34,7 +34,11 @@ export async function POST(request: NextRequest) {
     let user = await prisma.user.findUnique({
       where: { firebaseUid: decodedToken.uid },
       include: {
-        student: true,
+        student: {
+          include: {
+            parentGuardian: true,
+          },
+        },
         admin: true,
         collaborator: true,
       },
@@ -53,12 +57,19 @@ export async function POST(request: NextRequest) {
         where: { id: user.id },
         data: { emailVerified: true },
         include: {
-          student: true,
+          student: {
+            include: {
+              parentGuardian: true,
+            },
+          },
           admin: true,
           collaborator: true,
         },
       });
     }
+
+    // Check if student needs to provide parent data
+    const parentDataRequired = user.student?.requiresParentData && !user.student?.parentGuardian;
 
     // Crea response con dati utente
     const response = NextResponse.json({
@@ -70,6 +81,7 @@ export async function POST(request: NextRequest) {
       isActive: user.isActive,
       profileCompleted: user.profileCompleted,
       emailVerified: user.emailVerified,
+      parentDataRequired: parentDataRequired || false,
     });
 
     // Cookie duration: 7 days (refresh happens on each /api/auth/me call)
@@ -95,6 +107,24 @@ export async function POST(request: NextRequest) {
     });
 
     response.cookies.set('profile-completed', String(user.profileCompleted), {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: cookieMaxAge,
+      path: '/',
+    });
+
+    // Cookie for parent data requirement (students only)
+    response.cookies.set('parent-data-required', String(parentDataRequired), {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: cookieMaxAge,
+      path: '/',
+    });
+
+    // Cookie for user active status
+    response.cookies.set('user-active', String(user.isActive), {
       httpOnly: false,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

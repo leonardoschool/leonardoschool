@@ -287,6 +287,9 @@ export type ProfileFormData = {
   city: string;
   province: string;
   postalCode: string;
+  // Optional fields for fiscal code calculation
+  birthPlace?: string;
+  gender?: 'M' | 'F';
 };
 
 /**
@@ -347,6 +350,231 @@ export const validateProfileForm = (data: ProfileFormData):
       city: cityResult.formattedValue!,
       province: provinceResult.formattedValue!,
       postalCode: capResult.formattedValue!,
+    }
+  };
+};
+
+// ==================== PARENT/GUARDIAN VALIDATION ====================
+
+/**
+ * Parent/Guardian relationship types
+ */
+export const PARENT_RELATIONSHIP_TYPES = [
+  { value: 'PADRE', label: 'Padre' },
+  { value: 'MADRE', label: 'Madre' },
+  { value: 'TUTORE_LEGALE', label: 'Tutore Legale' },
+  { value: 'ALTRO', label: 'Altro' },
+] as const;
+
+export type ParentRelationshipType = typeof PARENT_RELATIONSHIP_TYPES[number]['value'];
+
+/**
+ * Parent/Guardian form data type
+ */
+export type ParentGuardianFormData = {
+  relationship: string;
+  firstName: string;
+  lastName: string;
+  fiscalCode: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  province?: string;
+  postalCode?: string;
+  // Optional fields for fiscal code calculation
+  birthPlace?: string;
+  dateOfBirth?: string;
+  gender?: 'M' | 'F';
+};
+
+/**
+ * Validated parent/guardian data type (ready for database)
+ */
+export type ValidatedParentGuardianData = {
+  relationship: string;
+  firstName: string;
+  lastName: string;
+  fiscalCode: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  province?: string;
+  postalCode?: string;
+};
+
+/**
+ * Validates a name field (first name or last name)
+ */
+export const validateNome = (value: string, fieldName: string = 'nome'): ValidationResult => {
+  const cleaned = value.trim();
+  
+  if (!cleaned) {
+    return { isValid: false, error: `Il ${fieldName} è obbligatorio` };
+  }
+  
+  if (cleaned.length < 2) {
+    return { isValid: false, error: `Il ${fieldName} è troppo corto` };
+  }
+  
+  if (cleaned.length > 50) {
+    return { isValid: false, error: `Il ${fieldName} è troppo lungo` };
+  }
+  
+  // Check for valid characters (letters, spaces, apostrophes, hyphens)
+  if (!/^[A-Za-zÀ-ÿ\s'-]+$/.test(cleaned)) {
+    return { isValid: false, error: `Il ${fieldName} contiene caratteri non validi` };
+  }
+  
+  // Capitalize first letter of each word
+  const formatted = cleaned
+    .toLowerCase()
+    .split(/(\s+|'|-)/)
+    .map((part, index, array) => {
+      // Don't capitalize separators
+      if (part === ' ' || part === "'" || part === '-') return part;
+      // Capitalize first letter
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join('');
+  
+  return { isValid: true, formattedValue: formatted };
+};
+
+/**
+ * Validates parent/guardian relationship type
+ */
+export const validateRelationship = (value: string): ValidationResult => {
+  if (!value) {
+    return { isValid: false, error: 'Il tipo di relazione è obbligatorio' };
+  }
+  
+  const validTypes = PARENT_RELATIONSHIP_TYPES.map(t => t.value);
+  if (!validTypes.includes(value as ParentRelationshipType)) {
+    return { isValid: false, error: 'Tipo di relazione non valido' };
+  }
+  
+  return { isValid: true, formattedValue: value };
+};
+
+/**
+ * Validates email (optional field for parent/guardian)
+ */
+export const validateEmailOptional = (value: string): ValidationResult => {
+  if (!value || value.trim() === '') {
+    return { isValid: true, formattedValue: undefined };
+  }
+  
+  const cleaned = value.trim().toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  
+  if (!emailRegex.test(cleaned)) {
+    return { isValid: false, error: 'Formato email non valido' };
+  }
+  
+  return { isValid: true, formattedValue: cleaned };
+};
+
+/**
+ * Calculates age from date of birth
+ */
+export const calculateAge = (dateOfBirth: string | Date): number => {
+  const dob = typeof dateOfBirth === 'string' ? new Date(dateOfBirth) : dateOfBirth;
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+    age--;
+  }
+  
+  return age;
+};
+
+/**
+ * Checks if a student is a minor based on date of birth
+ */
+export const isMinor = (dateOfBirth: string | Date): boolean => {
+  return calculateAge(dateOfBirth) < 18;
+};
+
+/**
+ * Validates and formats all parent/guardian fields
+ * Returns either validated data or list of errors
+ */
+export const validateParentGuardianForm = (data: ParentGuardianFormData): 
+  { success: true; data: ValidatedParentGuardianData } | 
+  { success: false; errors: Record<string, string> } => {
+  
+  const errors: Record<string, string> = {};
+  
+  const relationshipResult = validateRelationship(data.relationship);
+  if (!relationshipResult.isValid) errors.relationship = relationshipResult.error!;
+  
+  const firstNameResult = validateNome(data.firstName, 'nome');
+  if (!firstNameResult.isValid) errors.firstName = firstNameResult.error!;
+  
+  const lastNameResult = validateNome(data.lastName, 'cognome');
+  if (!lastNameResult.isValid) errors.lastName = lastNameResult.error!;
+  
+  const cfResult = validateCodiceFiscale(data.fiscalCode);
+  if (!cfResult.isValid) errors.fiscalCode = cfResult.error!;
+  
+  const phoneResult = validateTelefono(data.phone);
+  if (!phoneResult.isValid) errors.phone = phoneResult.error!;
+  
+  // Optional fields
+  const emailResult = data.email ? validateEmailOptional(data.email) : { isValid: true, formattedValue: undefined };
+  if (!emailResult.isValid) errors.email = emailResult.error!;
+  
+  // Optional address fields (only validate if provided)
+  let addressFormatted: string | undefined;
+  let cityFormatted: string | undefined;
+  let provinceFormatted: string | undefined;
+  let postalCodeFormatted: string | undefined;
+  
+  if (data.address && data.address.trim()) {
+    const addressResult = formatIndirizzo(data.address);
+    if (!addressResult.isValid) errors.address = addressResult.error!;
+    else addressFormatted = addressResult.formattedValue;
+  }
+  
+  if (data.city && data.city.trim()) {
+    const cityResult = formatCitta(data.city);
+    if (!cityResult.isValid) errors.city = cityResult.error!;
+    else cityFormatted = cityResult.formattedValue;
+  }
+  
+  if (data.province && data.province.trim()) {
+    const provinceResult = validateProvincia(data.province);
+    if (!provinceResult.isValid) errors.province = provinceResult.error!;
+    else provinceFormatted = provinceResult.formattedValue;
+  }
+  
+  if (data.postalCode && data.postalCode.trim()) {
+    const capResult = validateCAP(data.postalCode);
+    if (!capResult.isValid) errors.postalCode = capResult.error!;
+    else postalCodeFormatted = capResult.formattedValue;
+  }
+  
+  if (Object.keys(errors).length > 0) {
+    return { success: false, errors };
+  }
+  
+  return {
+    success: true,
+    data: {
+      relationship: relationshipResult.formattedValue!,
+      firstName: firstNameResult.formattedValue!,
+      lastName: lastNameResult.formattedValue!,
+      fiscalCode: cfResult.formattedValue!,
+      phone: phoneResult.formattedValue!,
+      email: emailResult.formattedValue,
+      address: addressFormatted,
+      city: cityFormatted,
+      province: provinceFormatted,
+      postalCode: postalCodeFormatted,
     }
   };
 };

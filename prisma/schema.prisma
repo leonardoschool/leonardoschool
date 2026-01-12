@@ -134,6 +134,7 @@ enum NotificationType {
   ACCOUNT_ACTIVATED // Account approvato dall'admin
   NEW_REGISTRATION // Nuovo utente registrato (per admin)
   PROFILE_COMPLETED // Utente ha completato profilo (per admin)
+  PARENT_DATA_REQUESTED // Richiesta dati genitore/tutore
 
   // === CONTRACTS ===
   CONTRACT_ASSIGNED // Contratto assegnato
@@ -330,8 +331,16 @@ model Student {
   enrollmentDate DateTime @default(now())
   graduationYear Int?
 
+  // Parent/Guardian requirement flags
+  // Admin can request parent data for adult students via requiresParentData
+  // For minors (<18), parent data is always required at registration
+  requiresParentData Boolean @default(false) // Admin can set this to true for adult students
+  parentDataRequestedAt DateTime? // When admin requested the parent data
+  parentDataRequestedById String? // Admin user ID who requested
+
   // Relations
   user                   User                            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentGuardian         ParentGuardian? // Dati del genitore/tutore
   simulationResults      SimulationResult[]
   stats                  StudentStats?
   contracts              Contract[]
@@ -356,6 +365,40 @@ model Student {
 
   @@index([userId])
   @@map("students")
+}
+
+// ==================== PARENT/GUARDIAN ====================
+
+// Dati del genitore/tutore dello studente
+// Obbligatorio per studenti minorenni, facoltativo (o richiesto dall'admin) per maggiorenni
+model ParentGuardian {
+  id        String @id @default(cuid())
+  studentId String @unique
+
+  // Relationship type
+  relationship String // "PADRE", "MADRE", "TUTORE_LEGALE", "ALTRO"
+
+  // Personal data
+  firstName  String
+  lastName   String
+  fiscalCode String // Codice fiscale genitore
+  phone      String
+  email      String?
+
+  // Address (can be different from student)
+  address    String?
+  city       String?
+  province   String?
+  postalCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@map("parent_guardians")
 }
 
 // ==================== ADMIN ====================

@@ -71,5 +71,6 @@ export function useAuth() {
     user: dbUser,
     loading: loading || isLoadingUser,
     isAuthenticated: !!firebaseUser,
+    emailVerified: firebaseUser?.emailVerified ?? false,
   };
 }

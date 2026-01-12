@@ -124,7 +124,9 @@ export default function AppHeader() {
   const gestioneMenuRef = useRef<HTMLDivElement>(null);
   const registroMenuRef = useRef<HTMLDivElement>(null);
   const didatticaMenuRef = useRef<HTMLDivElement>(null);
-  const currentColorTheme = localStorage.getItem('theme') || 'light';
+  
+  // Effective theme for logo (light or dark only, handles 'system')
+  const [effectiveLogoTheme, setEffectiveLogoTheme] = useState<'light' | 'dark'>('light');
 
   // Polling interval for real-time updates (30 seconds)
   const POLLING_INTERVAL = 30 * 1000;
@@ -249,8 +251,10 @@ export default function AppHeader() {
     if (theme === 'system') {
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       root.classList.toggle('dark', prefersDark);
+      setEffectiveLogoTheme(prefersDark ? 'dark' : 'light');
     } else {
       root.classList.toggle('dark', theme === 'dark');
+      setEffectiveLogoTheme(theme);
     }
   };
 
@@ -512,7 +516,7 @@ export default function AppHeader() {
           <Link href="/dashboard" className="flex items-center flex-shrink-0">
             <div className="relative w-[10rem] h-[10rem] mt-3">
               <Image
-                src={`/images/logo-${currentColorTheme}.png`}
+                src={`/images/logo-${effectiveLogoTheme}.png`}
                 alt="Leonardo School"
                 fill
                 className="object-contain object-left"
@@ -964,7 +968,7 @@ export default function AppHeader() {
             <div className="flex items-center gap-3">
               <div className="relative w-10 h-10">
                 <Image
-                  src="/images/logo.png"
+                  src={`/images/logo-${effectiveLogoTheme}.png`}
                   alt="Leonardo School"
                   fill
                   className="object-contain"

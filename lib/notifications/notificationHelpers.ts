@@ -260,7 +260,7 @@ export const notifications = {
       type: 'NEW_REGISTRATION',
       title: 'Nuova registrazione',
       message: `${params.userName} (${params.userEmail}) si è registrato`,
-      linkUrl: `/utenti/${params.userId}`,
+      linkUrl: `/utenti?highlight=${params.userId}`,
       linkType: 'user',
       linkEntityId: params.userId,
     });
@@ -280,7 +280,7 @@ export const notifications = {
       type: 'PROFILE_COMPLETED',
       title: 'Profilo completato',
       message: `${params.studentName} ha completato il profilo anagrafico`,
-      linkUrl: `/utenti/${params.studentUserId}`,
+      linkUrl: `/utenti?highlight=${params.studentUserId}`,
       linkType: 'student',
       linkEntityId: params.studentUserId,
     });

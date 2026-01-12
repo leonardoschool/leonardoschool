@@ -20,6 +20,11 @@ import {
   Award,
   X,
   Hash,
+  Heart,
+  Phone,
+  CreditCard,
+  MapPin,
+  User,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -33,6 +38,26 @@ const formatDate = (date: Date | string | null) => {
   }).format(new Date(date));
 };
 
+// Helper to calculate age
+const calculateAge = (dateOfBirth: Date | string | null | undefined): number | null => {
+  if (!dateOfBirth) return null;
+  const dob = new Date(dateOfBirth);
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+    age--;
+  }
+  return age;
+};
+
+// Relationship labels
+const relationshipLabels: Record<string, string> = {
+  PADRE: 'Padre',
+  MADRE: 'Madre',
+  TUTORE_LEGALE: 'Tutore Legale',
+  ALTRO: 'Altro',
+};
 
 
 // Student Detail Modal
@@ -140,6 +165,91 @@ function StudentDetailModal({
                     )}
                   </div>
                 </div>
+
+                {/* Parent/Guardian Section */}
+                {student.parentGuardian && (
+                  <div>
+                    <h4 className={`text-lg font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
+                      <Heart className="w-5 h-5" />
+                      Genitore/Tutore
+                      {student.dateOfBirth && calculateAge(student.dateOfBirth) !== null && calculateAge(student.dateOfBirth)! < 18 && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                          Minorenne
+                        </span>
+                      )}
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Relationship */}
+                      <div className={`p-4 rounded-lg ${colors.background.secondary}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <User className={`w-4 h-4 ${colors.text.muted}`} />
+                          <span className={`text-sm ${colors.text.muted}`}>Parentela</span>
+                        </div>
+                        <p className={`font-medium ${colors.text.primary}`}>
+                          {relationshipLabels[student.parentGuardian.relationship] || student.parentGuardian.relationship}
+                        </p>
+                      </div>
+
+                      {/* Name */}
+                      <div className={`p-4 rounded-lg ${colors.background.secondary}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <User className={`w-4 h-4 ${colors.text.muted}`} />
+                          <span className={`text-sm ${colors.text.muted}`}>Nome Completo</span>
+                        </div>
+                        <p className={`font-medium ${colors.text.primary}`}>
+                          {student.parentGuardian.firstName} {student.parentGuardian.lastName}
+                        </p>
+                      </div>
+
+                      {/* Fiscal Code */}
+                      <div className={`p-4 rounded-lg ${colors.background.secondary}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <CreditCard className={`w-4 h-4 ${colors.text.muted}`} />
+                          <span className={`text-sm ${colors.text.muted}`}>Codice Fiscale</span>
+                        </div>
+                        <p className={`font-medium font-mono ${colors.text.primary}`}>{student.parentGuardian.fiscalCode}</p>
+                      </div>
+
+                      {/* Phone */}
+                      <div className={`p-4 rounded-lg ${colors.background.secondary}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Phone className={`w-4 h-4 ${colors.text.muted}`} />
+                          <span className={`text-sm ${colors.text.muted}`}>Telefono</span>
+                        </div>
+                        <p className={`font-medium ${colors.text.primary}`}>{student.parentGuardian.phone}</p>
+                      </div>
+
+                      {/* Email */}
+                      {student.parentGuardian.email && (
+                        <div className={`p-4 rounded-lg ${colors.background.secondary}`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <Mail className={`w-4 h-4 ${colors.text.muted}`} />
+                            <span className={`text-sm ${colors.text.muted}`}>Email</span>
+                          </div>
+                          <p className={`font-medium ${colors.text.primary} break-all`}>{student.parentGuardian.email}</p>
+                        </div>
+                      )}
+
+                      {/* Address */}
+                      {(student.parentGuardian.address || student.parentGuardian.city) && (
+                        <div className={`p-4 rounded-lg ${colors.background.secondary} ${!student.parentGuardian.email ? 'md:col-span-2' : ''}`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <MapPin className={`w-4 h-4 ${colors.text.muted}`} />
+                            <span className={`text-sm ${colors.text.muted}`}>Indirizzo</span>
+                          </div>
+                          <p className={`font-medium ${colors.text.primary}`}>
+                            {[
+                              student.parentGuardian.address, 
+                              student.parentGuardian.city, 
+                              student.parentGuardian.province, 
+                              student.parentGuardian.postalCode
+                            ].filter(Boolean).join(', ')}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Groups Section */}
                 {student.groups && student.groups.length > 0 && (
