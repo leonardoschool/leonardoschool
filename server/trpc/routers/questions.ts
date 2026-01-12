@@ -772,6 +772,40 @@ export const questionsRouter = router({
       return { updated: result.count };
     }),
 
+  // Bulk update subject
+  bulkUpdateSubject: adminProcedure
+    .input(z.object({
+      ids: z.array(z.string()),
+      subjectId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify subject exists
+      const subject = await ctx.prisma.customSubject.findUnique({
+        where: { id: input.subjectId },
+      });
+
+      if (!subject) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Materia non trovata.',
+        });
+      }
+
+      // When changing subject, we need to clear topicId and subTopicId
+      // since topics are subject-specific
+      const result = await ctx.prisma.question.updateMany({
+        where: { id: { in: input.ids } },
+        data: {
+          subjectId: input.subjectId,
+          topicId: null,
+          subTopicId: null,
+          updatedById: ctx.user.id,
+        },
+      });
+
+      return { updated: result.count, subjectName: subject.name };
+    }),
+
   // Bulk delete
   bulkDelete: adminProcedure
     .input(z.object({ ids: z.array(z.string()) }))

@@ -28,6 +28,7 @@ import {
   ChevronRight,
   MessageSquare,
   Star,
+  BookOpen,
   Layers,
   FileText,
   Eye,
@@ -83,6 +84,7 @@ export default function AdminQuestionsContent() {
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showFilters, setShowFilters] = useState(false);
+  const [showBulkSubjectSelect, setShowBulkSubjectSelect] = useState(false);
 
   // Export state
   const [isExporting, setIsExporting] = useState(false);
@@ -106,6 +108,20 @@ export default function AdminQuestionsContent() {
     return () => window.removeEventListener('scroll', handleScroll, true);
   }, [openMenuId]);
 
+  // Close bulk subject dropdown on click outside
+  useEffect(() => {
+    if (!showBulkSubjectSelect) return;
+    
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-bulk-subject-dropdown]')) {
+        setShowBulkSubjectSelect(false);
+      }
+    };
+    
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [showBulkSubjectSelect]);
   // Fetch questions
   const { data: questionsData, isLoading } = trpc.questions.getQuestions.useQuery({
     page,
@@ -198,6 +214,17 @@ export default function AdminQuestionsContent() {
       utils.questions.getQuestions.invalidate();
       utils.questions.getQuestionStats.invalidate();
       setSelectedIds(new Set());
+    },
+    onError: handleMutationError,
+  });
+
+  const bulkSubjectMutation = trpc.questions.bulkUpdateSubject.useMutation({
+    onSuccess: (result) => {
+      showSuccess('Materia aggiornata', `${result.updated} domande spostate in "${result.subjectName}".`);
+      utils.questions.getQuestions.invalidate();
+      utils.questions.getQuestionStats.invalidate();
+      setSelectedIds(new Set());
+      setShowBulkSubjectSelect(false);
     },
     onError: handleMutationError,
   });
@@ -530,11 +557,44 @@ export default function AdminQuestionsContent() {
 
       {/* Bulk Actions */}
       {selectedIds.size > 0 && (
-        <div className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} flex items-center justify-between`}>
+        <div className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
           <span className={colors.text.secondary}>
             {selectedIds.size} domand{selectedIds.size === 1 ? 'a' : 'e'} selezionat{selectedIds.size === 1 ? 'a' : 'e'}
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Change Subject Dropdown */}
+            <div className="relative" data-bulk-subject-dropdown>
+              <button
+                onClick={() => setShowBulkSubjectSelect(!showBulkSubjectSelect)}
+                disabled={bulkSubjectMutation.isPending}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors text-sm"
+              >
+                <BookOpen className="w-4 h-4" />
+                Cambia Materia
+              </button>
+              {showBulkSubjectSelect && (
+                <div className={`absolute top-full left-0 mt-1 z-50 min-w-[200px] ${colors.background.card} ${colors.effects.shadow.lg} rounded-lg border ${colors.border.primary} py-1`}>
+                  {subjects?.map((subject) => (
+                    <button
+                      key={subject.id}
+                      onClick={() => {
+                        bulkSubjectMutation.mutate({
+                          ids: [...selectedIds],
+                          subjectId: subject.id,
+                        });
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:${colors.background.secondary} ${colors.text.primary} flex items-center gap-2 transition-colors`}
+                    >
+                      <span
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: subject.color || '#6b7280' }}
+                      />
+                      {subject.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               onClick={() => bulkStatusMutation.mutate({ ids: [...selectedIds], status: 'PUBLISHED' })}
               disabled={bulkStatusMutation.isPending}
