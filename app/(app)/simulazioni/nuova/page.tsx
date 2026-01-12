@@ -8,6 +8,8 @@ import { useToast } from '@/components/ui/Toast';
 import { Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import Checkbox from '@/components/ui/Checkbox';
+import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import { Modal } from '@/components/ui/Modal';
 import { previewSimulationPdf } from '@/lib/utils/simulationPdfGenerator';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -158,7 +160,7 @@ export default function NewSimulationPage() {
   // Attendance tracking
   const [trackAttendance, setTrackAttendance] = useState(false);
   const [locationType, setLocationType] = useState<LocationType | ''>('');
-  const [locationDetails, setLocationDetails] = useState('');
+  const [locationDetails, _setLocationDetails] = useState('');
 
   
   // Anti-cheat settings
@@ -191,6 +193,9 @@ export default function NewSimulationPage() {
   
   // Question detail modal
   const [previewQuestion, setPreviewQuestion] = useState<string | null>(null);
+  
+  // Print preview modal
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   // Loading states
   const [isSaving, setIsSaving] = useState(false);
@@ -1592,25 +1597,22 @@ export default function NewSimulationPage() {
                 <Printer className={`w-12 h-12 mx-auto ${colors.text.muted} mb-3`} />
                 <h3 className={`font-medium ${colors.text.primary} mb-2`}>Anteprima Stampa</h3>
                 <p className={`text-sm ${colors.text.muted} mb-4`}>
-                  Visualizza come apparirà il test stampato prima di crearlo
+                  Visualizza come apparirà il test stampato (con formule LaTeX renderizzate)
                 </p>
                 <button
                   type="button"
-                  onClick={handlePdfPreview}
-                  disabled={selectedQuestions.length === 0 || isPdfLoading}
+                  onClick={() => {
+                    if (selectedQuestions.length === 0) {
+                      alert('Seleziona almeno una domanda per visualizzare l\'anteprima');
+                      return;
+                    }
+                    setShowPrintPreview(true);
+                  }}
+                  disabled={selectedQuestions.length === 0}
                   className={`px-4 py-2 ${colors.background.secondary} border ${colors.border.light} rounded-lg text-sm font-medium ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
-                  {isPdfLoading ? (
-                    <>
-                      <Spinner size="xs" variant="muted" className="inline mr-2" />
-                      Caricamento...
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="w-4 h-4 inline mr-2" />
-                      Visualizza anteprima PDF
-                    </>
-                  )}
+                  <Eye className="w-4 h-4 inline mr-2" />
+                  Visualizza anteprima stampa
                 </button>
               </div>
             )}
@@ -1748,83 +1750,213 @@ export default function NewSimulationPage() {
       </div>
 
       {/* Question Preview Modal */}
-      {previewQuestion && questionDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setPreviewQuestion(null)}>
-          <div 
-            className={`w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-xl ${colors.background.card} shadow-2xl`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className={`p-4 border-b ${colors.border.light} flex items-center justify-between`}>
-              <h3 className={`font-semibold ${colors.text.primary}`}>Anteprima Domanda</h3>
-              <button
-                onClick={() => setPreviewQuestion(null)}
-                className={`p-1 rounded-lg ${colors.text.muted} hover:bg-gray-100 dark:hover:bg-gray-800`}
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              {/* Question metadata */}
-              <div className="flex items-center gap-2 flex-wrap">
-                {questionDetail.subject && (
-                  <span 
-                    className="px-2 py-1 rounded text-xs font-medium text-white"
-                    style={{ backgroundColor: questionDetail.subject.color || '#6b7280' }}
-                  >
-                    {questionDetail.subject.name}
-                  </span>
-                )}
-                {questionDetail.topic && (
-                  <span className={`px-2 py-1 rounded text-xs ${colors.background.secondary} ${colors.text.secondary}`}>
-                    {questionDetail.topic.name}
-                  </span>
-                )}
-                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                  questionDetail.difficulty === 'EASY' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                  questionDetail.difficulty === 'MEDIUM' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                }`}>
-                  {questionDetail.difficulty === 'EASY' ? 'Facile' : questionDetail.difficulty === 'MEDIUM' ? 'Media' : 'Difficile'}
+      <Modal
+        isOpen={!!previewQuestion && !!questionDetail}
+        onClose={() => setPreviewQuestion(null)}
+        title="Anteprima Domanda"
+        icon={<Eye className="w-6 h-6" />}
+        size="2xl"
+        variant="primary"
+      >
+        {questionDetail && (
+          <div className="space-y-4">
+            {/* Question metadata */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {questionDetail.subject && (
+                <span 
+                  className="px-2 py-1 rounded text-xs font-medium text-white"
+                  style={{ backgroundColor: questionDetail.subject.color || '#6b7280' }}
+                >
+                  {questionDetail.subject.name}
                 </span>
-              </div>
+              )}
+              {questionDetail.topic && (
+                <span className={`px-2 py-1 rounded text-xs ${colors.background.secondary} ${colors.text.secondary}`}>
+                  {questionDetail.topic.name}
+                </span>
+              )}
+              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                questionDetail.difficulty === 'EASY' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                questionDetail.difficulty === 'MEDIUM' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+              }`}>
+                {questionDetail.difficulty === 'EASY' ? 'Facile' : questionDetail.difficulty === 'MEDIUM' ? 'Media' : 'Difficile'}
+              </span>
+            </div>
 
-              {/* Question text */}
-              <div 
-                className={`prose dark:prose-invert max-w-none ${colors.text.primary}`}
-                dangerouslySetInnerHTML={{ __html: questionDetail.text }}
-              />
+            {/* Question text */}
+            <div className={`${colors.text.primary}`}>
+              <RichTextRenderer text={questionDetail.text} />
+            </div>
 
-              {/* Answers */}
-              <div className="space-y-2 mt-4">
-                <h4 className={`font-medium ${colors.text.primary}`}>Risposte:</h4>
-                {questionDetail.answers?.map((answer, idx) => (
-                  <div 
-                    key={idx}
-                    className={`p-3 rounded-lg border ${
-                      answer.isCorrect 
-                        ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
-                        : `${colors.border.light} ${colors.background.secondary}`
-                    }`}
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className={`font-medium ${answer.isCorrect ? 'text-green-600 dark:text-green-400' : colors.text.secondary}`}>
-                        {String.fromCharCode(65 + idx)}.
-                      </span>
-                      <div 
-                        className={answer.isCorrect ? 'text-green-700 dark:text-green-300' : colors.text.primary}
-                        dangerouslySetInnerHTML={{ __html: answer.text }}
-                      />
-                      {answer.isCorrect && (
-                        <Check className="w-4 h-4 text-green-500 ml-auto flex-shrink-0" />
-                      )}
+            {/* Answers */}
+            <div className="space-y-2 mt-4">
+              <h4 className={`font-medium ${colors.text.primary}`}>Risposte:</h4>
+              {questionDetail.answers?.map((answer, idx) => (
+                <div 
+                  key={idx}
+                  className={`p-3 rounded-lg border ${
+                    answer.isCorrect 
+                      ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
+                      : `${colors.border.light} ${colors.background.secondary}`
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <span className={`font-medium ${answer.isCorrect ? 'text-green-600 dark:text-green-400' : colors.text.secondary}`}>
+                      {String.fromCharCode(65 + idx)}.
+                    </span>
+                    <div className={`flex-1 ${answer.isCorrect ? 'text-green-700 dark:text-green-300' : colors.text.primary}`}>
+                      <RichTextRenderer text={answer.text} />
                     </div>
+                    {answer.isCorrect && (
+                      <Check className="w-4 h-4 text-green-500 ml-auto flex-shrink-0" />
+                    )}
                   </div>
-                ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Print Preview Modal */}
+      <Modal
+        isOpen={showPrintPreview}
+        onClose={() => setShowPrintPreview(false)}
+        title="Anteprima Stampa"
+        icon={<Printer className="w-6 h-6" />}
+        size="full"
+        variant="default"
+        footer={
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                // Open in new window for actual printing
+                const printWindow = window.open('', '_blank');
+                if (printWindow) {
+                  printWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                      <title>${title || 'Simulazione'} - Stampa</title>
+                      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+                      <style>
+                        @page { size: A4; margin: 15mm 20mm; }
+                        body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.4; }
+                        .header { text-align: center; border-bottom: 2px solid #a8012b; padding-bottom: 10px; margin-bottom: 20px; }
+                        .school { color: #a8012b; font-weight: bold; font-size: 14pt; }
+                        .title { font-size: 18pt; font-weight: bold; text-transform: uppercase; margin: 10px 0; }
+                        .date { color: #666; font-size: 10pt; }
+                        .info-box { border: 1px solid #999; border-radius: 5px; padding: 15px; margin-bottom: 20px; }
+                        .instructions { background: #f5f5f5; border: 1px solid #ccc; border-radius: 5px; padding: 15px; margin-bottom: 20px; }
+                        .question { margin-bottom: 20px; page-break-inside: avoid; }
+                        .question-number { font-weight: bold; }
+                        .answers { margin-left: 25px; margin-top: 8px; }
+                        .answer { margin: 5px 0; }
+                        .katex { font-size: 1.1em; }
+                      </style>
+                    </head>
+                    <body>
+                      <div id="content"></div>
+                      <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+                      <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+                      <script>
+                        document.getElementById('content').innerHTML = ${JSON.stringify(document.getElementById('print-preview-content')?.innerHTML || '')};
+                        renderMathInElement(document.body, {
+                          delimiters: [
+                            {left: '$$', right: '$$', display: true},
+                            {left: '$', right: '$', display: false},
+                            {left: '\\\\[', right: '\\\\]', display: true},
+                            {left: '\\\\(', right: '\\\\)', display: false}
+                          ]
+                        });
+                        setTimeout(() => window.print(), 500);
+                      </script>
+                    </body>
+                    </html>
+                  `);
+                  printWindow.document.close();
+                }
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.bg} text-white hover:opacity-90`}
+            >
+              <Printer className="w-4 h-4" />
+              Stampa / Salva PDF
+            </button>
+            <button
+              onClick={() => setShowPrintPreview(false)}
+              className={`px-4 py-2 rounded-lg border ${colors.border.light} ${colors.text.secondary}`}
+            >
+              Chiudi
+            </button>
+          </div>
+        }
+      >
+        <div id="print-preview-content" className="bg-white text-black p-6 rounded-lg max-h-[70vh] overflow-y-auto">
+          {/* Header */}
+          <div className="text-center mb-6 border-b-2 border-[#a8012b] pb-4">
+            <p className="text-[#a8012b] font-bold text-lg">LEONARDO SCHOOL</p>
+            <h2 className="text-2xl font-bold uppercase my-2">{title || 'Simulazione'}</h2>
+            <p className="text-gray-600 text-sm">
+              Anno Accademico {new Date().getFullYear()}/{new Date().getFullYear() + 1} - {new Date().toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+          </div>
+
+          {/* Student Info Box */}
+          <div className="border border-gray-400 rounded-lg p-4 mb-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm">Cognome e Nome: <span className="border-b border-gray-400 inline-block w-64">&nbsp;</span></p>
+                <p className="text-sm mt-2">Matricola: <span className="border-b border-gray-400 inline-block w-40">&nbsp;</span></p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm">Data: {new Date().toLocaleDateString('it-IT')}</p>
               </div>
             </div>
           </div>
+
+          {/* Instructions */}
+          <div className="bg-gray-100 border border-gray-300 rounded-lg p-4 mb-6">
+            <h3 className="font-bold text-sm mb-2">ISTRUZIONI</h3>
+            <ul className="text-sm space-y-1">
+              <li>• Tempo a disposizione: {durationMinutes} minuti</li>
+              <li>• Punteggio: Risposta corretta +{correctPoints}, Risposta errata {wrongPoints}, Non risposta {blankPoints}</li>
+              <li>• Numero domande: {selectedQuestions.length}</li>
+              {paperInstructions && <li>• {paperInstructions}</li>}
+            </ul>
+          </div>
+
+          {/* Questions */}
+          <h3 className="text-center font-bold uppercase mb-6">DOMANDE A RISPOSTA MULTIPLA</h3>
+          <div className="space-y-6">
+            {selectedQuestions.map((sq, index) => {
+              const question = questionsData?.questions.find(q => q.id === sq.questionId);
+              if (!question) return null;
+              
+              return (
+                <div key={sq.questionId} className="mb-4">
+                  <div className="mb-2">
+                    <span className="font-bold">{index + 1}. </span>
+                    <RichTextRenderer text={question.text} className="inline font-bold" />
+                  </div>
+                  {question.answers && question.answers.length > 0 && (
+                    <div className="ml-6 space-y-1">
+                      {[...question.answers]
+                        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                        .map((answer, ansIndex) => (
+                          <div key={answer.id} className="flex items-start gap-2">
+                            <span className="font-medium w-6">{String.fromCharCode(65 + ansIndex)})</span>
+                            <RichTextRenderer text={answer.text} />
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

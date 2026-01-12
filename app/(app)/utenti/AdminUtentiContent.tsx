@@ -1131,7 +1131,7 @@ function ManageSubjectsModal({
 export default function AdminUtentiContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const queryClient = useQueryClient();
+  const _queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<RoleFilter>('ALL');
   const [status, setStatus] = useState<StatusFilter>('all');

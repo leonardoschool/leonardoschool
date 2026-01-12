@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { auth } from '@/lib/firebase/config';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
@@ -600,9 +601,9 @@ export default function ContractSignPage() {
         {/* Help Text */}
         <p className={`text-center mt-6 text-sm ${colors.text.muted}`}>
           Hai bisogno di aiuto?{' '}
-          <a href="/contattaci" className={`${colors.primary.text} hover:underline`}>
+          <Link href="/contattaci" className={`${colors.primary.text} hover:underline`}>
             Contattaci
-          </a>
+          </Link>
         </p>
       </div>
     </div>

@@ -10,6 +10,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
+import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import {
   ArrowLeft,
   Edit2,
@@ -164,7 +165,7 @@ export default function DettaglioDomandaPage() {
               </span>
             </div>
             <h1 className={`text-xl font-bold ${colors.text.primary}`}>
-              {question.text.length > 100 ? `${question.text.slice(0, 100)}...` : question.text}
+              <RichTextRenderer text={question.text.length > 100 ? `${question.text.slice(0, 100)}...` : question.text} />
             </h1>
           </div>
         </div>
@@ -250,7 +251,9 @@ export default function DettaglioDomandaPage() {
           {/* Question Text */}
           <div className={`${colors.background.card} rounded-xl p-6 ${colors.effects.shadow.sm}`}>
             <h3 className={`font-semibold ${colors.text.primary} mb-4`}>Testo della domanda</h3>
-            <p className={`${colors.text.primary} whitespace-pre-wrap`}>{question.text}</p>
+            <div className={`${colors.text.primary} whitespace-pre-wrap`}>
+              <RichTextRenderer text={question.text} />
+            </div>
             {question.textLatex && (
               <div className={`mt-4 p-4 rounded-lg ${colors.background.secondary} border ${colors.border.light}`}>
                 <p className={`text-xs font-medium ${colors.text.muted} mb-2`}>Formula LaTeX:</p>
@@ -259,7 +262,9 @@ export default function DettaglioDomandaPage() {
             )}
             {question.description && (
               <div className={`mt-4 p-4 rounded-lg ${colors.background.secondary}`}>
-                <p className={`text-sm ${colors.text.muted}`}>{question.description}</p>
+                <div className={`text-sm ${colors.text.muted}`}>
+                  <RichTextRenderer text={question.description} />
+                </div>
               </div>
             )}
             {question.imageUrl && (
@@ -300,11 +305,13 @@ export default function DettaglioDomandaPage() {
                       {answer.label}
                     </span>
                     <div className="flex-1">
-                      <p className={`${colors.text.primary}`}>{answer.text}</p>
+                      <div className={`${colors.text.primary}`}>
+                        <RichTextRenderer text={answer.text} />
+                      </div>
                       {answer.explanation && (
-                        <p className={`text-sm ${colors.text.muted} mt-2`}>
-                          💡 {answer.explanation}
-                        </p>
+                        <div className={`text-sm ${colors.text.muted} mt-2`}>
+                          💡 <RichTextRenderer text={answer.explanation} />
+                        </div>
                       )}
                     </div>
                     {answer.isCorrect && (
@@ -357,9 +364,9 @@ export default function DettaglioDomandaPage() {
                         Risposta corretta
                       </span>
                     </div>
-                    <p className="text-sm text-green-800 dark:text-green-200">
-                      {question.correctExplanation}
-                    </p>
+                    <div className="text-sm text-green-800 dark:text-green-200">
+                      <RichTextRenderer text={question.correctExplanation} />
+                    </div>
                   </div>
                 )}
                 {question.wrongExplanation && (
@@ -370,9 +377,9 @@ export default function DettaglioDomandaPage() {
                         Risposta errata
                       </span>
                     </div>
-                    <p className="text-sm text-red-800 dark:text-red-200">
-                      {question.wrongExplanation}
-                    </p>
+                    <div className="text-sm text-red-800 dark:text-red-200">
+                      <RichTextRenderer text={question.wrongExplanation} />
+                    </div>
                   </div>
                 )}
                 {question.generalExplanation && (
@@ -383,9 +390,9 @@ export default function DettaglioDomandaPage() {
                         Spiegazione generale
                       </span>
                     </div>
-                    <p className={`text-sm ${colors.text.primary}`}>
-                      {question.generalExplanation}
-                    </p>
+                    <div className={`text-sm ${colors.text.primary}`}>
+                      <RichTextRenderer text={question.generalExplanation} />
+                    </div>
                   </div>
                 )}
               </div>

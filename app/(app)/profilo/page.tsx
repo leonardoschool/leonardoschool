@@ -22,7 +22,6 @@ import {
   Briefcase,
   Users,
   Download,
-  UserPlus,
   Heart,
   Home
 } from 'lucide-react';
@@ -236,7 +235,7 @@ export default function ProfiloPage() {
           <>
             {/* Parent Data Request Alert */}
             {parentDataRequirement?.requestedByAdmin && !parentGuardian && (
-              <ParentDataRequestAlert requestedAt={(parentDataRequirement as any)?.requestedAt ?? null} />
+              <ParentDataRequestAlert requestedAt={'requestedAt' in (parentDataRequirement ?? {}) ? (parentDataRequirement as { requestedAt?: Date | string | null }).requestedAt : null} />
             )}
             
             <StudentSection 
@@ -426,7 +425,7 @@ function SignedContractCard({ contract }: { contract: any }) {
 }
 
 // Alert shown to students when admin has requested parent/guardian data
-function ParentDataRequestAlert({ requestedAt }: { requestedAt?: Date | null }) {
+function ParentDataRequestAlert({ requestedAt }: { requestedAt?: Date | string | null }) {
   return (
     <div className={`${colors.status.error.bgLight} border-2 ${colors.status.error.border} rounded-xl p-4 sm:p-6 animate-pulse`}>
       <div className="flex items-start gap-3">
@@ -450,13 +449,13 @@ function ParentDataRequestAlert({ requestedAt }: { requestedAt?: Date | null }) 
               })}
             </p>
           )}
-          <a 
+          <Link 
             href="/auth/complete-profile"
             className={`mt-4 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg ${colors.status.error.bg} text-white font-semibold hover:opacity-90 transition-opacity shadow-lg`}
           >
             <Edit2 className="w-4 h-4" />
             Compila dati genitore per sbloccare
-          </a>
+          </Link>
         </div>
       </div>
     </div>
@@ -510,13 +509,13 @@ function ParentGuardianSection({
         <p className={`${colors.text.secondary}`}>
           I dati del genitore/tutore legale non sono ancora stati inseriti.
         </p>
-        <a 
+        <Link 
           href="/auth/complete-profile?parentData=true"
           className={`mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.bg} text-white font-medium hover:opacity-90 transition-opacity`}
         >
           <Edit2 className="w-4 h-4" />
           Aggiungi dati genitore
-        </a>
+        </Link>
       </div>
     );
   }

@@ -24,9 +24,11 @@ export default function AppLayout({
 
   return (
     <div className={`min-h-screen ${colors.background.primary} overflow-x-hidden`}>
-      <AppHeader />
-      <main className="py-6 sm:py-8 lg:py-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="print:hidden">
+        <AppHeader />
+      </div>
+      <main className="py-6 sm:py-8 lg:py-10 print:py-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 print:max-w-none print:px-0">
           {children}
         </div>
       </main>

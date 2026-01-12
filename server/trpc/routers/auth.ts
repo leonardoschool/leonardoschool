@@ -157,7 +157,7 @@ export const authRouter = router({
         graduationYear: user.student.graduationYear,
         requiresParentData: user.student.requiresParentData,
         parentDataRequestedAt: user.student.parentDataRequestedAt?.toISOString(),
-        parentDataRequestedBy: user.student.parentDataRequestedBy,
+        parentDataRequestedById: user.student.parentDataRequestedById,
         parentGuardian: user.student.parentGuardian,
       } : undefined,
     };

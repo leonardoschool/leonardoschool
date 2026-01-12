@@ -19,7 +19,6 @@ import {
   ArrowRight,
   Sparkles,
   Users,
-  ExternalLink,
   TrendingUp,
   Target,
   GraduationCap,

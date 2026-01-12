@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { colors } from '@/lib/theme/colors';
 import CustomSelect from '@/components/ui/CustomSelect';
 import DatePicker from '@/components/ui/DatePicker';
@@ -224,8 +223,8 @@ export default function ParentGuardianForm({
     return `${baseClass} ${colors.border.primary} focus:ring-[#A01B3B] focus:border-transparent`;
   };
 
-  // Error display helper
-  const ErrorMessage = ({ field }: { field: keyof ParentGuardianFormData }) => {
+  // Error display helper function
+  const renderErrorMessage = (field: keyof ParentGuardianFormData) => {
     if (!touched[`parent_${field}`] || !fieldErrors[`parent_${field}`]) return null;
     return (
       <p className={`mt-1.5 text-sm ${colors.status.error.text} flex items-center gap-1`}>
@@ -285,7 +284,7 @@ export default function ParentGuardianForm({
             placeholder="Seleziona il tipo di relazione..."
             hasError={!!(touched['parent_relationship'] && fieldErrors['parent_relationship'])}
           />
-          <ErrorMessage field="relationship" />
+          {renderErrorMessage('relationship')}
         </div>
 
         {/* First Name */}
@@ -303,7 +302,7 @@ export default function ParentGuardianForm({
             className={getInputClass('firstName')}
             placeholder="Mario"
           />
-          <ErrorMessage field="firstName" />
+          {renderErrorMessage('firstName')}
         </div>
 
         {/* Last Name */}
@@ -321,7 +320,7 @@ export default function ParentGuardianForm({
             className={getInputClass('lastName')}
             placeholder="Rossi"
           />
-          <ErrorMessage field="lastName" />
+          {renderErrorMessage('lastName')}
         </div>
 
         {/* Date of Birth */}
@@ -384,7 +383,7 @@ export default function ParentGuardianForm({
             className={getInputClass('phone')}
             placeholder="+39 333 123 4567"
           />
-          <ErrorMessage field="phone" />
+          {renderErrorMessage('phone')}
         </div>
 
         {/* Fiscal Code with calculate button - Full width */}
@@ -415,7 +414,7 @@ export default function ParentGuardianForm({
             className={`${getInputClass('fiscalCode')} uppercase tracking-widest font-mono`}
             placeholder="RSSMRA65A01H501Z"
           />
-          <ErrorMessage field="fiscalCode" />
+          {renderErrorMessage('fiscalCode')}
           <p className={`mt-1.5 text-xs ${colors.text.muted}`}>
             Compila data nascita, sesso e luogo di nascita per calcolare automaticamente
           </p>
@@ -435,7 +434,7 @@ export default function ParentGuardianForm({
             className={getInputClass('email')}
             placeholder="email@esempio.com"
           />
-          <ErrorMessage field="email" />
+          {renderErrorMessage('email')}
         </div>
       </div>
 
@@ -460,7 +459,7 @@ export default function ParentGuardianForm({
               className={getInputClass('address')}
               placeholder="Via Roma 123"
             />
-            <ErrorMessage field="address" />
+            {renderErrorMessage('address')}
           </div>
 
           {/* City, Province, Postal Code */}
@@ -478,7 +477,7 @@ export default function ParentGuardianForm({
                 className={getInputClass('city')}
                 placeholder="Roma"
               />
-              <ErrorMessage field="city" />
+              {renderErrorMessage('city')}
             </div>
 
             <div>
@@ -495,7 +494,7 @@ export default function ParentGuardianForm({
                 hasError={!!(touched['parent_province'] && fieldErrors['parent_province'])}
                 searchable
               />
-              <ErrorMessage field="province" />
+              {renderErrorMessage('province')}
             </div>
 
             <div>
@@ -512,7 +511,7 @@ export default function ParentGuardianForm({
                 className={`${getInputClass('postalCode')} font-mono tracking-wider`}
                 placeholder="00100"
               />
-              <ErrorMessage field="postalCode" />
+              {renderErrorMessage('postalCode')}
             </div>
           </div>
         </div>

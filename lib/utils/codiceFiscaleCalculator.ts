@@ -101,7 +101,7 @@ function estraiVocali(str: string): string {
 function calcolaCognome(cognome: string): string {
   const consonanti = estraiConsonanti(cognome);
   const vocali = estraiVocali(cognome);
-  let codice = consonanti + vocali + 'XXX';
+  const codice = consonanti + vocali + 'XXX';
   return codice.substring(0, 3);
 }
 

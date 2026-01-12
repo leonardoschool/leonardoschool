@@ -1758,7 +1758,7 @@ export const studentsRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       // Find the student (can be userId or studentId)
-      let student = await ctx.prisma.student.findFirst({
+      const student = await ctx.prisma.student.findFirst({
         where: {
           OR: [
             { id: input.studentId },

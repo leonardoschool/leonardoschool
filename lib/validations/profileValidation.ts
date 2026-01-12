@@ -431,7 +431,7 @@ export const validateNome = (value: string, fieldName: string = 'nome'): Validat
   const formatted = cleaned
     .toLowerCase()
     .split(/(\s+|'|-)/)
-    .map((part, index, array) => {
+    .map((part, _index, _array) => {
       // Don't capitalize separators
       if (part === ' ' || part === "'" || part === '-') return part;
       // Capitalize first letter

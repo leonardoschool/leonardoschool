@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
 import { trpc } from '@/lib/trpc/client';
+import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import {
   Users,
   TrendingUp,
@@ -207,7 +208,9 @@ export function AssignmentStatistics({ simulationId, assignmentId, groupId }: As
                         </span>
                       )}
                     </div>
-                    <p className={`text-sm ${colors.text.primary} line-clamp-2`}>{question.text}</p>
+                    <div className={`text-sm ${colors.text.primary} line-clamp-2`}>
+                      <RichTextRenderer text={question.text} />
+                    </div>
                     <div className="flex items-center gap-4 mt-2 text-sm">
                       <span className="text-red-600 flex items-center gap-1">
                         <XCircle className="w-3 h-3" />
