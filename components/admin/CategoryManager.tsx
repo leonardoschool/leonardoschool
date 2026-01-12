@@ -140,7 +140,8 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
   const [assigningCategoryId, setAssigningCategoryId] = useState<string | null>(null);
   const [assignmentData, setAssignmentData] = useState<AssignmentData>(defaultAssignmentData);
   const [groupSearchTerm, setGroupSearchTerm] = useState('');
-  const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [userTypeFilter, setUserTypeFilter] = useState<'all' | 'students' | 'collaborators'>('all');
 
   // Materials modal state
   const [showMaterialsModal, setShowMaterialsModal] = useState(false);
@@ -163,6 +164,7 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
   const { data: categoriesRaw, isLoading: categoriesLoading } = trpc.materials.getAllCategories.useQuery();
   const { data: groups } = trpc.groups.getAll.useQuery();
   const { data: students } = trpc.students.getAllForAdmin.useQuery();
+  const { data: collaborators } = trpc.users.getCollaborators.useQuery();
   const { data: allMaterials } = trpc.materials.getAll.useQuery({});
   const { data: subjects } = trpc.materials.getAllSubjects.useQuery();
 
@@ -190,7 +192,7 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
   // Mutations
   const createCategoryMutation = trpc.materials.createCategory.useMutation({
     onSuccess: () => {
-      showSuccess('Categoria creata', 'La categoria è stata creata con successo.');
+      showSuccess('Cartella creata', 'La cartella è stata creata con successo.');
       utils.materials.getAllCategories.invalidate();
       utils.materials.getCategories.invalidate();
       resetCategoryForm();
@@ -200,7 +202,7 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
 
   const updateCategoryMutation = trpc.materials.updateCategory.useMutation({
     onSuccess: () => {
-      showSuccess('Categoria aggiornata', 'La categoria è stata aggiornata con successo.');
+      showSuccess('Cartella aggiornata', 'La cartella è stata aggiornata con successo.');
       utils.materials.getAllCategories.invalidate();
       utils.materials.getCategories.invalidate();
       resetCategoryForm();
@@ -212,7 +214,7 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
 
   const deleteCategoryMutation = trpc.materials.deleteCategory.useMutation({
     onSuccess: () => {
-      showSuccess('Categoria eliminata', 'La categoria è stata eliminata con successo.');
+      showSuccess('Cartella eliminata', 'La cartella è stata eliminata con successo.');
       utils.materials.getAllCategories.invalidate();
       utils.materials.getCategories.invalidate();
     },
@@ -253,7 +255,8 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
       studentIds: category.studentAccess?.map(sa => sa.student.user.id) || [],
     });
     setGroupSearchTerm('');
-    setStudentSearchTerm('');
+    setUserSearchTerm('');
+    setUserTypeFilter('all');
     setShowAssignModal(true);
   };
 
@@ -365,7 +368,7 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
           className="px-4 py-2.5 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl text-gray-500 dark:text-gray-400 hover:border-[#a8012b] hover:text-[#a8012b] dark:hover:text-[#d1163b] hover:bg-red-50 dark:hover:bg-red-950/30 transition-all flex items-center gap-2"
         >
           <FolderPlus className="w-5 h-5" />
-          Nuova Categoria
+          Nuova Cartella
         </button>
       )}
 
@@ -374,7 +377,7 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
         <div className="p-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
             {editingCategoryId ? <Edit2 className="w-5 h-5" /> : <FolderPlus className="w-5 h-5" />}
-            {editingCategoryId ? 'Modifica Categoria' : 'Nuova Categoria'}
+            {editingCategoryId ? 'Modifica Cartella' : 'Nuova Cartella'}
           </h3>
           
           <div className="space-y-4">
@@ -389,7 +392,7 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
                   value={categoryFormData.name}
                   onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="Nome categoria"
+                  placeholder="Nome cartella"
                 />
               </div>
               <div>
@@ -435,7 +438,7 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
               >
                 <ButtonLoader loading={createCategoryMutation.isPending || updateCategoryMutation.isPending} loadingText="Salvataggio...">
                   <Save className="h-4 w-4" />
-                  {editingCategoryId ? 'Salva Modifiche' : 'Crea Categoria'}
+                  {editingCategoryId ? 'Salva Modifiche' : 'Crea Cartella'}
                 </ButtonLoader>
               </button>
             </div>
@@ -447,8 +450,8 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
       {categories.length === 0 ? (
         <div className="text-center py-12 text-gray-500 dark:text-gray-400">
           <Folder className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p className="text-lg font-medium mb-2">Nessuna categoria</p>
-          <p className="text-sm">Crea la prima categoria per organizzare i materiali</p>
+          <p className="text-lg font-medium mb-2">Nessuna cartella</p>
+          <p className="text-sm">Crea la prima cartella per organizzare i materiali</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -553,16 +556,16 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
         <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-600 dark:text-blue-400" />
         <div className="space-y-2">
           <p className="text-blue-900 dark:text-blue-100 font-medium">
-            📁 Come funzionano le categorie:
+            📁 Come funzionano le cartelle:
           </p>
           <ul className="list-disc list-inside space-y-1 text-blue-800 dark:text-blue-200 text-sm">
-            <li>Le categorie sono <strong>cartelle</strong> che raggruppano materiali per argomento o tipo</li>
-            <li>Quando rendi una categoria visibile agli studenti, <strong>tutti i materiali al suo interno</strong> diventano automaticamente accessibili</li>
-            <li>Non serve impostare la visibilità dei singoli materiali se sono dentro una categoria visibile</li>
-            <li>Gli studenti vedranno le categorie come cartelle nella loro sezione materiali</li>
+            <li>Le cartelle raggruppano materiali per argomento o tipo</li>
+            <li>Quando rendi una cartella visibile agli studenti, <strong>tutti i materiali al suo interno</strong> diventano automaticamente accessibili</li>
+            <li>Non serve impostare la visibilità dei singoli materiali se sono dentro una cartella visibile</li>
+            <li>Gli studenti vedranno le cartelle nella loro sezione materiali</li>
           </ul>
           <p className="text-orange-600 dark:text-orange-400 text-sm font-medium pt-1">
-            ⚠️ Le categorie con visibilità &quot;Nessuno&quot; non sono visibili agli studenti. Usa l&apos;icona 👥 per modificare chi può vederle.
+            ⚠️ Le cartelle con visibilità &quot;Nessuno&quot; non sono visibili agli studenti. Usa l&apos;icona 👥 per modificare chi può vederle.
           </p>
         </div>
       </div>
@@ -815,53 +818,119 @@ export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryMan
                 </div>
               )}
 
-              {/* Student Selection */}
-              {assignmentData.visibility === 'SELECTED_STUDENTS' && students && (
+              {/* User Selection (Students + Collaborators) */}
+              {assignmentData.visibility === 'SELECTED_STUDENTS' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Seleziona Studenti
+                    Seleziona Utenti
                   </label>
+                  {/* User Type Filter */}
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => setUserTypeFilter('all')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        userTypeFilter === 'all'
+                          ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+                          : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      }`}
+                    >
+                      Tutti
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUserTypeFilter('students')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        userTypeFilter === 'students'
+                          ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+                          : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      }`}
+                    >
+                      Studenti
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUserTypeFilter('collaborators')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        userTypeFilter === 'collaborators'
+                          ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+                          : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      }`}
+                    >
+                      Collaboratori
+                    </button>
+                  </div>
                   {/* Search Input */}
                   <div className="relative mb-3">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <input
                       type="text"
-                      value={studentSearchTerm}
-                      onChange={(e) => setStudentSearchTerm(e.target.value)}
-                      placeholder="Cerca studente..."
+                      value={userSearchTerm}
+                      onChange={(e) => setUserSearchTerm(e.target.value)}
+                      placeholder="Cerca utente..."
                       className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                     />
                   </div>
                   <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-3 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50">
                     {(() => {
-                      if (students.length === 0) {
-                        return <p className="text-sm text-gray-500 dark:text-gray-400">Nessuno studente disponibile</p>;
+                      // Build combined users list based on filter
+                      const users: Array<{ id: string; name: string; type: 'student' | 'collaborator' }> = [];
+                      
+                      if (userTypeFilter === 'all' || userTypeFilter === 'students') {
+                        students?.forEach((student: { id: string; name: string; student?: { id: string } }) => {
+                          const studentId = student.student?.id || student.id;
+                          if (studentId) {
+                            users.push({ id: studentId, name: student.name, type: 'student' });
+                          }
+                        });
                       }
-                      const filtered = students.filter((student: { id: string; name: string; student?: { id: string } }) =>
-                        student.name.toLowerCase().includes(studentSearchTerm.toLowerCase())
+                      
+                      if (userTypeFilter === 'all' || userTypeFilter === 'collaborators') {
+                        collaborators?.forEach((collaborator: { id: string; name: string }) => {
+                          users.push({ id: collaborator.id, name: collaborator.name, type: 'collaborator' });
+                        });
+                      }
+                      
+                      if (users.length === 0) {
+                        return <p className="text-sm text-gray-500 dark:text-gray-400">Nessun utente disponibile</p>;
+                      }
+                      
+                      const filtered = users.filter(user =>
+                        user.name.toLowerCase().includes(userSearchTerm.toLowerCase())
                       );
+                      
                       if (filtered.length === 0) {
-                        return <p className="text-sm text-gray-500 dark:text-gray-400">Nessuno studente trovato</p>;
+                        return <p className="text-sm text-gray-500 dark:text-gray-400">Nessun utente trovato</p>;
                       }
-                      return filtered.map((student: { id: string; name: string; student?: { id: string } }) => {
-                        const studentId = student.student?.id || student.id;
+                      
+                      return filtered.map((user) => {
+                        const isSelected = assignmentData.studentIds.includes(user.id);
                         return (
                           <button
-                            key={studentId}
+                            key={user.id}
                             type="button"
                             onClick={() => {
-                              const newIds = assignmentData.studentIds.includes(studentId)
-                                ? assignmentData.studentIds.filter(id => id !== studentId)
-                                : [...assignmentData.studentIds, studentId];
+                              const newIds = isSelected
+                                ? assignmentData.studentIds.filter(id => id !== user.id)
+                                : [...assignmentData.studentIds, user.id];
                               setAssignmentData({ ...assignmentData, studentIds: newIds });
                             }}
-                            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                              assignmentData.studentIds.includes(studentId)
+                            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                              isSelected
                                 ? 'bg-indigo-500 text-white'
                                 : 'bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 border border-gray-200 dark:border-gray-500'
                             }`}
                           >
-                            {student.name}
+                            {user.name}
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${
+                              isSelected
+                                ? 'bg-white/20 text-white'
+                                : user.type === 'student'
+                                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                  : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                            }`}>
+                              {user.type === 'student' ? 'S' : 'C'}
+                            </span>
                           </button>
                         );
                       });

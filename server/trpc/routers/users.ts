@@ -605,6 +605,26 @@ export const usersRouter = router({
   }),
 
   /**
+   * Get all collaborators (for assignment modals)
+   */
+  getCollaborators: adminProcedure.query(async ({ ctx }) => {
+    const collaborators = await ctx.prisma.user.findMany({
+      where: {
+        role: 'COLLABORATOR',
+        isActive: true,
+        profileCompleted: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+    return collaborators;
+  }),
+
+  /**
    * Change user role
    */
   changeRole: adminProcedure
