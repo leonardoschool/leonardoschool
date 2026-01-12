@@ -17,15 +17,6 @@ enum UserRole {
   STUDENT
 }
 
-enum Subject {
-  BIOLOGIA
-  CHIMICA
-  FISICA
-  MATEMATICA
-  LOGICA
-  CULTURA_GENERALE
-}
-
 enum DifficultyLevel {
   EASY
   MEDIUM
@@ -504,9 +495,6 @@ model Question {
   // === VERSIONING ===
   version Int @default(1) // Versione corrente
 
-  // === LEGACY (per retrocompatibilità con enum Subject) ===
-  legacySubject Subject? // Mantenuto per migrazione
-
   // === RELATIONS ===
   subject   CustomSubject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
   topic     Topic?         @relation(fields: [topicId], references: [id], onDelete: SetNull)
@@ -529,7 +517,6 @@ model Question {
   @@index([type])
   @@index([status])
   @@index([year])
-  @@index([legacySubject])
   @@index([createdById])
   @@map("questions")
 }

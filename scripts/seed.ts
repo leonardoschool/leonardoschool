@@ -15,15 +15,14 @@ import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import {
   DifficultyLevel,
-  PrismaClient,
   QuestionStatus,
   QuestionType,
   UserRole,
 } from '@prisma/client';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import prisma from '../lib/prisma/client';
 
-const prisma = new PrismaClient();
 const TEST_PASSWORD = 'TestPassword123!';
 const SEED_MARKER = 'Seed Demo Data';
 

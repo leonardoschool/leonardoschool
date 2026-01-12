@@ -12,10 +12,8 @@
 import { config } from 'dotenv';
 config({ path: '.env' });
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma/client';
 import { runCleanup, getDatabaseStats } from '../server/services/cleanupService';
-
-const prisma = new PrismaClient();
 
 async function main() {
   const args = process.argv.slice(2);

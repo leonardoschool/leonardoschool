@@ -10,7 +10,7 @@
     "lint": "eslint",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio",
+    "prisma:studio": "prisma studio --url \"postgresql://postgres:postgres@localhost:5433/leonardoschool?schema=public\"",
     "prisma:seed": "tsx scripts/seed.ts",
     "prisma:push": "npx prisma db push",
     "seed": "tsx scripts/seed.ts",
@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
+    "@prisma/adapter-pg": "^7.2.0",
     "@prisma/client": "7.2.0",
     "@tanstack/react-query": "^5.62.0",
     "@trpc/client": "^11.0.0",
@@ -40,6 +41,7 @@
     "nanoid": "^5.0.9",
     "next": "^16.0.10",
     "nodemailer": "^7.0.10",
+    "pg": "^8.16.3",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-hook-form": "^7.54.0",
@@ -52,6 +54,7 @@
   "devDependencies": {
     "@types/node": "^20",
     "@types/nodemailer": "^7.0.4",
+    "@types/pg": "^8.16.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.22",
