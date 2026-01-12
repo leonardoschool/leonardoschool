@@ -35,7 +35,9 @@ yarn-error.log*
 
 # Firebase sensitive files (SECURITY)
 *firebase*adminsdk*.json
+*service-account*.json
 firebase-uids.json
+leonardo-school-*.json
 
 # vercel
 .vercel
