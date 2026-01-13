@@ -130,6 +130,16 @@ export default function LoginPage() {
       
       if (!response.ok) {
         const errorData = await response.json();
+        
+        // If account is deactivated (403), logout from Firebase and show error
+        if (response.status === 403) {
+          await firebaseAuth.logout();
+          setError(errorData.error || 'Il tuo account è stato disattivato');
+          showError('Account disattivato', errorData.error || 'Il tuo account è stato disattivato. Contatta l\'amministrazione.');
+          setLoading(false);
+          return;
+        }
+        
         throw new Error(errorData.error || 'Errore nel recupero dati utente');
       }
       

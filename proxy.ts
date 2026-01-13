@@ -86,7 +86,6 @@ export function proxy(request: NextRequest) {
   const userRole = request.cookies.get('user-role')?.value;
   const profileCompleted = request.cookies.get('profile-completed')?.value === 'true';
   const parentDataRequired = request.cookies.get('parent-data-required')?.value === 'true';
-  const userActive = request.cookies.get('user-active')?.value !== 'false'; // Default to true if not set
   const pendingContract = request.cookies.get('pending-contract')?.value;
   
   // Check if it's a protected route
@@ -108,23 +107,10 @@ export function proxy(request: NextRequest) {
       return NextResponse.redirect(new URL('/auth/complete-profile', request.url));
     }
 
-    // Check if user account is deactivated
-    if (!userActive) {
-      // If student has parentDataRequired, they can still access /profilo and /auth/complete-profile to add parent data
-      if (userRole === 'STUDENT' && parentDataRequired) {
-        if (!pathname.startsWith('/profilo') && !pathname.startsWith('/auth/complete-profile')) {
-          return NextResponse.redirect(new URL('/profilo?section=genitore', request.url));
-        }
-        // Allow access to profile page and complete-profile page
-      } else {
-        // Account manually deactivated - redirect to login with message
-        const loginUrl = new URL('/auth/login', request.url);
-        loginUrl.searchParams.set('error', 'account-deactivated');
-        return NextResponse.redirect(loginUrl);
-      }
-    } else if (userRole === 'STUDENT' && parentDataRequired) {
-      // Account is active but parent data is required (edge case)
-      // Still block all routes except profile and complete-profile
+    // Check if parent data is required (blocks all access until parent data is provided)
+    // This applies to both students and collaborators, requested by admin
+    if (parentDataRequired && (userRole === 'STUDENT' || userRole === 'COLLABORATOR')) {
+      // Allow access only to profile page (to add parent data) and complete-profile
       if (!pathname.startsWith('/profilo') && !pathname.startsWith('/auth/complete-profile')) {
         return NextResponse.redirect(new URL('/profilo?section=genitore', request.url));
       }
