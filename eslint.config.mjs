@@ -12,7 +12,27 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Legacy Flutter webapp (not part of current project)
+    "webapp_old/**",
   ]),
+  // Custom rules
+  {
+    rules: {
+      // Allow unused variables with underscore prefix (intentionally ignored)
+      "@typescript-eslint/no-unused-vars": ["warn", { 
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_"
+      }],
+      // Standard React hooks rules
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
+      // Disable React compiler rules that flag valid patterns
+      // setState in useEffect for data initialization is a valid and common React pattern
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/purity": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

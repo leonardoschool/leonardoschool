@@ -1,0 +1,2155 @@
+// Prisma Schema per Leonardo School
+// Database: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==================== ENUMS ====================
+
+enum UserRole {
+  ADMIN
+  COLLABORATOR
+  STUDENT
+}
+
+enum DifficultyLevel {
+  EASY
+  MEDIUM
+  HARD
+}
+
+// ==================== QUESTION ENUMS ====================
+
+enum QuestionType {
+  MULTIPLE_CHOICE // Risposta multipla (più risposte corrette possibili)
+  SINGLE_CHOICE // Risposta singola (una sola risposta corretta)
+  OPEN_TEXT // Risposta aperta/libera
+}
+
+enum QuestionStatus {
+  DRAFT // Bozza, non visibile agli studenti
+  PUBLISHED // Pubblicata, visibile e utilizzabile
+  ARCHIVED // Archiviata, non più utilizzabile ma storico mantenuto
+}
+
+enum OpenAnswerValidationType {
+  MANUAL // Valutazione manuale da parte di admin/collaboratore
+  KEYWORDS // Valutazione automatica tramite keywords
+  BOTH // Entrambe: prima keywords, poi conferma manuale
+}
+
+enum QuestionFeedbackType {
+  ERROR_IN_QUESTION // Errore nel testo della domanda
+  ERROR_IN_ANSWER // Errore nelle risposte
+  UNCLEAR // Domanda poco chiara
+  SUGGESTION // Suggerimento miglioramento
+  OTHER // Altro
+}
+
+enum QuestionFeedbackStatus {
+  PENDING // In attesa di revisione
+  REVIEWED // Revisionata
+  FIXED // Corretta
+  REJECTED // Rifiutata (non era un errore)
+}
+
+// ==================== SIMULATION ENUMS ====================
+
+enum SimulationType {
+  OFFICIAL // Test ufficiali per graduatorie
+  PRACTICE // Pratica guidata
+  CUSTOM // Test personalizzato
+  QUICK_QUIZ // Quiz rapido autogenerato
+}
+
+enum SimulationStatus {
+  DRAFT // Bozza
+  PUBLISHED // Pubblicato e disponibile
+  ARCHIVED // Archiviato
+}
+
+enum AssignmentStatus {
+  ACTIVE // Assegnazione attiva, studenti possono accedere
+  CLOSED // Chiusa manualmente o automaticamente, studenti non possono più accedere
+}
+
+enum SimulationVisibility {
+  PRIVATE // Solo assegnati specifici
+  GROUP // Visibile a gruppi specifici
+  PUBLIC // Visibile a tutti gli studenti attivi
+}
+
+enum SimulationSessionStatus {
+  WAITING // In attesa che tutti entrino
+  STARTED // Simulazione avviata
+  COMPLETED // Tutti hanno completato o tempo scaduto
+  CANCELLED // Annullata
+}
+
+enum SimulationAccessType {
+  OPEN // Chiunque invitato può entrare quando vuole (entro scadenza)
+  ROOM // Stanza virtuale - si aspetta che tutti entrino, poi si parte insieme
+}
+
+enum CheatingEventType {
+  TAB_CHANGE // Cambio tab/finestra
+  WINDOW_BLUR // Finestra persa di focus
+  COPY_ATTEMPT // Tentativo di copia
+  PASTE_ATTEMPT // Tentativo di incolla
+  RIGHT_CLICK // Click destro
+  DEVTOOLS_OPEN // DevTools aperti
+  SCREENSHOT_ATTEMPT // Tentativo screenshot (Print Screen)
+  KEYBOARD_SHORTCUT // Shortcut sospetta (Ctrl+C, Ctrl+V, etc.)
+  MULTIPLE_MONITORS // Rilevati monitor multipli
+  DISCONNECTION // Disconnessione sospetta
+  OTHER // Altro evento sospetto
+}
+
+enum SessionMessageSender {
+  ADMIN // Inviato da admin/collaboratore
+  STUDENT // Inviato dallo studente
+}
+
+enum AlertType {
+  INFO
+  WARNING
+  SUCCESS
+  ERROR
+}
+
+enum ContractStatus {
+  PENDING // Contratto assegnato, in attesa di firma
+  SIGNED // Contratto firmato dallo studente
+  EXPIRED // Contratto scaduto (non firmato in tempo)
+  CANCELLED // Contratto annullato dall'admin
+  REVOKED // Contratto firmato ma poi revocato dall'admin (storico)
+}
+
+enum NotificationType {
+  // === ACCOUNT & AUTH ===
+  ACCOUNT_ACTIVATED // Account approvato dall'admin
+  NEW_REGISTRATION // Nuovo utente registrato (per admin)
+  PROFILE_COMPLETED // Utente ha completato profilo (per admin)
+  PARENT_DATA_REQUESTED // Richiesta dati genitore/tutore
+
+  // === CONTRACTS ===
+  CONTRACT_ASSIGNED // Contratto assegnato
+  CONTRACT_SIGNED // Contratto firmato
+  CONTRACT_REMINDER // Promemoria firma contratto
+  CONTRACT_EXPIRED // Contratto scaduto
+  CONTRACT_CANCELLED // Contratto annullato
+
+  // === EVENTS & CALENDAR ===
+  EVENT_INVITATION // Invito a evento
+  EVENT_REMINDER // Promemoria evento imminente
+  EVENT_UPDATED // Evento modificato
+  EVENT_CANCELLED // Evento annullato
+
+  // === SIMULATIONS ===
+  SIMULATION_ASSIGNED // Simulazione assegnata
+  SIMULATION_REMINDER // Promemoria simulazione
+  SIMULATION_READY // Stanza virtuale pronta
+  SIMULATION_STARTED // Simulazione iniziata
+  SIMULATION_RESULTS // Risultati disponibili
+  SIMULATION_COMPLETED // Simulazione completata (per admin)
+
+  // === STAFF ABSENCES ===
+  STAFF_ABSENCE // Lezione annullata per assenza
+  ABSENCE_REQUEST // Richiesta assenza (per admin)
+  ABSENCE_CONFIRMED // Assenza confermata
+  ABSENCE_REJECTED // Assenza rifiutata
+  SUBSTITUTION_ASSIGNED // Assegnato come sostituto
+
+  // === QUESTIONS & ANSWERS ===
+  QUESTION_FEEDBACK // Segnalazione su domanda
+  OPEN_ANSWER_TO_REVIEW // Risposta aperta da valutare
+
+  // === MATERIALS ===
+  MATERIAL_AVAILABLE // Nuovo materiale disponibile
+
+  // === GROUPS ===
+  GROUP_MEMBER_ADDED // Aggiunto come membro di un gruppo
+  GROUP_REFERENT_ASSIGNED // Assegnato come referente di un gruppo
+
+  // === MESSAGING ===
+  MESSAGE_RECEIVED // Nuovo messaggio ricevuto
+
+  // === APPLICATIONS & CONTACTS ===
+  JOB_APPLICATION // Nuova candidatura lavoro
+  CONTACT_REQUEST // Nuova richiesta informazioni
+
+  // === ATTENDANCE ===
+  ATTENDANCE_RECORDED // Presenza registrata
+
+  // === SYSTEM ===
+  SYSTEM_ALERT // Alert di sistema
+  GENERAL // Comunicazione generica
+}
+
+// ==================== CALENDAR & EVENT ENUMS ====================
+
+enum EventType {
+  LESSON // Lezione
+  SIMULATION // Simulazione
+  MEETING // Riunione
+  EXAM // Esame
+  OTHER // Altro
+}
+
+enum EventLocationType {
+  ONLINE // Online (link meet/zoom)
+  IN_PERSON // In presenza (aula fisica)
+  HYBRID // Ibrido (entrambi)
+}
+
+enum EventInviteStatus {
+  PENDING // In attesa di risposta
+  ACCEPTED // Accettato
+  DECLINED // Rifiutato
+  TENTATIVE // Forse
+}
+
+enum RecurrenceFrequency {
+  DAILY // Ogni giorno
+  WEEKLY // Ogni settimana
+  BIWEEKLY // Ogni due settimane
+  MONTHLY // Ogni mese
+}
+
+enum StaffAbsenceStatus {
+  PENDING // In attesa di conferma admin
+  CONFIRMED // Confermata dall'admin
+  REJECTED // Rifiutata dall'admin
+  CANCELLED // Annullata
+}
+
+// ==================== ATTENDANCE ENUMS ====================
+
+enum AttendanceStatus {
+  PRESENT // Presente
+  ABSENT // Assente
+  LATE // Ritardo
+  EXCUSED // Giustificato
+  CUSTOM // Stato personalizzato (vedi customStatusId)
+}
+
+// ==================== MESSAGING ENUMS ====================
+
+enum MessageStatus {
+  SENT // Inviato
+  DELIVERED // Consegnato
+  READ // Letto
+}
+
+enum ConversationType {
+  DIRECT // Conversazione diretta tra due utenti
+  GROUP // Conversazione di gruppo
+}
+
+// ==================== NOTIFICATION ENUMS ====================
+
+enum NotificationChannel {
+  IN_APP // Solo notifica in-app
+  EMAIL // Solo email
+  BOTH // Entrambi
+}
+
+// ==================== AUTH & USERS ====================
+
+model User {
+  id               String   @id @default(cuid())
+  firebaseUid      String   @unique // Link a Firebase Auth
+  email            String   @unique
+  name             String
+  role             UserRole @default(STUDENT)
+  isActive         Boolean  @default(false) // true solo quando profilo completo + admin approva
+  profileCompleted Boolean  @default(false) // true quando compila dati anagrafici
+  emailVerified    Boolean  @default(false)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastLoginAt DateTime?
+
+  // Relations
+  student          Student?
+  admin            Admin?
+  collaborator     Collaborator?
+  alerts           Alert[]
+  questionsCreated Question[]    @relation("QuestionCreatedBy")
+
+  // Simulation relations
+  simulationsCreated Simulation[]           @relation("SimulationCreatedBy")
+  assignmentsCreated SimulationAssignment[] @relation("AssignmentCreator")
+
+  // Calendar & Event relations
+  eventsCreated    CalendarEvent[]   @relation("EventCreatedBy")
+  eventInvitations EventInvitation[] @relation("EventInvitee")
+
+  // Staff absence relations
+  absencesRequested     StaffAbsence[] @relation("AbsenceRequester")
+  absencesConfirmed     StaffAbsence[] @relation("AbsenceConfirmer")
+  substitutionsAssigned StaffAbsence[] @relation("AbsenceSubstitute")
+
+  // Attendance relations
+  attendanceRecorded Attendance[] @relation("AttendanceRecorder")
+
+  // Messaging relations
+  conversationParticipations ConversationParticipant[]
+  messagesSent               Message[]                 @relation("MessageSender")
+
+  // Session messaging (virtual room)
+  sessionMessagesSent SessionMessage[] @relation("SessionMessageSender")
+
+  // Notification relations
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
+
+  @@index([firebaseUid])
+  @@index([email])
+  @@map("users")
+}
+
+// ==================== STUDENTS ====================
+
+model Student {
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  matricola   String?   @unique // Matricola studente (es: LS2025001) - nullable per migrazione, poi rendere required
+  fiscalCode  String?   @unique
+  dateOfBirth DateTime?
+  phone       String?
+  address     String?
+  city        String?
+  province    String?
+  postalCode  String?
+
+  // School info
+  enrollmentDate DateTime @default(now())
+  graduationYear Int?
+
+  // Parent/Guardian requirement flags
+  // Admin can request parent data for adult students via requiresParentData
+  // For minors (<18), parent data is always required at registration
+  requiresParentData Boolean @default(false) // Admin can set this to true for adult students
+  parentDataRequestedAt DateTime? // When admin requested the parent data
+  parentDataRequestedById String? // Admin user ID who requested
+
+  // Relations
+  user                   User                            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentGuardian         ParentGuardian? // Dati del genitore/tutore
+  simulationResults      SimulationResult[]
+  stats                  StudentStats?
+  contracts              Contract[]
+  materialAccess         MaterialStudentAccess[]
+  materialCategoryAccess MaterialCategoryStudentAccess[]
+  groupMemberships       GroupMember[] // Gruppi a cui appartiene
+  referenceGroups        Group[]                         @relation("GroupReferenceStudent") // Gruppi di cui è riferimento
+
+  // Question-related relations
+  questionFeedbacks     QuestionFeedback[] // Segnalazioni domande
+  questionFavorites     QuestionFavorite[] // Domande preferite
+  openAnswerSubmissions OpenAnswerSubmission[] // Risposte aperte
+
+  // Simulation assignments
+  simulationAssignments SimulationAssignment[] // Simulazioni assegnate
+
+  // Simulation session participation
+  sessionParticipations SimulationSessionParticipant[] // Partecipazioni a sessioni
+
+  // Attendance records
+  attendanceRecords Attendance[] // Presenze registrate
+
+  @@index([userId])
+  @@map("students")
+}
+
+// ==================== PARENT/GUARDIAN ====================
+
+// Dati del genitore/tutore dello studente
+// Obbligatorio per studenti minorenni, facoltativo (o richiesto dall'admin) per maggiorenni
+model ParentGuardian {
+  id        String @id @default(cuid())
+  studentId String @unique
+
+  // Relationship type
+  relationship String // "PADRE", "MADRE", "TUTORE_LEGALE", "ALTRO"
+
+  // Personal data
+  firstName  String
+  lastName   String
+  fiscalCode String // Codice fiscale genitore
+  phone      String
+  email      String?
+
+  // Address (can be different from student)
+  address    String?
+  city       String?
+  province   String?
+  postalCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@map("parent_guardians")
+}
+
+// ==================== ADMIN ====================
+
+model Admin {
+  id             String  @id @default(cuid())
+  userId         String  @unique
+  phone          String?
+  canManageUsers Boolean @default(false)
+  canManageTests Boolean @default(true)
+  canViewStats   Boolean @default(true)
+
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceGroups Group[] @relation("GroupReferenceAdmin")
+
+  @@index([userId])
+  @@map("admins")
+}
+
+// ==================== COLLABORATORS ====================
+
+model Collaborator {
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  fiscalCode  String?   @unique
+  dateOfBirth DateTime?
+  phone       String?
+  address     String?
+  city        String?
+  province    String?
+  postalCode  String?
+
+  // Permissions
+  canManageQuestions Boolean @default(true)
+  canManageMaterials Boolean @default(true)
+  canViewStats       Boolean @default(true)
+  canViewStudents    Boolean @default(true) // Vista limitata (no dati sensibili)
+
+  // Employment info
+  hireDate       DateTime @default(now())
+  specialization String? // Area di competenza (es. "Biologia", "Matematica")
+  notes          String?  @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contracts        Contract[] // Unified contract system
+  subjects         CollaboratorSubject[] // Materie insegnate
+  groupMemberships GroupMember[] // Gruppi a cui appartiene
+  referenceGroups  Group[]               @relation("GroupReferenceCollaborator") // Gruppi di cui è riferimento
+
+  @@index([userId])
+  @@map("collaborators")
+}
+
+// ==================== QUESTIONS ====================
+
+model Question {
+  id String @id @default(cuid())
+
+  // === TYPE & STATUS ===
+  type   QuestionType   @default(SINGLE_CHOICE)
+  status QuestionStatus @default(DRAFT)
+
+  // === CONTENT ===
+  text        String  @db.Text // Testo della domanda
+  textLatex   String? @db.Text // Formula LaTeX (opzionale)
+  description String? @db.Text // Descrizione/contesto aggiuntivo
+
+  // === IMAGE (either external URL or Firebase Storage) ===
+  imageUrl         String? // URL esterno immagine (opzione 1)
+  // Firebase Storage (opzione 2)
+  imageStoragePath String? // Path su Firebase Storage (es. "questions/images/abc123.jpg")
+  imageFileName    String? // Nome originale del file
+  imageFileSize    Int? // Dimensione in bytes
+  imageMimeType    String? // MIME type (es. "image/jpeg")
+  imageAlt         String? // Alt text per accessibilità
+
+  // === CATEGORIZATION ===
+  // Collegamento a CustomSubject invece di enum (più flessibile)
+  subjectId  String?
+  topicId    String? // Argomento
+  subTopicId String? // Sotto-argomento
+  difficulty DifficultyLevel @default(MEDIUM)
+
+  // === SCORING ===
+  points         Float @default(1.0) // Punti per risposta corretta
+  negativePoints Float @default(0.0) // Punti negativi per risposta errata (es. -0.25)
+  blankPoints    Float @default(0.0) // Punti per risposta non data
+
+  // === TIMING ===
+  timeLimitSeconds Int? // Tempo limite per questa domanda (opzionale)
+
+  // === EXPLANATIONS ===
+  correctExplanation  String? @db.Text // Spiegazione mostrata se risposta corretta
+  wrongExplanation    String? @db.Text // Spiegazione mostrata se risposta errata
+  generalExplanation  String? @db.Text // Spiegazione generale (sempre mostrata)
+  explanationVideoUrl String? // Link a video esplicativo
+  explanationPdfUrl   String? // Link a PDF esplicativo
+
+  // === OPEN ANSWER VALIDATION (for OPEN_TEXT type) ===
+  openValidationType OpenAnswerValidationType? // Tipo di validazione per risposte aperte
+  openMinLength      Int? // Lunghezza minima risposta aperta
+  openMaxLength      Int? // Lunghezza massima risposta aperta
+  openCaseSensitive  Boolean                   @default(false) // Keywords case-sensitive?
+  openPartialMatch   Boolean                   @default(true) // Match parziale keywords?
+
+  // === DISPLAY OPTIONS ===
+  shuffleAnswers  Boolean @default(false) // Mescola ordine risposte
+  showExplanation Boolean @default(true) // Mostra spiegazione dopo risposta
+
+  // === METADATA ===
+  // tags field deprecated - use questionTags relation instead
+  legacyTags String[] @map("tags") // Kept for migration, use questionTags relation
+  year       Int? // Anno in cui è apparsa (es. esame 2023)
+  source     String? // Fonte ("Medicina 2023", "Veterinaria 2022")
+  externalId String? // ID esterno per import
+
+  // === STATISTICS ===
+  timesUsed      Int    @default(0) // Volte usata in simulazioni
+  timesAnswered  Int    @default(0) // Volte risposte ricevute
+  timesCorrect   Int    @default(0) // Risposte corrette
+  timesWrong     Int    @default(0) // Risposte errate
+  timesSkipped   Int    @default(0) // Risposte saltate
+  avgTimeSeconds Float? // Tempo medio di risposta
+  avgCorrectRate Float? // % risposte corrette
+
+  // === AUDIT ===
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdById String? // User ID di chi ha creato
+  updatedById String? // User ID ultimo aggiornamento
+  publishedAt DateTime? // Data pubblicazione
+  archivedAt  DateTime? // Data archiviazione
+
+  // === VERSIONING ===
+  version Int @default(1) // Versione corrente
+
+  // === RELATIONS ===
+  subject   CustomSubject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  topic     Topic?         @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  subTopic  SubTopic?      @relation(fields: [subTopicId], references: [id], onDelete: SetNull)
+  createdBy User?          @relation("QuestionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  answers               QuestionAnswer[] // Risposte possibili
+  keywords              QuestionKeyword[] // Keywords per validazione open text
+  simulationQuestions   SimulationQuestion[] // Uso in simulazioni
+  feedbacks             QuestionFeedback[] // Segnalazioni studenti
+  favorites             QuestionFavorite[] // Preferiti studenti
+  versions              QuestionVersion[] // Storico versioni
+  openAnswerSubmissions OpenAnswerSubmission[] // Risposte aperte ricevute
+  questionTags          QuestionTagAssignment[] // Tag assegnati alla domanda
+
+  @@index([subjectId])
+  @@index([topicId])
+  @@index([subTopicId])
+  @@index([difficulty])
+  @@index([type])
+  @@index([status])
+  @@index([year])
+  @@index([createdById])
+  @@map("questions")
+}
+
+// ==================== QUESTION TAGS ====================
+
+// Tag categories (e.g., "Database", "Anno", "Difficoltà", etc.)
+model QuestionTagCategory {
+  id          String  @id @default(cuid())
+  name        String  @unique // "Database di riferimento", "Anno esame", etc.
+  description String?
+  color       String? // Hex color for UI
+  order       Int     @default(0)
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String? // Admin userId
+
+  tags QuestionTag[]
+
+  @@index([isActive])
+  @@index([order])
+  @@map("question_tag_categories")
+}
+
+// Individual tags
+model QuestionTag {
+  id          String  @id @default(cuid())
+  name        String // "TOLC-MED 2024", "Alpha Test", etc.
+  description String?
+  color       String? // Hex color for UI (overrides category color)
+  categoryId  String?
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String? // Admin userId
+
+  // Relations
+  category  QuestionTagCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  questions QuestionTagAssignment[]
+
+  @@unique([categoryId, name]) // Same tag name allowed in different categories
+  @@index([categoryId])
+  @@index([isActive])
+  @@map("question_tags")
+}
+
+// Many-to-many: Question <-> Tag
+model QuestionTagAssignment {
+  id         String @id @default(cuid())
+  questionId String
+  tagId      String
+
+  assignedAt DateTime @default(now())
+  assignedBy String? // User who assigned the tag
+
+  // Relations
+  question Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  tag      QuestionTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, tagId])
+  @@index([questionId])
+  @@index([tagId])
+  @@map("question_tag_assignments")
+}
+
+// ==================== QUESTION ANSWERS ====================
+
+model QuestionAnswer {
+  id         String @id @default(cuid())
+  questionId String
+
+  // Content
+  text      String  @db.Text // Testo della risposta
+  textLatex String? @db.Text // Formula LaTeX (opzionale)
+
+  // Image (either external URL or Firebase Storage)
+  imageUrl         String? // URL esterno immagine (opzione 1)
+  // Firebase Storage (opzione 2)
+  imageStoragePath String? // Path su Firebase Storage
+  imageFileName    String? // Nome originale del file
+  imageFileSize    Int? // Dimensione in bytes
+  imageMimeType    String? // MIME type
+  imageAlt         String? // Alt text per accessibilità
+
+  // Correctness
+  isCorrect Boolean @default(false) // Se è risposta corretta
+
+  // Explanation (specifica per questa risposta)
+  explanation String? @db.Text // Perché questa risposta è giusta/sbagliata
+
+  // Display
+  order Int     @default(0) // Ordine visualizzazione
+  label String? // Label personalizzata (A, B, C... o custom)
+
+  // Stats
+  timesSelected Int @default(0) // Volte selezionata
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@index([isCorrect])
+  @@map("question_answers")
+}
+
+// ==================== QUESTION KEYWORDS (for open text validation) ====================
+
+model QuestionKeyword {
+  id         String @id @default(cuid())
+  questionId String
+
+  // Keyword
+  keyword     String // La keyword da cercare
+  weight      Float   @default(1.0) // Peso della keyword (per punteggio parziale)
+  isRequired  Boolean @default(false) // Se obbligatoria per risposta corretta
+  isSuggested Boolean @default(false) // Se è un suggerimento del sistema
+
+  // Matching options
+  caseSensitive Boolean @default(false) // Case sensitive per questa keyword?
+  exactMatch    Boolean @default(false) // Match esatto o parziale?
+
+  // Synonyms (alternative accettate)
+  synonyms String[] // Array di sinonimi accettati
+
+  createdAt   DateTime @default(now())
+  createdById String? // Chi ha aggiunto la keyword
+
+  // Relations
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@map("question_keywords")
+}
+
+// ==================== QUESTION FEEDBACK (student reports) ====================
+
+model QuestionFeedback {
+  id         String @id @default(cuid())
+  questionId String
+  studentId  String
+
+  // Feedback details
+  type    QuestionFeedbackType
+  status  QuestionFeedbackStatus @default(PENDING)
+  message String                 @db.Text // Descrizione del problema
+
+  // Admin response
+  adminResponse String?   @db.Text // Risposta dell'admin
+  reviewedById  String? // Admin che ha revisionato
+  reviewedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@index([studentId])
+  @@index([status])
+  @@index([type])
+  @@map("question_feedbacks")
+}
+
+// ==================== QUESTION FAVORITES ====================
+
+model QuestionFavorite {
+  id         String @id @default(cuid())
+  questionId String
+  studentId  String
+
+  // Optional notes
+  notes String? @db.Text // Note personali dello studente
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, studentId])
+  @@index([studentId])
+  @@map("question_favorites")
+}
+
+// ==================== QUESTION VERSIONS (history) ====================
+
+model QuestionVersion {
+  id         String @id @default(cuid())
+  questionId String
+  version    Int // Numero versione
+
+  // Snapshot of question at this version
+  snapshot Json // JSON con tutti i dati della domanda
+
+  // Change info
+  changeReason String?  @db.Text // Motivo della modifica
+  changedById  String? // Chi ha modificato
+  changedAt    DateTime @default(now())
+
+  // Relations
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, version])
+  @@index([questionId])
+  @@index([changedAt])
+  @@map("question_versions")
+}
+
+// ==================== OPEN ANSWER SUBMISSIONS ====================
+
+model OpenAnswerSubmission {
+  id                 String  @id @default(cuid())
+  questionId         String
+  studentId          String
+  simulationResultId String? // Collegamento al risultato simulazione
+
+  // Student's answer
+  answerText String @db.Text // Testo risposta studente
+
+  // Auto-validation (keywords)
+  keywordsMatched String[] // Keywords trovate
+  keywordsMissed  String[] // Keywords mancanti (required)
+  autoScore       Float? // Punteggio automatico (0-1)
+
+  // Manual validation
+  manualScore    Float? // Punteggio manuale (0-1)
+  isValidated    Boolean   @default(false) // Se è stata validata manualmente
+  validatedById  String? // Chi ha validato
+  validatedAt    DateTime?
+  validatorNotes String?   @db.Text // Note del validatore
+
+  // Final score (uses manual if validated, otherwise auto)
+  finalScore Float?
+
+  submittedAt DateTime @default(now())
+
+  // Relations
+  question         Question          @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  student          Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  simulationResult SimulationResult? @relation(fields: [simulationResultId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@index([studentId])
+  @@index([isValidated])
+  @@index([simulationResultId])
+  @@map("open_answer_submissions")
+}
+
+// ==================== SIMULATIONS ====================
+
+model Simulation {
+  id          String               @id @default(cuid())
+  title       String
+  description String?              @db.Text
+  type        SimulationType
+  status      SimulationStatus     @default(DRAFT)
+  visibility  SimulationVisibility @default(PRIVATE)
+
+  // Creator info
+  createdById String? // User ID of creator
+  creatorRole String? // ADMIN, COLLABORATOR, STUDENT
+  isOfficial  Boolean @default(false) // Official simulations count for rankings
+
+  // Access type (virtual room or open access)
+  accessType SimulationAccessType @default(OPEN) // OPEN = entro scadenza, ROOM = stanza virtuale
+
+  // Scheduling on calendar
+  isScheduled     Boolean @default(false) // If true, appears on calendar
+  calendarEventId String? @unique // Link to calendar event if scheduled
+
+  // Timing
+  startDate       DateTime? // When simulation becomes available
+  endDate         DateTime? // When simulation closes
+  durationMinutes Int // Duration in minutes (0 = no time limit)
+
+  // Configuration
+  totalQuestions     Int
+  showResults        Boolean @default(true) // Show results immediately after completion
+  showCorrectAnswers Boolean @default(true) // Show which answers were correct
+  allowReview        Boolean @default(true) // Allow review after completion
+  randomizeOrder     Boolean @default(false) // Randomize question order
+  randomizeAnswers   Boolean @default(false) // Randomize answer options order
+
+  // Scoring configuration
+  useQuestionPoints Boolean @default(false) // Use individual question points or global
+  correctPoints     Float   @default(1.5) // Points for correct answer (if not using question points)
+  wrongPoints       Float   @default(-0.4) // Points for wrong answer (negative)
+  blankPoints       Float   @default(0.0) // Points for unanswered
+
+  // Scoring targets (for official simulations)
+  maxScore     Float? // Maximum achievable score (calculated or manual)
+  passingScore Float? // Minimum score to pass
+
+  // Attempts configuration
+  isRepeatable Boolean @default(false) // Can students retry?
+  maxAttempts  Int? // Max attempts allowed (null = unlimited if repeatable)
+
+  // Paper-based mode (for in-person exams without computer)
+  isPaperBased      Boolean @default(false) // If true, exam is printed and answers entered manually
+  paperInstructions String? @db.Text // Special instructions for paper-based exams
+
+  // Attendance tracking
+  trackAttendance Boolean @default(false) // If true, attendance is recorded for this simulation
+  locationType    String? // 'ONLINE', 'IN_PERSON', 'HYBRID' - for attendance context
+  locationDetails String? // Physical location or online meeting link
+
+  // Sections configuration (for TOLC-style simulations with multiple sections)
+  hasSections Boolean @default(false) // If true, simulation has multiple timed sections
+  sections    Json? // Array of sections: [{name, durationMinutes, questionIds, subjectId}]
+
+  // Anti-cheat settings
+  enableAntiCheat     Boolean @default(false) // Enable anti-cheat measures
+  forceFullscreen     Boolean @default(false) // Force fullscreen mode
+  blockTabChange      Boolean @default(false) // Block tab/window change
+  blockCopyPaste      Boolean @default(false) // Block copy/paste
+  logSuspiciousEvents Boolean @default(false) // Log suspicious events for review
+
+  // Question selection criteria (for auto-generation)
+  subjectDistribution    Json? // {subjectId: numberOfQuestions, ...}
+  difficultyDistribution Json? // {EASY: n, MEDIUM: n, HARD: n}
+  topicIds               Json? // Array of topic IDs to include
+
+  // Assignment - flexible targeting
+  isPublic Boolean @default(false) // Available to all active students
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  createdBy     User?                  @relation("SimulationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  questions     SimulationQuestion[]
+  results       SimulationResult[]
+  assignments   SimulationAssignment[] // Specific student/group assignments
+  sessions      SimulationSession[] // Virtual room sessions
+  calendarEvent CalendarEvent?         @relation("SimulationCalendarEvent", fields: [calendarEventId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([isPublic])
+  @@index([createdById])
+  @@index([visibility])
+  @@index([isOfficial])
+  @@index([accessType])
+  @@index([isScheduled])
+  @@index([isPaperBased])
+  @@index([hasSections])
+  @@map("simulations")
+}
+
+// Flexible assignment to students, groups
+model SimulationAssignment {
+  id           String @id @default(cuid())
+  simulationId String
+
+  // Target (one of these should be set)
+  studentId String? // Assign to specific student
+  groupId   String? // Assign to student group
+
+  // Assignment status
+  status AssignmentStatus @default(ACTIVE) // ACTIVE or CLOSED
+
+  // Assignment metadata
+  assignedById String? // Who assigned it
+  assignedAt   DateTime  @default(now())
+  dueDate      DateTime? // Optional specific due date for this assignment
+  notes        String?   @db.Text // Notes for this specific assignment
+
+  // Schedule for this specific assignment
+  startDate    DateTime? // When this assignment becomes available
+  endDate      DateTime? // When this assignment closes
+  locationType String? // 'ONLINE', 'IN_PERSON', 'HYBRID'
+  createCalendarEvent Boolean @default(false) // Whether to create a calendar event for this assignment
+
+  // Relations
+  simulation Simulation           @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  student    Student?             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  group      Group?               @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  assignedBy User?                @relation("AssignmentCreator", fields: [assignedById], references: [id], onDelete: SetNull)
+  results    SimulationResult[]   // Results for this specific assignment
+  sessions   SimulationSession[]  // Virtual Room sessions for this assignment
+
+  // Note: Removed unique constraints to allow multiple assignments of the same simulation
+  // to the same student/group with different dates/schedules
+  @@index([simulationId])
+  @@index([studentId])
+  @@index([groupId])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([status])
+  @@index([simulationId, studentId]) // Composite index for queries
+  @@index([simulationId, groupId])   // Composite index for queries
+  @@map("simulation_assignments")
+}
+
+model SimulationQuestion {
+  id           String @id @default(cuid())
+  simulationId String
+  questionId   String
+  order        Int // Order in the simulation
+
+  // Optional override of question points for this simulation
+  customPoints         Float? // Override question's default points
+  customNegativePoints Float? // Override negative points
+
+  simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([simulationId, questionId])
+  @@index([simulationId])
+  @@index([questionId])
+  @@map("simulation_questions")
+}
+
+// ==================== RESULTS ====================
+
+model SimulationResult {
+  id           String  @id @default(cuid())
+  simulationId String
+  studentId    String
+  assignmentId String? // Link to specific assignment (allows multiple attempts per simulation)
+
+  // Timing
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  durationSeconds Int?
+
+  // Scoring
+  totalQuestions  Int
+  correctAnswers  Int   @default(0)
+  wrongAnswers    Int   @default(0)
+  blankAnswers    Int   @default(0)
+  totalScore      Float @default(0.0)
+  percentageScore Float @default(0.0)
+
+  // Open answer review status
+  pendingOpenAnswers Int       @default(0) // Number of open answers awaiting manual review
+  reviewedAt         DateTime? // When all open answers were reviewed
+  reviewedById       String?   // Who completed the review
+
+  // Answers (JSON array)
+  answers Json // [{questionId, answer: 'A'|'B'|'C'|'D'|'E'|'BLANK', isCorrect, timeSpent}]
+
+  // Subject breakdown (JSON)
+  subjectScores Json? // {BIOLOGIA: {correct: 5, wrong: 2, blank: 1}, ...}
+
+  // Ranking
+  rankPosition      Int?
+  totalParticipants Int?
+
+  simulation Simulation            @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  student    Student               @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assignment SimulationAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+
+  // Open answer submissions for this result
+  openAnswerSubmissions OpenAnswerSubmission[]
+
+  // Virtual room participant link
+  sessionParticipant SimulationSessionParticipant?
+
+  // Unique constraint: one result per student per simulation per assignment
+  // For simulations without assignment (public), assignmentId is null
+  @@unique([simulationId, studentId, assignmentId])
+  @@index([studentId])
+  @@index([simulationId])
+  @@index([assignmentId])
+  @@index([totalScore])
+  @@index([completedAt])
+  @@index([pendingOpenAnswers])
+  @@map("simulation_results")
+}
+
+// ==================== SIMULATION SESSIONS (Virtual Room) ====================
+
+model SimulationSession {
+  id           String  @id @default(cuid())
+  simulationId String
+  assignmentId String? // Link to specific assignment for per-assignment Virtual Rooms
+
+  // Session status
+  status SimulationSessionStatus @default(WAITING)
+
+  // Timing
+  scheduledStartAt DateTime? // Orario programmato inizio
+  actualStartAt    DateTime? // Orario effettivo inizio (quando admin avvia)
+  endedAt          DateTime? // Quando la sessione è terminata
+
+  // Session management
+  startedById String? // Admin/Collaboratore che ha avviato la sessione
+
+  // Configuration
+  waitingMessage String? @db.Text // Messaggio mostrato in sala d'attesa
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  simulation   Simulation                     @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  assignment   SimulationAssignment?          @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  participants SimulationSessionParticipant[]
+
+  @@index([simulationId])
+  @@index([assignmentId])
+  @@index([status])
+  @@index([scheduledStartAt])
+  @@map("simulation_sessions")
+}
+
+model SimulationSessionParticipant {
+  id        String @id @default(cuid())
+  sessionId String
+  studentId String
+
+  // Participation tracking
+  joinedAt    DateTime  @default(now()) // Quando è entrato nella stanza
+  readyAt     DateTime? // Quando ha segnalato di essere pronto
+  startedAt   DateTime? // Quando ha iniziato la simulazione
+  completedAt DateTime? // Quando ha completato
+
+  // Connection status (for real-time monitoring)
+  isConnected    Boolean   @default(true) // Currently connected
+  lastHeartbeat  DateTime  @default(now()) // Last activity ping
+  disconnectedAt DateTime? // When disconnected (for reconnection)
+  
+  // Kick/block status
+  isKicked     Boolean   @default(false) // Se lo studente è stato espulso
+  kickedAt     DateTime? // Quando è stato espulso
+  kickedReason String?   // Motivo dell'espulsione
+
+  // Progress tracking (for admin monitoring)
+  currentQuestionIndex Int @default(0) // Current question being viewed
+  answeredCount        Int @default(0) // Number of questions answered
+  resultId             String? @unique // Link to SimulationResult when started
+
+  // For ranking display
+  anonymousId String @default(cuid()) // ID anonimo per la graduatoria pubblica
+
+  // Relations
+  session         SimulationSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student         Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  cheatingEvents  SessionCheatingEvent[]
+  messages        SessionMessage[]
+  result          SimulationResult?        @relation(fields: [resultId], references: [id], onDelete: SetNull)
+
+  @@unique([sessionId, studentId])
+  @@index([sessionId])
+  @@index([studentId])
+  @@index([isConnected])
+  @@map("simulation_session_participants")
+}
+
+// Session cheating events - logged suspicious activities during virtual room sessions
+model SessionCheatingEvent {
+  id            String @id @default(cuid())
+  participantId String
+
+  eventType   CheatingEventType
+  description String? // Additional details
+  metadata    Json? // Browser info, timestamp details, etc.
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  participant SimulationSessionParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@index([participantId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("session_cheating_events")
+}
+
+// Session messages - bidirectional messages between admin/collaborator and student
+model SessionMessage {
+  id            String @id @default(cuid())
+  participantId String
+
+  senderType SessionMessageSender // ADMIN or STUDENT
+  senderId   String? // User ID of the sender (admin/collaborator or student's user)
+  message    String  @db.Text
+
+  isRead    Boolean   @default(false)
+  readAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  participant SimulationSessionParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  sender      User?                        @relation("SessionMessageSender", fields: [senderId], references: [id], onDelete: SetNull)
+
+  @@index([participantId])
+  @@index([senderType])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("session_messages")
+}
+
+// ==================== STATS & ANALYTICS ====================
+
+model StudentStats {
+  id        String @id @default(cuid())
+  studentId String @unique
+
+  // Overall stats
+  totalSimulations    Int   @default(0)
+  totalQuestions      Int   @default(0)
+  totalCorrectAnswers Int   @default(0)
+  avgScore            Float @default(0.0)
+  bestScore           Float @default(0.0)
+
+  // Subject stats (JSON)
+  subjectStats Json? // {BIOLOGIA: {total: 100, correct: 75, avg: 0.75}, ...}
+
+  // Time stats
+  totalStudyTimeMinutes Int @default(0)
+  avgSimulationTime     Int @default(0)
+
+  // Streaks
+  currentStreak    Int       @default(0)
+  longestStreak    Int       @default(0)
+  lastActivityDate DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("student_stats")
+}
+
+// ==================== ALERTS & NOTIFICATIONS ====================
+
+model Alert {
+  id      String    @id @default(cuid())
+  userId  String? // null = broadcast to all users
+  title   String
+  message String    @db.Text
+  type    AlertType @default(INFO)
+  isRead  Boolean   @default(false)
+
+  // Optional link
+  linkUrl  String?
+  linkText String?
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([isRead])
+  @@map("alerts")
+}
+
+// ==================== EVENTS & CALENDAR ====================
+
+// Legacy Event model - kept for migration, use CalendarEvent instead
+model Event {
+  id          String   @id @default(cuid())
+  title       String
+  description String?  @db.Text
+  startDate   DateTime
+  endDate     DateTime
+  location    String?
+  isPublic    Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String? // Admin userId
+
+  @@index([startDate])
+  @@index([isPublic])
+  @@map("events")
+}
+
+// New comprehensive Calendar Event system
+model CalendarEvent {
+  id          String  @id @default(cuid())
+  title       String
+  description String? @db.Text
+
+  // Event type
+  type EventType @default(OTHER)
+
+  // Timing
+  startDate DateTime
+  endDate   DateTime
+  isAllDay  Boolean  @default(false)
+
+  // Location
+  locationType    EventLocationType @default(IN_PERSON)
+  locationDetails String? // Nome aula, indirizzo, ecc.
+  onlineLink      String? // Link meet/zoom per eventi online
+
+  // Creator
+  createdById String
+
+  // Visibility & Access
+  isPublic Boolean @default(false) // Visibile a tutti
+
+  // Notifications
+  sendEmailInvites   Boolean @default(false) // Invia email agli invitati
+  sendEmailReminders Boolean @default(false) // Invia promemoria email
+  reminderMinutes    Int? // Minuti prima per il promemoria
+
+  // Recurrence
+  isRecurring         Boolean              @default(false)
+  recurrenceFrequency RecurrenceFrequency?
+  recurrenceEndDate   DateTime? // Quando finisce la ricorrenza
+  parentEventId       String? // Per eventi ricorrenti, link al parent
+
+  // Link to simulation (if type = SIMULATION)
+  // The relation is defined on Simulation model with calendarEventId
+
+  // Status
+  isCancelled   Boolean   @default(false)
+  cancelledAt   DateTime?
+  cancelledById String?
+  cancelReason  String?   @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  createdBy     User              @relation("EventCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  parentEvent   CalendarEvent?    @relation("RecurringEvents", fields: [parentEventId], references: [id], onDelete: SetNull)
+  childEvents   CalendarEvent[]   @relation("RecurringEvents")
+  invitations   EventInvitation[]
+  attendances   Attendance[]
+  simulation    Simulation?       @relation("SimulationCalendarEvent")
+  staffAbsences StaffAbsence[] // Assenze correlate a questo evento
+
+  @@index([type])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([createdById])
+  @@index([isPublic])
+  @@index([isCancelled])
+  @@index([parentEventId])
+  @@map("calendar_events")
+}
+
+// Event invitations (who is invited to an event)
+model EventInvitation {
+  id      String @id @default(cuid())
+  eventId String
+
+  // Invite target (one of these should be set)
+  userId  String? // Invite specific user (admin/collaborator/student)
+  groupId String? // Invite entire group
+
+  // Response
+  status       EventInviteStatus @default(PENDING)
+  respondedAt  DateTime?
+  responseNote String?           @db.Text
+
+  // Email tracking
+  emailSentAt DateTime?
+  emailError  String?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User?         @relation("EventInvitee", fields: [userId], references: [id], onDelete: Cascade)
+  group Group?        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@unique([eventId, groupId])
+  @@index([eventId])
+  @@index([userId])
+  @@index([groupId])
+  @@index([status])
+  @@map("event_invitations")
+}
+
+// ==================== ATTENDANCE (Registro Presenze) ====================
+
+// Custom attendance statuses (admin-defined)
+model AttendanceStatusType {
+  id          String  @id @default(cuid())
+  name        String  @unique // "In ritardo lieve", "Uscita anticipata", etc.
+  code        String  @unique // "LATE_MILD", "EARLY_EXIT", etc.
+  description String?
+  color       String? // Hex color for UI
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  createdBy String? // Admin userId
+
+  attendances Attendance[]
+
+  @@index([isActive])
+  @@map("attendance_status_types")
+}
+
+model Attendance {
+  id        String @id @default(cuid())
+  eventId   String
+  studentId String
+
+  // Status (use standard enum or custom)
+  status         AttendanceStatus @default(PRESENT)
+  customStatusId String? // If status = CUSTOM, link to custom status
+
+  // Details
+  notes       String?   @db.Text // Note aggiuntive
+  arrivalTime DateTime? // Orario effettivo arrivo (per ritardi)
+  leaveTime   DateTime? // Orario uscita anticipata
+
+  // Recording
+  recordedById String // Admin/Collaboratore che ha registrato
+  recordedAt   DateTime @default(now())
+
+  // Edit history
+  lastEditedById String?
+  lastEditedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  event        CalendarEvent         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  student      Student               @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  customStatus AttendanceStatusType? @relation(fields: [customStatusId], references: [id], onDelete: SetNull)
+  recordedBy   User                  @relation("AttendanceRecorder", fields: [recordedById], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, studentId])
+  @@index([eventId])
+  @@index([studentId])
+  @@index([status])
+  @@index([recordedById])
+  @@map("attendances")
+}
+
+// ==================== STAFF ABSENCES ====================
+
+model StaffAbsence {
+  id String @id @default(cuid())
+
+  // Who is absent
+  requesterId String // User ID of staff member requesting absence
+
+  // Absence period
+  startDate DateTime
+  endDate   DateTime
+  isAllDay  Boolean  @default(true)
+
+  // Reason
+  reason   String  @db.Text
+  isUrgent Boolean @default(false)
+
+  // Related events affected by this absence
+  affectedEventId String? // Primary event affected (optional)
+
+  // Status & Approval
+  status        StaffAbsenceStatus @default(PENDING)
+  confirmedById String? // Admin who confirmed
+  confirmedAt   DateTime?
+  adminNotes    String?            @db.Text
+
+  // Substitution
+  substituteId          String? // User ID of substitute (if assigned)
+  substituteConfirmedAt DateTime? // When substitute confirmed
+
+  // Notifications
+  studentsNotified   Boolean   @default(false)
+  studentsNotifiedAt DateTime?
+  emailsSentAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  requester     User           @relation("AbsenceRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  confirmedBy   User?          @relation("AbsenceConfirmer", fields: [confirmedById], references: [id], onDelete: SetNull)
+  substitute    User?          @relation("AbsenceSubstitute", fields: [substituteId], references: [id], onDelete: SetNull)
+  affectedEvent CalendarEvent? @relation(fields: [affectedEventId], references: [id], onDelete: SetNull)
+
+  @@index([requesterId])
+  @@index([status])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([substituteId])
+  @@index([affectedEventId])
+  @@map("staff_absences")
+}
+
+// ==================== CONTRACTS ====================
+
+enum ContractTargetRole {
+  STUDENT
+  COLLABORATOR
+}
+
+model ContractTemplate {
+  id          String             @id @default(cuid())
+  name        String // "Corso Annuale Medicina", "Corso Intensivo", etc.
+  description String?            @db.Text
+  content     String             @db.Text // HTML/Markdown del contratto con placeholder
+  price       Float? // Prezzo opzionale
+  duration    String? // "12 mesi", "6 mesi", etc.
+  targetRole  ContractTargetRole @default(STUDENT) // Per chi è destinato questo template
+  isActive    Boolean            @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String? // Admin userId
+
+  contracts Contract[]
+
+  @@index([isActive])
+  @@index([targetRole])
+  @@map("contract_templates")
+}
+
+model Contract {
+  id             String  @id @default(cuid())
+  studentId      String?
+  collaboratorId String?
+  templateId     String
+
+  // Contract status
+  status ContractStatus @default(PENDING)
+
+  // Content snapshot (frozen at assignment time)
+  contentSnapshot String @db.Text // HTML with student data filled in
+
+  // Signature
+  signedAt           DateTime?
+  signatureData      String?   @db.Text // Base64 signature image or digital signature data
+  signatureIp        String? // IP address at signing
+  signatureUserAgent String? // Browser info at signing
+
+  // Token for email link
+  signToken          String    @unique @default(cuid())
+  signTokenExpiresAt DateTime?
+
+  // Download permission - admin controls if user can download the signed contract
+  canDownload Boolean @default(false)
+
+  // Timestamps
+  assignedAt DateTime  @default(now())
+  expiresAt  DateTime? // Deadline for signing
+
+  // Revocation info (for revoked contracts that were previously signed)
+  revokedAt   DateTime?
+  revokedBy   String? // Admin userId who revoked
+  revokeNotes String? @db.Text // Reason for revocation
+
+  // Admin notes
+  adminNotes String? @db.Text
+  assignedBy String? // Admin userId who assigned
+
+  // Relations
+  student      Student?         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  collaborator Collaborator?    @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
+  template     ContractTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  @@index([studentId])
+  @@index([collaboratorId])
+  @@index([templateId])
+  @@index([status])
+  @@index([signToken])
+  @@map("contracts")
+}
+
+// ==================== ADMIN NOTIFICATIONS ====================
+
+model AdminNotification {
+  id      String           @id @default(cuid())
+  type    NotificationType
+  title   String
+  message String           @db.Text
+
+  // Related entities
+  studentId      String? // Related student (if applicable)
+  collaboratorId String? // Related collaborator (if applicable)
+  contractId     String? // Related contract (if applicable)
+
+  // Read status per admin (JSON: {adminId: readAt})
+  readBy Json @default("{}")
+
+  // Priority
+  isUrgent Boolean @default(false)
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+
+  @@index([type])
+  @@index([createdAt])
+  @@index([isUrgent])
+  @@map("admin_notifications")
+}
+
+// ==================== MESSAGING SYSTEM ====================
+
+// Conversation (thread between users)
+model Conversation {
+  id   String           @id @default(cuid())
+  type ConversationType @default(DIRECT)
+
+  // For group conversations
+  name        String? // Nome del gruppo (opzionale per DIRECT)
+  description String? @db.Text
+
+  // Metadata
+  isArchived Boolean @default(false)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastMessageAt DateTime?
+
+  // Relations
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([type])
+  @@index([lastMessageAt])
+  @@index([isArchived])
+  @@map("conversations")
+}
+
+// Participants in a conversation
+model ConversationParticipant {
+  id             String @id @default(cuid())
+  conversationId String
+  userId         String
+
+  // Participant status
+  isAdmin    Boolean   @default(false) // Admin del gruppo (per conversazioni GROUP)
+  isMuted    Boolean   @default(false) // Notifiche silenziate
+  isArchived Boolean   @default(false) // Archiviata per questo utente
+  leftAt     DateTime? // Se ha lasciato la conversazione
+
+  // Read tracking
+  lastReadAt    DateTime? // Ultimo messaggio letto
+  lastReadMsgId String? // ID ultimo messaggio letto
+
+  joinedAt DateTime @default(now())
+
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([conversationId])
+  @@index([userId])
+  @@index([lastReadAt])
+  @@map("conversation_participants")
+}
+
+// Individual messages
+model Message {
+  id             String @id @default(cuid())
+  conversationId String
+  senderId       String
+
+  // Content
+  content String @db.Text
+
+  // Attachments (optional)
+  attachmentUrl      String? // URL file allegato
+  attachmentName     String? // Nome file
+  attachmentSize     Int? // Dimensione in bytes
+  attachmentMimeType String? // MIME type
+
+  // Status
+  status    MessageStatus @default(SENT)
+  isEdited  Boolean       @default(false)
+  isDeleted Boolean       @default(false) // Soft delete
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([createdAt])
+  @@index([status])
+  @@map("messages")
+}
+
+// ==================== UNIFIED NOTIFICATION SYSTEM ====================
+
+// Notifications for all users (students, collaborators, admins)
+model Notification {
+  id     String           @id @default(cuid())
+  userId String // Destinatario della notifica
+  type   NotificationType
+
+  // Content
+  title   String
+  message String  @db.Text
+  iconUrl String? // Icona personalizzata (opzionale)
+
+  // Link to related entity (click action)
+  linkUrl        String? // URL per navigazione al click
+  linkType       String? // Tipo di link (event, simulation, contract, etc.)
+  linkEntityType String? // Tipo di entità collegata per cleanup
+  linkEntityId   String? // ID dell'entità collegata
+
+  // Channel & Delivery
+  channel     NotificationChannel @default(IN_APP)
+  emailSent   Boolean             @default(false)
+  emailSentAt DateTime?
+  emailError  String?
+
+  // Status
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  isUrgent   Boolean   @default(false)
+  isArchived Boolean   @default(false) // Archived notifications hidden from main view
+
+  // Grouping (per raggruppare notifiche simili)
+  groupKey String? // es. "simulation_123" per raggruppare notifiche della stessa simulazione
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime? // Scadenza notifica (auto-dismiss)
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([isRead])
+  @@index([createdAt])
+  @@index([isUrgent])
+  @@index([isArchived])
+  @@index([groupKey])
+  @@map("notifications")
+}
+
+// User notification preferences
+model NotificationPreference {
+  id     String @id @default(cuid())
+  userId String
+
+  // Notification type
+  notificationType NotificationType
+
+  // Channels enabled
+  inAppEnabled Boolean @default(true)
+  emailEnabled Boolean @default(true)
+
+  // Quiet hours (optional)
+  quietHoursStart String? // "22:00" - Ora inizio silenzio
+  quietHoursEnd   String? // "08:00" - Ora fine silenzio
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, notificationType])
+  @@index([userId])
+  @@map("notification_preferences")
+}
+
+// ==================== LEARNING MATERIALS ====================
+
+enum MaterialType {
+  PDF
+  VIDEO
+  LINK
+  DOCUMENT
+}
+
+enum MaterialVisibility {
+  NONE // Not assigned to anyone
+  ALL_STUDENTS // Visible to all active students
+  GROUP_BASED // Based on student groups
+  SELECTED_STUDENTS // Selected individual students
+}
+
+// Material Category - Container for grouping materials (with visibility)
+model MaterialCategory {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  icon        String? // Lucide icon name
+  order       Int     @default(0)
+  isActive    Boolean @default(true)
+
+  // Visibility settings (same as Material)
+  visibility MaterialVisibility @default(ALL_STUDENTS)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String? // userId who created it
+
+  materials     MaterialCategoryLink[]
+  groupAccess   MaterialCategoryGroupAccess[]
+  studentAccess MaterialCategoryStudentAccess[]
+
+  @@index([isActive])
+  @@index([order])
+  @@index([visibility])
+  @@map("material_categories")
+}
+
+// Group-based access for categories
+model MaterialCategoryGroupAccess {
+  id         String @id @default(cuid())
+  categoryId String
+  groupId    String
+
+  category MaterialCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  group    Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, groupId])
+  @@index([categoryId])
+  @@index([groupId])
+  @@map("material_category_group_access")
+}
+
+// Individual student access for categories
+model MaterialCategoryStudentAccess {
+  id         String @id @default(cuid())
+  categoryId String
+  studentId  String
+
+  category MaterialCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  student  Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, studentId])
+  @@index([categoryId])
+  @@index([studentId])
+  @@map("material_category_student_access")
+}
+
+// Junction table for Material <-> Category many-to-many relationship
+model MaterialCategoryLink {
+  id         String @id @default(cuid())
+  materialId String
+  categoryId String
+  createdAt  DateTime @default(now())
+
+  material Material         @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  category MaterialCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([materialId, categoryId])
+  @@index([materialId])
+  @@index([categoryId])
+  @@map("material_category_links")
+}
+
+// Custom subjects managed by admin (for materials AND questions)
+model CustomSubject {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  code        String  @unique // Short code like "BIO", "CHI", "FIS"
+  description String?
+  color       String? // Hex color for UI
+  icon        String? // Lucide icon name
+  order       Int     @default(0)
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  materials     Material[]
+  collaborators CollaboratorSubject[] // Collaboratori che insegnano questa materia
+  topics        Topic[] // Argomenti della materia
+  questions     Question[] // Domande di questa materia
+
+  @@index([isActive])
+  @@index([order])
+  @@map("custom_subjects")
+}
+
+// Topics (Argomenti) - Main topics within a subject
+model Topic {
+  id          String          @id @default(cuid())
+  name        String
+  description String?
+  difficulty  DifficultyLevel @default(MEDIUM)
+  order       Int             @default(0)
+  isActive    Boolean         @default(true)
+
+  subjectId String
+  subject   CustomSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  subTopics SubTopic[]
+  questions Question[] // Domande di questo argomento
+  materials Material[] // Materiali di questo argomento
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String? // userId who created it
+
+  @@unique([subjectId, name])
+  @@index([subjectId])
+  @@index([isActive])
+  @@index([order])
+  @@map("topics")
+}
+
+// SubTopics (Sotto-argomenti) - Sub-topics within a topic
+model SubTopic {
+  id          String          @id @default(cuid())
+  name        String
+  description String?
+  difficulty  DifficultyLevel @default(MEDIUM)
+  order       Int             @default(0)
+  isActive    Boolean         @default(true)
+
+  topicId String
+  topic   Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  questions Question[] // Domande di questo sotto-argomento
+  materials Material[] // Materiali di questo sotto-argomento
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String? // userId who created it
+
+  @@unique([topicId, name])
+  @@index([topicId])
+  @@index([isActive])
+  @@index([order])
+  @@map("sub_topics")
+}
+
+model Material {
+  id          String       @id @default(cuid())
+  title       String
+  description String?      @db.Text
+  type        MaterialType
+
+  // File/URL info
+  fileUrl      String? // Firebase Storage URL for PDF/videos
+  fileName     String? // Original filename
+  fileSize     Int? // Size in bytes
+  externalUrl  String? // For external links
+  thumbnailUrl String? // Thumbnail for videos
+
+  // Visibility settings
+  visibility MaterialVisibility @default(ALL_STUDENTS)
+
+  // Classification: Subject > Topic > SubTopic
+  subjectId  String?
+  topicId    String?
+  subTopicId String?
+
+  // Metadata
+  tags     String[]
+  order    Int      @default(0)
+  isActive Boolean  @default(true)
+
+  // Stats
+  viewCount     Int @default(0)
+  downloadCount Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String? // Admin userId
+
+  // Relations
+  subject       CustomSubject?            @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  topic         Topic?                    @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  subTopic      SubTopic?                 @relation(fields: [subTopicId], references: [id], onDelete: SetNull)
+  categories    MaterialCategoryLink[]
+  groupAccess   MaterialGroupAccess[]
+  studentAccess MaterialStudentAccess[]
+
+  @@index([type])
+  @@index([visibility])
+  @@index([subjectId])
+  @@index([topicId])
+  @@index([subTopicId])
+  @@index([isActive])
+  @@map("materials")
+}
+
+// Group-based access (linked to student groups)
+model MaterialGroupAccess {
+  id         String @id @default(cuid())
+  materialId String
+  groupId    String
+
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([materialId, groupId])
+  @@index([materialId])
+  @@index([groupId])
+  @@map("material_group_access")
+}
+
+// Individual student access
+model MaterialStudentAccess {
+  id         String   @id @default(cuid())
+  materialId String
+  studentId  String
+  grantedAt  DateTime @default(now())
+  grantedBy  String? // Admin userId
+
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([materialId, studentId])
+  @@index([materialId])
+  @@index([studentId])
+  @@map("material_student_access")
+}
+
+// ==================== JOB APPLICATIONS ====================
+
+enum JobApplicationStatus {
+  PENDING // In attesa di revisione
+  REVIEWING // In corso di valutazione
+  APPROVED // Approvata (collaboratore creato)
+  REJECTED // Rifiutata
+}
+
+model JobApplication {
+  id String @id @default(cuid())
+
+  // Candidato info
+  name  String
+  email String
+  phone String
+
+  // Candidatura
+  subject    String // Oggetto della candidatura
+  materia    String // Materia di competenza indicata
+  message    String  @db.Text // Messaggio/presentazione
+  cvUrl      String? // URL del CV su Firebase Storage
+  cvFileName String? // Nome originale del file CV
+
+  // Status
+  status JobApplicationStatus @default(PENDING)
+
+  // Admin review
+  adminNotes String?   @db.Text // Note dell'admin
+  reviewedAt DateTime?
+  reviewedBy String? // Admin userId che ha revisionato
+
+  // Se approvata, link al collaboratore creato
+  collaboratorId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([email])
+  @@map("job_applications")
+}
+
+// ==================== CONTACT REQUESTS ====================
+
+enum ContactRequestStatus {
+  PENDING // In attesa di risposta
+  READ // Letta
+  REPLIED // Risposta inviata
+  ARCHIVED // Archiviata
+}
+
+model ContactRequest {
+  id String @id @default(cuid())
+
+  // Richiedente info
+  name  String
+  email String
+  phone String
+
+  // Richiesta
+  subject String // Oggetto della richiesta
+  message String @db.Text // Messaggio
+
+  // Status
+  status ContactRequestStatus @default(PENDING)
+
+  // Admin review
+  adminNotes String?   @db.Text // Note dell'admin
+  readAt     DateTime?
+  repliedAt  DateTime?
+  handledBy  String? // Admin userId che ha gestito
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([email])
+  @@map("contact_requests")
+}
+
+// ==================== COLLABORATOR SUBJECTS ====================
+
+// Many-to-many: un collaboratore può insegnare più materie
+model CollaboratorSubject {
+  id             String @id @default(cuid())
+  collaboratorId String
+  subjectId      String
+
+  // Indica se è la materia principale
+  isPrimary Boolean @default(false)
+
+  assignedAt DateTime @default(now())
+
+  collaborator Collaborator  @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
+  subject      CustomSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([collaboratorId, subjectId])
+  @@index([collaboratorId])
+  @@index([subjectId])
+  @@map("collaborator_subjects")
+}
+
+// ==================== GROUPS ====================
+
+enum GroupType {
+  STUDENTS // Gruppo di soli studenti
+  COLLABORATORS // Gruppo di soli collaboratori
+  MIXED // Gruppo misto (studenti + collaboratori)
+}
+
+model Group {
+  id          String    @id @default(cuid())
+  name        String
+  description String?   @db.Text
+  color       String? // Colore del gruppo (hex)
+  type        GroupType @default(MIXED)
+  isActive    Boolean   @default(true)
+
+  // Riferimenti (responsabili del gruppo)
+  referenceStudentId      String? // Studente di riferimento
+  referenceCollaboratorId String? // Collaboratore di riferimento
+  referenceAdminId        String? // Admin di riferimento
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  referenceStudent      Student?      @relation("GroupReferenceStudent", fields: [referenceStudentId], references: [id], onDelete: SetNull)
+  referenceCollaborator Collaborator? @relation("GroupReferenceCollaborator", fields: [referenceCollaboratorId], references: [id], onDelete: SetNull)
+  referenceAdmin        Admin?        @relation("GroupReferenceAdmin", fields: [referenceAdminId], references: [id], onDelete: SetNull)
+  members               GroupMember[]
+
+  // Simulation assignments
+  simulationAssignments SimulationAssignment[]
+
+  // Material access
+  materialAccess         MaterialGroupAccess[]
+  materialCategoryAccess MaterialCategoryGroupAccess[]
+
+  // Event invitations
+  eventInvitations EventInvitation[]
+
+  @@index([type])
+  @@index([isActive])
+  @@map("groups")
+}
+
+model GroupMember {
+  id      String @id @default(cuid())
+  groupId String
+
+  // Solo uno di questi sarà popolato
+  studentId      String?
+  collaboratorId String?
+
+  joinedAt DateTime @default(now())
+
+  // Relations
+  group        Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  student      Student?      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  collaborator Collaborator? @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, studentId])
+  @@unique([groupId, collaboratorId])
+  @@index([groupId])
+  @@index([studentId])
+  @@index([collaboratorId])
+  @@map("group_members")
+}

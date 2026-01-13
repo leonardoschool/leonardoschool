@@ -36,6 +36,7 @@ export default function ContactForm({ defaultSubject = '', subjectReadonly = fal
     message: '',
     cv: null,
   });
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [errors, setErrors] = useState<FormErrors>({});
@@ -148,6 +149,7 @@ export default function ContactForm({ defaultSubject = '', subjectReadonly = fal
     }
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {

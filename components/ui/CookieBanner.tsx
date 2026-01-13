@@ -1,18 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 
-export default function CookieBanner() {
-  const [showBanner, setShowBanner] = useState(false);
+// Helper function to check cookie acceptance on client
+function getInitialBannerState(): boolean {
+  if (typeof window === 'undefined') return false;
+  return !localStorage.getItem('cookiesAccepted');
+}
 
-  useEffect(() => {
-    // Check if user has already accepted cookies
-    const cookiesAccepted = localStorage.getItem('cookiesAccepted');
-    if (!cookiesAccepted) {
-      setShowBanner(true);
-    }
-  }, []);
+export default function CookieBanner() {
+  // Use lazy initializer to avoid useEffect setState
+  const [showBanner, setShowBanner] = useState(getInitialBannerState);
 
   const handleAccept = () => {
     localStorage.setItem('cookiesAccepted', 'true');
@@ -25,7 +24,7 @@ export default function CookieBanner() {
     <div className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-gray-200 p-4 z-50 shadow-2xl animate-fadeIn">
       <div className="container mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
         <p className="text-sm text-center sm:text-left text-gray-700">
-          Utilizziamo il localStorage per salvare le tue preferenze sul sito. 
+          Utilizziamo i cookie per salvare le tue preferenze sul sito. 
           Per maggiori informazioni visita la sezione{' '}
           <Link
             href="/privacy-policy.pdf"

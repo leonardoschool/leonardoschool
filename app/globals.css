@@ -1,3 +1,5 @@
+@import 'katex/dist/katex.min.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -12,10 +14,44 @@
 }
 
 :root {
+  /* Colori Brand Leonardo School */
   --primary-red: #a8012b;
-  --primary-black: #000000;
-  --light-gray: #f8f9fa;
+  --primary-red-dark: #8a0125;
+  --primary-red-light: #d1163b;
+  
+  /* Light Mode Colors - Pulito e professionale */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9fafb;
+  --bg-tertiary: #f3f4f6;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-tertiary: #6b7280;
+  --border-color: #e5e7eb;
+  --shadow-color: rgba(0, 0, 0, 0.1);
+  
+  /* Colori Materie */
+  --color-matematica: #D54F8A;
+  --color-biologia: #68BCE8;
+  --color-chimica: #42BFED;
+  --color-fisica: #EEB550;
+  --color-logica: #B6B21D;
+  --color-cultura: #E7418B;
+  
   --font-bahnschrift: 'Bahnschrift', system-ui, -apple-system, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Dark Mode Colors - Slate moderno e sofisticato */
+    --bg-primary: #0f172a;      /* slate-900 */
+    --bg-secondary: #1e293b;    /* slate-800 */
+    --bg-tertiary: #334155;     /* slate-700 */
+    --text-primary: #f1f5f9;    /* slate-100 */
+    --text-secondary: #94a3b8;  /* slate-400 */
+    --text-tertiary: #64748b;   /* slate-500 */
+    --border-color: #334155;    /* slate-700 */
+    --shadow-color: rgba(0, 0, 0, 0.5);
+  }
 }
 
 * {
@@ -27,6 +63,9 @@
 body {
   overflow-x: hidden;
   font-family: var(--font-bahnschrift), system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Custom scrollbar */
@@ -35,7 +74,7 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: var(--bg-secondary);
 }
 
 ::-webkit-scrollbar-thumb {
@@ -44,7 +83,17 @@ body {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #8a0125;
+  background: var(--primary-red-dark);
+}
+
+/* Hide scrollbar utility class */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
 }
 
 /* Smooth scroll */
@@ -293,6 +342,63 @@ html {
   40% {
     transform: scale(1);
   }
+}
+
+/* Login Page Animations */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.8s ease-out;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.6s ease-out;
 }
 
 
