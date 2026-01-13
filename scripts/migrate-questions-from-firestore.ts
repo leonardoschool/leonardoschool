@@ -28,7 +28,8 @@
  */
 
 import { config } from 'dotenv';
-config({ path: '.env' });
+import { resolve } from 'path';
+config({ path: resolve(__dirname, '../.env') });
 
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';

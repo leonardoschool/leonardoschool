@@ -4,25 +4,51 @@
  * - Crea utenti seed (admin, collaboratori, studenti) su Firebase + PostgreSQL
  *
  * Usage: pnpm seed
+ * 
+ * File Firebase usato:
+ * - TEST/LOCAL: leonardo-school-1cd72-firebase-adminsdk-fbsvc-6c031d9728.json
+ * - PROD: leonardo-school-service-account.json (o env var)
  */
 
+// IMPORTANTE: caricare dotenv PRIMA di qualsiasi altro import
 import { config } from 'dotenv';
-config({ path: '.env' });
+import { resolve } from 'path';
+config({ path: resolve(__dirname, '../.env') });
 
+// Ora gli import che usano process.env
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { UserRole } from '@prisma/client';
+import { UserRole, PrismaClient } from '@prisma/client';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-import prisma from '../lib/prisma/client';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+
+// Crea Prisma client direttamente qui (dopo che dotenv ha caricato DATABASE_URL)
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 const TEST_PASSWORD = 'TestPassword123!';
 
-// Firebase init
+// Determina ambiente da DATABASE_URL (il modo più affidabile)
+// Branch main di Neon prod ha 'ep-mute-heart', branch test ha 'ep-sweet-tooth'
+const isProduction = process.env.DATABASE_URL?.includes('ep-mute-heart') ?? false;
+
+console.log(`\n🌍 Ambiente rilevato: ${isProduction ? 'PRODUCTION' : 'TEST/LOCAL'}`);
+console.log(`   Database: ${process.env.DATABASE_URL?.split('@')[1]?.split('/')[0] || 'localhost'}\n`);
+
+// Firebase init - file diverso per ambiente
 let serviceAccount: Record<string, unknown>;
-const serviceAccountPath = join(process.cwd(), 'leonardo-school-1cd72-firebase-adminsdk-fbsvc-6c031d9728.json');
+
+// Prova file locale appropriato per ambiente
+const testServiceAccountPath = join(process.cwd(), 'leonardo-school-1cd72-firebase-adminsdk-fbsvc-6c031d9728.json');
+const prodServiceAccountPath = join(process.cwd(), 'leonardo-school-service-account.json');
+const serviceAccountPath = isProduction ? prodServiceAccountPath : testServiceAccountPath;
+
 if (existsSync(serviceAccountPath)) {
-  console.log('📄 Loading Firebase credentials from local JSON file...');
+  console.log(`📄 Loading Firebase credentials from: ${isProduction ? 'PROD' : 'TEST'} JSON file...`);
+  console.log(`   File: ${serviceAccountPath}`);
   serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf8'));
 } else if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
   console.log('🔑 Loading Firebase credentials from environment variable...');
@@ -33,7 +59,8 @@ if (existsSync(serviceAccountPath)) {
 
 if (!serviceAccount.project_id) {
   console.error('❌ Firebase credentials not found!');
-  console.error('   Put the JSON file or set FIREBASE_SERVICE_ACCOUNT_KEY');
+  console.error(`   Expected file: ${serviceAccountPath}`);
+  console.error('   Or set FIREBASE_SERVICE_ACCOUNT_KEY env var');
   process.exit(1);
 }
 

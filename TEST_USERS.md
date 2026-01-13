@@ -31,11 +31,6 @@ Questo file contiene le credenziali degli utenti di test creati dallo script di 
 | collab3@leonardoschool.test | Giulia Marino | 3333456789 | MRNGLI90C03H501Z | TestPassword123! |
 | collab4@leonardoschool.test | Francesco Romano | 3334567890 | RMNFNC88D04H501Z | TestPassword123! |
 | collab5@leonardoschool.test | Sara Colombo | 3335678901 | CLMSRA92E05H501Z | TestPassword123! |
-| collab6@leonardoschool.test | Alessandro Bruno | 3336789012 | BRNLSN87F06H501Z | TestPassword123! |
-| collab7@leonardoschool.test | Elena Gallo | 3337890123 | GLLLNE91G07H501Z | TestPassword123! |
-| collab8@leonardoschool.test | Davide Costa | 3338901234 | CSTDVD89H08H501Z | TestPassword123! |
-| collab9@leonardoschool.test | Chiara Conti | 3339012345 | CNTCHR93I09H501Z | TestPassword123! |
-| collab10@leonardoschool.test | Luca Giordano | 3340123456 | GRDLCU86L10H501Z | TestPassword123! |
 
 ---
 
@@ -48,21 +43,6 @@ Questo file contiene le credenziali degli utenti di test creati dallo script di 
 | studente3@leonardoschool.test | Lorenzo Fontana | 3343456789 | Napoli | TestPassword123! |
 | studente4@leonardoschool.test | Giulia Santoro | 3344567890 | Torino | TestPassword123! |
 | studente5@leonardoschool.test | Alessandro Moretti | 3345678901 | Bologna | TestPassword123! |
-| studente6@leonardoschool.test | Francesca Leone | 3346789012 | Firenze | TestPassword123! |
-| studente7@leonardoschool.test | Marco Benedetti | 3347890123 | Genova | TestPassword123! |
-| studente8@leonardoschool.test | Valentina Serra | 3348901234 | Palermo | TestPassword123! |
-| studente9@leonardoschool.test | Gabriele Vitale | 3349012345 | Catania | TestPassword123! |
-| studente10@leonardoschool.test | Martina Orlando | 3350123456 | Venezia | TestPassword123! |
-| studente11@leonardoschool.test | Andrea Ferri | 3351234567 | Verona | TestPassword123! |
-| studente12@leonardoschool.test | Beatrice Mancini | 3352345678 | Padova | TestPassword123! |
-| studente13@leonardoschool.test | Riccardo Greco | 3353456789 | Trieste | TestPassword123! |
-| studente14@leonardoschool.test | Camilla Russo | 3354567890 | Bari | TestPassword123! |
-| studente15@leonardoschool.test | Tommaso Marchetti | 3355678901 | Brescia | TestPassword123! |
-| studente16@leonardoschool.test | Alice Monti | 3356789012 | Parma | TestPassword123! |
-| studente17@leonardoschool.test | Edoardo Barbieri | 3357890123 | Modena | TestPassword123! |
-| studente18@leonardoschool.test | Emma Silvestri | 3358901234 | Reggio Emilia | TestPassword123! |
-| studente19@leonardoschool.test | Nicolò Lombardi | 3359012345 | Piacenza | TestPassword123! |
-| studente20@leonardoschool.test | Greta Pellegrini | 3360123456 | Ravenna | TestPassword123! |
 
 ---
 

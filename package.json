@@ -22,9 +22,9 @@
     "cleanup": "tsx scripts/cleanup.ts",
     "cleanup:dry": "tsx scripts/cleanup.ts --dry-run",
     "cleanup:stats": "tsx scripts/cleanup.ts --stats",
-    "migrate:questions": "tsx scripts/migrate-questions-from-firestore.ts",
-    "migrate:questions:dry": "tsx scripts/migrate-questions-from-firestore.ts --dry-run",
-    "migrate:questions:inspect": "tsx scripts/migrate-questions-from-firestore.ts --inspect"
+    "migrate:questions": "tsx --env-file .env scripts/migrate-questions-from-firestore.ts",
+    "migrate:questions:dry": "tsx --env-file .env scripts/migrate-questions-from-firestore.ts --dry-run",
+    "migrate:questions:inspect": "tsx --env-file .env scripts/migrate-questions-from-firestore.ts --inspect"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
