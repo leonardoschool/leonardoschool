@@ -57,13 +57,14 @@ export default function SimulationResultPage({ params }: { params: Promise<{ id:
     if (userError || (!userLoading && !user)) {
       const handleLogout = async () => {
         try {
+          // Solo signOut - i cookie vengono puliti dal listener onIdTokenChanged in useAuth
+          // o direttamente qui per garantire pulizia
           await auth.signOut();
-          await fetch('/api/auth/logout', { method: 'POST' });
+          await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
         } catch (e) {
           console.error('Logout error:', e);
-        } finally {
-          router.push('/auth/login');
         }
+        router.push('/auth/login');
       };
       handleLogout();
     }
