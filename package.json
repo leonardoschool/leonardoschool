@@ -5,9 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "dev:lan": "next dev -H 0.0.0.0",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
+    "postinstall": "prisma generate",
     "env:local": "tsx scripts/switch-env.ts local",
     "env:test": "tsx scripts/switch-env.ts test",
     "env:prod": "tsx scripts/switch-env.ts prod",
