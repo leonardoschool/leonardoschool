@@ -77,6 +77,14 @@ function showCurrent(): void {
     console.log(`   App URL: ${appUrlMatch[1]}`);
   }
   
+  // Show email config
+  const smtpHostMatch = content.match(/^SMTP_HOST="([^"]+)"/m);
+  if (smtpHostMatch) {
+    console.log(`   Email: ✅ SMTP configurato (${smtpHostMatch[1]})`);
+  } else {
+    console.log('   Email: ⚠️  SMTP non configurato');
+  }
+  
   console.log('');
 }
 

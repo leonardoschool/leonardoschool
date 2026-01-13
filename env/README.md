@@ -4,12 +4,12 @@ Questa cartella contiene le configurazioni per i diversi ambienti.
 
 ## 📄 File presenti
 
-| File | Ambiente | Usato quando |
-|------|----------|--------------|
-| `.env.local` | Sviluppo locale | `pnpm dev` con Docker PostgreSQL |
-| `.env.test` | Test/Staging | Deploy su Vercel test con Neon DB |
-| `.env.production` | Produzione | Deploy finale (quando pronto) |
-| `.env.example` | Template | Esempio per nuovi sviluppatori |
+| File | Ambiente | Database | Email |
+|------|----------|----------|-------|
+| `.env.local` | Sviluppo locale | Docker (localhost:5433) | Disabilitato |
+| `.env.test` | Test/Staging | Neon PostgreSQL | Aruba SMTP |
+| `.env.production` | Produzione | Neon PostgreSQL | Aruba SMTP |
+| `.env.example` | Template | - | Template |
 
 ## 🔄 Come switchare ambiente
 
@@ -26,6 +26,24 @@ pnpm env:prod
 # Vedere ambiente attivo
 pnpm env:current
 ```
+
+## 📧 Configurazione Email (SMTP)
+
+Le email vengono inviate tramite SMTP Aruba. Variabili necessarie:
+
+```env
+SMTP_HOST=""
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=""
+SMTP_PASSWORD=""
+EMAIL_FROM=""
+EMAIL_TO=""
+```
+
+**Note:**
+- In locale (`.env.local`) le email sono commentate/disabilitate
+- In test e produzione sono già configurate
 
 ## ⚠️ Sicurezza
 

@@ -249,8 +249,8 @@ function getBaseEmailTemplate(content: string, title: string): string {
             <div class="footer">
               <p>© ${new Date().getFullYear()} Leonardo School. Tutti i diritti riservati.</p>
               <p style="margin-top: 10px;">
-                <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}">Visita il sito</a> | 
-                <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}/contattaci">Contattaci</a>
+                <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://www.leonardoschool.it'}">Visita il sito</a> | 
+                <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://www.leonardoschool.it'}/contattaci">Contattaci</a>
               </p>
             </div>
           </div>
@@ -527,7 +527,7 @@ export async function sendProfileCompletedAdminNotification(data: ProfileComplet
     return { success: false, error: 'No admin email configured' };
   }
 
-  const adminUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}/utenti`;
+  const adminUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.leonardoschool.it'}/utenti`;
 
   const content = `
     <p class="greeting">Nuovo studente registrato!</p>
@@ -581,7 +581,7 @@ export async function sendContractSignedAdminNotification(data: {
     return { success: false, error: 'No admin email configured' };
   }
 
-  const adminUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}/contratti`;
+  const adminUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.leonardoschool.it'}/contratti`;
   
   const formattedSignDate = new Intl.DateTimeFormat('it-IT', {
     weekday: 'long',

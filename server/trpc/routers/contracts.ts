@@ -473,7 +473,7 @@ export const contractsRouter = router({
       // Send notifications using the unified notification service
       // Use relative URL for in-app navigation, full URL for emails
       const signLinkRelative = `/contratto/${contract.signToken}`;
-      const signLinkAbsolute = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}/contratto/${contract.signToken}`;
+      const signLinkAbsolute = `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.leonardoschool.it'}/contratto/${contract.signToken}`;
       
       await notificationService.notifyContractAssigned(ctx.prisma, {
         contractId: contract.id,
@@ -543,7 +543,7 @@ export const contractsRouter = router({
       });
 
       // Send notifications using the unified notification service
-      const loginUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}/auth/login`;
+      const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.leonardoschool.it'}/auth/login`;
       await notificationService.notifyAccountActivated(ctx.prisma, {
         userId: student.user.id,
         userName: student.user.name,
