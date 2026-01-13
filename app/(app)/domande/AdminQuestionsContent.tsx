@@ -946,7 +946,7 @@ export default function AdminQuestionsContent() {
                               || question.questionTags[0].tag.category?.color 
                               || '#6366f1',
                           }}
-                          title={question.questionTags.map((qt: { tag: { name: string } }) => qt.tag.name).join(', ')}
+                          title={question.questionTags.map(qt => qt.tag?.name).filter(Boolean).join(', ')}
                         >
                           {question.questionTags[0].tag.name}
                           {question.questionTags.length > 1 && ` +${question.questionTags.length - 1}`}
