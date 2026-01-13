@@ -30,8 +30,13 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files - IMPORTANTE: non committare mai credenziali!
+.env
+.env.*
+!.env.example
+env/.env.*
+!env/.env.example
+!env/README.md
 
 # Firebase sensitive files (SECURITY)
 *firebase*adminsdk*.json
