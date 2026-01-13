@@ -18,6 +18,7 @@
     "prisma:studio": "tsx scripts/prisma-studio.ts",
     "prisma:seed": "tsx scripts/seed.ts",
     "prisma:push": "tsx scripts/prisma-push.ts",
+    "prisma:reset": "tsx scripts/prisma-reset.ts",
     "seed": "tsx scripts/seed.ts",
     "cleanup": "tsx scripts/cleanup.ts",
     "cleanup:dry": "tsx scripts/cleanup.ts --dry-run",

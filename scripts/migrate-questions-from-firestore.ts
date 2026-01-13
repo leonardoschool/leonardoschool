@@ -274,9 +274,10 @@ function resolveQuestionHierarchy(
     if (sectionInfo) {
       result.subjectName = sectionInfo.title;
     } else {
-      // ID non trovato nella config, usa come fallback se non è una sigla
-      if (rawSection!.length > 5) {
-        result.subjectName = rawSection;
+      // ID non trovato nella config, usa come fallback se non è una sigla e non è "*"
+      const cleaned = rawSection!.trim();
+      if (cleaned.length > 5 && cleaned !== '*') {
+        result.subjectName = cleaned;
       }
     }
   }
@@ -287,9 +288,10 @@ function resolveQuestionHierarchy(
     if (subjectInfo) {
       result.topicName = subjectInfo.title;
     } else {
-      // ID non trovato, usa come fallback se non è una sigla
-      if (rawSubject!.length > 5) {
-        result.topicName = rawSubject;
+      // ID non trovato, usa come fallback se non è una sigla e non è "*"
+      const cleaned = rawSubject!.trim();
+      if (cleaned.length > 5 && cleaned !== '*') {
+        result.topicName = cleaned;
       }
     }
   }
@@ -300,9 +302,10 @@ function resolveQuestionHierarchy(
     if (argumentInfo) {
       result.subTopicName = argumentInfo.title;
     } else {
-      // ID non trovato, usa come fallback se non è una sigla
-      if (rawArgument!.length > 5) {
-        result.subTopicName = rawArgument;
+      // ID non trovato, usa come fallback se non è una sigla e non è "*"
+      const cleaned = rawArgument!.trim();
+      if (cleaned.length > 5 && cleaned !== '*') {
+        result.subTopicName = cleaned;
       }
     }
   }
