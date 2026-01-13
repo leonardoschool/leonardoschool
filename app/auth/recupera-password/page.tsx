@@ -187,10 +187,13 @@ export default function RecuperaPasswordPage() {
                     setLoading(false);
                   }}
                   disabled={cooldownSeconds > 0}
-                  className={`w-full flex justify-center py-2 px-4 border ${colors.border.primary} rounded-md shadow-sm text-sm font-medium ${colors.text.primary} ${colors.background.card} hover:${colors.background.secondary} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-${colors.primary.main} disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300`}
+                  className={`w-full flex justify-center py-2 px-4 border rounded-md shadow-sm text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-300 ${
+                    cooldownSeconds > 0 
+                      ? `${colors.border.primary} ${colors.text.muted} ${colors.background.card} cursor-not-allowed` 
+                      : `${colors.border.primary} ${colors.text.primary} ${colors.background.card} hover:${colors.background.secondary} focus:ring-${colors.primary.main}`
+                  }`}
                 >
-                  {cooldownSeconds > 0 ? `Attendere ${cooldownSeconds}s` : 'Invia di nuovo'}
-                  Invia di nuovo
+                  {cooldownSeconds > 0 ? `Attendere ${cooldownSeconds}s | Invia di nuovo` : 'Invia di nuovo'}
                 </button>
                 
                 <Link

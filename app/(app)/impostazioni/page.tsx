@@ -369,43 +369,6 @@ export default function ImpostazioniPage() {
           </div>
         </SettingsSection>
 
-        {/* Language Settings */}
-        <SettingsSection 
-          icon={Globe} 
-          title="Lingua e Regione" 
-          description="Imposta lingua e formato regionale"
-        >
-          <div className="space-y-4">
-            <div>
-              <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>Lingua</label>
-              <select 
-                className={`w-full px-3 sm:px-4 py-2 rounded-lg border ${colors.border.primary} ${colors.background.card} ${colors.text.primary} focus:ring-2 focus:ring-[#a8012b] focus:border-transparent text-sm sm:text-base`}
-                defaultValue="it"
-                onChange={(e) => {
-                  if (e.target.value === 'en') {
-                    showSuccess('Prossimamente', 'Il supporto per l\'inglese sarà disponibile a breve.');
-                    e.target.value = 'it';
-                  }
-                }}
-              >
-                <option value="it">🇮🇹 Italiano</option>
-                <option value="en">🇬🇧 English (Coming soon)</option>
-              </select>
-            </div>
-            <div>
-              <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>Formato data</label>
-              <select 
-                className={`w-full px-3 sm:px-4 py-2 rounded-lg border ${colors.border.primary} ${colors.background.card} ${colors.text.primary} focus:ring-2 focus:ring-[#a8012b] focus:border-transparent text-sm sm:text-base`}
-                defaultValue="dd/mm/yyyy"
-              >
-                <option value="dd/mm/yyyy">DD/MM/YYYY (31/12/2025)</option>
-                <option value="dd-mm-yyyy">DD-MM-YYYY (31-12-2025)</option>
-                <option value="yyyy-mm-dd">YYYY-MM-DD (2025-12-31)</option>
-              </select>
-            </div>
-          </div>
-        </SettingsSection>
-
         {/* Account Actions */}
         <SettingsSection 
           icon={AlertCircle} 
