@@ -11,6 +11,7 @@ import Checkbox from '@/components/ui/Checkbox';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import { Modal } from '@/components/ui/Modal';
 import { previewSimulationPdf } from '@/lib/utils/simulationPdfGenerator';
+import { SimulationPreviewModal } from '@/components/simulazioni';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -40,6 +41,7 @@ import {
   Clock,
   Layers,
   Info,
+  Monitor,
 } from 'lucide-react';
 import type { SimulationType, LocationType, SimulationSection } from '@/lib/validations/simulationValidation';
 import { SIMULATION_PRESETS } from '@/lib/validations/simulationValidation';
@@ -198,9 +200,30 @@ export default function NewSimulationPage() {
   // Question detail modal
   const [previewQuestion, setPreviewQuestion] = useState<string | null>(null);
 
+  // Simulation preview modal (for students view)
+  const [showSimulationPreview, setShowSimulationPreview] = useState(false);
+  const [previewQuestionsData, setPreviewQuestionsData] = useState<Array<{
+    id: string;
+    text: string;
+    textLatex?: string | null;
+    type: string;
+    difficulty: string;
+    imageUrl?: string | null;
+    subject?: { name: string; color?: string | null } | null;
+    topic?: { name?: string | null } | null;
+    answers: Array<{
+      id: string;
+      text: string;
+      isCorrect: boolean;
+      order: number;
+      imageUrl?: string | null;
+    }>;
+  }>>([]);
+
   // Loading states
   const [isSaving, setIsSaving] = useState(false);
   const [isPdfLoading, setIsPdfLoading] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   // Fetch data
   const { data: subjectsData } = trpc.questions.getSubjects.useQuery();
@@ -797,7 +820,7 @@ export default function NewSimulationPage() {
       margin-bottom: 15px;
     }
     .page-header-logo {
-      width: 180px;
+      width: 100px;
       height: auto;
       display: inline-block;
     }
@@ -879,6 +902,7 @@ export default function NewSimulationPage() {
       margin-bottom: 4px;
       font-family: Arial, Helvetica, sans-serif;
       font-size: 11pt;
+      font-weight: bold;
     }
     .question-text strong {
       font-weight: bold;
@@ -2501,6 +2525,68 @@ export default function NewSimulationPage() {
                 </button>
               </div>
             )}
+
+            {/* Non-paper-based preview button */}
+            {!isPaperBased && (
+              <div className="mt-6">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (selectedQuestions.length === 0) {
+                      alert('Seleziona almeno una domanda per visualizzare l\'anteprima');
+                      return;
+                    }
+                    setIsPreviewLoading(true);
+                    try {
+                      const result = await questionsWithAnswersQuery.refetch();
+                      if (result.data) {
+                        const previewData = result.data.map(q => ({
+                          id: q.id,
+                          text: q.text,
+                          textLatex: q.textLatex,
+                          type: q.type,
+                          difficulty: q.difficulty,
+                          imageUrl: q.imageUrl,
+                          subject: q.subject ? { name: q.subject.name, color: q.subject.color } : null,
+                          topic: q.topic ? { name: q.topic.name } : null,
+                          answers: q.answers.map((a: { id: string; text: string; isCorrect: boolean; order: number; imageUrl?: string | null }) => ({
+                            id: a.id,
+                            text: a.text,
+                            isCorrect: a.isCorrect,
+                            order: a.order,
+                            imageUrl: a.imageUrl,
+                          })),
+                        }));
+                        setPreviewQuestionsData(previewData);
+                        setShowSimulationPreview(true);
+                      }
+                    } catch (error) {
+                      console.error('Error loading questions for preview:', error);
+                      alert('Errore nel caricamento delle domande. Riprova.');
+                    } finally {
+                      setIsPreviewLoading(false);
+                    }
+                  }}
+                  disabled={selectedQuestions.length === 0 || isPreviewLoading}
+                  className={`w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg text-sm font-medium hover:from-blue-700 hover:to-blue-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm`}
+                >
+                  {isPreviewLoading ? (
+                    <>
+                      <Spinner className="w-4 h-4" />
+                      Caricamento anteprima...
+                    </>
+                  ) : (
+                    <>
+                      <Monitor className="w-4 h-4" />
+                      Anteprima studente
+                    </>
+                  )}
+                </button>
+                <p className={`text-xs mt-2 text-center ${colors.text.muted}`}>
+                  Visualizza come gli studenti vedranno la simulazione
+                </p>
+              </div>
+            )}
           </div>
         );
 
@@ -2703,6 +2789,36 @@ export default function NewSimulationPage() {
           </div>
         )}
       </Modal>
+
+      {/* Simulation Preview Modal - shows what students will see */}
+      <SimulationPreviewModal
+        isOpen={showSimulationPreview}
+        onClose={() => setShowSimulationPreview(false)}
+        title={title || 'Simulazione'}
+        description={description}
+        simulationType={simulationType}
+        durationMinutes={durationMinutes}
+        questions={previewQuestionsData}
+        hasSections={hasSections}
+        sections={sections.map(s => ({
+          id: s.id,
+          name: s.name,
+          durationMinutes: s.durationMinutes,
+          questionIds: s.questionIds || [],
+          order: s.order,
+        }))}
+        correctPoints={correctPoints}
+        wrongPoints={wrongPoints}
+        blankPoints={blankPoints}
+        showResults={showResults}
+        showCorrectAnswers={showCorrectAnswers}
+        isRepeatable={isRepeatable}
+        isOfficial={isOfficial}
+        enableAntiCheat={enableAntiCheat}
+        forceFullscreen={forceFullscreen}
+        randomizeOrder={randomizeOrder}
+        randomizeAnswers={randomizeAnswers}
+      />
     </div>
   );
 }

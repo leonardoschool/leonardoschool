@@ -9,3 +9,4 @@ export { default as TolcInstructions } from './TolcInstructions';
 export { default as TolcSimulationLayout } from './TolcSimulationLayout';
 export { default as StudentWaitingRoom } from './StudentWaitingRoom';
 export { default as InTestMessaging, MessagingButton } from './InTestMessaging';
+export { default as SimulationPreviewModal } from './SimulationPreviewModal';

@@ -368,7 +368,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
       margin-bottom: 15px;
     }
     .page-header-logo {
-      width: 180px;
+      width: 100px;
       height: auto;
       display: inline-block;
     }
@@ -451,6 +451,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
       margin-bottom: 4px;
       font-family: Arial, Helvetica, sans-serif;
       font-size: 11pt;
+      font-weight: bold;
     }
     .question-text strong {
       font-weight: bold;
