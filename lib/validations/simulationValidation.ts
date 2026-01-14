@@ -127,6 +127,7 @@ const simulationBaseSchema = z.object({
   // Paper-based mode
   isPaperBased: z.boolean().default(false),
   paperInstructions: z.string().optional().nullable(),
+  showSectionsInPaper: z.boolean().default(true), // Show sections dividers in paper PDF
   
   // Attendance tracking
   trackAttendance: z.boolean().default(false),

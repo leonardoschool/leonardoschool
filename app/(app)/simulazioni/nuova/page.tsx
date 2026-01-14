@@ -156,7 +156,7 @@ export default function NewSimulationPage() {
   // Paper-based mode
   const [isPaperBased, setIsPaperBased] = useState(false);
   const [paperInstructions, setPaperInstructions] = useState('');
-  
+  const [showSectionsInPaper, setShowSectionsInPaper] = useState(true);
   // Attendance tracking
   const [trackAttendance, setTrackAttendance] = useState(false);
   const [locationType, setLocationType] = useState<LocationType | ''>('');
@@ -197,9 +197,6 @@ export default function NewSimulationPage() {
   
   // Question detail modal
   const [previewQuestion, setPreviewQuestion] = useState<string | null>(null);
-  
-  // Print preview modal
-  const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   // Loading states
   const [isSaving, setIsSaving] = useState(false);
@@ -575,6 +572,379 @@ export default function NewSimulationPage() {
     return selectedQuestions.filter(sq => !allAssignedIds.includes(sq.questionId));
   };
 
+  // Type for questions with answers for printing
+  type PrintQuestion = {
+    id: string;
+    text: string;
+    type: string;
+    difficulty: string;
+    subject?: { name?: string | null; color?: string | null } | null;
+    topic?: { name?: string | null } | null;
+    answers: Array<{ id: string; text: string; isCorrect: boolean; order: number }>;
+  };
+
+  // Generate auto sections based on question subjects
+  const generateAutoSections = (questions: PrintQuestion[]): SimulationSection[] => {
+    if (!hasSections) return [];
+    
+    // If manual mode with existing sections, return them
+    if (sectionMode === 'manual' && sections.length > 0) {
+      return sections;
+    }
+    
+    // Auto mode: group questions by subject
+    const subjectGroups = new Map<string, { name: string; questionIds: string[] }>();
+    
+    for (const q of questions) {
+      const subjectName = q.subject?.name || 'Altro';
+      if (!subjectGroups.has(subjectName)) {
+        subjectGroups.set(subjectName, { name: subjectName, questionIds: [] });
+      }
+      subjectGroups.get(subjectName)!.questionIds.push(q.id);
+    }
+    
+    // Convert to array and sort by name
+    const autoSections: SimulationSection[] = Array.from(subjectGroups.entries()).map(([_, group], index) => ({
+      id: `auto-${index}`,
+      name: group.name,
+      durationMinutes: Math.ceil((durationMinutes / questions.length) * group.questionIds.length),
+      questionIds: group.questionIds,
+      questionCount: group.questionIds.length,
+      order: index,
+    }));
+    
+    return autoSections;
+  };
+
+  // Get effective sections for rendering (manual or auto-generated)
+  const getEffectiveSections = (questions: PrintQuestion[]): SimulationSection[] => {
+    if (!hasSections) return [];
+    // Use manual sections if available, otherwise fall back to auto-generated
+    if (sectionMode === 'manual' && sections.length > 0) return sections;
+    // Auto mode or manual mode with no sections: generate from subjects
+    return generateAutoSections(questions);
+  };
+
+  // Open print window directly with questions
+  const openPrintWindow = (questions: PrintQuestion[]) => {
+    // Calculate academic year
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth();
+    const academicYearStart = currentMonth >= 8 ? currentYear : currentYear - 1;
+    const academicYearEnd = academicYearStart + 1;
+    const academicYearText = `Anno accademico ${academicYearStart}/${academicYearEnd}`;
+    
+    // Get effective sections
+    const effectiveSections = getEffectiveSections(questions);
+    
+    // Helper to render questions grouped by type
+    const renderQuestionsByType = (
+      questionsToRender: PrintQuestion[],
+      startNumber: number
+    ): { html: string; nextNumber: number } => {
+      let html = '';
+      let questionNumber = startNumber;
+      
+      // Group by type
+      const multipleChoice = questionsToRender.filter(q => q.type === 'MULTIPLE_CHOICE');
+      const singleChoice = questionsToRender.filter(q => q.type === 'SINGLE_CHOICE');
+      const openText = questionsToRender.filter(q => q.type === 'OPEN_TEXT');
+      
+      // Render MULTIPLE_CHOICE
+      if (multipleChoice.length > 0) {
+        html += `<div class="question-type-header">DOMANDE A RISPOSTA MULTIPLA</div>`;
+        for (const question of multipleChoice) {
+          html += `<div class="question">`;
+          html += `<div class="question-text"><strong>${questionNumber}.</strong> ${question.text}</div>`;
+          if (question.answers && question.answers.length > 0) {
+            html += `<div class="answers">`;
+            const sortedAnswers = [...question.answers].sort((a, b) => a.order - b.order);
+            sortedAnswers.forEach((answer, idx) => {
+              html += `<div class="answer"><strong>${String.fromCharCode(65 + idx)})</strong> ${answer.text}</div>`;
+            });
+            html += `</div>`;
+          }
+          html += `</div>`;
+          questionNumber++;
+        }
+      }
+      
+      // Render SINGLE_CHOICE
+      if (singleChoice.length > 0) {
+        html += `<div class="question-type-header">DOMANDE A RISPOSTA SINGOLA</div>`;
+        for (const question of singleChoice) {
+          html += `<div class="question">`;
+          html += `<div class="question-text"><strong>${questionNumber}.</strong> ${question.text}</div>`;
+          if (question.answers && question.answers.length > 0) {
+            html += `<div class="answers">`;
+            const sortedAnswers = [...question.answers].sort((a, b) => a.order - b.order);
+            sortedAnswers.forEach((answer, idx) => {
+              html += `<div class="answer"><strong>${String.fromCharCode(65 + idx)})</strong> ${answer.text}</div>`;
+            });
+            html += `</div>`;
+          }
+          html += `</div>`;
+          questionNumber++;
+        }
+      }
+      
+      // Render OPEN_TEXT
+      if (openText.length > 0) {
+        html += `<div class="question-type-header">DOMANDE A RISPOSTA APERTA</div>`;
+        for (const question of openText) {
+          html += `<div class="question">`;
+          html += `<div class="question-text"><strong>${questionNumber}.</strong> ${question.text}</div>`;
+          // Open questions don't have answer options - add space for answer
+          html += `<div class="open-answer-space"></div>`;
+          html += `</div>`;
+          questionNumber++;
+        }
+      }
+      
+      return { html, nextNumber: questionNumber };
+    };
+    
+    // Build questions HTML
+    let questionsHtml = '';
+    
+    if (hasSections && showSectionsInPaper && effectiveSections.length > 0) {
+      // Render with sections - grouped by type within each section
+      const sortedSections = [...effectiveSections].sort((a, b) => a.order - b.order);
+      let globalQuestionNumber = 1;
+      
+      for (const section of sortedSections) {
+        const sectionQuestionIds = section.questionIds || [];
+        const sectionQuestions = sectionQuestionIds
+          .map(id => questions.find(q => q.id === id))
+          .filter((q): q is typeof questions[0] => q !== undefined);
+        
+        if (sectionQuestions.length === 0) continue;
+        
+        // Section header
+        questionsHtml += `<div class="section-header">${section.name}</div>`;
+        
+        // Render questions grouped by type
+        const result = renderQuestionsByType(sectionQuestions, globalQuestionNumber);
+        questionsHtml += result.html;
+        globalQuestionNumber = result.nextNumber;
+      }
+      
+      // Unassigned questions (only for manual mode)
+      const assignedIds = sortedSections.flatMap(s => s.questionIds || []);
+      const unassigned = sectionMode === 'manual' 
+        ? selectedQuestions.filter(sq => !assignedIds.includes(sq.questionId))
+        : [];
+      if (unassigned.length > 0) {
+        const unassignedQuestions = unassigned
+          .map(sq => questions.find(q => q.id === sq.questionId))
+          .filter((q): q is typeof questions[0] => q !== undefined);
+        
+        questionsHtml += `<div class="section-header">ALTRE DOMANDE</div>`;
+        const result = renderQuestionsByType(unassignedQuestions, globalQuestionNumber);
+        questionsHtml += result.html;
+        globalQuestionNumber = result.nextNumber;
+      }
+    } else {
+      // Render without sections - just group by type
+      const allQuestions = selectedQuestions
+        .map(sq => questions.find(q => q.id === sq.questionId))
+        .filter((q): q is typeof questions[0] => q !== undefined);
+      
+      const result = renderQuestionsByType(allQuestions, 1);
+      questionsHtml = result.html;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${title || 'Simulazione'}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    /* Page setup - margins allow browser to add page numbers */
+    @page { 
+      size: A4; 
+      margin: 10mm 15mm 15mm 15mm;
+    }
+    
+    @media print {
+      body { 
+        -webkit-print-color-adjust: exact !important; 
+        print-color-adjust: exact !important;
+      }
+      .print-instruction { display: none !important; }
+    }
+    
+    body { 
+      font-family: Arial, Helvetica, sans-serif; 
+      font-size: 11pt; 
+      line-height: 1.4; 
+      color: #000;
+      background: #fff;
+      padding: 0;
+      margin: 0;
+      position: relative;
+    }
+    
+    /* Page header - centered logo (first page only) */
+    .page-header {
+      text-align: center;
+      margin-bottom: 15px;
+    }
+    .page-header-logo {
+      width: 180px;
+      height: auto;
+      display: inline-block;
+    }
+    
+    /* Watermark background logo */
+    .watermark {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      opacity: 0.06;
+      z-index: -1;
+      width: 50%;
+      max-width: 350px;
+      pointer-events: none;
+    }
+    
+    .container { 
+      max-width: 100%; 
+      padding: 0; 
+      position: relative; 
+      z-index: 1;
+      margin-top: 0;
+    }
+    
+    /* Description (centered, bold, underlined) */
+    .description {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 12pt;
+      text-align: center;
+      text-decoration: underline;
+      font-weight: bold;
+      margin: 5px 0;
+    }
+    
+    /* Academic year */
+    .academic-year {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 11pt;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    
+    /* Section header (e.g., FISICA E MATEMATICA) */
+    .section-header {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 12pt;
+      font-weight: bold;
+      text-align: center;
+      text-decoration: underline;
+      margin: 25px 0 10px 0;
+      text-transform: uppercase;
+    }
+    
+    /* Question type header (e.g., DOMANDE A RISPOSTA MULTIPLA) */
+    .question-type-header {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 11pt;
+      font-weight: bold;
+      text-align: center;
+      text-decoration: underline;
+      margin: 15px 0 12px 0;
+      text-transform: uppercase;
+    }
+    
+    /* Questions */
+    .question { 
+      margin-bottom: 14px; 
+    }
+    
+    /* Open answer space for OPEN_TEXT questions */
+    .open-answer-space {
+      border: 1px solid #ccc;
+      min-height: 120px;
+      margin: 8px 0 8px 25px;
+      background: #fafafa;
+    }
+    .question-text { 
+      margin-bottom: 4px;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 11pt;
+    }
+    .question-text strong {
+      font-weight: bold;
+    }
+    .answers { 
+      margin-left: 25px; 
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .answer { 
+      margin: 2px 0; 
+      font-size: 11pt;
+    }
+    .answer strong {
+      font-weight: bold;
+    }
+    
+    /* Subscript and superscript */
+    sub { font-size: 0.7em; vertical-align: sub; }
+    sup { font-size: 0.7em; vertical-align: super; }
+    
+    /* KaTeX */
+    .katex { font-size: 1em; }
+    .katex-display { margin: 6px 0; }
+  </style>
+</head>
+<body>
+  <!-- Header - centered logo (first page only) -->
+  <div class="page-header">
+    <img src="/images/Logo_testata_doc.png" alt="" class="page-header-logo">
+  </div>
+  
+  <!-- Watermark logo -->
+  <img src="/images/logo.png" alt="" class="watermark">
+  
+  <div class="container">
+    <!-- Description -->
+    ${description ? `<div class="description">${description}</div>` : ''}
+    
+    <div class="academic-year">${academicYearText}</div>
+    
+    ${questionsHtml}
+  </div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"><\/script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"><\/script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      renderMathInElement(document.body, {
+        delimiters: [
+          {left: '$$', right: '$$', display: true},
+          {left: '$', right: '$', display: false},
+          {left: '\\\\[', right: '\\\\]', display: true},
+          {left: '\\\\(', right: '\\\\)', display: false}
+        ],
+        throwOnError: false
+      });
+      setTimeout(function() { window.print(); }, 800);
+    });
+  <\/script>
+</body>
+</html>
+      `);
+      printWindow.document.close();
+    }
+  };
+
   // Fetch questions with answers utility (using refetch)
   const questionsWithAnswersQuery = trpc.questions.getQuestionsWithAnswers.useQuery(
     { questionIds: selectedQuestions.map(sq => sq.questionId) },
@@ -603,6 +973,17 @@ export default function NewSimulationPage() {
           blankPoints,
           paperInstructions,
           schoolName: 'Leonardo School',
+          // Sections support
+          hasSections,
+          showSectionsInPaper,
+          sections: hasSections ? sections.map(s => ({
+            id: s.id,
+            name: s.name,
+            durationMinutes: s.durationMinutes,
+            questionIds: s.questionIds || [],
+            subjectId: s.subjectId,
+            order: s.order,
+          })) : undefined,
           questions: result.data.map(q => ({
             id: q.id,
             text: q.text,
@@ -675,6 +1056,7 @@ export default function NewSimulationPage() {
         // New fields
         isPaperBased,
         paperInstructions: paperInstructions || undefined,
+        showSectionsInPaper,
         trackAttendance,
         locationType: locationType || undefined,
         locationDetails: locationDetails || undefined,
@@ -1281,6 +1663,27 @@ export default function NewSimulationPage() {
                                 Nessuna sezione creata. Aggiungi una sezione per iniziare.
                               </p>
                             )}
+                          </div>
+                        )}
+                        
+                        {/* Show sections in paper PDF toggle - visible when paper mode is enabled */}
+                        {isPaperBased && (
+                          <div className={`mt-4 pt-4 border-t ${colors.border.light}`}>
+                            <div className="flex items-start gap-3">
+                              <Checkbox
+                                id="showSectionsInPaper"
+                                checked={showSectionsInPaper}
+                                onChange={(e) => setShowSectionsInPaper(e.target.checked)}
+                              />
+                              <div className="flex-1">
+                                <label htmlFor="showSectionsInPaper" className={`font-medium ${colors.text.primary} cursor-pointer`}>
+                                  Mostra sezioni nel PDF cartaceo
+                                </label>
+                                <p className={`text-sm ${colors.text.muted} mt-0.5`}>
+                                  Visualizza i separatori di sezione con il nome nel PDF stampato
+                                </p>
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -2040,28 +2443,61 @@ export default function NewSimulationPage() {
               </div>
             </div>
 
-            {/* Paper-based preview button */}
+            {/* Paper-based print button */}
             {isPaperBased && (
-              <div className={`mt-6 p-6 rounded-xl border-2 border-dashed ${colors.border.light} text-center`}>
-                <Printer className={`w-12 h-12 mx-auto ${colors.text.muted} mb-3`} />
-                <h3 className={`font-medium ${colors.text.primary} mb-2`}>Anteprima Stampa</h3>
-                <p className={`text-sm ${colors.text.muted} mb-4`}>
-                  Visualizza come apparirà il test stampato (con formule LaTeX renderizzate)
-                </p>
+              <div className={`mt-6`}>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     if (selectedQuestions.length === 0) {
-                      alert('Seleziona almeno una domanda per visualizzare l\'anteprima');
+                      alert('Seleziona almeno una domanda per stampare');
                       return;
                     }
-                    setShowPrintPreview(true);
+                    // Fetch questions with answers then open print directly
+                    setIsPdfLoading(true);
+                    try {
+                      const result = await questionsWithAnswersQuery.refetch();
+                      if (result.data) {
+                        // Open print directly with the fetched questions
+                        const printQuestions = result.data.map(q => ({
+                          id: q.id,
+                          text: q.text,
+                          type: q.type,
+                          difficulty: q.difficulty,
+                          subject: q.subject,
+                          topic: q.topic,
+                          answers: q.answers.map(a => ({
+                            id: a.id,
+                            text: a.text,
+                            isCorrect: a.isCorrect,
+                            order: a.order,
+                          })),
+                        }));
+                        
+                        // Open print window directly
+                        openPrintWindow(printQuestions);
+                      }
+                    } catch (error) {
+                      console.error('Error loading questions for print:', error);
+                      alert('Errore nel caricamento delle domande. Riprova.');
+                    } finally {
+                      setIsPdfLoading(false);
+                    }
                   }}
-                  disabled={selectedQuestions.length === 0}
-                  className={`px-4 py-2 ${colors.background.secondary} border ${colors.border.light} rounded-lg text-sm font-medium ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+                  disabled={selectedQuestions.length === 0 || isPdfLoading}
+                  className={`w-full px-4 py-3 ${colors.primary.bg} text-white rounded-lg text-sm font-medium hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
                 >
-                  <Eye className="w-4 h-4 inline mr-2" />
-                  Visualizza anteprima stampa
+                  {isPdfLoading ? (
+                    <>
+                      <Spinner className="w-4 h-4" />
+                      Caricamento...
+                    </>
+                  ) : (
+                    <>
+                      <Printer className="w-4 h-4" />
+                      Anteprima stampa simulazione
+                    </>
+                  )}
                 </button>
               </div>
             )}
@@ -2266,145 +2702,6 @@ export default function NewSimulationPage() {
             </div>
           </div>
         )}
-      </Modal>
-
-      {/* Print Preview Modal */}
-      <Modal
-        isOpen={showPrintPreview}
-        onClose={() => setShowPrintPreview(false)}
-        title="Anteprima Stampa"
-        icon={<Printer className="w-6 h-6" />}
-        size="full"
-        variant="default"
-        footer={
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                // Open in new window for actual printing
-                const printWindow = window.open('', '_blank');
-                if (printWindow) {
-                  printWindow.document.write(`
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                      <title>${title || 'Simulazione'} - Stampa</title>
-                      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
-                      <style>
-                        @page { size: A4; margin: 15mm 20mm; }
-                        body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.4; }
-                        .header { text-align: center; border-bottom: 2px solid #a8012b; padding-bottom: 10px; margin-bottom: 20px; }
-                        .school { color: #a8012b; font-weight: bold; font-size: 14pt; }
-                        .title { font-size: 18pt; font-weight: bold; text-transform: uppercase; margin: 10px 0; }
-                        .date { color: #666; font-size: 10pt; }
-                        .info-box { border: 1px solid #999; border-radius: 5px; padding: 15px; margin-bottom: 20px; }
-                        .instructions { background: #f5f5f5; border: 1px solid #ccc; border-radius: 5px; padding: 15px; margin-bottom: 20px; }
-                        .question { margin-bottom: 20px; page-break-inside: avoid; }
-                        .question-number { font-weight: bold; }
-                        .answers { margin-left: 25px; margin-top: 8px; }
-                        .answer { margin: 5px 0; }
-                        .katex { font-size: 1.1em; }
-                      </style>
-                    </head>
-                    <body>
-                      <div id="content"></div>
-                      <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
-                      <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
-                      <script>
-                        document.getElementById('content').innerHTML = ${JSON.stringify(document.getElementById('print-preview-content')?.innerHTML || '')};
-                        renderMathInElement(document.body, {
-                          delimiters: [
-                            {left: '$$', right: '$$', display: true},
-                            {left: '$', right: '$', display: false},
-                            {left: '\\\\[', right: '\\\\]', display: true},
-                            {left: '\\\\(', right: '\\\\)', display: false}
-                          ]
-                        });
-                        setTimeout(() => window.print(), 500);
-                      </script>
-                    </body>
-                    </html>
-                  `);
-                  printWindow.document.close();
-                }
-              }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.bg} text-white hover:opacity-90`}
-            >
-              <Printer className="w-4 h-4" />
-              Stampa / Salva PDF
-            </button>
-            <button
-              onClick={() => setShowPrintPreview(false)}
-              className={`px-4 py-2 rounded-lg border ${colors.border.light} ${colors.text.secondary}`}
-            >
-              Chiudi
-            </button>
-          </div>
-        }
-      >
-        <div id="print-preview-content" className="bg-white text-black p-6 rounded-lg max-h-[70vh] overflow-y-auto">
-          {/* Header */}
-          <div className="text-center mb-6 border-b-2 border-[#a8012b] pb-4">
-            <p className="text-[#a8012b] font-bold text-lg">LEONARDO SCHOOL</p>
-            <h2 className="text-2xl font-bold uppercase my-2">{title || 'Simulazione'}</h2>
-            <p className="text-gray-600 text-sm">
-              Anno Accademico {new Date().getFullYear()}/{new Date().getFullYear() + 1} - {new Date().toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
-            </p>
-          </div>
-
-          {/* Student Info Box */}
-          <div className="border border-gray-400 rounded-lg p-4 mb-6">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm">Cognome e Nome: <span className="border-b border-gray-400 inline-block w-64">&nbsp;</span></p>
-                <p className="text-sm mt-2">Matricola: <span className="border-b border-gray-400 inline-block w-40">&nbsp;</span></p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm">Data: {new Date().toLocaleDateString('it-IT')}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Instructions */}
-          <div className="bg-gray-100 border border-gray-300 rounded-lg p-4 mb-6">
-            <h3 className="font-bold text-sm mb-2">ISTRUZIONI</h3>
-            <ul className="text-sm space-y-1">
-              <li>• Tempo a disposizione: {durationMinutes} minuti</li>
-              <li>• Punteggio: Risposta corretta +{correctPoints}, Risposta errata {wrongPoints}, Non risposta {blankPoints}</li>
-              <li>• Numero domande: {selectedQuestions.length}</li>
-              {paperInstructions && <li>• {paperInstructions}</li>}
-            </ul>
-          </div>
-
-          {/* Questions */}
-          <h3 className="text-center font-bold uppercase mb-6">DOMANDE A RISPOSTA MULTIPLA</h3>
-          <div className="space-y-6">
-            {selectedQuestions.map((sq, index) => {
-              const question = questionsData?.questions.find(q => q.id === sq.questionId);
-              if (!question) return null;
-              
-              return (
-                <div key={sq.questionId} className="mb-4">
-                  <div className="mb-2">
-                    <span className="font-bold">{index + 1}. </span>
-                    <RichTextRenderer text={question.text} className="inline font-bold" />
-                  </div>
-                  {question.answers && question.answers.length > 0 && (
-                    <div className="ml-6 space-y-1">
-                      {[...question.answers]
-                        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-                        .map((answer, ansIndex) => (
-                          <div key={answer.id} className="flex items-start gap-2">
-                            <span className="font-medium w-6">{String.fromCharCode(65 + ansIndex)})</span>
-                            <RichTextRenderer text={answer.text} />
-                          </div>
-                        ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
       </Modal>
     </div>
   );
