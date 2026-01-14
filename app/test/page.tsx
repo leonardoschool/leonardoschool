@@ -120,9 +120,7 @@ const allTests: TestCardType[] = [
       { title: 'Syllabus TOLC-S (Scienze chimiche, fisiche, matematiche, geologiche e naturali)', url: 'https://www.cisiaonline.it/tolc/tolc-s/struttura-della-prova-e-sillabo' },
       { title: 'Syllabus TOLC-SPS (Scienze politiche e sociali)', url: 'https://www.cisiaonline.it/tolc/tolc-sps/struttura-della-prova-e-sillabo' },
       { title: 'Syllabus TOLC-SU (Scienze umanistiche)', url: 'http://tolc-su/' },
-      { title: 'English TOLC-E', url: 'https://www.cisiaonline.it/tolc/english-tolc-e/structure-and-syllabus' },
-      { title: 'English TOLC-F', url: 'https://www.cisiaonline.it/tolc/english-tolc-f/structure-and-syllabus' },
-      { title: 'English TOLC-I', url: 'https://www.cisiaonline.it/tolc/english-tolc-i/structure-and-syllabus' },
+      { title: 'English CEnT-S', url: 'https://www.cisiaonline.it/tolc/english-tolc-e/structure-and-syllabus' }
     ],
   },
 ];
@@ -215,7 +213,7 @@ export default function TestPage() {
                     <span className="text-red-600 mr-2">›</span> Medicine and Surgery
                   </a>
                   <a href="https://www.unicampus.it/ammissioni-trasferim/medicine-and-surgery-medtech-a-a-2026-2027-cittadini-italiani-europei-ed-equiparati/" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicine and Surgery "MedTech"
+                    <span className="text-red-600 mr-2">›</span> Medicine and Surgery &quot;MedTech&quot;
                   </a>
                 </div>
               </div>
