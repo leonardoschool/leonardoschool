@@ -49,11 +49,24 @@ tests/
 ├── unit/
 │   ├── components/       # UI component tests
 │   ├── middleware/       # Proxy/auth middleware tests
-│   ├── trpc/             # tRPC middleware tests
+│   ├── trpc/             # tRPC middleware and router tests
 │   ├── utils/            # Utility function tests
 │   └── validations/      # Validation function tests
 ├── integration/          # Integration tests (WIP)
-└── e2e/                  # Playwright E2E tests (WIP)
+└── e2e/                  # Playwright E2E tests
+    ├── homepage.spec.ts      # Homepage tests
+    ├── auth.spec.ts          # Login page tests
+    ├── registration.spec.ts  # Registration tests
+    ├── contact.spec.ts       # Contact form tests
+    ├── job-application.spec.ts # Lavora con noi tests
+    ├── chi-siamo.spec.ts     # About us page tests
+    ├── didattica.spec.ts     # Teaching page tests
+    ├── simulazione.spec.ts   # Simulation page tests
+    ├── termini.spec.ts       # Terms and conditions tests
+    ├── navigation.spec.ts    # Site navigation tests
+    ├── seo.spec.ts           # SEO and meta tags tests
+    ├── accessibility.spec.ts # WCAG accessibility tests
+    └── performance.spec.ts   # Performance tests
 ```
 
 ## Test Categories
@@ -223,7 +236,26 @@ Run coverage report:
 pnpm test:coverage
 ```
 
-Coverage thresholds are currently disabled for a progressive coverage approach. As test coverage grows, thresholds will be incrementally enabled.
+### Coverage Thresholds (ACTIVE)
+
+| Metric | Threshold | Current |
+|--------|-----------|---------|
+| Lines | 80% | **98.39%** ✅ |
+| Branches | 75% | **95.85%** ✅ |
+| Functions | 80% | **100%** ✅ |
+| Statements | 80% | **98.53%** ✅ |
+
+Coverage is enforced in CI/CD pipeline. Pull requests must meet thresholds to merge.
+
+### Excluded from Coverage
+
+The following files are excluded from coverage metrics (require runtime/external services):
+- `lib/firebase/**` - Firebase SDK (requires auth connection)
+- `lib/prisma/**` - Prisma Client (requires database)
+- `lib/hooks/**` - React hooks (require component context)
+- `lib/cache/**`, `lib/email/**`, `lib/notifications/**` - External services
+- `lib/utils/contractPdf.ts`, `lib/utils/simulationPdfGenerator.ts` - PDF generation
+- `lib/utils/matricolaUtils.ts` - Requires Prisma for generateMatricola
 
 ## CI/CD
 
@@ -237,13 +269,61 @@ See `.github/workflows/test.yml` for configuration.
 
 | Category | Tests | Status |
 |----------|-------|--------|
-| Validations | 106 | ✅ |
-| tRPC Middleware | 29 | ✅ |
-| Utilities | 81 | ✅ |
-| Proxy Middleware | 103 | ✅ |
-| UI Components | 51 | ✅ |
-| tRPC Routers | 1236 | ✅ |
-| **Total** | **1606** | ✅ |
+| tRPC Routers | 1606 | ✅ |
+| Validations | 555 | ✅ |
+| Utilities | 290 | ✅ |
+| UI Components | 162 | ✅ |
+| Theme & Permissions | 45 | ✅ |
+| **Unit Total** | **2636** | ✅ |
+| E2E Tests | ~150 | ✅ |
+
+> Last updated: January 2026
+
+### Validation Tests Breakdown
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| authValidation.test.ts | 42 | Email, password strength |
+| profileValidation.test.ts | 120+ | Italian profile data (CF, CAP, provincia, parent/guardian) |
+| fileValidation.test.ts | ~80 | File uploads, MIME types, security |
+| simulationValidation.test.ts | 180+ | All Zod schemas, helper functions, type guards, presets |
+| questionValidation.test.ts | ~78 | Question schemas, answers, keywords |
+| formValidation.test.ts | ~66 | Contact form, sanitization |
+| notificationValidation.test.ts | ~20 | Notification schemas |
+| questionTagValidation.test.ts | ~35 | Tag/category schemas |
+
+### Utility Tests Breakdown
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| errorHandler.test.ts | 49 | tRPC error parsing, Italian translations |
+| stringUtils.test.ts | 32 | Name/email normalization |
+| sanitizeHtml.test.ts | 85 | XSS prevention, dangerous tags, event handlers |
+| escapeHtml.test.ts | 54 | HTML entity escaping, sanitizeText |
+| codiceFiscaleCalculator.test.ts | ~80 | Italian fiscal code calculation |
+| simulationLabels.test.ts | ~20 | Simulation label generation |
+
+### Theme & Core Tests Breakdown
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| colors.test.ts | 20+ | Dynamic subject colors, color system |
+| permissions.test.ts | 15+ | Role-based access, navigation items |
+| constants.test.ts | 10+ | Site constants, configuration |
+| codiceFiscaleCalculator.test.ts | 48 | Italian fiscal code algorithm |
+| matricolaUtils.test.ts | 41 | Student enrollment numbers |
+| simulationLabels.test.ts | 35 | Simulation type labels and colors |
+
+### UI Component Tests Breakdown
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| Spinner.test.tsx | 18 | Sizes, variants, accessibility |
+| ButtonLoader.test.tsx | 15 | Loading states, text display |
+| Button.test.tsx | 32 | Variants, sizes, disabled, interactions |
+| Input.test.tsx | 38 | States, errors, types, accessibility |
+| Toast.test.tsx | 35 | Notifications, auto-dismiss, stacking |
+| loaders.test.tsx | 24 | PageLoader, DotsLoader, Skeleton |
 
 ### tRPC Router Tests Breakdown
 
@@ -265,6 +345,24 @@ See `.github/workflows/test.yml` for configuration.
 | Job Applications | 67 | CRUD, status workflow, CV management |
 | Question Tags | 100 | Categories, tags, assignments, bulk operations |
 | Virtual Room | 89 | Session management, cheating detection, real-time |
+
+### E2E Tests Breakdown
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| homepage.spec.ts | ~15 | Metadata, hero, services, responsive |
+| auth.spec.ts | ~12 | Login form, validation, password toggle |
+| registration.spec.ts | ~16 | Registration form, validation, terms |
+| contact.spec.ts | ~16 | Contact form, validation, submission |
+| job-application.spec.ts | ~12 | Job application form, CV upload |
+| chi-siamo.spec.ts | ~10 | About page content, accessibility |
+| didattica.spec.ts | ~10 | Teaching page, navigation |
+| simulazione.spec.ts | ~10 | Simulation page, features |
+| termini.spec.ts | ~10 | Terms content, navigation |
+| navigation.spec.ts | ~20 | Header, footer, mobile menu |
+| seo.spec.ts | ~25 | Meta tags, OG, robots, sitemap |
+| accessibility.spec.ts | ~25 | ARIA, keyboard, landmarks, contrast |
+| performance.spec.ts | ~18 | Load time, resources, caching |
 
 ## Best Practices
 

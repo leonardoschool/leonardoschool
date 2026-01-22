@@ -220,7 +220,7 @@ describe('Messages Router', () => {
       });
 
       it('should only return active users', async () => {
-        const ctx = createMockContext({ role: 'ADMIN' });
+        const _ctx = createMockContext({ role: 'ADMIN' });
         
         // Query includes isActive: true
         // Inactive users should not be returned
@@ -589,7 +589,7 @@ describe('Messages Router', () => {
       });
 
       it('should throw FORBIDDEN if user is not participant', async () => {
-        const ctx = createMockContext();
+        const _ctx = createMockContext();
         
         mockPrisma.conversationParticipant.findFirst.mockResolvedValue(null);
         
@@ -602,7 +602,7 @@ describe('Messages Router', () => {
       });
 
       it('should throw FORBIDDEN if user has left the conversation', async () => {
-        const ctx = createMockContext();
+        const _ctx = createMockContext();
         
         // leftAt is not null means user left
         mockPrisma.conversationParticipant.findFirst.mockResolvedValue(null); // Query filters leftAt: null
@@ -719,17 +719,18 @@ describe('Messages Router', () => {
 
     describe('filtering', () => {
       it('should filter by archived status when filter=archived', async () => {
-        const filter: 'archived' | 'all' = 'archived';
+        const filter: 'archived' | 'all' | 'unread' = 'archived';
         const isArchivedFilter = filter === 'archived' ? { isArchived: true } : { isArchived: false };
         
         expect(isArchivedFilter.isArchived).toBe(true);
       });
 
       it('should filter by non-archived when filter=all', async () => {
-        const filter: 'archived' | 'all' = 'all';
-        const isArchivedFilter = filter === 'archived' ? { isArchived: true } : { isArchived: false };
+        // When filter is 'all', we show non-archived conversations
+        const filterValue = 'all';
+        const isArchived = filterValue !== 'all' && filterValue === 'archived';
         
-        expect(isArchivedFilter.isArchived).toBe(false);
+        expect(isArchived).toBe(false);
       });
 
       it('should only include conversations where user has not left', async () => {
@@ -876,7 +877,7 @@ describe('Messages Router', () => {
 
     describe('success scenarios', () => {
       it('should return messages ordered by createdAt asc', async () => {
-        const ctx = createMockContext();
+        const _ctx = createMockContext();
         const conversationId = faker.string.uuid();
         const messages = [
           createMockMessage({ createdAt: new Date('2024-01-01') }),
@@ -1136,7 +1137,7 @@ describe('Messages Router', () => {
       });
 
       it('should return 0 when no unread messages', async () => {
-        const ctx = createMockContext();
+        const _ctx = createMockContext();
         
         mockPrisma.conversationParticipant.findMany.mockResolvedValue([]);
         
@@ -1152,7 +1153,7 @@ describe('Messages Router', () => {
   describe('Security', () => {
     describe('conversation access', () => {
       it('should prevent reading messages from conversations user is not part of', async () => {
-        const ctx = createMockContext();
+        const _ctx = createMockContext();
         
         // User is not a participant
         mockPrisma.conversationParticipant.findFirst.mockResolvedValue(null);
@@ -1166,7 +1167,7 @@ describe('Messages Router', () => {
       });
 
       it('should prevent sending messages to conversations user is not part of', async () => {
-        const ctx = createMockContext();
+        const _ctx = createMockContext();
         
         mockPrisma.conversationParticipant.findFirst.mockResolvedValue(null);
         
@@ -1179,7 +1180,7 @@ describe('Messages Router', () => {
       });
 
       it('should prevent toggling archive for conversations user is not part of', async () => {
-        const ctx = createMockContext();
+        const _ctx = createMockContext();
         
         mockPrisma.conversationParticipant.findFirst.mockResolvedValue(null);
         
@@ -1223,20 +1224,20 @@ describe('Messages Router', () => {
 
     describe('data privacy', () => {
       it('should only return conversations user is participant of', async () => {
-        const ctx = createMockContext();
+        const _ctx = createMockContext();
         
         // Query filters by current user's participation
         const whereCondition = {
           participants: {
-            some: { userId: ctx.user.id },
+            some: { userId: _ctx.user.id },
           },
         };
         
-        expect(whereCondition.participants.some.userId).toBe(ctx.user.id);
+        expect(whereCondition.participants.some.userId).toBe(_ctx.user.id);
       });
 
       it('should only return contactable users based on role', async () => {
-        const ctx = createMockContext({ role: 'STUDENT' });
+        const _ctx = createMockContext({ role: 'STUDENT' });
         
         // Students can only see admin and collaborators
         const allowedRoles = ['ADMIN', 'COLLABORATOR'];
@@ -1244,7 +1245,7 @@ describe('Messages Router', () => {
       });
 
       it('should only return groups user has access to for collaborators', async () => {
-        const ctx = createMockContext({ role: 'COLLABORATOR' });
+        const _ctx = createMockContext({ role: 'COLLABORATOR' });
         const collaboratorId = faker.string.uuid();
         
         // Collaborator can only see groups they're related to
@@ -1286,7 +1287,7 @@ describe('Messages Router', () => {
   describe('Edge Cases', () => {
     describe('empty states', () => {
       it('should handle user with no conversations', async () => {
-        const ctx = createMockContext();
+        const _ctx = createMockContext();
         
         mockPrisma.conversation.findMany.mockResolvedValue([]);
         mockPrisma.conversation.count.mockResolvedValue(0);
@@ -1303,7 +1304,7 @@ describe('Messages Router', () => {
       });
 
       it('should handle conversation with no messages', async () => {
-        const ctx = createMockContext();
+        const _ctx = createMockContext();
         
         mockPrisma.message.findMany.mockResolvedValue([]);
         mockPrisma.message.count.mockResolvedValue(0);
@@ -1319,7 +1320,7 @@ describe('Messages Router', () => {
       });
 
       it('should handle student with no groups (no reference students)', async () => {
-        const ctx = createMockContext({ role: 'STUDENT' });
+        const _ctx = createMockContext({ role: 'STUDENT' });
         
         mockPrisma.student.findUnique.mockResolvedValue({ id: faker.string.uuid() });
         mockPrisma.groupMember.findMany.mockResolvedValue([]);

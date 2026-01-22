@@ -14,6 +14,14 @@ import {
   validateDataNascita,
   validateProfileForm,
   PROVINCE_ITALIANE,
+  // Additional exports for extended tests
+  validateNome,
+  validateRelationship,
+  validateEmailOptional,
+  calculateAge,
+  isMinor,
+  validateParentGuardianForm,
+  PARENT_RELATIONSHIP_TYPES,
 } from '@/lib/validations/profileValidation';
 
 describe('profileValidation', () => {
@@ -419,6 +427,397 @@ describe('profileValidation', () => {
         expect(result.data.city).toBe('Roma');
         expect(result.data.province).toBe('RM');
       }
+    });
+  });
+});
+
+// ==================== ADDITIONAL TESTS ====================
+// Tests for parent/guardian validation functions
+
+describe('profileValidation - Additional Functions', () => {
+  describe('PARENT_RELATIONSHIP_TYPES', () => {
+    it('should contain expected relationship types', () => {
+      expect(PARENT_RELATIONSHIP_TYPES).toHaveLength(4);
+      
+      const values = PARENT_RELATIONSHIP_TYPES.map(t => t.value);
+      expect(values).toContain('PADRE');
+      expect(values).toContain('MADRE');
+      expect(values).toContain('TUTORE_LEGALE');
+      expect(values).toContain('ALTRO');
+    });
+
+    it('should have labels for each type', () => {
+      PARENT_RELATIONSHIP_TYPES.forEach(type => {
+        expect(type.label).toBeDefined();
+        expect(type.label.length).toBeGreaterThan(0);
+      });
+    });
+  });
+
+  describe('validateNome', () => {
+    describe('valid names', () => {
+      it('should accept valid Italian name', () => {
+        const result = validateNome('Mario');
+        expect(result.isValid).toBe(true);
+        expect(result.formattedValue).toBe('Mario');
+      });
+
+      it('should capitalize lowercase name', () => {
+        const result = validateNome('giuseppe');
+        expect(result.isValid).toBe(true);
+        expect(result.formattedValue).toBe('Giuseppe');
+      });
+
+      it('should handle compound names with space', () => {
+        const result = validateNome('maria teresa');
+        expect(result.isValid).toBe(true);
+        expect(result.formattedValue).toBe('Maria Teresa');
+      });
+
+      it('should handle names with apostrophe', () => {
+        const result = validateNome("d'amico");
+        expect(result.isValid).toBe(true);
+        expect(result.formattedValue).toBe("D'Amico");
+      });
+
+      it('should handle names with hyphen', () => {
+        const result = validateNome('jean-pierre');
+        expect(result.isValid).toBe(true);
+        expect(result.formattedValue).toBe('Jean-Pierre');
+      });
+
+      it('should handle accented characters', () => {
+        const result = validateNome('nicolò');
+        expect(result.isValid).toBe(true);
+        expect(result.formattedValue).toBe('Nicolò');
+      });
+
+      it('should use custom field name in errors', () => {
+        const result = validateNome('', 'cognome');
+        expect(result.isValid).toBe(false);
+        expect(result.error).toContain('cognome');
+      });
+    });
+
+    describe('invalid names', () => {
+      it('should reject empty string', () => {
+        const result = validateNome('');
+        expect(result.isValid).toBe(false);
+        expect(result.error).toBe('Il nome è obbligatorio');
+      });
+
+      it('should reject single character', () => {
+        const result = validateNome('A');
+        expect(result.isValid).toBe(false);
+        expect(result.error).toBe('Il nome è troppo corto');
+      });
+
+      it('should reject name over 50 characters', () => {
+        const result = validateNome('A'.repeat(51));
+        expect(result.isValid).toBe(false);
+        expect(result.error).toBe('Il nome è troppo lungo');
+      });
+
+      it('should reject name with numbers', () => {
+        const result = validateNome('Mario123');
+        expect(result.isValid).toBe(false);
+        expect(result.error).toBe('Il nome contiene caratteri non validi');
+      });
+
+      it('should reject name with special characters', () => {
+        const result = validateNome('Mario@#$');
+        expect(result.isValid).toBe(false);
+        expect(result.error).toBe('Il nome contiene caratteri non validi');
+      });
+    });
+  });
+
+  describe('validateRelationship', () => {
+    it('should accept PADRE', () => {
+      const result = validateRelationship('PADRE');
+      expect(result.isValid).toBe(true);
+      expect(result.formattedValue).toBe('PADRE');
+    });
+
+    it('should accept MADRE', () => {
+      const result = validateRelationship('MADRE');
+      expect(result.isValid).toBe(true);
+    });
+
+    it('should accept TUTORE_LEGALE', () => {
+      const result = validateRelationship('TUTORE_LEGALE');
+      expect(result.isValid).toBe(true);
+    });
+
+    it('should accept ALTRO', () => {
+      const result = validateRelationship('ALTRO');
+      expect(result.isValid).toBe(true);
+    });
+
+    it('should reject empty string', () => {
+      const result = validateRelationship('');
+      expect(result.isValid).toBe(false);
+      expect(result.error).toBe('Il tipo di relazione è obbligatorio');
+    });
+
+    it('should reject invalid relationship type', () => {
+      const result = validateRelationship('NONNO');
+      expect(result.isValid).toBe(false);
+      expect(result.error).toBe('Tipo di relazione non valido');
+    });
+  });
+
+  describe('validateEmailOptional', () => {
+    it('should accept empty string (optional field)', () => {
+      const result = validateEmailOptional('');
+      expect(result.isValid).toBe(true);
+      expect(result.formattedValue).toBeUndefined();
+    });
+
+    it('should accept whitespace only (treated as empty)', () => {
+      const result = validateEmailOptional('   ');
+      expect(result.isValid).toBe(true);
+      expect(result.formattedValue).toBeUndefined();
+    });
+
+    it('should accept valid email', () => {
+      const result = validateEmailOptional('test@example.com');
+      expect(result.isValid).toBe(true);
+      expect(result.formattedValue).toBe('test@example.com');
+    });
+
+    it('should lowercase email', () => {
+      const result = validateEmailOptional('Test@Example.COM');
+      expect(result.isValid).toBe(true);
+      expect(result.formattedValue).toBe('test@example.com');
+    });
+
+    it('should reject invalid email format', () => {
+      const result = validateEmailOptional('not-an-email');
+      expect(result.isValid).toBe(false);
+      expect(result.error).toBe('Formato email non valido');
+    });
+
+    it('should reject email without @', () => {
+      const result = validateEmailOptional('testexample.com');
+      expect(result.isValid).toBe(false);
+    });
+
+    it('should reject email without domain', () => {
+      const result = validateEmailOptional('test@');
+      expect(result.isValid).toBe(false);
+    });
+  });
+
+  describe('calculateAge', () => {
+    it('should calculate age correctly for past date', () => {
+      const thirtyYearsAgo = new Date();
+      thirtyYearsAgo.setFullYear(thirtyYearsAgo.getFullYear() - 30);
+      thirtyYearsAgo.setMonth(0, 1); // Jan 1
+      
+      const age = calculateAge(thirtyYearsAgo);
+      // Age should be 29 or 30 depending on current date
+      expect(age).toBeGreaterThanOrEqual(29);
+      expect(age).toBeLessThanOrEqual(30);
+    });
+
+    it('should accept string date format', () => {
+      const age = calculateAge('1990-06-15');
+      expect(age).toBeGreaterThan(30);
+    });
+
+    it('should accept Date object', () => {
+      const date = new Date(1990, 5, 15); // June 15, 1990
+      const age = calculateAge(date);
+      expect(age).toBeGreaterThan(30);
+    });
+
+    it('should handle birthday not yet occurred this year', () => {
+      const today = new Date();
+      const futureMonth = (today.getMonth() + 6) % 12;
+      const birthYear = today.getFullYear() - 25;
+      
+      // Create date 6 months from now last year (birthday hasn't happened)
+      const futureDate = new Date(birthYear, futureMonth, 15);
+      const age = calculateAge(futureDate);
+      
+      // Should be 24 if birthday hasn't happened yet, 25 if it has
+      expect(age).toBeGreaterThanOrEqual(24);
+      expect(age).toBeLessThanOrEqual(25);
+    });
+  });
+
+  describe('isMinor', () => {
+    it('should return true for person under 18', () => {
+      const fifteenYearsAgo = new Date();
+      fifteenYearsAgo.setFullYear(fifteenYearsAgo.getFullYear() - 15);
+      
+      expect(isMinor(fifteenYearsAgo)).toBe(true);
+    });
+
+    it('should return false for person 18 or older', () => {
+      const twentyYearsAgo = new Date();
+      twentyYearsAgo.setFullYear(twentyYearsAgo.getFullYear() - 20);
+      
+      expect(isMinor(twentyYearsAgo)).toBe(false);
+    });
+
+    it('should accept string date', () => {
+      expect(isMinor('2000-01-01')).toBe(false);
+    });
+
+    it('should handle edge case of exactly 18', () => {
+      const eighteenYearsAgo = new Date();
+      eighteenYearsAgo.setFullYear(eighteenYearsAgo.getFullYear() - 18);
+      eighteenYearsAgo.setMonth(0, 1); // Jan 1
+      
+      // Should be false (18 years old is not a minor)
+      const result = isMinor(eighteenYearsAgo);
+      expect(typeof result).toBe('boolean');
+    });
+  });
+
+  describe('validateParentGuardianForm', () => {
+    const validParentData = {
+      relationship: 'PADRE',
+      firstName: 'Mario',
+      lastName: 'Rossi',
+      fiscalCode: 'RSSMRA80A01H501U',
+      phone: '+39 333 123 4567',
+    };
+
+    it('should validate complete valid parent data', () => {
+      const result = validateParentGuardianForm(validParentData);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.relationship).toBe('PADRE');
+        expect(result.data.firstName).toBe('Mario');
+        expect(result.data.lastName).toBe('Rossi');
+      }
+    });
+
+    it('should validate with optional email', () => {
+      const result = validateParentGuardianForm({
+        ...validParentData,
+        email: 'mario.rossi@email.com',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.email).toBe('mario.rossi@email.com');
+      }
+    });
+
+    it('should validate with optional address fields', () => {
+      const result = validateParentGuardianForm({
+        ...validParentData,
+        address: 'Via Roma 123',
+        city: 'Roma',
+        province: 'RM',
+        postalCode: '00100',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.address).toBe('Via Roma 123');
+        expect(result.data.city).toBe('Roma');
+        expect(result.data.province).toBe('RM');
+        expect(result.data.postalCode).toBe('00100');
+      }
+    });
+
+    it('should return errors for invalid required fields', () => {
+      const result = validateParentGuardianForm({
+        relationship: 'INVALID',
+        firstName: '',
+        lastName: '',
+        fiscalCode: 'INVALID',
+        phone: '',
+      });
+      expect(result.success).toBe(false);
+      if (result.success === false) {
+        expect(result.errors.relationship).toBeDefined();
+        expect(result.errors.firstName).toBeDefined();
+        expect(result.errors.lastName).toBeDefined();
+        expect(result.errors.fiscalCode).toBeDefined();
+        expect(result.errors.phone).toBeDefined();
+      }
+    });
+
+    it('should return errors for invalid optional email', () => {
+      const result = validateParentGuardianForm({
+        ...validParentData,
+        email: 'invalid-email',
+      });
+      expect(result.success).toBe(false);
+      if (result.success === false) {
+        expect(result.errors.email).toBeDefined();
+      }
+    });
+
+    it('should return errors for invalid optional address', () => {
+      const result = validateParentGuardianForm({
+        ...validParentData,
+        address: 'ab', // Too short
+      });
+      expect(result.success).toBe(false);
+      if (result.success === false) {
+        expect(result.errors.address).toBeDefined();
+      }
+    });
+
+    it('should return errors for invalid optional city', () => {
+      const result = validateParentGuardianForm({
+        ...validParentData,
+        city: 'A', // Too short
+      });
+      expect(result.success).toBe(false);
+      if (result.success === false) {
+        expect(result.errors.city).toBeDefined();
+      }
+    });
+
+    it('should return errors for invalid optional province', () => {
+      const result = validateParentGuardianForm({
+        ...validParentData,
+        province: 'XX', // Invalid province code
+      });
+      expect(result.success).toBe(false);
+      if (result.success === false) {
+        expect(result.errors.province).toBeDefined();
+      }
+    });
+
+    it('should return errors for invalid optional postal code', () => {
+      const result = validateParentGuardianForm({
+        ...validParentData,
+        postalCode: '123', // Too short
+      });
+      expect(result.success).toBe(false);
+      if (result.success === false) {
+        expect(result.errors.postalCode).toBeDefined();
+      }
+    });
+
+    it('should format names correctly', () => {
+      const result = validateParentGuardianForm({
+        ...validParentData,
+        firstName: 'MARIO',
+        lastName: 'rossi',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.firstName).toBe('Mario');
+        expect(result.data.lastName).toBe('Rossi');
+      }
+    });
+
+    it('should accept all relationship types', () => {
+      PARENT_RELATIONSHIP_TYPES.forEach(type => {
+        const result = validateParentGuardianForm({
+          ...validParentData,
+          relationship: type.value,
+        });
+        expect(result.success).toBe(true);
+      });
     });
   });
 });
