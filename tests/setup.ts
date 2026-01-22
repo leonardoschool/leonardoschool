@@ -21,6 +21,81 @@ afterEach(() => {
 // Mock environment variables for testing
 vi.stubEnv('NODE_ENV', 'test');
 vi.stubEnv('DATABASE_URL', 'postgresql://test:test@localhost:5432/test');
+vi.stubEnv('FIREBASE_SERVICE_ACCOUNT_KEY', JSON.stringify({
+  type: 'service_account',
+  project_id: 'test-project',
+  private_key_id: 'test-key-id',
+  private_key: '-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBALRiMLABc\n-----END RSA PRIVATE KEY-----\n',
+  client_email: 'test@test-project.iam.gserviceaccount.com',
+  client_id: '123456789',
+  auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+  token_uri: 'https://oauth2.googleapis.com/token',
+}));
+vi.stubEnv('NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET', 'test-project.appspot.com');
+
+// Mock Firebase Admin SDK (must be before any imports that use it)
+vi.mock('firebase-admin/app', () => ({
+  initializeApp: vi.fn(() => ({})),
+  getApps: vi.fn(() => []),
+  cert: vi.fn(() => ({})),
+}));
+
+vi.mock('firebase-admin/auth', () => ({
+  getAuth: vi.fn(() => ({
+    verifyIdToken: vi.fn().mockResolvedValue({
+      uid: 'test-uid',
+      email: 'test@example.com',
+      email_verified: true,
+    }),
+    getUser: vi.fn().mockResolvedValue({
+      uid: 'test-uid',
+      email: 'test@example.com',
+      emailVerified: true,
+    }),
+    createUser: vi.fn(),
+    updateUser: vi.fn(),
+    deleteUser: vi.fn(),
+    setCustomUserClaims: vi.fn(),
+  })),
+}));
+
+vi.mock('firebase-admin/storage', () => ({
+  getStorage: vi.fn(() => ({
+    bucket: vi.fn(() => ({
+      file: vi.fn(() => ({
+        save: vi.fn(),
+        delete: vi.fn(),
+        getSignedUrl: vi.fn().mockResolvedValue(['https://storage.test/file']),
+      })),
+    })),
+  })),
+}));
+
+// Mock the admin module itself
+vi.mock('@/lib/firebase/admin', () => ({
+  adminApp: {},
+  adminAuth: {
+    verifyIdToken: vi.fn().mockResolvedValue({
+      uid: 'test-uid',
+      email: 'test@example.com',
+      email_verified: true,
+    }),
+    getUser: vi.fn(),
+    createUser: vi.fn(),
+    updateUser: vi.fn(),
+    deleteUser: vi.fn(),
+    setCustomUserClaims: vi.fn(),
+  },
+  adminStorage: {
+    bucket: vi.fn(() => ({
+      file: vi.fn(() => ({
+        save: vi.fn(),
+        delete: vi.fn(),
+        getSignedUrl: vi.fn().mockResolvedValue(['https://storage.test/file']),
+      })),
+    })),
+  },
+}));
 
 // Mock Next.js navigation
 vi.mock('next/navigation', () => ({
