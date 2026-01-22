@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Note: 'any' types used for Prisma query results with dynamic includes
 import { NextRequest, NextResponse } from 'next/server';
-import { adminAuth } from '@/lib/firebase/admin';
+import { getAdminAuth } from '@/lib/firebase/admin';
 import { prisma } from '@/lib/prisma/client';
 import { cookies } from 'next/headers';
 import { sanitizeText } from '@/lib/utils/escapeHtml';
@@ -25,7 +25,7 @@ export async function GET(
     // Verify token
     let decodedToken;
     try {
-      decodedToken = await adminAuth.verifyIdToken(token);
+      decodedToken = await getAdminAuth().verifyIdToken(token);
     } catch {
       return NextResponse.json({ error: 'Token non valido' }, { status: 401 });
     }

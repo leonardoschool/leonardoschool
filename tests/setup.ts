@@ -81,9 +81,8 @@ vi.mock('firebase-admin/storage', () => ({
 }));
 
 // Mock the admin module itself
-vi.mock('@/lib/firebase/admin', () => ({
-  adminApp: {},
-  adminAuth: {
+vi.mock('@/lib/firebase/admin', () => {
+  const mockAuth = {
     verifyIdToken: vi.fn().mockResolvedValue({
       uid: 'test-uid',
       email: 'test@example.com',
@@ -94,8 +93,9 @@ vi.mock('@/lib/firebase/admin', () => ({
     updateUser: vi.fn(),
     deleteUser: vi.fn(),
     setCustomUserClaims: vi.fn(),
-  },
-  adminStorage: {
+  };
+  
+  const mockStorage = {
     bucket: vi.fn(() => ({
       file: vi.fn(() => ({
         save: vi.fn(),
@@ -103,8 +103,17 @@ vi.mock('@/lib/firebase/admin', () => ({
         getSignedUrl: vi.fn().mockResolvedValue(['https://storage.test/file']),
       })),
     })),
-  },
-}));
+  };
+  
+  return {
+    adminApp: {},
+    adminAuth: mockAuth,
+    adminStorage: mockStorage,
+    getAdminAuth: vi.fn(() => mockAuth),
+    getAdminStorage: vi.fn(() => mockStorage),
+    getAdminApp: vi.fn(() => ({})),
+  };
+});
 
 // Mock Next.js navigation
 vi.mock('next/navigation', () => ({

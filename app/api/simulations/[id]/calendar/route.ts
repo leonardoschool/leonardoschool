@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma/client';
-import { adminAuth } from '@/lib/firebase/admin';
+import { getAdminAuth } from '@/lib/firebase/admin';
 import { generateICalendar, EventEmailData } from '@/lib/email/eventEmails';
 
 export async function GET(
@@ -23,7 +23,7 @@ export async function GET(
 
     let decodedToken;
     try {
-      decodedToken = await adminAuth.verifyIdToken(authToken);
+      decodedToken = await getAdminAuth().verifyIdToken(authToken);
     } catch {
       return NextResponse.json({ error: 'Token non valido' }, { status: 401 });
     }

@@ -67,6 +67,7 @@ jobs:
 
       - name: Publish coverage report in PR
         uses: davelosert/vitest-coverage-report-action@v2
+        if: github.event_name == 'pull_request'
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 

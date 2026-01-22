@@ -1,7 +1,7 @@
 // tRPC Context - Shared between all procedures
 import { FetchCreateContextFnOptions } from '@trpc/server/adapters/fetch';
 import { prisma } from '@/lib/prisma/client';
-import { adminAuth } from '@/lib/firebase/admin';
+import { getAdminAuth } from '@/lib/firebase/admin';
 import { User, Student, Admin, Collaborator } from '@prisma/client';
 import { initRequestContext, generateRequestId } from '@/lib/utils/requestContext';
 
@@ -37,7 +37,7 @@ export async function createContext(opts: FetchCreateContextFnOptions) {
   if (token) {
     try {
       // Verify Firebase token
-      const decodedToken = await adminAuth.verifyIdToken(token);
+      const decodedToken = await getAdminAuth().verifyIdToken(token);
       firebaseUid = decodedToken.uid;
 
       // Get user from database

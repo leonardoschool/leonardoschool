@@ -1,6 +1,6 @@
 // API route to get current user data after login
 import { NextRequest, NextResponse } from 'next/server';
-import { adminAuth } from '@/lib/firebase/admin';
+import { getAdminAuth } from '@/lib/firebase/admin';
 import { prisma } from '@/lib/prisma/client';
 import { checkRateLimit, getClientIp, rateLimitExceededResponse } from '@/lib/middleware/rateLimit';
 
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verifica token Firebase
-    const decodedToken = await adminAuth.verifyIdToken(token);
+    const decodedToken = await getAdminAuth().verifyIdToken(token);
 
     // Recupera utente dal database
     let user = await prisma.user.findUnique({

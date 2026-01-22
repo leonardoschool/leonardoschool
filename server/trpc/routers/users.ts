@@ -5,7 +5,7 @@
 import { router, adminProcedure, protectedProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { adminAuth } from '@/lib/firebase/admin';
+import { getAdminAuth } from '@/lib/firebase/admin';
 import { Prisma } from '@prisma/client';
 import { generateMatricola } from '@/lib/utils/matricolaUtils';
 import { createCachedQuery, CACHE_TIMES, CACHE_TAGS } from '@/lib/cache/serverCache';
@@ -849,7 +849,7 @@ export const usersRouter = router({
 
       // Delete from Firebase
       try {
-        await adminAuth.deleteUser(user.firebaseUid);
+        await getAdminAuth().deleteUser(user.firebaseUid);
       } catch (firebaseError: any) {
         // If user doesn't exist in Firebase, continue with DB deletion
         if (firebaseError.code !== 'auth/user-not-found') {
