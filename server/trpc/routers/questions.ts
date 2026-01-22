@@ -11,12 +11,684 @@ import {
   validateQuestionAnswers,
   validateQuestionKeywords,
   importQuestionRowSchema,
+  QuestionFilterInput,
 } from '@/lib/validations/questionValidation';
 import {
   smartRandomGenerationSchema,
   getDifficultyRatios,
 } from '@/lib/validations/simulationValidation';
 import * as notificationService from '@/server/services/notificationService';
+
+// ============ Helper Functions ============
+
+/**
+ * Build search conditions for question text search
+ */
+function buildSearchConditions(search: string | undefined): Record<string, unknown>[] {
+  if (!search) return [];
+  return [{
+    OR: [
+      { text: { contains: search, mode: 'insensitive' } },
+      { legacyTags: { has: search } },
+      { source: { contains: search, mode: 'insensitive' } },
+    ],
+  }];
+}
+
+/**
+ * Build tag filter conditions
+ */
+function buildTagFilterConditions(tagIds: string[] | undefined): Record<string, unknown>[] {
+  if (!tagIds || tagIds.length === 0) return [];
+  return [{
+    questionTags: {
+      some: {
+        tagId: { in: tagIds },
+      },
+    },
+  }];
+}
+
+/**
+ * Build basic filters for question where clause
+ */
+function buildQuestionBasicFilters(input: QuestionFilterInput): Record<string, unknown> {
+  const where: Record<string, unknown> = {};
+  
+  if (input.subjectId) where.subjectId = input.subjectId;
+  if (input.topicId) where.topicId = input.topicId;
+  if (input.subTopicId) where.subTopicId = input.subTopicId;
+  if (input.type) where.type = input.type;
+  if (input.difficulty) where.difficulty = input.difficulty;
+  if (input.year) where.year = input.year;
+  if (input.source) where.source = { contains: input.source, mode: 'insensitive' };
+  if (input.createdById) where.createdById = input.createdById;
+  if (input.tags && input.tags.length > 0) where.legacyTags = { hasEvery: input.tags };
+  
+  return where;
+}
+
+/**
+ * Build status filter for questions
+ */
+function buildQuestionStatusFilter(
+  status: string | undefined,
+  includeDrafts: boolean | undefined,
+  includeArchived: boolean | undefined
+): { in: string[] } | string {
+  if (status) return status;
+  
+  const statusIn: string[] = ['PUBLISHED'];
+  if (includeDrafts) statusIn.push('DRAFT');
+  if (includeArchived) statusIn.push('ARCHIVED');
+  return { in: statusIn };
+}
+
+/**
+ * Build optional relation update object (connect/disconnect)
+ */
+function buildRelationUpdate(
+  value: string | null | undefined
+): { connect: { id: string } } | { disconnect: true } | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return { disconnect: true };
+  return { connect: { id: value } };
+}
+
+// Types for import helpers
+type ImportAnswerData = { text: string; isCorrect: boolean; order: number; label: string };
+type ImportKeywordData = {
+  keyword: string;
+  weight: number;
+  isRequired: boolean;
+  isSuggested: boolean;
+  caseSensitive: boolean;
+  exactMatch: boolean;
+  synonyms: string[];
+};
+
+/**
+ * Build answers array from import row
+ */
+function buildImportAnswers(
+  answerA: string | undefined | null,
+  answerB: string | undefined | null,
+  answerC: string | undefined | null,
+  answerD: string | undefined | null,
+  answerE: string | undefined | null,
+  correctAnswers: string | undefined | null
+): ImportAnswerData[] {
+  const answers: ImportAnswerData[] = [];
+  const correctSet = new Set(
+    (correctAnswers ?? '').toUpperCase().split(',').map(s => s.trim())
+  );
+  
+  const answerTexts = [answerA, answerB, answerC, answerD, answerE];
+  answerTexts.forEach((text, idx) => {
+    if (text) {
+      const label = String.fromCodePoint(65 + idx);
+      answers.push({
+        text,
+        isCorrect: correctSet.has(label),
+        order: idx,
+        label,
+      });
+    }
+  });
+  
+  return answers;
+}
+
+/**
+ * Build keywords array from comma-separated string
+ */
+function buildImportKeywords(keywordsString: string | undefined | null): ImportKeywordData[] {
+  if (!keywordsString) return [];
+  
+  return keywordsString.split(',').map(k => k.trim()).filter(Boolean).map(keyword => ({
+    keyword,
+    weight: 1,
+    isRequired: false,
+    isSuggested: false,
+    caseSensitive: false,
+    exactMatch: false,
+    synonyms: [],
+  }));
+}
+
+/**
+ * Match subject ID from code
+ */
+function matchSubjectId(
+  subjectCode: string | undefined | null,
+  defaultSubjectId: string | undefined,
+  subjectByCode: Map<string, string>
+): string | undefined {
+  if (!subjectCode) return defaultSubjectId;
+  return subjectByCode.get(subjectCode.toUpperCase()) ?? defaultSubjectId;
+}
+
+/**
+ * Match topic ID from name and subject
+ */
+function matchTopicId(
+  topicName: string | undefined | null,
+  subjectId: string | undefined,
+  topics: Array<{ id: string; name: string; subjectId: string }>
+): string | null {
+  if (!topicName || !subjectId) return null;
+  const matchedTopic = topics.find(
+    t => t.subjectId === subjectId && t.name.toLowerCase() === topicName.toLowerCase()
+  );
+  return matchedTopic?.id ?? null;
+}
+
+/**
+ * Build nested write for answers in Prisma create
+ */
+function buildAnswersNestedCreate(
+  answers: ImportAnswerData[]
+): { create: Array<{ text: string; isCorrect: boolean; order: number; label: string }> } | undefined {
+  if (answers.length === 0) return undefined;
+  return {
+    create: answers.map(a => ({
+      text: a.text,
+      isCorrect: a.isCorrect,
+      order: a.order,
+      label: a.label,
+    })),
+  };
+}
+
+/**
+ * Build nested write for keywords in Prisma create
+ */
+function buildKeywordsNestedCreate(
+  keywords: ImportKeywordData[],
+  createdById: string
+): { create: Array<{
+  keyword: string;
+  weight: number;
+  isRequired: boolean;
+  isSuggested: boolean;
+  caseSensitive: boolean;
+  exactMatch: boolean;
+  synonyms: string[];
+  createdById: string;
+}> } | undefined {
+  if (keywords.length === 0) return undefined;
+  return {
+    create: keywords.map(k => ({
+      keyword: k.keyword,
+      weight: k.weight,
+      isRequired: k.isRequired,
+      isSuggested: k.isSuggested,
+      caseSensitive: k.caseSensitive,
+      exactMatch: k.exactMatch,
+      synonyms: k.synonyms,
+      createdById,
+    })),
+  };
+}
+
+/**
+ * Parse comma-separated tags string
+ */
+function parseLegacyTags(tags: string | undefined | null): string[] {
+  if (!tags) return [];
+  return tags.split(',').map(t => t.trim());
+}
+
+// Type for subject with question count
+type SubjectWithCount = {
+  id: string;
+  _count: { questions: number };
+};
+
+/**
+ * Calculate proportional distribution based on available questions
+ */
+function calculateProportionalDistribution(
+  subjects: SubjectWithCount[],
+  totalQuestions: number
+): Map<string, number> {
+  const distribution = new Map<string, number>();
+  const activeSubjects = subjects.filter(s => s._count.questions > 0);
+  const totalAvailable = activeSubjects.reduce((sum, s) => sum + s._count.questions, 0);
+  
+  if (totalAvailable === 0) return distribution;
+  
+  let distributed = 0;
+  activeSubjects.forEach((s, idx) => {
+    const proportion = s._count.questions / totalAvailable;
+    const count = idx === activeSubjects.length - 1
+      ? totalQuestions - distributed // Last subject gets remainder
+      : Math.round(proportion * totalQuestions);
+    distribution.set(s.id, count);
+    distributed += count;
+  });
+  
+  return distribution;
+}
+
+/**
+ * Calculate balanced distribution (equal per subject)
+ */
+function calculateBalancedDistribution(
+  subjects: SubjectWithCount[],
+  totalQuestions: number
+): Map<string, number> {
+  const distribution = new Map<string, number>();
+  const activeSubjects = subjects.filter(s => s._count.questions > 0);
+  
+  if (activeSubjects.length === 0) return distribution;
+  
+  const perSubject = Math.floor(totalQuestions / activeSubjects.length);
+  const remainder = totalQuestions % activeSubjects.length;
+  activeSubjects.forEach((s, idx) => {
+    distribution.set(s.id, perSubject + (idx < remainder ? 1 : 0));
+  });
+  
+  return distribution;
+}
+
+/**
+ * Calculate target distribution based on preset
+ */
+function calculateTargetDistribution(
+  preset: string,
+  subjects: SubjectWithCount[],
+  totalQuestions: number,
+  focusSubjectId?: string,
+  customDistribution?: Record<string, number>
+): Map<string, number> {
+  switch (preset) {
+    case 'PROPORTIONAL':
+      return calculateProportionalDistribution(subjects, totalQuestions);
+    case 'BALANCED':
+      return calculateBalancedDistribution(subjects, totalQuestions);
+    case 'SINGLE_SUBJECT':
+      if (focusSubjectId) {
+        return new Map([[focusSubjectId, totalQuestions]]);
+      }
+      return calculateProportionalDistribution(subjects, totalQuestions);
+    case 'CUSTOM':
+      if (customDistribution) {
+        const dist = new Map<string, number>();
+        for (const [subjectId, count] of Object.entries(customDistribution)) {
+          if (count > 0) {
+            dist.set(subjectId, count);
+          }
+        }
+        return dist;
+      }
+      return calculateProportionalDistribution(subjects, totalQuestions);
+    default:
+      return calculateProportionalDistribution(subjects, totalQuestions);
+  }
+}
+
+/**
+ * Ensure distribution total matches requested total
+ */
+function normalizeDistributionTotal(
+  distribution: Map<string, number>,
+  targetTotal: number
+): void {
+  const currentTotal = Array.from(distribution.values()).reduce((a, b) => a + b, 0);
+  if (currentTotal < targetTotal && distribution.size > 0) {
+    const firstKey = Array.from(distribution.keys())[0];
+    distribution.set(firstKey, (distribution.get(firstKey) || 0) + (targetTotal - currentTotal));
+  }
+}
+
+/**
+ * Build base where clause for question queries
+ */
+function buildSmartRandomBaseWhere(
+  excludeQuestionIds?: string[],
+  tagIds?: string[]
+): Record<string, unknown> {
+  const baseWhere: Record<string, unknown> = {
+    status: 'PUBLISHED',
+  };
+
+  if (excludeQuestionIds && excludeQuestionIds.length > 0) {
+    baseWhere.id = { notIn: excludeQuestionIds };
+  }
+
+  if (tagIds && tagIds.length > 0) {
+    baseWhere.questionTags = {
+      some: {
+        tagId: { in: tagIds },
+      },
+    };
+  }
+
+  return baseWhere;
+}
+
+/**
+ * Calculate difficulty targets for a given count
+ */
+function calculateDifficultyTargets(
+  targetCount: number,
+  ratios: { EASY: number; MEDIUM: number; HARD: number }
+): { EASY: number; MEDIUM: number; HARD: number } {
+  const targets = {
+    EASY: Math.round(targetCount * ratios.EASY),
+    MEDIUM: Math.round(targetCount * ratios.MEDIUM),
+    HARD: Math.round(targetCount * ratios.HARD),
+  };
+
+  // Ensure we get exactly targetCount
+  const diffTotal = targets.EASY + targets.MEDIUM + targets.HARD;
+  if (diffTotal < targetCount) {
+    targets.MEDIUM += targetCount - diffTotal;
+  } else if (diffTotal > targetCount) {
+    // Reduce from hard first, then medium
+    const excess = diffTotal - targetCount;
+    if (targets.HARD >= excess) {
+      targets.HARD -= excess;
+    } else {
+      targets.MEDIUM -= (excess - targets.HARD);
+      targets.HARD = 0;
+    }
+  }
+
+  return targets;
+}
+
+/**
+ * Build order by clause for smart question selection
+ */
+function buildSmartOrderBy(
+  avoidRecentlyUsed: boolean,
+  preferRecentQuestions: boolean,
+  maximizeTopicCoverage: boolean
+): Array<{ [key: string]: 'asc' | 'desc' }> {
+  const orderBy: Array<{ [key: string]: 'asc' | 'desc' }> = [];
+  
+  if (avoidRecentlyUsed) {
+    orderBy.push({ timesUsed: 'asc' });
+  }
+  if (preferRecentQuestions) {
+    orderBy.push({ createdAt: 'desc' });
+  }
+  if (maximizeTopicCoverage) {
+    orderBy.push({ topicId: 'asc' });
+  }
+  orderBy.push({ id: 'asc' }); // Stable fallback
+  
+  return orderBy;
+}
+
+// Type for question with topic for topic coverage
+type QuestionWithTopic = {
+  id: string;
+  topicId: string | null;
+  [key: string]: unknown;
+};
+
+/**
+ * Apply topic coverage maximization - round robin pick from topics
+ */
+function applyTopicCoverage<T extends QuestionWithTopic>(
+  questions: T[],
+  targetCount: number
+): T[] {
+  if (questions.length <= targetCount) return questions;
+  
+  // Group by topic
+  const byTopic = new Map<string | null, T[]>();
+  for (const q of questions) {
+    const topicId = q.topicId;
+    if (!byTopic.has(topicId)) {
+      byTopic.set(topicId, []);
+    }
+    byTopic.get(topicId)?.push(q);
+  }
+
+  // Round-robin pick from topics
+  const result: T[] = [];
+  const topicIterators = Array.from(byTopic.values()).map(arr => ({ arr, idx: 0 }));
+  let topicIdx = 0;
+  
+  while (result.length < targetCount && topicIterators.some(t => t.idx < t.arr.length)) {
+    const iterator = topicIterators[topicIdx % topicIterators.length];
+    if (iterator.idx < iterator.arr.length) {
+      result.push(iterator.arr[iterator.idx]);
+      iterator.idx++;
+    }
+    topicIdx++;
+  }
+  
+  return result;
+}
+
+// Selected question type for smart generation
+type SmartSelectedQuestion = {
+  questionId: string;
+  order: number;
+  question: {
+    id: string;
+    text: string;
+    type: string;
+    difficulty: string;
+    subject?: { id: string; name: string; color: string | null };
+    topic?: { id: string; name: string };
+  };
+};
+
+// Type for question data from Prisma query
+type QuestionQueryResult = {
+  id: string;
+  text: string;
+  type: string;
+  difficulty: string;
+  topicId: string | null;
+  timesUsed?: number;
+  createdAt?: Date;
+  subject: { id: string; name: string; color: string | null } | null;
+  topic: { id: string; name: string } | null;
+};
+
+/**
+ * Transform question query result to selected question format
+ */
+function transformToSelectedQuestion(
+  q: QuestionQueryResult,
+  order: number
+): SmartSelectedQuestion {
+  return {
+    questionId: q.id,
+    order,
+    question: {
+      id: q.id,
+      text: q.text,
+      type: q.type,
+      difficulty: q.difficulty,
+      subject: q.subject ?? undefined,
+      topic: q.topic ?? undefined,
+    },
+  };
+}
+
+// Configuration for question selection
+type SelectionConfig = {
+  baseWhere: Record<string, unknown>;
+  difficultyRatios: { EASY: number; MEDIUM: number; HARD: number };
+  avoidRecentlyUsed: boolean;
+  preferRecentQuestions: boolean;
+  maximizeTopicCoverage: boolean;
+};
+
+// Common select clause for question queries
+const questionSelectClause = {
+  id: true,
+  text: true,
+  type: true,
+  difficulty: true,
+  topicId: true,
+  timesUsed: true,
+  createdAt: true,
+  subject: {
+    select: { id: true, name: true, color: true },
+  },
+  topic: {
+    select: { id: true, name: true },
+  },
+};
+
+/**
+ * Select questions for a specific difficulty level
+ */
+async function selectQuestionsForDifficulty(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  prisma: any,
+  subjectId: string,
+  difficulty: string,
+  count: number,
+  excludeIds: string[],
+  config: SelectionConfig
+): Promise<{ questions: SmartSelectedQuestion[]; selectedIds: string[]; orderStart: number }> {
+  const orderByClause = buildSmartOrderBy(
+    config.avoidRecentlyUsed,
+    config.preferRecentQuestions,
+    config.maximizeTopicCoverage
+  );
+
+  const questions = await prisma.question.findMany({
+    where: {
+      ...config.baseWhere,
+      subjectId,
+      difficulty: difficulty as 'EASY' | 'MEDIUM' | 'HARD',
+      id: { notIn: excludeIds },
+    },
+    take: count * 3, // Get more than needed for shuffling
+    orderBy: orderByClause,
+    select: questionSelectClause,
+  });
+
+  // Apply topic coverage maximization using helper
+  const finalQuestions = config.maximizeTopicCoverage
+    ? applyTopicCoverage(questions, count)
+    : questions;
+
+  // Shuffle and take only what we need
+  const shuffled = [...finalQuestions].sort(() => Math.random() - 0.5);
+  const picked = shuffled.slice(0, count);
+
+  const selectedIds = picked.map((q: QuestionQueryResult) => q.id);
+  const selectedQuestions = picked.map((q: QuestionQueryResult, idx: number) => transformToSelectedQuestion(q, idx));
+
+  return { questions: selectedQuestions, selectedIds, orderStart: picked.length };
+}
+
+/**
+ * Fill remaining questions when target not met
+ */
+async function fillRemainingQuestions(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  prisma: any,
+  subjectId: string,
+  remainingNeeded: number,
+  excludeIds: string[],
+  config: SelectionConfig,
+  startOrder: number
+): Promise<{ questions: SmartSelectedQuestion[]; selectedIds: string[] }> {
+  const remainingTargets = calculateRemainingDifficultyTargets(remainingNeeded, config.difficultyRatios);
+  const allQuestions: SmartSelectedQuestion[] = [];
+  const allIds: string[] = [];
+  let orderCounter = startOrder;
+
+  const difficultyEntries = Object.entries(remainingTargets).filter(([, count]) => count > 0);
+
+  for (const [difficulty, count] of difficultyEntries) {
+    const extraQuestions = await prisma.question.findMany({
+      where: {
+        ...config.baseWhere,
+        subjectId,
+        difficulty: difficulty as 'EASY' | 'MEDIUM' | 'HARD',
+        id: { notIn: [...excludeIds, ...allIds] },
+      },
+      take: count,
+      orderBy: config.avoidRecentlyUsed ? { timesUsed: 'asc' } : { createdAt: 'desc' },
+      select: questionSelectClause,
+    });
+
+    for (const q of extraQuestions) {
+      allIds.push(q.id);
+      allQuestions.push(transformToSelectedQuestion(q, orderCounter++));
+    }
+  }
+
+  return { questions: allQuestions, selectedIds: allIds };
+}
+
+/**
+ * Calculate remaining difficulty targets for fill-gap logic
+ */
+function calculateRemainingDifficultyTargets(
+  remainingNeeded: number,
+  ratios: { EASY: number; MEDIUM: number; HARD: number }
+): { EASY: number; MEDIUM: number; HARD: number } {
+  const targets = {
+    EASY: Math.round(remainingNeeded * ratios.EASY),
+    MEDIUM: Math.round(remainingNeeded * ratios.MEDIUM),
+    HARD: Math.round(remainingNeeded * ratios.HARD),
+  };
+
+  // Ensure total matches
+  const diffTotal = targets.EASY + targets.MEDIUM + targets.HARD;
+  if (diffTotal < remainingNeeded) {
+    targets.MEDIUM += remainingNeeded - diffTotal;
+  }
+
+  return targets;
+}
+
+/**
+ * Calculate statistics for generated questions
+ */
+function calculateGenerationStats(questions: SmartSelectedQuestion[]): {
+  total: number;
+  bySubject: Record<string, { name: string; count: number; color: string | null }>;
+  byDifficulty: Record<string, number>;
+  topicsCovered: number;
+} {
+  const bySubject: Record<string, { name: string; count: number; color: string | null }> = {};
+  const byDifficulty: Record<string, number> = { EASY: 0, MEDIUM: 0, HARD: 0 };
+  const topicsSet = new Set<string>();
+
+  for (const q of questions) {
+    // Subject stats
+    const subjectName = q.question.subject?.name || 'Sconosciuta';
+    if (!bySubject[subjectName]) {
+      bySubject[subjectName] = { 
+        name: subjectName, 
+        count: 0, 
+        color: q.question.subject?.color || null 
+      };
+    }
+    bySubject[subjectName].count++;
+
+    // Difficulty stats
+    byDifficulty[q.question.difficulty]++;
+
+    // Topic coverage
+    if (q.question.topic) {
+      topicsSet.add(q.question.topic.id);
+    }
+  }
+
+  return {
+    total: questions.length,
+    bySubject,
+    byDifficulty,
+    topicsCovered: topicsSet.size,
+  };
+}
 
 export const questionsRouter = router({
   // ==================== QUESTION CRUD ====================
@@ -25,77 +697,17 @@ export const questionsRouter = router({
   getQuestions: staffProcedure
     .input(questionFilterSchema)
     .query(async ({ ctx, input }) => {
-      const {
-        page,
-        pageSize,
-        search,
-        subjectId,
-        topicId,
-        subTopicId,
-        type,
-        status,
-        difficulty,
-        tags,
-        tagIds,
-        year,
-        source,
-        createdById,
-        sortBy,
-        sortOrder,
-        includeAnswers,
-        includeDrafts,
-        includeArchived,
-      } = input;
+      const { page, pageSize, sortBy, sortOrder, includeAnswers } = input;
 
-      // Build where clause
-      const where: Record<string, unknown> = {};
-      const andConditions: Record<string, unknown>[] = [];
-
-      // Search in text
-      if (search) {
-        andConditions.push({
-          OR: [
-            { text: { contains: search, mode: 'insensitive' } },
-            { legacyTags: { has: search } },
-            { source: { contains: search, mode: 'insensitive' } },
-          ],
-        });
-      }
-
-      // Filters
-      if (subjectId) where.subjectId = subjectId;
-      if (topicId) where.topicId = topicId;
-      if (subTopicId) where.subTopicId = subTopicId;
-      if (type) where.type = type;
-      if (difficulty) where.difficulty = difficulty;
-      if (year) where.year = year;
-      if (source) where.source = { contains: source, mode: 'insensitive' };
-      if (createdById) where.createdById = createdById;
-      if (tags && tags.length > 0) where.legacyTags = { hasEvery: tags };
-      
-      // Filter by new QuestionTag IDs
-      if (tagIds && tagIds.length > 0) {
-        andConditions.push({
-          questionTags: {
-            some: {
-              tagId: { in: tagIds },
-            },
-          },
-        });
-      }
+      // Build where clause using helpers
+      const where = buildQuestionBasicFilters(input);
+      const andConditions: Record<string, unknown>[] = [
+        ...buildSearchConditions(input.search),
+        ...buildTagFilterConditions(input.tagIds),
+      ];
 
       // Status filter
-      if (status) {
-        where.status = status;
-      } else {
-        const statusIn: string[] = ['PUBLISHED'];
-        if (includeDrafts) statusIn.push('DRAFT');
-        if (includeArchived) statusIn.push('ARCHIVED');
-        where.status = { in: statusIn };
-      }
-
-      // Collaborators can see all questions but can only edit/delete their own
-      // This is enforced in the update/delete mutations, not here in the list query
+      where.status = buildQuestionStatusFilter(input.status, input.includeDrafts, input.includeArchived);
 
       // Combine AND conditions if any
       if (andConditions.length > 0) {
@@ -323,7 +935,7 @@ export const questionsRouter = router({
                 isCorrect: answer.isCorrect ?? false,
                 explanation: answer.explanation ?? null,
                 order: answer.order ?? index,
-                label: answer.label ?? String.fromCharCode(65 + index),
+                label: answer.label ?? String.fromCodePoint(65 + index),
               })),
             }
           } : {}),
@@ -332,7 +944,7 @@ export const questionsRouter = router({
             keywords: {
               create: keywords.map((keyword) => ({
                 keyword: keyword.keyword,
-                weight: keyword.weight ?? 1.0,
+                weight: keyword.weight ?? 1,
                 isRequired: keyword.isRequired ?? false,
                 isSuggested: keyword.isSuggested ?? false,
                 caseSensitive: keyword.caseSensitive ?? false,
@@ -412,15 +1024,17 @@ export const questionsRouter = router({
       // Update using sequential operations with callback transaction (using ctx.prisma inside)
       const updatedQuestion = await ctx.prisma.$transaction(async () => {
         // Create version snapshot before update
+        const snapshotData = structuredClone({
+          ...currentQuestion,
+          answers: currentQuestion.answers,
+          keywords: currentQuestion.keywords,
+        });
+        
         await ctx.prisma.questionVersion.create({
           data: {
             questionId: id,
             version: currentQuestion.version,
-            snapshot: JSON.parse(JSON.stringify({
-              ...currentQuestion,
-              answers: currentQuestion.answers,
-              keywords: currentQuestion.keywords,
-            })),
+            snapshot: snapshotData,
             changeReason: changeReason ?? null,
             changedById: ctx.user.id,
           },
@@ -444,26 +1058,12 @@ export const questionsRouter = router({
           where: { id },
           data: {
             ...restData,
-            // Handle subject relation
-            subject: subjectId === undefined 
-              ? undefined 
-              : subjectId === null 
-                ? { disconnect: true } 
-                : { connect: { id: subjectId } },
-            // Handle topic relation  
-            topic: topicId === undefined 
-              ? undefined 
-              : topicId === null 
-                ? { disconnect: true } 
-                : { connect: { id: topicId } },
-            // Handle subTopic relation
-            subTopic: subTopicId === undefined 
-              ? undefined 
-              : subTopicId === null 
-                ? { disconnect: true } 
-                : { connect: { id: subTopicId } },
+            // Handle subject/topic/subTopic relations using helper
+            subject: buildRelationUpdate(subjectId),
+            topic: buildRelationUpdate(topicId),
+            subTopic: buildRelationUpdate(subTopicId),
             // Handle legacy tags
-            legacyTags: tags !== undefined ? tags : undefined,
+            legacyTags: tags,
             updatedById: ctx.user.id,
             version: { increment: 1 },
             publishedAt: restData.status === 'PUBLISHED' && !currentQuestion.publishedAt
@@ -481,7 +1081,7 @@ export const questionsRouter = router({
                   isCorrect: answer.isCorrect ?? false,
                   explanation: answer.explanation ?? null,
                   order: answer.order ?? index,
-                  label: answer.label ?? String.fromCharCode(65 + index),
+                  label: answer.label ?? String.fromCodePoint(65 + index),
                 })),
               }
             } : {}),
@@ -490,7 +1090,7 @@ export const questionsRouter = router({
               keywords: {
                 create: keywords.map((keyword) => ({
                   keyword: keyword.keyword,
-                  weight: keyword.weight ?? 1.0,
+                  weight: keyword.weight ?? 1,
                   isRequired: keyword.isRequired ?? false,
                   isSuggested: keyword.isSuggested ?? false,
                   caseSensitive: keyword.caseSensitive ?? false,
@@ -1005,7 +1605,7 @@ export const questionsRouter = router({
         const str = String(value);
         // If contains comma, semicolon, newline or quotes, wrap in quotes
         if (str.includes(',') || str.includes(';') || str.includes('\n') || str.includes('"')) {
-          return `"${str.replace(/"/g, '""')}"`;
+          return `"${str.replaceAll('"', '""')}"`;
         }
         return str;
       };
@@ -1090,56 +1690,18 @@ export const questionsRouter = router({
             }
           }
 
-          // Match subject
-          let subjectId: string | undefined = input.defaultSubjectId;
-          if (row.subjectCode) {
-            const matchedId = subjectByCode.get(row.subjectCode.toUpperCase());
-            if (matchedId) subjectId = matchedId as string;
-          }
+          // Match subject and topic using helpers
+          const subjectId = matchSubjectId(row.subjectCode, input.defaultSubjectId, subjectByCode);
+          const topicId = matchTopicId(row.topicName, subjectId, topics);
 
-          // Match topic
-          let topicId: string | null = null;
-          if (row.topicName && subjectId) {
-            const matchedTopic = topics.find(
-              t => t.subjectId === subjectId && 
-                   t.name.toLowerCase() === row.topicName!.toLowerCase()
-            );
-            if (matchedTopic) topicId = matchedTopic.id;
-          }
-
-          // Build answers array
-          const answers: { text: string; isCorrect: boolean; order: number; label: string }[] = [];
-          const correctSet = new Set(
-            (row.correctAnswers ?? '').toUpperCase().split(',').map(s => s.trim())
+          // Build answers and keywords using helpers
+          const answers = buildImportAnswers(
+            row.answerA, row.answerB, row.answerC, row.answerD, row.answerE,
+            row.correctAnswers
           );
+          const keywords = buildImportKeywords(row.keywords);
 
-          const answerTexts = [row.answerA, row.answerB, row.answerC, row.answerD, row.answerE];
-          answerTexts.forEach((text, idx) => {
-            if (text) {
-              const label = String.fromCharCode(65 + idx);
-              answers.push({
-                text,
-                isCorrect: correctSet.has(label),
-                order: idx,
-                label,
-              });
-            }
-          });
-
-          // Build keywords array
-          const keywords = row.keywords
-            ? row.keywords.split(',').map(k => k.trim()).filter(Boolean).map(keyword => ({
-                keyword,
-                weight: 1.0,
-                isRequired: false,
-                isSuggested: false,
-                caseSensitive: false,
-                exactMatch: false,
-                synonyms: [],
-              }))
-            : [];
-
-          // Create question with nested writes
+          // Create question with nested writes using helpers
           await ctx.prisma.question.create({
             data: {
               text: row.text,
@@ -1148,42 +1710,18 @@ export const questionsRouter = router({
               difficulty: row.difficulty ?? 'MEDIUM',
               subjectId,
               topicId,
-              points: row.points ?? 1.0,
+              points: row.points ?? 1,
               negativePoints: row.negativePoints ?? 0,
               correctExplanation: row.correctExplanation ?? null,
               wrongExplanation: row.wrongExplanation ?? null,
-              legacyTags: row.tags ? row.tags.split(',').map(t => t.trim()) : [],
+              legacyTags: parseLegacyTags(row.tags),
               year: row.year ?? null,
               source: row.source ?? null,
               externalId: row.externalId ?? null,
               createdById: ctx.user.id,
               updatedById: ctx.user.id,
-              // Create answers with nested write
-              ...(answers.length > 0 ? {
-                answers: {
-                  create: answers.map(a => ({
-                    text: a.text,
-                    isCorrect: a.isCorrect,
-                    order: a.order,
-                    label: a.label,
-                  })),
-                }
-              } : {}),
-              // Create keywords with nested write
-              ...(keywords.length > 0 ? {
-                keywords: {
-                  create: keywords.map(k => ({
-                    keyword: k.keyword,
-                    weight: k.weight,
-                    isRequired: k.isRequired,
-                    isSuggested: k.isSuggested,
-                    caseSensitive: k.caseSensitive,
-                    exactMatch: k.exactMatch,
-                    synonyms: k.synonyms,
-                    createdById: ctx.user.id,
-                  })),
-                }
-              } : {}),
+              answers: buildAnswersNestedCreate(answers),
+              keywords: buildKeywordsNestedCreate(keywords, ctx.user.id),
             },
           });
 
@@ -1234,7 +1772,7 @@ export const questionsRouter = router({
 
       // Split into words and filter
       const words = text
-        .replace(/[^\w\sàèéìòù]/g, ' ')
+        .replaceAll(/[^\w\sàèéìòù]/g, ' ')
         .split(/\s+/)
         .filter(word => 
           word.length > 3 && 
@@ -1264,7 +1802,7 @@ export const questionsRouter = router({
 
       // Check for scientific patterns
       scientificPatterns.forEach(({ pattern, reason }) => {
-        const matches = text.match(pattern);
+        const matches = pattern.exec(text);
         if (matches) {
           matches.forEach((match: string) => {
             if (!currentKeywords.includes(match.toLowerCase())) {
@@ -1290,9 +1828,8 @@ export const questionsRouter = router({
       });
 
       // Sort by confidence and limit
-      return suggestions
-        .sort((a, b) => b.confidence - a.confidence)
-        .slice(0, 15);
+      const sortedSuggestions = suggestions.toSorted((a, b) => b.confidence - a.confidence);
+      return sortedSuggestions.slice(0, 15);
     }),
 
   // ==================== STUDENT FEATURES ====================
@@ -1570,8 +2107,8 @@ export const questionsRouter = router({
       ctx.prisma.questionFeedback.count({ where: { status: 'PENDING' } }),
     ]);
 
-    // Get subject names
-    const subjectIds = bySubject.map(s => s.subjectId).filter(Boolean) as string[];
+    // Get subject names (filter returns string[] since Boolean removes nulls)
+    const subjectIds = bySubject.map(s => s.subjectId).filter((id): id is string => id !== null);
     const subjects = await ctx.prisma.customSubject.findMany({
       where: { id: { in: subjectIds } },
       select: { id: true, name: true, color: true },
@@ -1749,290 +2286,83 @@ export const questionsRouter = router({
       // Map subjects by id
       const subjectsById = new Map(subjects.map(s => [s.id, s]));
 
-      // Step 2: Calculate target distribution per subject
-      const targetDistribution: Map<string, number> = new Map();
-      
-      if (preset === 'PROPORTIONAL') {
-        // Distribution proportional to available questions per subject
-        const activeSubjectsWithQuestions = subjects.filter(s => s._count.questions > 0);
-        const totalAvailable = activeSubjectsWithQuestions.reduce((sum, s) => sum + s._count.questions, 0);
-        
-        if (totalAvailable > 0) {
-          let distributed = 0;
-          activeSubjectsWithQuestions.forEach((s, idx) => {
-            const proportion = s._count.questions / totalAvailable;
-            const count = idx === activeSubjectsWithQuestions.length - 1
-              ? totalQuestions - distributed // Last subject gets remainder
-              : Math.round(proportion * totalQuestions);
-            targetDistribution.set(s.id, count);
-            distributed += count;
-          });
-        }
-      } else if (preset === 'BALANCED') {
-        // Equal distribution across all subjects
-        const activeSubjectsWithQuestions = subjects.filter(s => s._count.questions > 0);
-        const perSubject = Math.floor(totalQuestions / activeSubjectsWithQuestions.length);
-        const remainder = totalQuestions % activeSubjectsWithQuestions.length;
-        activeSubjectsWithQuestions.forEach((s, idx) => {
-          targetDistribution.set(s.id, perSubject + (idx < remainder ? 1 : 0));
-        });
-      } else if (preset === 'SINGLE_SUBJECT' && focusSubjectId) {
-        // All questions from single subject
-        targetDistribution.set(focusSubjectId, totalQuestions);
-      } else if (preset === 'CUSTOM' && customSubjectDistribution) {
-        // User-defined distribution
-        for (const [subjectId, count] of Object.entries(customSubjectDistribution)) {
-          if (count > 0) {
-            targetDistribution.set(subjectId, count);
-          }
-        }
-      } else {
-        // Fallback: proportional distribution
-        const activeSubjectsWithQuestions = subjects.filter(s => s._count.questions > 0);
-        const totalAvailable = activeSubjectsWithQuestions.reduce((sum, s) => sum + s._count.questions, 0);
-        
-        if (totalAvailable > 0) {
-          let distributed = 0;
-          activeSubjectsWithQuestions.forEach((s, idx) => {
-            const proportion = s._count.questions / totalAvailable;
-            const count = idx === activeSubjectsWithQuestions.length - 1
-              ? totalQuestions - distributed
-              : Math.round(proportion * totalQuestions);
-            targetDistribution.set(s.id, count);
-            distributed += count;
-          });
-        }
-      }
+      // Step 2: Calculate target distribution per subject using helper
+      const targetDistribution = calculateTargetDistribution(
+        preset,
+        subjects,
+        totalQuestions,
+        focusSubjectId,
+        customSubjectDistribution
+      );
 
       // Ensure total matches requested
-      const currentTotal = Array.from(targetDistribution.values()).reduce((a, b) => a + b, 0);
-      if (currentTotal < totalQuestions && targetDistribution.size > 0) {
-        // Add remainder to first subject
-        const firstKey = Array.from(targetDistribution.keys())[0];
-        targetDistribution.set(firstKey, (targetDistribution.get(firstKey) || 0) + (totalQuestions - currentTotal));
-      }
+      normalizeDistributionTotal(targetDistribution, totalQuestions);
 
       // Step 3: Get difficulty ratios
       const difficultyRatios = getDifficultyRatios(difficultyMix);
 
-      // Step 4: Build base query for available questions
-      const baseWhere: Record<string, unknown> = {
-        status: 'PUBLISHED',
+      // Step 4: Build base query for available questions using helper
+      const baseWhere = buildSmartRandomBaseWhere(excludeQuestionIds, tagIds);
+
+      // Build selection config
+      const selectionConfig: SelectionConfig = {
+        baseWhere,
+        difficultyRatios,
+        avoidRecentlyUsed,
+        preferRecentQuestions,
+        maximizeTopicCoverage,
       };
 
-      if (excludeQuestionIds && excludeQuestionIds.length > 0) {
-        baseWhere.id = { notIn: excludeQuestionIds };
-      }
-
-      if (tagIds && tagIds.length > 0) {
-        baseWhere.questionTags = {
-          some: {
-            tagId: { in: tagIds },
-          },
-        };
-      }
-
       // Step 5: Select questions per subject with smart ordering
-      const selectedQuestions: Array<{
-        questionId: string;
-        order: number;
-        question: {
-          id: string;
-          text: string;
-          type: string;
-          difficulty: string;
-          subject?: { id: string; name: string; color: string | null };
-          topic?: { id: string; name: string };
-        };
-      }> = [];
-
+      const selectedQuestions: SmartSelectedQuestion[] = [];
       let orderCounter = 0;
 
-      for (const [subjectId, targetCount] of targetDistribution.entries()) {
-        if (targetCount === 0) continue;
+      // Process each subject in distribution
+      const subjectEntries = Array.from(targetDistribution.entries()).filter(
+        ([subjectId, targetCount]) => targetCount > 0 && subjectsById.has(subjectId)
+      );
 
-        const subject = subjectsById.get(subjectId);
-        if (!subject) continue;
-
-        // Calculate difficulty counts for this subject
-        const difficultyTargets = {
-          EASY: Math.round(targetCount * difficultyRatios.EASY),
-          MEDIUM: Math.round(targetCount * difficultyRatios.MEDIUM),
-          HARD: Math.round(targetCount * difficultyRatios.HARD),
-        };
-
-        // Ensure we get exactly targetCount
-        const diffTotal = difficultyTargets.EASY + difficultyTargets.MEDIUM + difficultyTargets.HARD;
-        if (diffTotal < targetCount) {
-          difficultyTargets.MEDIUM += targetCount - diffTotal;
-        } else if (diffTotal > targetCount) {
-          // Reduce from hard first, then medium
-          const excess = diffTotal - targetCount;
-          if (difficultyTargets.HARD >= excess) {
-            difficultyTargets.HARD -= excess;
-          } else {
-            difficultyTargets.MEDIUM -= (excess - difficultyTargets.HARD);
-            difficultyTargets.HARD = 0;
-          }
-        }
-
-        // Get questions for each difficulty level
+      for (const [subjectId, targetCount] of subjectEntries) {
+        // Calculate difficulty counts for this subject using helper
+        const difficultyTargets = calculateDifficultyTargets(targetCount, difficultyRatios);
         const selectedForSubject: string[] = [];
 
-        for (const [difficulty, count] of Object.entries(difficultyTargets)) {
-          if (count === 0) continue;
+        // Get questions for each difficulty level
+        const difficultyEntries = Object.entries(difficultyTargets).filter(
+          ([, count]) => count > 0
+        );
 
-          // Build order by clause for smart selection
-          const orderByClause: Array<{ [key: string]: 'asc' | 'desc' }> = [];
-          
-          if (avoidRecentlyUsed) {
-            orderByClause.push({ timesUsed: 'asc' }); // Prefer less used
-          }
-          if (preferRecentQuestions) {
-            orderByClause.push({ createdAt: 'desc' }); // Prefer newer
-          }
-          if (maximizeTopicCoverage) {
-            // We'll handle this with grouping later
-            orderByClause.push({ topicId: 'asc' }); // Group by topic
-          }
-          // Add some randomness by also ordering randomly
-          orderByClause.push({ id: 'asc' }); // Stable fallback
+        for (const [difficulty, count] of difficultyEntries) {
+          const result = await selectQuestionsForDifficulty(
+            ctx.prisma,
+            subjectId,
+            difficulty,
+            count,
+            selectedForSubject,
+            selectionConfig
+          );
 
-          const questions = await ctx.prisma.question.findMany({
-            where: {
-              ...baseWhere,
-              subjectId,
-              difficulty: difficulty as 'EASY' | 'MEDIUM' | 'HARD',
-              id: { notIn: selectedForSubject },
-            },
-            take: count * 3, // Get more than needed for shuffling
-            orderBy: orderByClause,
-            select: {
-              id: true,
-              text: true,
-              type: true,
-              difficulty: true,
-              topicId: true,
-              timesUsed: true,
-              createdAt: true,
-              subject: {
-                select: { id: true, name: true, color: true },
-              },
-              topic: {
-                select: { id: true, name: true },
-              },
-            },
-          });
-
-          // Apply topic coverage maximization
-          let finalQuestions = questions;
-          if (maximizeTopicCoverage && questions.length > count) {
-            // Group by topic and pick one from each topic first
-            const byTopic = new Map<string | null, typeof questions>();
-            for (const q of questions) {
-              const topicId = q.topicId;
-              if (!byTopic.has(topicId)) {
-                byTopic.set(topicId, []);
-              }
-              byTopic.get(topicId)!.push(q);
-            }
-
-            // Round-robin pick from topics
-            const result: typeof questions = [];
-            const topicIterators = Array.from(byTopic.values()).map(arr => ({ arr, idx: 0 }));
-            let topicIdx = 0;
-            
-            while (result.length < count && topicIterators.some(t => t.idx < t.arr.length)) {
-              const iterator = topicIterators[topicIdx % topicIterators.length];
-              if (iterator.idx < iterator.arr.length) {
-                result.push(iterator.arr[iterator.idx]);
-                iterator.idx++;
-              }
-              topicIdx++;
-            }
-            
-            finalQuestions = result;
-          }
-
-          // Shuffle and take only what we need
-          const shuffled = [...finalQuestions].sort(() => Math.random() - 0.5);
-          const picked = shuffled.slice(0, count);
-
-          for (const q of picked) {
-            selectedForSubject.push(q.id);
-            selectedQuestions.push({
-              questionId: q.id,
-              order: orderCounter++,
-              question: {
-                id: q.id,
-                text: q.text,
-                type: q.type,
-                difficulty: q.difficulty,
-                subject: q.subject ?? undefined,
-                topic: q.topic ?? undefined,
-              },
-            });
+          // Update order and add to results
+          for (const q of result.questions) {
+            selectedForSubject.push(q.questionId);
+            selectedQuestions.push({ ...q, order: orderCounter++ });
           }
         }
 
-        // If we didn't get enough questions, try to fill the gap while respecting difficulty ratios
+        // Fill remaining if needed
         const remainingNeeded = targetCount - selectedForSubject.length;
         if (remainingNeeded > 0) {
-          // Calculate how many of each difficulty we still need, respecting original ratios
-          const remainingDifficultyTargets = {
-            EASY: Math.round(remainingNeeded * difficultyRatios.EASY),
-            MEDIUM: Math.round(remainingNeeded * difficultyRatios.MEDIUM),
-            HARD: Math.round(remainingNeeded * difficultyRatios.HARD),
-          };
+          const fillResult = await fillRemainingQuestions(
+            ctx.prisma,
+            subjectId,
+            remainingNeeded,
+            selectedForSubject,
+            selectionConfig,
+            orderCounter
+          );
 
-          // Ensure total matches
-          const diffTotal = remainingDifficultyTargets.EASY + remainingDifficultyTargets.MEDIUM + remainingDifficultyTargets.HARD;
-          if (diffTotal < remainingNeeded) {
-            remainingDifficultyTargets.MEDIUM += remainingNeeded - diffTotal;
-          }
-
-          // Try to get remaining questions for each difficulty level
-          for (const [difficulty, count] of Object.entries(remainingDifficultyTargets)) {
-            if (count === 0) continue;
-
-            const extraQuestions = await ctx.prisma.question.findMany({
-              where: {
-                ...baseWhere,
-                subjectId,
-                difficulty: difficulty as 'EASY' | 'MEDIUM' | 'HARD',
-                id: { notIn: selectedForSubject },
-              },
-              take: count,
-              orderBy: avoidRecentlyUsed ? { timesUsed: 'asc' } : { createdAt: 'desc' },
-              select: {
-                id: true,
-                text: true,
-                type: true,
-                difficulty: true,
-                subject: {
-                  select: { id: true, name: true, color: true },
-                },
-                topic: {
-                  select: { id: true, name: true },
-                },
-              },
-            });
-
-            for (const q of extraQuestions) {
-              selectedForSubject.push(q.id);
-              selectedQuestions.push({
-                questionId: q.id,
-                order: orderCounter++,
-                question: {
-                  id: q.id,
-                  text: q.text,
-                  type: q.type,
-                  difficulty: q.difficulty,
-                  subject: q.subject ?? undefined,
-                  topic: q.topic ?? undefined,
-                },
-              });
-            }
+          for (const q of fillResult.questions) {
+            selectedQuestions.push({ ...q, order: orderCounter++ });
           }
         }
       }
@@ -2042,41 +2372,12 @@ export const questionsRouter = router({
         .sort(() => Math.random() - 0.5)
         .map((q, idx) => ({ ...q, order: idx }));
 
-      // Calculate statistics for the generated set
-      const stats = {
-        total: finalQuestions.length,
-        bySubject: {} as Record<string, { name: string; count: number; color: string | null }>,
-        byDifficulty: { EASY: 0, MEDIUM: 0, HARD: 0 } as Record<string, number>,
-        topicsCovered: new Set<string>(),
-      };
-
-      for (const q of finalQuestions) {
-        // Subject stats
-        const subjectName = q.question.subject?.name || 'Sconosciuta';
-        if (!stats.bySubject[subjectName]) {
-          stats.bySubject[subjectName] = { 
-            name: subjectName, 
-            count: 0, 
-            color: q.question.subject?.color || null 
-          };
-        }
-        stats.bySubject[subjectName].count++;
-
-        // Difficulty stats
-        stats.byDifficulty[q.question.difficulty]++;
-
-        // Topic coverage
-        if (q.question.topic) {
-          stats.topicsCovered.add(q.question.topic.id);
-        }
-      }
+      // Calculate statistics using helper
+      const stats = calculateGenerationStats(finalQuestions);
 
       return {
         questions: finalQuestions,
-        stats: {
-          ...stats,
-          topicsCovered: stats.topicsCovered.size,
-        },
+        stats,
         requestedTotal: totalQuestions,
         achievedTotal: finalQuestions.length,
         warning: finalQuestions.length < totalQuestions 

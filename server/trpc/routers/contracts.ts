@@ -317,125 +317,22 @@ export const contractsRouter = router({
       )
     )
     .mutation(async ({ ctx, input }) => {
-      let targetUser: any = null;
-      let targetType: 'STUDENT' | 'COLLABORATOR' = 'STUDENT';
-      let targetId: string = '';
+      // Get and validate target (student or collaborator)
+      const { targetUser, targetType, targetId } = await getContractTarget(
+        ctx.prisma,
+        input.studentId,
+        input.collaboratorId
+      );
 
-      // Check if assigning to student or collaborator
-      if (input.studentId) {
-        const student = await ctx.prisma.student.findUnique({
-          where: { id: input.studentId },
-          include: {
-            user: true,
-            contracts: {
-              where: { status: { in: ['PENDING', 'SIGNED'] } },
-            },
-          },
-        });
+      // Get and validate template
+      const template = await getActiveTemplate(ctx.prisma, input.templateId);
 
-        if (!student) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Studente non trovato',
-          });
-        }
-
-        if (!student.user.profileCompleted) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: 'Lo studente non ha ancora completato il profilo',
-          });
-        }
-
-        if (student.contracts.length > 0) {
-          throw new TRPCError({
-            code: 'CONFLICT',
-            message: 'Lo studente ha già un contratto attivo o in attesa',
-          });
-        }
-
-        targetUser = student;
-        targetType = 'STUDENT';
-        targetId = input.studentId;
-      } else if (input.collaboratorId) {
-        const collaborator = await ctx.prisma.collaborator.findUnique({
-          where: { id: input.collaboratorId },
-          include: {
-            user: true,
-            contracts: {
-              where: { status: { in: ['PENDING', 'SIGNED'] } },
-            },
-          },
-        });
-
-        if (!collaborator) {
-          // Try to find by userId to give more helpful error
-          const byUserId = await ctx.prisma.collaborator.findUnique({
-            where: { userId: input.collaboratorId },
-          });
-          
-          if (byUserId) {
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `ID errato: hai passato l'userId, usa collaboratorId: "${byUserId.id}"`,
-            });
-          }
-          
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: `Collaboratore con ID "${input.collaboratorId}" non trovato. Verifica che il record esista nella tabella collaborators.`,
-          });
-        }
-
-        if (!collaborator.user.profileCompleted) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: 'Il collaboratore non ha ancora completato il profilo',
-          });
-        }
-
-        if (collaborator.contracts.length > 0) {
-          throw new TRPCError({
-            code: 'CONFLICT',
-            message: 'Il collaboratore ha già un contratto attivo o in attesa',
-          });
-        }
-
-        targetUser = collaborator;
-        targetType = 'COLLABORATOR';
-        targetId = input.collaboratorId;
-      }
-
-      // Get template
-      const template = await ctx.prisma.contractTemplate.findUnique({
-        where: { id: input.templateId },
-      });
-
-      if (!template || !template.isActive) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Template contratto non trovato o non attivo',
-        });
-      }
-
-      // Generate content snapshot with user data
-      // Use custom content if provided, otherwise generate from template
-      // SECURITY: Sanitize custom content to prevent XSS attacks
-      let contentSnapshot: string;
-      if (input.customContent) {
-        // Validate content length to prevent DoS
-        const lengthValidation = validateContentLength(input.customContent);
-        if (!lengthValidation.valid) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: lengthValidation.message || 'Contenuto troppo lungo',
-          });
-        }
-        // Sanitize HTML to remove dangerous elements
-        contentSnapshot = sanitizeHtml(input.customContent);
-      } else {
-        contentSnapshot = generateContractContent(template.content, targetUser, targetUser.user);
-      }
+      // Prepare contract content
+      const contentSnapshot = prepareContractContent(
+        input.customContent,
+        template.content,
+        targetUser
+      );
       
       // Use custom price if provided, otherwise use template price
       const _finalPrice = input.customPrice ?? template.price;
@@ -890,6 +787,13 @@ export const contractsRouter = router({
         where: { id: input.contractId },
       });
 
+      // Determine recipient type
+      const getRecipientType = (): 'STUDENT' | 'COLLABORATOR' | undefined => {
+        if (studentId) return 'STUDENT';
+        if (collaboratorId) return 'COLLABORATOR';
+        return undefined;
+      };
+
       // Send notifications using the unified notification service
       await notificationService.notifyContractCancelled(ctx.prisma, {
         contractId: input.contractId,
@@ -897,7 +801,7 @@ export const contractsRouter = router({
         recipientUserId: userUserId,
         recipientName: userName,
         recipientProfileId: studentId || collaboratorId || undefined,
-        recipientType: studentId ? 'STUDENT' : collaboratorId ? 'COLLABORATOR' : undefined,
+        recipientType: getRecipientType(),
       });
 
       return { success: true, message: 'Contratto revocato ed eliminato' };
@@ -988,12 +892,15 @@ export const contractsRouter = router({
 
       // Send notification to user about contract revocation
       if (userUserId) {
+        const revokeReason = input.revokeNotes ? ` Motivo: ${input.revokeNotes}` : '';
+        const notificationMessage = `Il tuo contratto "${templateName}" è stato revocato dall'amministrazione.${revokeReason}`;
+        
         await ctx.prisma.notification.create({
           data: {
             userId: userUserId,
             type: 'CONTRACT_CANCELLED',
             title: 'Contratto revocato',
-            message: `Il tuo contratto "${templateName}" è stato revocato dall'amministrazione.${input.revokeNotes ? ` Motivo: ${input.revokeNotes}` : ''}`,
+            message: notificationMessage,
           },
         });
       }
@@ -1290,96 +1197,20 @@ export const contractsRouter = router({
         });
       }
 
-      // Determine if this is a student or collaborator contract
-      const isStudentContract = !!contract.studentId;
-      const isCollaboratorContract = !!contract.collaboratorId;
+      // Get signer info and verify authorization
+      const { signerName, signerEmail, signerId, signerType } = await getSignerInfo(
+        ctx.prisma,
+        ctx.user.id,
+        contract
+      );
 
-      // Verify authorization
-      let signerName: string;
-      let signerEmail: string;
-      let signerId: string;
-
-      if (isStudentContract) {
-        const student = await ctx.prisma.student.findUnique({
-          where: { userId: ctx.user.id },
-        });
-
-        if (!student || contract.studentId !== student.id) {
-          throw new TRPCError({
-            code: 'FORBIDDEN',
-            message: 'Non sei autorizzato a firmare questo contratto',
-          });
-        }
-
-        signerName = contract.student!.user.name;
-        signerEmail = contract.student!.user.email;
-        signerId = student.id;
-      } else if (isCollaboratorContract) {
-        const collaborator = await ctx.prisma.collaborator.findUnique({
-          where: { userId: ctx.user.id },
-        });
-
-        if (!collaborator || contract.collaboratorId !== collaborator.id) {
-          throw new TRPCError({
-            code: 'FORBIDDEN',
-            message: 'Non sei autorizzato a firmare questo contratto',
-          });
-        }
-
-        signerName = contract.collaborator!.user.name;
-        signerEmail = contract.collaborator!.user.email;
-        signerId = collaborator.id;
-      } else {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Contratto non valido: nessun destinatario associato',
-        });
-      }
-
-      if (contract.status !== 'PENDING') {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Il contratto non è in stato di attesa firma',
-        });
-      }
-
-      if (contract.expiresAt && contract.expiresAt < new Date()) {
-        // Mark as expired
-        await ctx.prisma.contract.update({
-          where: { id: contract.id },
-          data: { status: 'EXPIRED' },
-        });
-
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Il contratto è scaduto. Contatta l\'amministrazione.',
-        });
-      }
+      // Validate contract status
+      await validateContractForSigning(ctx.prisma, contract);
 
       const signedAt = new Date();
 
       // Calculate contract expiration date based on template duration
-      let contractExpiresAt: Date | null = null;
-      const duration = contract.template.duration;
-      if (duration) {
-        // Parse duration string (e.g., "12 mesi", "6 mesi", "1 anno")
-        const durationLower = duration.toLowerCase();
-        const now = new Date();
-        
-        if (durationLower.includes('anno') || durationLower.includes('anni')) {
-          const years = parseInt(durationLower.match(/\d+/)?.[0] || '1');
-          contractExpiresAt = new Date(now.setFullYear(now.getFullYear() + years));
-        } else if (durationLower.includes('mese') || durationLower.includes('mesi')) {
-          const months = parseInt(durationLower.match(/\d+/)?.[0] || '1');
-          contractExpiresAt = new Date(now.setMonth(now.getMonth() + months));
-        } else if (durationLower.includes('settiman')) {
-          const weeks = parseInt(durationLower.match(/\d+/)?.[0] || '1');
-          contractExpiresAt = new Date(now.setDate(now.getDate() + (weeks * 7)));
-        } else if (durationLower.includes('giorn')) {
-          const days = parseInt(durationLower.match(/\d+/)?.[0] || '1');
-          contractExpiresAt = new Date(now.setDate(now.getDate() + days));
-        }
-      }
+      const contractExpiresAt = calculateContractExpiration(contract.template.duration);
 
       // Sign the contract
       const signedContract = await ctx.prisma.contract.update({
@@ -1389,7 +1220,6 @@ export const contractsRouter = router({
           signedAt,
           signatureData: input.signatureData,
           contractExpiresAt,
-          // Note: IP and User-Agent should be captured from request headers in production
         },
       });
 
@@ -1406,7 +1236,7 @@ export const contractsRouter = router({
         signerUserId: ctx.user.id,
         signerName: signerName,
         signerEmail: signerEmail,
-        signerType: isStudentContract ? 'STUDENT' : 'COLLABORATOR',
+        signerType: signerType,
         signerProfileId: signerId,
         signedAt,
         price: contract.template.price || 0,
@@ -1417,6 +1247,386 @@ export const contractsRouter = router({
 });
 
 // ==================== HELPER FUNCTIONS ====================
+
+// Type definitions for helper functions
+interface StudentWithUser {
+  id: string;
+  fiscalCode: string | null;
+  dateOfBirth: Date | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  province: string | null;
+  postalCode: string | null;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    profileCompleted: boolean;
+  };
+  contracts: Array<{ status: string }>;
+}
+
+interface CollaboratorWithUser {
+  id: string;
+  fiscalCode: string | null;
+  dateOfBirth: Date | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  province: string | null;
+  postalCode: string | null;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    profileCompleted: boolean;
+  };
+  contracts: Array<{ status: string }>;
+}
+
+interface ContractTargetResult {
+  targetUser: StudentWithUser | CollaboratorWithUser;
+  targetType: 'STUDENT' | 'COLLABORATOR';
+  targetId: string;
+}
+
+/**
+ * Validate a student for contract assignment
+ */
+async function validateStudentForContract(
+  prisma: any,
+  studentId: string
+): Promise<ContractTargetResult> {
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    include: {
+      user: true,
+      contracts: {
+        where: { status: { in: ['PENDING', 'SIGNED'] } },
+      },
+    },
+  });
+
+  if (!student) {
+    throw new TRPCError({
+      code: 'NOT_FOUND',
+      message: 'Studente non trovato',
+    });
+  }
+
+  if (!student.user.profileCompleted) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Lo studente non ha ancora completato il profilo',
+    });
+  }
+
+  if (student.contracts.length > 0) {
+    throw new TRPCError({
+      code: 'CONFLICT',
+      message: 'Lo studente ha già un contratto attivo o in attesa',
+    });
+  }
+
+  return {
+    targetUser: student,
+    targetType: 'STUDENT',
+    targetId: studentId,
+  };
+}
+
+/**
+ * Validate a collaborator for contract assignment
+ */
+async function validateCollaboratorForContract(
+  prisma: any,
+  collaboratorId: string
+): Promise<ContractTargetResult> {
+  const collaborator = await prisma.collaborator.findUnique({
+    where: { id: collaboratorId },
+    include: {
+      user: true,
+      contracts: {
+        where: { status: { in: ['PENDING', 'SIGNED'] } },
+      },
+    },
+  });
+
+  if (!collaborator) {
+    // Try to find by userId to give more helpful error
+    const byUserId = await prisma.collaborator.findUnique({
+      where: { userId: collaboratorId },
+    });
+    
+    if (byUserId) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `ID errato: hai passato l'userId, usa collaboratorId: "${byUserId.id}"`,
+      });
+    }
+    
+    throw new TRPCError({
+      code: 'NOT_FOUND',
+      message: `Collaboratore con ID "${collaboratorId}" non trovato. Verifica che il record esista nella tabella collaborators.`,
+    });
+  }
+
+  if (!collaborator.user.profileCompleted) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Il collaboratore non ha ancora completato il profilo',
+    });
+  }
+
+  if (collaborator.contracts.length > 0) {
+    throw new TRPCError({
+      code: 'CONFLICT',
+      message: 'Il collaboratore ha già un contratto attivo o in attesa',
+    });
+  }
+
+  return {
+    targetUser: collaborator,
+    targetType: 'COLLABORATOR',
+    targetId: collaboratorId,
+  };
+}
+
+/**
+ * Get the target user for contract assignment (student or collaborator)
+ */
+async function getContractTarget(
+  prisma: any,
+  studentId?: string,
+  collaboratorId?: string
+): Promise<ContractTargetResult> {
+  if (studentId) {
+    return validateStudentForContract(prisma, studentId);
+  }
+  // Must be collaboratorId due to zod refine validation
+  if (!collaboratorId) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Devi specificare studentId o collaboratorId',
+    });
+  }
+  return validateCollaboratorForContract(prisma, collaboratorId);
+}
+
+/**
+ * Prepare contract content from template or custom content
+ */
+function prepareContractContent(
+  customContent: string | undefined,
+  templateContent: string,
+  targetUser: StudentWithUser | CollaboratorWithUser
+): string {
+  if (customContent) {
+    const lengthValidation = validateContentLength(customContent);
+    if (!lengthValidation.valid) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: lengthValidation.message || 'Contenuto troppo lungo',
+      });
+    }
+    return sanitizeHtml(customContent);
+  }
+  return generateContractContent(templateContent, targetUser, targetUser.user);
+}
+
+/**
+ * Validate and get active template
+ */
+async function getActiveTemplate(prisma: any, templateId: string) {
+  const template = await prisma.contractTemplate.findUnique({
+    where: { id: templateId },
+  });
+
+  if (!template?.isActive) {
+    throw new TRPCError({
+      code: 'NOT_FOUND',
+      message: 'Template contratto non trovato o non attivo',
+    });
+  }
+
+  return template;
+}
+
+// Types for signContract helper functions
+interface ContractWithRelations {
+  id: string;
+  studentId: string | null;
+  collaboratorId: string | null;
+  status: string;
+  expiresAt: Date | null;
+  template: {
+    name: string;
+    duration: string | null;
+    price: number | null;
+  };
+  student: {
+    id: string;
+    user: { id: string; name: string; email: string };
+  } | null;
+  collaborator: {
+    id: string;
+    user: { id: string; name: string; email: string };
+  } | null;
+}
+
+interface SignerInfo {
+  signerName: string;
+  signerEmail: string;
+  signerId: string;
+  signerType: 'STUDENT' | 'COLLABORATOR';
+}
+
+/**
+ * Verify authorization for signing a student contract
+ */
+async function verifyStudentSigner(
+  prisma: any,
+  userId: string,
+  contract: ContractWithRelations
+): Promise<SignerInfo> {
+  const student = await prisma.student.findUnique({
+    where: { userId },
+  });
+
+  if (!student || contract.studentId !== student.id) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Non sei autorizzato a firmare questo contratto',
+    });
+  }
+
+  return {
+    signerName: contract.student?.user.name ?? '',
+    signerEmail: contract.student?.user.email ?? '',
+    signerId: student.id,
+    signerType: 'STUDENT',
+  };
+}
+
+/**
+ * Verify authorization for signing a collaborator contract
+ */
+async function verifyCollaboratorSigner(
+  prisma: any,
+  userId: string,
+  contract: ContractWithRelations
+): Promise<SignerInfo> {
+  const collaborator = await prisma.collaborator.findUnique({
+    where: { userId },
+  });
+
+  if (!collaborator || contract.collaboratorId !== collaborator.id) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Non sei autorizzato a firmare questo contratto',
+    });
+  }
+
+  return {
+    signerName: contract.collaborator?.user.name ?? '',
+    signerEmail: contract.collaborator?.user.email ?? '',
+    signerId: collaborator.id,
+    signerType: 'COLLABORATOR',
+  };
+}
+
+/**
+ * Get signer information and verify authorization
+ */
+async function getSignerInfo(
+  prisma: any,
+  userId: string,
+  contract: ContractWithRelations
+): Promise<SignerInfo> {
+  const isStudentContract = !!contract.studentId;
+  const isCollaboratorContract = !!contract.collaboratorId;
+
+  if (isStudentContract) {
+    return verifyStudentSigner(prisma, userId, contract);
+  }
+  
+  if (isCollaboratorContract) {
+    return verifyCollaboratorSigner(prisma, userId, contract);
+  }
+
+  throw new TRPCError({
+    code: 'BAD_REQUEST',
+    message: 'Contratto non valido: nessun destinatario associato',
+  });
+}
+
+/**
+ * Validate contract status for signing
+ */
+async function validateContractForSigning(
+  prisma: any,
+  contract: ContractWithRelations
+): Promise<void> {
+  if (contract.status !== 'PENDING') {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Il contratto non è in stato di attesa firma',
+    });
+  }
+
+  if (contract.expiresAt && contract.expiresAt < new Date()) {
+    await prisma.contract.update({
+      where: { id: contract.id },
+      data: { status: 'EXPIRED' },
+    });
+
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Il contratto è scaduto. Contatta l\'amministrazione.',
+    });
+  }
+}
+
+/**
+ * Calculate contract expiration date based on template duration
+ */
+function calculateContractExpiration(duration: string | null): Date | null {
+  if (!duration) {
+    return null;
+  }
+
+  const durationLower = duration.toLowerCase();
+  const now = new Date();
+  const digitRegex = /\d+/;
+  
+  const extractNumber = (str: string): number => {
+    const match = digitRegex.exec(str);
+    return match ? Number.parseInt(match[0], 10) : 1;
+  };
+  
+  if (durationLower.includes('anno') || durationLower.includes('anni')) {
+    const years = extractNumber(durationLower);
+    return new Date(now.setFullYear(now.getFullYear() + years));
+  }
+  
+  if (durationLower.includes('mese') || durationLower.includes('mesi')) {
+    const months = extractNumber(durationLower);
+    return new Date(now.setMonth(now.getMonth() + months));
+  }
+  
+  if (durationLower.includes('settiman')) {
+    const weeks = extractNumber(durationLower);
+    return new Date(now.setDate(now.getDate() + (weeks * 7)));
+  }
+  
+  if (durationLower.includes('giorn')) {
+    const days = extractNumber(durationLower);
+    return new Date(now.setDate(now.getDate() + days));
+  }
+
+  return null;
+}
 
 /**
  * Generate contract content with student data filled in
@@ -1462,16 +1672,16 @@ function generateContractContent(
   const fullAddress = sanitizedAddressParts.join(', ');
 
   return template
-    .replace(/\{\{NOME_COMPLETO\}\}/g, sanitizeText(user.name))
-    .replace(/\{\{EMAIL\}\}/g, sanitizeText(user.email))
-    .replace(/\{\{CODICE_FISCALE\}\}/g, sanitizeText(student.fiscalCode))
-    .replace(/\{\{DATA_NASCITA\}\}/g, sanitizeText(formattedBirthDate))
-    .replace(/\{\{TELEFONO\}\}/g, sanitizeText(student.phone))
-    .replace(/\{\{INDIRIZZO_COMPLETO\}\}/g, fullAddress)
-    .replace(/\{\{INDIRIZZO\}\}/g, sanitizeText(student.address))
-    .replace(/\{\{CITTA\}\}/g, sanitizeText(student.city))
-    .replace(/\{\{PROVINCIA\}\}/g, sanitizeText(student.province))
-    .replace(/\{\{CAP\}\}/g, sanitizeText(student.postalCode))
-    .replace(/\{\{DATA_ODIERNA\}\}/g, sanitizeText(formattedDate))
-    .replace(/\{\{ANNO\}\}/g, today.getFullYear().toString());
+    .replaceAll('{{NOME_COMPLETO}}', sanitizeText(user.name))
+    .replaceAll('{{EMAIL}}', sanitizeText(user.email))
+    .replaceAll('{{CODICE_FISCALE}}', sanitizeText(student.fiscalCode))
+    .replaceAll('{{DATA_NASCITA}}', sanitizeText(formattedBirthDate))
+    .replaceAll('{{TELEFONO}}', sanitizeText(student.phone))
+    .replaceAll('{{INDIRIZZO_COMPLETO}}', fullAddress)
+    .replaceAll('{{INDIRIZZO}}', sanitizeText(student.address))
+    .replaceAll('{{CITTA}}', sanitizeText(student.city))
+    .replaceAll('{{PROVINCIA}}', sanitizeText(student.province))
+    .replaceAll('{{CAP}}', sanitizeText(student.postalCode))
+    .replaceAll('{{DATA_ODIERNA}}', sanitizeText(formattedDate))
+    .replaceAll('{{ANNO}}', today.getFullYear().toString());
 }
