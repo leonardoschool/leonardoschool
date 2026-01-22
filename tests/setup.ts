@@ -3,9 +3,18 @@
  * This file runs before each test file
  */
 
+// Extend globalThis for React 19 test environment
+declare global {
+  var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
+
 import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
+
+// Configure React 19 test environment - MUST be before any React imports
+// This fixes "React.act is not a function" error
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 // Extend Vitest matchers with Testing Library matchers
 import * as matchers from '@testing-library/jest-dom/matchers';

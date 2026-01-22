@@ -6,6 +6,10 @@ on:
   push:
     branches: [develop]
 
+env:
+  PNPM_VERSION: '10'
+  NODE_VERSION: '20'
+
 jobs:
   test:
     name: ci/test
@@ -29,6 +33,14 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL_CI }}
       NODE_ENV: test
+      # Firebase dummy values for CI build
+      NEXT_PUBLIC_FIREBASE_API_KEY: dummy-api-key
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: dummy.firebaseapp.com
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: dummy-project
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: dummy.appspot.com
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: '123456789'
+      NEXT_PUBLIC_FIREBASE_APP_ID: '1:123:web:abc'
+      FIREBASE_SERVICE_ACCOUNT_KEY: '{"type":"service_account","project_id":"dummy-project","private_key_id":"key","private_key":"-----BEGIN RSA PRIVATE KEY-----\\nMIIB\\n-----END RSA PRIVATE KEY-----\\n","client_email":"test@dummy.iam.gserviceaccount.com","client_id":"123","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token"}'
 
     steps:
       - uses: actions/checkout@v4
@@ -36,12 +48,12 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: ${{ env.PNPM_VERSION }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
       - name: Install dependencies
@@ -72,11 +84,11 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: ${{ env.PNPM_VERSION }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -98,11 +110,11 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: ${{ env.PNPM_VERSION }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
       - name: Cache Playwright browsers
