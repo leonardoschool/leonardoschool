@@ -19,8 +19,6 @@ const eslintConfig = defineConfig([
     "webapp_old/**",
     // Coverage reports (generated files)
     "coverage/**",
-    // Mobile app (separate project)
-    "mobile/**",
   ]),
   // Custom rules
   {
