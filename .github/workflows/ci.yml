@@ -98,7 +98,6 @@ jobs:
 
   e2e:
     name: ci/e2e
-    if: github.base_ref == 'test'
     runs-on: ubuntu-latest
 
     steps:
