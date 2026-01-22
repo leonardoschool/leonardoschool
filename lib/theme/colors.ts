@@ -4,15 +4,52 @@
  * Questo file contiene tutti i colori brand utilizzati nell'applicazione.
  * Supporta automaticamente light/dark mode basato sulle preferenze del browser.
  * 
- * Dark Mode: Design moderno con sfondo slate/zinc scuro e accenti rosso bordeaux
+ * I colori delle materie sono DINAMICI e vengono dal database (CustomSubject.color).
+ * Usare generateDynamicSubjectColor(hexColor) per generare le classi CSS.
  * 
  * @example
- * import { colors } from '@/lib/theme/colors';
+ * import { colors, generateDynamicSubjectColor } from '@/lib/theme/colors';
  * 
  * <div className={colors.primary.gradient} />
- * <h1 className={colors.subjects.chimica.bg} />
+ * <div className={generateDynamicSubjectColor(subject.color).bg} />
  * <div className={colors.background.primary} /> // Si adatta automaticamente al tema
  */
+
+// ==================== DYNAMIC SUBJECT COLORS ====================
+
+/**
+ * Genera classi CSS dinamiche per una materia basandosi sul colore dal database
+ * @param hexColor - Colore hex della materia (es. "#D54F8A")
+ * @returns Oggetto con classi Tailwind per bg, text, border, etc.
+ */
+export function generateDynamicSubjectColor(hexColor: string | null | undefined) {
+  const color = hexColor || '#6B7280'; // Fallback grigio neutro
+  
+  return {
+    main: color,
+    bg: `bg-[${color}]`,
+    text: `text-[${color}]`,
+    border: `border-[${color}]`,
+    hover: `hover:bg-[${color}]`,
+    shadow: `shadow-[${color}]/20`,
+    // Per bg con opacità ridotta
+    bgLight: `bg-[${color}]/10`,
+    bgLightDark: `bg-[${color}]/20`,
+  };
+}
+
+/**
+ * Genera stile inline per una materia (alternativa alle classi Tailwind)
+ * Utile quando si usano colori dinamici che Tailwind non può preprocessare
+ */
+export function getSubjectInlineStyle(hexColor: string | null | undefined) {
+  const color = hexColor || '#6B7280';
+  return {
+    backgroundColor: color,
+    color: color,
+    borderColor: color,
+  };
+}
 
 export const colors = {
   /**
@@ -42,92 +79,6 @@ export const colors = {
     // Gradiente per elementi decorativi
     accentGradient: 'bg-gradient-to-r from-red-500 to-red-600',
     accentBar: 'from-[#a8012b] to-red-400',
-  },
-
-  /**
-   * Colori per materie scientifiche
-   * Utilizzati nelle card materie, badge, etc.
-   */
-  subjects: {
-    matematica: {
-      main: '#D54F8A',
-      bg: 'bg-[#D54F8A]',
-      softBg: 'bg-pink-100 dark:bg-pink-900/30',
-      text: 'text-[#D54F8A]',
-      border: 'border-[#D54F8A]',
-      hover: 'hover:bg-[#D54F8A]',
-      shadow: 'shadow-[#D54F8A]/20',
-      glow: 'bg-[#D54F8A] rounded-full blur-[100px] opacity-10',
-    },
-    
-    biologia: {
-      main: '#68BCE8',
-      bg: 'bg-[#68BCE8]',
-      softBg: 'bg-sky-100 dark:bg-sky-900/30',
-      text: 'text-[#68BCE8]',
-      border: 'border-[#68BCE8]',
-      hover: 'hover:bg-[#68BCE8]',
-      shadow: 'shadow-[#68BCE8]/20',
-      glow: 'bg-[#68BCE8] rounded-full blur-[120px] opacity-15',
-    },
-    
-    chimica: {
-      main: '#42BFED',
-      bg: 'bg-[#42BFED]',
-      softBg: 'bg-cyan-100 dark:bg-cyan-900/30',
-      text: 'text-[#42BFED]',
-      border: 'border-[#42BFED]',
-      hover: 'hover:bg-[#5AACDB]',
-      shadow: 'shadow-[#42BFED]/20',
-    },
-    
-    fisica: {
-      main: '#EEB550',
-      bg: 'bg-[#EEB550]',
-      softBg: 'bg-amber-100 dark:bg-amber-900/30',
-      text: 'text-[#EEB550]',
-      border: 'border-[#EEB550]',
-      hover: 'hover:bg-[#EEB550]',
-      shadow: 'shadow-[#EEB550]/20',
-      glow: 'bg-[#EEB550] rounded-full blur-[110px] opacity-10',
-    },
-    
-    logica: {
-      main: '#B6B21D',
-      bg: 'bg-[#B6B21D]',
-      softBg: 'bg-lime-100 dark:bg-lime-900/30',
-      text: 'text-[#B6B21D]',
-      border: 'border-[#B6B21D]',
-      hover: 'hover:bg-[#A5A238]',
-      shadow: 'shadow-[#B6B21D]/20',
-      // Variante più chiara per simboli
-      lightSymbol: 'text-[#B5B240]',
-    },
-    
-    culturaGenerale: {
-      main: '#E7418B',
-      bg: 'bg-[#E7418B]',
-      softBg: 'bg-rose-100 dark:bg-rose-900/30',
-      text: 'text-[#E7418B]',
-      border: 'border-[#E7418B]',
-      hover: 'hover:bg-[#C4407A]',
-      shadow: 'shadow-[#E7418B]/20',
-    },
-    
-    // Test universitari specifici
-    hunimed: {
-      main: '#19419B',
-      bg: 'bg-[#19419B]',
-      text: 'text-[#19419B]',
-      border: 'border-[#19419B]',
-    },
-    
-    medicina: {
-      main: '#EB635B',
-      bg: 'bg-[#EB635B]',
-      text: 'text-[#EB635B]',
-      border: 'border-[#EB635B]',
-    },
   },
 
   /**
@@ -384,24 +335,32 @@ export const colors = {
 } as const;
 
 /**
- * Helper function per ottenere il colore di una materia dinamicamente
- * @example
- * const colorClass = getSubjectColor('MATEMATICA', 'bg');
+ * @deprecated Usare generateDynamicSubjectColor(hexColor) con il colore dal database.
+ * Questa funzione è mantenuta per backward compatibility durante la migrazione.
+ * I colori delle materie sono ora dinamici e vengono dal database (CustomSubject.color).
  */
 export function getSubjectColor(
-  subject: 'MATEMATICA' | 'BIOLOGIA' | 'CHIMICA' | 'FISICA' | 'LOGICA' | 'CULTURA_GENERALE',
+  _subject: string,
   variant: 'bg' | 'softBg' | 'text' | 'border' | 'hover' | 'main' = 'bg'
 ) {
-  const mapping = {
-    MATEMATICA: colors.subjects.matematica,
-    BIOLOGIA: colors.subjects.biologia,
-    CHIMICA: colors.subjects.chimica,
-    FISICA: colors.subjects.fisica,
-    LOGICA: colors.subjects.logica,
-    CULTURA_GENERALE: colors.subjects.culturaGenerale,
+  // Fallback: restituisce un colore neutro
+  // I componenti dovrebbero essere aggiornati per usare generateDynamicSubjectColor
+  const fallbackColor = '#6B7280'; // grigio neutro
+  
+  if (variant === 'main') {
+    return fallbackColor;
+  }
+  
+  // Restituisce classi Tailwind con colore neutro
+  const variants = {
+    bg: 'bg-gray-500',
+    softBg: 'bg-gray-100 dark:bg-gray-800',
+    text: 'text-gray-500',
+    border: 'border-gray-500',
+    hover: 'hover:bg-gray-600',
   };
-
-  return mapping[subject]?.[variant] || colors.neutral.gray[600];
+  
+  return variants[variant] || variants.bg;
 }
 
 /**

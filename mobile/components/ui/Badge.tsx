@@ -2,7 +2,7 @@
  * Leonardo School Mobile - Badge Component
  * 
  * Badge per mostrare stati, contatori, materie.
- * Supporta sia materie dinamiche (con colore dal database) che legacy.
+ * Le materie usano sempre colori dinamici dal database.
  */
 
 import React from 'react';
@@ -10,11 +10,8 @@ import { View, StyleSheet } from 'react-native';
 import { Text } from './Text';
 import { 
   colors, 
-  getSubjectColor, 
-  getLegacySubjectColor,
-  getLegacySubjectName 
+  getSubjectColor
 } from '../../lib/theme/colors';
-import type { LegacySubject } from '../../lib/theme/colors';
 import { spacing, layout } from '../../lib/theme/spacing';
 
 type BadgeVariant = 'default' | 'primary' | 'success' | 'warning' | 'error' | 'info' | 'subject';
@@ -26,8 +23,6 @@ interface BadgeProps {
   size?: BadgeSize;
   /** Colore della materia dal database (es. "#FF5733") */
   subjectColor?: string | null;
-  /** @deprecated Usare subjectColor invece */
-  legacySubject?: LegacySubject;
   outlined?: boolean;
 }
 
@@ -36,7 +31,6 @@ export function Badge({
   variant = 'default',
   size = 'md',
   subjectColor,
-  legacySubject,
   outlined = false,
 }: BadgeProps) {
   const sizeStyles = {
@@ -64,26 +58,15 @@ export function Badge({
   };
 
   const getColors = () => {
-    if (variant === 'subject') {
-      // Priorità: colore dinamico, poi legacy, poi fallback
-      if (subjectColor) {
-        const mainColor = getSubjectColor(subjectColor, 'main');
-        const lightColor = getSubjectColor(subjectColor, 'light');
-        return {
-          bg: outlined ? 'transparent' : lightColor,
-          text: mainColor,
-          border: mainColor,
-        };
-      }
-      if (legacySubject) {
-        const mainColor = getLegacySubjectColor(legacySubject, 'main');
-        const lightColor = getLegacySubjectColor(legacySubject, 'light');
-        return {
-          bg: outlined ? 'transparent' : lightColor,
-          text: mainColor,
-          border: mainColor,
-        };
-      }
+    if (variant === 'subject' && subjectColor) {
+      // Colore dinamico dalla materia (database)
+      const mainColor = getSubjectColor(subjectColor, 'main');
+      const lightColor = getSubjectColor(subjectColor, 'light');
+      return {
+        bg: outlined ? 'transparent' : lightColor,
+        text: mainColor,
+        border: mainColor,
+      };
     }
 
     const variantColors = {
@@ -154,13 +137,12 @@ export function Badge({
 // ==================== SUBJECT BADGE ====================
 
 /**
- * SubjectBadge con supporto per materie dinamiche e legacy
+/**
+ * SubjectBadge per materie dinamiche dal database
  * 
- * Per materie dal database (dinamiche):
+ * Uso:
  * <DynamicSubjectBadge subject={customSubject} />
- * 
- * Per compatibilità legacy:
- * <LegacySubjectBadge subject="MATEMATICA" />
+ * <SubjectBadge subject={customSubject} /> // alias
  */
 
 /** Badge per materie dal database con colore dinamico */
@@ -186,30 +168,11 @@ export function DynamicSubjectBadge({
   );
 }
 
-/** @deprecated Badge per materie legacy (enum statico). Usa DynamicSubjectBadge invece. */
-interface LegacySubjectBadgeProps {
-  subject: LegacySubject;
-  size?: BadgeSize;
-  showLabel?: boolean;
-}
-
-export function LegacySubjectBadge({ 
-  subject, 
-  size = 'md', 
-  showLabel = true 
-}: LegacySubjectBadgeProps) {
-  return (
-    <Badge variant="subject" legacySubject={subject} size={size}>
-      {showLabel ? getLegacySubjectName(subject) : subject.charAt(0)}
-    </Badge>
-  );
-}
-
 /**
- * SubjectBadge - convenience alias per LegacySubjectBadge
- * @deprecated Usare DynamicSubjectBadge per materie dal database
+ * SubjectBadge - alias per DynamicSubjectBadge
+ * Usato per materie dinamiche dal database
  */
-export const SubjectBadge = LegacySubjectBadge;
+export const SubjectBadge = DynamicSubjectBadge;
 
 // ==================== COUNT BADGE ====================
 

@@ -2,9 +2,10 @@
  * Leonardo School Mobile - Materiali Screen
  * 
  * Materiale didattico: PDF, video, risorse per materia.
+ * Parità con webapp StudentMaterialsContent.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -12,6 +13,7 @@ import {
   RefreshControl,
   TouchableOpacity,
   Linking,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -47,25 +49,54 @@ export default function MaterialiScreen() {
   const { user } = useAuthStore();
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Fetch materials
+  // Fetch materials - usa getMyMaterials come la webapp
   const {
     data: materialsData,
     isLoading,
     refetch,
     isRefetching,
-  } = trpc.materials.getStudentMaterials.useQuery(
-    { subjectId: selectedSubject || undefined },
-    { enabled: !!user }
-  );
+  } = trpc.materials.getMyMaterials.useQuery(undefined, { 
+    enabled: !!user 
+  });
 
-  // Fetch subjects
-  const { data: subjectsData } = trpc.subjects.getAll.useQuery(undefined, {
+  // Fetch subjects - usa materials.getSubjects come la webapp
+  const { data: subjectsData } = trpc.materials.getSubjects.useQuery(undefined, {
     enabled: !!user,
   });
 
-  const materials: Material[] = (materialsData?.materials || []) as Material[];
+  // getMyMaterials restituisce direttamente l'array di materiali
+  const allMaterials: Material[] = useMemo(() => {
+    return (materialsData || []) as Material[];
+  }, [materialsData]);
   const subjects: Subject[] = (subjectsData || []) as Subject[];
+
+  // Filter materials by search query and selected subject
+  const materials = useMemo(() => {
+    let filtered = allMaterials;
+    
+    // Filter by selected subject
+    if (selectedSubject) {
+      filtered = filtered.filter(m => m.subjectId === selectedSubject);
+    }
+    
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (m) =>
+          m.title.toLowerCase().includes(query) ||
+          m.description?.toLowerCase().includes(query) ||
+          m.subject?.name.toLowerCase().includes(query)
+      );
+    }
+    
+    return filtered;
+  }, [allMaterials, searchQuery, selectedSubject]);
+
+  // Total count for header
+  const totalMaterials = allMaterials.length;
 
   const getMaterialIcon = (type: string): keyof typeof Ionicons.glyphMap => {
     const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -107,6 +138,28 @@ export default function MaterialiScreen() {
         title="Materiale Didattico" 
         onMenuPress={() => setDrawerVisible(true)} 
       />
+
+      {/* Search Bar */}
+      <View style={[styles.searchContainer, { backgroundColor: themedColors.background }]}>
+        <View style={[styles.searchBar, { backgroundColor: themedColors.card, borderColor: themedColors.border }]}>
+          <Ionicons name="search" size={18} color={themedColors.textMuted} />
+          <TextInput
+            style={[styles.searchInput, { color: themedColors.text }]}
+            placeholder="Cerca materiali..."
+            placeholderTextColor={themedColors.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={18} color={themedColors.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+        <Caption style={{ marginTop: 8 }}>
+          {totalMaterials} materiali disponibili
+        </Caption>
+      </View>
       
       {/* Subject Filter */}
       <View style={[styles.filterContainer, { borderBottomColor: themedColors.border }]}>
@@ -242,6 +295,25 @@ export default function MaterialiScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 0,
   },
   filterContainer: {
     borderBottomWidth: 1,

@@ -3,25 +3,21 @@
  * 
  * Esporta tutti i moduli del tema per uso centralizzato.
  * 
- * NOTA: Le materie sono ora dinamiche e vengono dal database.
- * Usare generateSubjectStyles(color) per generare i colori delle materie.
- * Le funzioni legacy sono disponibili per compatibilità.
+ * NOTA: Le materie sono dinamiche e vengono dal database.
+ * Usare generateSubjectStyles(color) o getSubjectColor(color) per generare i colori delle materie.
  */
 
 export { 
   colors, 
   getSubjectColor, 
   generateSubjectStyles,
-  getLegacySubjectColor,
-  getLegacySubjectName,
   getThemedColor 
 } from './colors';
 export type { 
   ColorScheme, 
   SubjectColorVariant, 
   SubjectColors,
-  CustomSubject,
-  LegacySubject
+  CustomSubject
 } from './colors';
 export { spacing, layout } from './spacing';
 export { typography, textStyles } from './typography';

@@ -2,10 +2,10 @@
  * Leonardo School Mobile - Dashboard Screen
  * 
  * Schermata principale dello studente con overview.
- * Dati caricati dalle API tRPC reali.
+ * Allineato alla webapp StudentDashboard.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   ScrollView,
@@ -28,19 +28,38 @@ import { colors } from '../../lib/theme/colors';
 import { spacing, layout } from '../../lib/theme/spacing';
 import { DrawerMenu, AppHeader } from '../../components/navigation';
 
+// Quick links configuration matching webapp
+const quickLinks = [
+  { route: '/(tabs)/simulations', icon: 'book-outline' as const, label: 'Simulazioni', color: '#3B82F6' },
+  { route: '/(tabs)/materiali', icon: 'folder-outline' as const, label: 'Materiali', color: '#14B8A6' },
+  { route: '/(tabs)/statistics', icon: 'bar-chart-outline' as const, label: 'Statistiche', color: '#8B5CF6' },
+  { route: '/(tabs)/calendario', icon: 'calendar-outline' as const, label: 'Calendario', color: '#F59E0B' },
+  { route: '/(tabs)/messaggi', icon: 'chatbubble-outline' as const, label: 'Messaggi', color: '#22C55E' },
+  { route: '/(tabs)/gruppo', icon: 'people-outline' as const, label: 'Gruppo', color: '#EC4899' },
+];
+
 export default function DashboardScreen() {
   const themedColors = useThemedColors();
   const { user } = useAuthStore();
   const [drawerVisible, setDrawerVisible] = useState(false);
   
-  // Fetch stats from API
+  // Fetch detailed stats (same as webapp)
   const { 
     data: statsData, 
     isLoading: statsLoading, 
     refetch: refetchStats,
     isRefetching: statsRefetching,
-  } = trpc.students.getMyStats.useQuery(undefined, {
-    enabled: !!user,
+  } = trpc.students.getDetailedStats.useQuery(undefined, {
+    enabled: !!user?.isActive,
+  });
+
+  // Fetch contract status for non-active users
+  const { 
+    data: contract, 
+    isLoading: contractLoading,
+  } = trpc.contracts.getMyContract.useQuery(undefined, {
+    enabled: !!user && !user.isActive,
+    retry: false,
   });
 
   // Fetch pending simulations count
@@ -50,11 +69,11 @@ export default function DashboardScreen() {
     refetch: refetchSimulations,
     isRefetching: simulationsRefetching,
   } = trpc.simulations.getAvailableSimulations.useQuery(
-    { page: 1, pageSize: 10, status: 'pending' },
-    { enabled: !!user }
+    { page: 1, pageSize: 10, status: 'available' },
+    { enabled: !!user?.isActive }
   );
 
-  const isLoading = statsLoading || simulationsLoading;
+  const isLoading = statsLoading || simulationsLoading || contractLoading;
   const isRefetching = statsRefetching || simulationsRefetching;
 
   const onRefresh = async () => {
@@ -70,6 +89,43 @@ export default function DashboardScreen() {
 
   const firstName = user?.name?.split(' ')[0] || 'Studente';
 
+  // Contract alert for non-active users (matching webapp)
+  const getContractAlert = useMemo(() => {
+    if (contractLoading || user?.isActive) return null;
+
+    if (contract?.status === 'PENDING') {
+      return {
+        type: 'pending',
+        title: 'Contratto da Firmare',
+        description: 'Ti è stato assegnato un contratto. Firmalo per completare l\'iscrizione.',
+        icon: 'create-outline' as const,
+        color: colors.status.info.main,
+      };
+    }
+
+    if (!contract && !user?.isActive) {
+      return {
+        type: 'waiting',
+        title: 'In Attesa di Contratto',
+        description: 'Il tuo profilo è completo. L\'amministrazione ti assegnerà presto un contratto.',
+        icon: 'time-outline' as const,
+        color: colors.status.warning.main,
+      };
+    }
+
+    if (contract?.status === 'SIGNED' && !user?.isActive) {
+      return {
+        type: 'activation',
+        title: 'In Attesa di Attivazione',
+        description: 'Hai firmato il contratto. Il tuo account verrà attivato a breve.',
+        icon: 'checkmark-circle-outline' as const,
+        color: colors.status.success.main,
+      };
+    }
+
+    return null;
+  }, [contract, contractLoading, user?.isActive]);
+
   // Define type for recent results
   interface RecentResult {
     id: string;
@@ -82,23 +138,32 @@ export default function DashboardScreen() {
     completedAt: Date | null;
   }
 
-  // Calculate stats from API data
-  const stats = {
+  // Calculate stats from API data (matching webapp getDetailedStats response)
+  const stats = useMemo(() => ({
     totalSimulations: statsData?.overview?.totalSimulations || 0,
-    averageScore: Math.round(statsData?.overview?.avgScore || 0),
+    averageScore: Math.round(statsData?.overview?.averageScore || statsData?.overview?.avgPercentage || 0),
     lastScore: statsData?.recentResults?.[0]?.percentageScore 
       ? Math.round(statsData.recentResults[0].percentageScore) 
       : 0,
     pendingSimulations: simulationsData?.pagination?.total || 0,
-  };
+    improvement: statsData?.overview?.improvement || 0,
+  }), [statsData, simulationsData]);
 
   const recentResults: RecentResult[] = statsData?.recentResults || [];
 
-  // Get subject progress from subjectStats
-  const subjectProgress = Object.entries(statsData?.subjectStats || {}).map(([subject, data]) => ({
-    subject,
-    percentage: Math.round((data as { avg?: number }).avg || 0),
-  })).slice(0, 5);
+  // Get subject progress from subjectBreakdown (getDetailedStats response)
+  interface SubjectProgressItem {
+    subject: string;
+    percentage: number;
+  }
+  
+  const subjectProgress: SubjectProgressItem[] = useMemo(() => {
+    const breakdown = statsData?.subjectBreakdown || [];
+    return breakdown.map((item: { subject: { name: string }; avgScore: number }) => ({
+      subject: item.subject?.name || 'Sconosciuto',
+      percentage: Math.round(item.avgScore || 0),
+    })).slice(0, 5);
+  }, [statsData?.subjectBreakdown]);
 
   if (!user) return null;
 
@@ -121,18 +186,33 @@ export default function DashboardScreen() {
           />
         }
       >
+        {/* Contract Alert for non-active users */}
+        {getContractAlert && (
+          <Card variant="outlined" style={[styles.alertCard, { borderLeftWidth: 4, borderLeftColor: getContractAlert.color }]}>
+            <View style={styles.alertContent}>
+              <View style={[styles.alertIcon, { backgroundColor: `${getContractAlert.color}20` }]}>
+                <Ionicons name={getContractAlert.icon} size={24} color={getContractAlert.color} />
+              </View>
+              <View style={styles.alertTextContainer}>
+                <Text variant="body" style={{ fontWeight: '600' }}>{getContractAlert.title}</Text>
+                <Caption style={{ marginTop: 2 }}>{getContractAlert.description}</Caption>
+              </View>
+            </View>
+          </Card>
+        )}
+
         {/* Welcome Header */}
         <View style={styles.header}>
           <View>
             <Text variant="bodySmall" color="muted">{getGreeting()}</Text>
             <Heading3>{firstName} 👋</Heading3>
           </View>
-          <TouchableOpacity
-            style={[styles.settingsButton, { backgroundColor: themedColors.backgroundSecondary }]}
-            onPress={() => router.push('/(tabs)/profile')}
-          >
-            <Ionicons name="settings-outline" size={22} color={themedColors.text} />
-          </TouchableOpacity>
+          {user.isActive && (
+            <View style={[styles.activeBadge, { backgroundColor: `${colors.status.success.main}20` }]}>
+              <Ionicons name="checkmark-circle" size={14} color={colors.status.success.main} />
+              <Text variant="caption" style={{ color: colors.status.success.main, marginLeft: 4 }}>Attivo</Text>
+            </View>
+          )}
         </View>
 
         {isLoading ? (
@@ -181,6 +261,58 @@ export default function DashboardScreen() {
                   <Caption>Ultimo Test</Caption>
                 </View>
               </Card>
+            </View>
+
+            {/* Self-Practice CTA - Hero Button (matching webapp) */}
+            {user.isActive && (
+              <TouchableOpacity
+                style={styles.selfPracticeButton}
+                onPress={() => router.push('/(tabs)/simulations')}
+                activeOpacity={0.9}
+              >
+                <LinearGradient
+                  colors={['#4F46E5', '#7C3AED', '#DB2777']}
+                  style={styles.selfPracticeContent}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <View style={styles.selfPracticeIcon}>
+                    <Ionicons name="flash" size={28} color="#FFFFFF" />
+                  </View>
+                  <View style={styles.selfPracticeTextContainer}>
+                    <Text variant="h4" style={{ color: '#FFFFFF' }}>
+                      Autoesercitazione ✨
+                    </Text>
+                    <Text variant="bodySmall" style={{ color: 'rgba(255,255,255,0.9)', marginTop: 2 }}>
+                      Quiz personalizzati con materie e difficoltà
+                    </Text>
+                  </View>
+                  <Ionicons name="arrow-forward" size={24} color="#FFFFFF" />
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+
+            {/* Quick Links Grid (matching webapp) */}
+            <View style={styles.section}>
+              <Heading3 style={styles.sectionTitle}>Accesso Rapido</Heading3>
+              <View style={styles.quickLinksGrid}>
+                {quickLinks.map((link) => (
+                  <TouchableOpacity
+                    key={link.route}
+                    style={styles.quickLinkCard}
+                    onPress={() => router.push(link.route as never)}
+                  >
+                    <Card variant="outlined" style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+                      <View style={[styles.quickLinkIcon, { backgroundColor: link.color }]}>
+                        <Ionicons name={link.icon} size={24} color="#FFFFFF" />
+                      </View>
+                      <Text variant="bodySmall" style={{ fontWeight: '600', textAlign: 'center' }}>
+                        {link.label}
+                      </Text>
+                    </Card>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
 
             {/* Quick Actions */}
@@ -284,6 +416,33 @@ export default function DashboardScreen() {
                   </Card>
                 ))}
               </View>
+            )}
+
+            {/* Motivation Section (matching webapp) */}
+            {stats.totalSimulations > 0 && (
+              <Card variant="outlined" style={styles.motivationCard}>
+                <View style={styles.motivationContent}>
+                  <View style={[styles.motivationIcon, { backgroundColor: themedColors.backgroundSecondary }]}>
+                    <Ionicons name="trending-up" size={24} color={colors.primary.main} />
+                  </View>
+                  <View style={styles.motivationTextContainer}>
+                    <Text variant="body" style={{ fontWeight: '600' }}>
+                      {stats.improvement > 0 
+                        ? '📈 Stai migliorando!' 
+                        : stats.totalSimulations >= 5 
+                          ? '💪 Continua così!' 
+                          : '🚀 Ottimo inizio!'}
+                    </Text>
+                    <Caption style={{ marginTop: 2 }}>
+                      {stats.improvement > 0 
+                        ? `+${stats.improvement.toFixed(1)}% rispetto alle prime simulazioni!`
+                        : stats.totalSimulations >= 5
+                          ? `${stats.totalSimulations} simulazioni completate. Continua!`
+                          : `Hai già ${stats.totalSimulations} simulazioni. Vai avanti!`}
+                    </Caption>
+                  </View>
+                </View>
+              </Card>
             )}
 
             {/* Empty state */}
@@ -465,5 +624,94 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[8],
     paddingVertical: spacing[4],
     borderRadius: layout.borderRadius.lg,
+  },
+  // Alert styles for contract status
+  alertCard: {
+    marginBottom: spacing[4],
+  },
+  alertContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  alertIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: layout.borderRadius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  alertTextContainer: {
+    flex: 1,
+    marginLeft: spacing[3],
+  },
+  activeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1],
+    borderRadius: layout.borderRadius.full,
+  },
+  // Quick links grid
+  quickLinksGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing[3],
+  },
+  quickLinkCard: {
+    width: '31%',
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing[3],
+  },
+  quickLinkIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: layout.borderRadius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing[2],
+  },
+  // Self practice button
+  selfPracticeButton: {
+    marginBottom: spacing[6],
+    borderRadius: layout.borderRadius.xl,
+    overflow: 'hidden',
+  },
+  selfPracticeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing[4],
+  },
+  selfPracticeIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: layout.borderRadius.lg,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selfPracticeTextContainer: {
+    flex: 1,
+    marginLeft: spacing[3],
+  },
+  // Motivation section
+  motivationCard: {
+    marginBottom: spacing[6],
+  },
+  motivationContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  motivationIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: layout.borderRadius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  motivationTextContainer: {
+    flex: 1,
+    marginLeft: spacing[3],
   },
 });

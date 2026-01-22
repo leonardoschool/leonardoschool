@@ -71,25 +71,6 @@ export const colors = {
   },
 
   /**
-   * Colori FALLBACK per materie scientifiche
-   * 
-   * NOTA: Questi sono colori di fallback. In produzione, i colori delle materie
-   * provengono dal database (CustomSubject.color) e vengono generati con
-   * generateSubjectStyles(subject.color)
-   * 
-   * @deprecated Usare generateSubjectStyles() con il colore dal database
-   */
-  subjectFallbacks: {
-    default: generateSubjectStyles(null),
-    matematica: generateSubjectStyles('#D54F8A'),
-    biologia: generateSubjectStyles('#68BCE8'),
-    chimica: generateSubjectStyles('#42BFED'),
-    fisica: generateSubjectStyles('#EEB550'),
-    logica: generateSubjectStyles('#B6B21D'),
-    culturaGenerale: generateSubjectStyles('#E7418B'),
-  },
-
-  /**
    * Sfondi e superfici
    */
   background: {
@@ -270,31 +251,6 @@ export interface CustomSubject {
 
 // ==================== HELPER FUNCTIONS ====================
 
-// Legacy Subject enum type (deprecated - use CustomSubject from database)
-export type LegacySubject = 'MATEMATICA' | 'BIOLOGIA' | 'CHIMICA' | 'FISICA' | 'LOGICA' | 'CULTURA_GENERALE';
-
-/**
- * @deprecated Usare generateSubjectStyles() con il colore dal database
- * 
- * Legacy helper per materie statiche. Le materie ora sono dinamiche
- * e il colore viene passato direttamente dal database.
- */
-export function getLegacySubjectColor(
-  subject: LegacySubject,
-  variant: SubjectColorVariant = 'main'
-): string {
-  const mapping: Record<LegacySubject, SubjectColors> = {
-    MATEMATICA: colors.subjectFallbacks.matematica,
-    BIOLOGIA: colors.subjectFallbacks.biologia,
-    CHIMICA: colors.subjectFallbacks.chimica,
-    FISICA: colors.subjectFallbacks.fisica,
-    LOGICA: colors.subjectFallbacks.logica,
-    CULTURA_GENERALE: colors.subjectFallbacks.culturaGenerale,
-  };
-
-  return mapping[subject]?.[variant] ?? colors.neutral[500];
-}
-
 /**
  * Primary helper for dynamic subject colors from database
  * 
@@ -313,22 +269,6 @@ export function getSubjectColor(
 ): string {
   const styles = generateSubjectStyles(color);
   return styles[variant];
-}
-
-/**
- * Helper per ottenere il nome della materia in italiano
- * @deprecated Le materie sono dinamiche, usa direttamente subject.name dal database
- */
-export function getLegacySubjectName(subject: LegacySubject): string {
-  const names: Record<LegacySubject, string> = {
-    MATEMATICA: 'Matematica',
-    BIOLOGIA: 'Biologia',
-    CHIMICA: 'Chimica',
-    FISICA: 'Fisica',
-    LOGICA: 'Logica',
-    CULTURA_GENERALE: 'Cultura Generale',
-  };
-  return names[subject] ?? subject;
 }
 
 /**

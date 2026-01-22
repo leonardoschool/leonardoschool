@@ -37,22 +37,26 @@ Register new routers in [server/trpc/routers/index.ts](server/trpc/routers/index
 ## Database (Prisma)
 Schema: [prisma/schema.prisma](prisma/schema.prisma)
 - **UserRole**: `ADMIN`, `COLLABORATOR`, `STUDENT`
-- **Subject**: `BIOLOGIA`, `CHIMICA`, `FISICA`, `MATEMATICA`, `LOGICA`, `CULTURA_GENERALE`
+- **Subject**: Custom subjects from database (`CustomSubject` model with dynamic colors)
 - Use `ctx.prisma.$transaction()` for atomic operations
 
 ## Color System (MANDATORY)
 **NEVER hardcode hex values.** Use [lib/theme/colors.ts](lib/theme/colors.ts):
 ```typescript
-import { colors, getSubjectColor } from '@/lib/theme/colors';
+import { colors, generateDynamicSubjectColor } from '@/lib/theme/colors';
 
-// ✅ Correct
+// ✅ Correct - Brand colors
 <div className={colors.primary.gradient} />
-<div className={getSubjectColor('BIOLOGIA', 'bg')} />
 
-// ❌ Wrong - never do this
+// ✅ Correct - Dynamic subject colors from database
+const subjectColors = generateDynamicSubjectColor(subject.color);
+<div style={{ backgroundColor: subjectColors.main }} />
+
+// ❌ Wrong - never hardcode subject colors
 <div className="bg-[#D54F8A]" />
 ```
-Categories: `colors.primary.*`, `colors.subjects.*`, `colors.background.*`, `colors.status.*`
+Categories: `colors.primary.*`, `colors.background.*`, `colors.status.*`
+Subject colors: Use `generateDynamicSubjectColor(hexColor)` with color from database
 
 ## UI/UX Requirements
 - **Responsive first**: Use Tailwind breakpoints (`sm:`, `md:`, `lg:`, `xl:`)

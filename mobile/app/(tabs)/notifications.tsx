@@ -2,7 +2,7 @@
  * Leonardo School Mobile - Notifications Screen
  * 
  * Lista notifiche utente.
- * Dati caricati dalle API tRPC reali.
+ * Allineato alla webapp NotificationsPageContent.tsx
  */
 
 import React, { useEffect, useState } from 'react';
@@ -29,13 +29,19 @@ import { colors } from '../../lib/theme/colors';
 import { spacing, layout } from '../../lib/theme/spacing';
 import type { NotificationType } from '../../types';
 
+// Filter types matching webapp
+type FilterType = 'all' | 'unread' | 'archived';
+
 // Type for notification from API
 interface NotificationItem {
   id: string;
   type: NotificationType;
   title: string;
-  body: string;
+  body?: string;
+  message?: string;
   isRead: boolean;
+  isArchived?: boolean;
+  isUrgent?: boolean;
   createdAt: string | Date;
 }
 
@@ -44,15 +50,21 @@ export default function NotificationsScreen() {
   const { user } = useAuthStore();
   const { setNotifications, markAsRead: markAsReadInStore, markAllAsRead: markAllAsReadInStore } = useNotificationStore();
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [filter, setFilter] = useState<FilterType>('all');
 
-  // Fetch notifications from API
+  // Fetch notifications from API with filter (matching webapp)
   const {
     data: notificationsData,
     isLoading,
     refetch,
     isRefetching,
   } = trpc.notifications.getNotifications.useQuery(
-    { page: 1, pageSize: 50 },
+    { 
+      page: 1, 
+      pageSize: 50,
+      unreadOnly: filter === 'unread',
+      archivedOnly: filter === 'archived',
+    },
     { enabled: !!user }
   );
 
@@ -185,19 +197,59 @@ export default function NotificationsScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={[]}>
       <AppHeader title="Notifiche" onMenuPress={() => setDrawerVisible(true)} />
       
-      {/* Header actions */}
-      {unreadCount > 0 && (
-        <View style={styles.headerActions}>
+      {/* Header with unread count and action */}
+      <View style={styles.headerSection}>
+        <View style={styles.headerTitleRow}>
+          <Text variant="h4">Notifiche</Text>
+          {unreadCount > 0 && (
+            <View style={[styles.unreadBadge, { backgroundColor: colors.primary.main }]}>
+              <Text variant="caption" style={{ color: '#FFFFFF', fontWeight: '600' }}>
+                {unreadCount} da leggere
+              </Text>
+            </View>
+          )}
+        </View>
+        {filter !== 'archived' && unreadCount > 0 && (
           <TouchableOpacity 
             onPress={handleMarkAllAsRead}
             disabled={markAllAsReadMutation.isPending}
+            style={styles.markAllButton}
           >
-            <Text variant="bodySmall" style={{ color: colors.primary.main }}>
-              {markAllAsReadMutation.isPending ? 'Attendere...' : 'Segna tutto come letto'}
+            <Ionicons name="checkmark-done" size={16} color={colors.primary.main} />
+            <Text variant="bodySmall" style={{ color: colors.primary.main, marginLeft: 4 }}>
+              {markAllAsReadMutation.isPending ? 'Attendere...' : 'Segna tutte lette'}
             </Text>
           </TouchableOpacity>
-        </View>
-      )}
+        )}
+      </View>
+
+      {/* Filter Tabs - matching webapp */}
+      <View style={[styles.filterContainer, { backgroundColor: themedColors.backgroundSecondary }]}>
+        {(['all', 'unread', 'archived'] as FilterType[]).map((f) => (
+          <TouchableOpacity
+            key={f}
+            style={[
+              styles.filterTab,
+              filter === f && [styles.filterTabActive, { backgroundColor: themedColors.card }],
+            ]}
+            onPress={() => setFilter(f)}
+          >
+            <Text
+              variant="buttonSmall"
+              style={{ color: filter === f ? themedColors.text : themedColors.textMuted }}
+            >
+              {f === 'all' ? 'Tutte' : f === 'unread' ? 'Non lette' : 'Archiviate'}
+            </Text>
+            {f === 'unread' && unreadCount > 0 && (
+              <View style={[styles.filterBadge, { backgroundColor: colors.status.error.main }]}>
+                <Text variant="caption" style={{ color: '#FFFFFF', fontSize: 10 }}>
+                  {unreadCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        ))}
+      </View>
 
       <ScrollView
         style={styles.scrollView}
@@ -218,11 +270,17 @@ export default function NotificationsScreen() {
               size={64}
               color={themedColors.textMuted}
             />
-            <Text variant="h5" color="muted">
-              Nessuna notifica
+            <Text variant="h5" color="muted" style={{ marginTop: spacing[3] }}>
+              {filter === 'unread' && 'Nessuna notifica non letta'}
+              {filter === 'archived' && 'Nessuna notifica archiviata'}
+              {filter === 'all' && 'Nessuna notifica'}
             </Text>
             <Body color="muted" align="center">
-              Non hai ancora ricevuto notifiche
+              {filter === 'all' 
+                ? 'Non hai ancora ricevuto notifiche'
+                : filter === 'unread'
+                  ? 'Tutte le notifiche sono state lette!'
+                  : 'Non hai notifiche archiviate'}
             </Body>
           </View>
         ) : (
@@ -234,8 +292,9 @@ export default function NotificationsScreen() {
                 {
                   backgroundColor: notification.isRead
                     ? themedColors.card
-                    : themedColors.backgroundSecondary,
-                  borderColor: themedColors.border,
+                    : `${colors.primary.main}08`,
+                  borderColor: notification.isRead ? themedColors.border : colors.primary.main,
+                  borderWidth: notification.isRead ? 1 : 1.5,
                 },
               ]}
               onPress={() => handleNotificationPress(notification)}
@@ -247,30 +306,45 @@ export default function NotificationsScreen() {
                   { backgroundColor: `${getNotificationColor(notification.type)}20` },
                 ]}
               >
-                <Ionicons
-                  name={getNotificationIcon(notification.type)}
-                  size={20}
-                  color={getNotificationColor(notification.type)}
-                />
+                {notification.isUrgent ? (
+                  <Ionicons name="warning" size={20} color={colors.status.warning.main} />
+                ) : (
+                  <Ionicons
+                    name={getNotificationIcon(notification.type)}
+                    size={20}
+                    color={getNotificationColor(notification.type)}
+                  />
+                )}
               </View>
 
               <View style={styles.notificationContent}>
                 <View style={styles.notificationHeader}>
-                  <Text
-                    variant="body"
-                    style={{ fontWeight: notification.isRead ? '400' : '600' }}
-                    numberOfLines={1}
-                  >
-                    {notification.title}
-                  </Text>
+                  <View style={styles.titleRow}>
+                    <Text
+                      variant="body"
+                      style={{ fontWeight: notification.isRead ? '400' : '600', flex: 1 }}
+                      numberOfLines={1}
+                    >
+                      {notification.title}
+                    </Text>
+                    {notification.isUrgent && (
+                      <View style={[styles.urgentBadge, { backgroundColor: `${colors.status.warning.main}20` }]}>
+                        <Text variant="caption" style={{ color: colors.status.warning.main, fontSize: 10 }}>
+                          Urgente
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                   {!notification.isRead && (
                     <View style={styles.unreadDot} />
                   )}
                 </View>
                 <Text variant="bodySmall" color="muted" numberOfLines={2}>
-                  {notification.body}
+                  {notification.body || notification.message}
                 </Text>
-                <Caption color="muted">{formatDate(notification.createdAt)}</Caption>
+                <Caption color="muted" style={{ marginTop: spacing[1] }}>
+                  {formatDate(notification.createdAt)}
+                </Caption>
               </View>
             </TouchableOpacity>
           ))
@@ -295,10 +369,57 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerActions: {
+  headerSection: {
     paddingHorizontal: spacing[4],
+    paddingTop: spacing[2],
+    paddingBottom: spacing[3],
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    marginBottom: spacing[2],
+  },
+  unreadBadge: {
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1],
+    borderRadius: layout.borderRadius.full,
+  },
+  markAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    marginHorizontal: spacing[4],
+    marginBottom: spacing[3],
+    padding: spacing[1],
+    borderRadius: layout.borderRadius.lg,
+    gap: spacing[1],
+  },
+  filterTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: spacing[2],
-    alignItems: 'flex-end',
+    paddingHorizontal: spacing[2],
+    borderRadius: layout.borderRadius.md,
+    gap: spacing[1],
+  },
+  filterTabActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  filterBadge: {
+    paddingHorizontal: spacing[1.5],
+    paddingVertical: spacing[0.5],
+    borderRadius: layout.borderRadius.full,
+    minWidth: 18,
+    alignItems: 'center',
   },
   scrollView: {
     flex: 1,
@@ -311,7 +432,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: spacing[4],
     borderRadius: layout.borderRadius.lg,
-    borderWidth: 1,
     marginBottom: spacing[2],
   },
   iconContainer: {
@@ -328,20 +448,33 @@ const styles = StyleSheet.create({
   },
   notificationHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
+    gap: spacing[2],
+  },
+  titleRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  urgentBadge: {
+    paddingHorizontal: spacing[1.5],
+    paddingVertical: spacing[0.5],
+    borderRadius: layout.borderRadius.sm,
   },
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: colors.primary.main,
+    marginTop: spacing[1.5],
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: spacing[16],
-    gap: spacing[3],
+    gap: spacing[2],
   },
 });

@@ -95,6 +95,15 @@ function RootLayoutNav() {
             headerShown: false,
           }}
         />
+        
+        {/* Conversation detail */}
+        <Stack.Screen
+          name="conversation/[id]"
+          options={{
+            headerShown: true,
+            headerBackTitle: 'Messaggi',
+          }}
+        />
       </Stack>
     </AuthGuard>
   );
