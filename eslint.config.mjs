@@ -14,6 +14,10 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Legacy Flutter webapp (not part of current project)
     "webapp_old/**",
+    // Coverage reports (generated files)
+    "coverage/**",
+    // Mobile app (separate project)
+    "mobile/**",
   ]),
   // Custom rules
   {

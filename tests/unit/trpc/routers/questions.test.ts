@@ -321,7 +321,7 @@ describe('Questions Router', () => {
       });
 
       it('should update answers', async () => {
-        const question = createMockQuestion();
+        const _question = createMockQuestion();
         const newAnswers = [createMockAnswer({ isCorrect: true })];
         
         mockPrisma.questionAnswer.deleteMany.mockResolvedValue({ count: 2 });

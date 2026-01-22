@@ -271,7 +271,7 @@ describe('Calendar Router', () => {
       });
 
       it('should include group invitations for students', async () => {
-        const ctx = createMockContext({ role: 'STUDENT' });
+        const _ctx = createMockContext({ role: 'STUDENT' });
         const studentId = faker.string.uuid();
         const groupId = faker.string.uuid();
         

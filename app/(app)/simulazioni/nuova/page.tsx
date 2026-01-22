@@ -203,7 +203,7 @@ export default function NewSimulationPage() {
 
   // Loading states
   const [isSaving, setIsSaving] = useState(false);
-  const [isPdfLoading, setIsPdfLoading] = useState(false);
+  const [_isPdfLoading, setIsPdfLoading] = useState(false);
 
   // Fetch data
   const { data: subjectsData } = trpc.questions.getSubjects.useQuery();
@@ -561,7 +561,7 @@ export default function NewSimulationPage() {
     setSections(updatedSections);
   };
 
-  const getQuestionSection = (questionId: string): string | null => {
+  const _getQuestionSection = (questionId: string): string | null => {
     for (const section of sections) {
       if (section.questionIds?.includes(questionId)) {
         return section.id;
@@ -583,7 +583,7 @@ export default function NewSimulationPage() {
 
 
   // Handle PDF preview - fetch complete question data with answers
-  const handlePdfPreview = async () => {
+  const _handlePdfPreview = async () => {
     if (selectedQuestions.length === 0) {
       alert('Seleziona almeno una domanda per visualizzare l\'anteprima');
       return;
