@@ -188,7 +188,7 @@ jobs:
         run: pnpm prisma:generate
 
       - name: Push database schema
-        run: pnpm prisma db push
+        run: pnpm prisma db push --url "$DATABASE_URL"
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/leonardoschool_test
 
