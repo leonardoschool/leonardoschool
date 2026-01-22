@@ -5,15 +5,17 @@
  */
 
 import React from 'react';
-import { View, ViewProps, TouchableOpacity } from 'react-native';
+import { View, TouchableOpacity, StyleProp, ViewStyle } from 'react-native';
 import { useThemedColors } from '../../contexts/ThemeContext';
 import { spacing, layout } from '../../lib/theme/spacing';
 
-interface CardProps extends ViewProps {
+interface CardProps {
   children: React.ReactNode;
   variant?: 'default' | 'outlined' | 'elevated';
   padding?: 'none' | 'sm' | 'md' | 'lg';
   onPress?: () => void;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
 }
 
 export function Card({
@@ -22,7 +24,7 @@ export function Card({
   padding = 'md',
   onPress,
   style,
-  ...props
+  testID,
 }: CardProps) {
   const themedColors = useThemedColors();
 
@@ -69,7 +71,7 @@ export function Card({
         style={cardStyle}
         onPress={onPress}
         activeOpacity={0.7}
-        {...props}
+        testID={testID}
       >
         {children}
       </TouchableOpacity>
@@ -77,7 +79,7 @@ export function Card({
   }
 
   return (
-    <View style={cardStyle} {...props}>
+    <View style={cardStyle} testID={testID}>
       {children}
     </View>
   );

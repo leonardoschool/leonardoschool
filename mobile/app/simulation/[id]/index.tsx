@@ -1,9 +1,13 @@
 /**
  * Schermata esecuzione simulazione
  * Gestisce il timer, le domande e le risposte durante una simulazione
+ * Supporta:
+ * - Simulazioni standard
+ * - Simulazioni TOLC con sezioni
+ * - Virtual Room con waiting room
  * Utilizza le API tRPC reali per caricamento e invio.
  */
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -24,12 +28,20 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { Text, Button, Card, PageLoader } from '../../../components/ui';
+import { RichTextWithLaTeX } from '../../../components/ui/LaTeXRenderer';
 import { colors } from '../../../lib/theme/colors';
 import { spacing } from '../../../lib/theme/spacing';
 import { typography } from '../../../lib/theme/typography';
 import { showConfirmAlert } from '../../../lib/errorHandler';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { trpc } from '../../../lib/trpc';
+import {
+  StudentWaitingRoom,
+  TolcInstructions,
+  TolcSimulationLayout,
+  InTestMessaging,
+  QuestionFeedbackModal,
+} from '../../../components/simulation';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -37,29 +49,52 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 interface Question {
   id: string;
   text: string;
+  textLatex?: string;
   difficulty: 'FACILE' | 'MEDIA' | 'DIFFICILE';
   type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'OPEN' | 'OPEN_TEXT';
   points: number;
   options: {
     id: string;
     text: string;
+    textLatex?: string;
   }[];
   subjectId: string;
 }
 
-// Tipo per le risposte
+// Tipo per le risposte (aggiornato per supportare answerText e flagged)
 interface Answer {
   questionId: string;
   selectedOptionId: string | null;
+  answerText: string | null;
   isMarked: boolean; // domanda segnata per revisione
+  timeSpent: number;
 }
 
-// Configurazione simulazione
+// Sezione TOLC
+interface SimulationSection {
+  name: string;
+  durationMinutes: number;
+  questionIds: string[];
+  subjectId?: string;
+}
+
+// Configurazione simulazione (estesa per supportare TOLC e Virtual Room)
 interface SimulationConfig {
   id: string;
   title: string;
+  description?: string;
   duration: number; // minuti
   questions: Question[];
+  hasSections: boolean;
+  sections: SimulationSection[];
+  accessType: 'PUBLIC' | 'ASSIGNED' | 'ROOM';
+  enableAntiCheat: boolean;
+  correctPoints: number;
+  wrongPoints: number;
+  blankPoints: number;
+  paperInstructions?: string;
+  isOfficial: boolean;
+  hasInProgressAttempt: boolean;
 }
 
 export default function SimulationExecutionScreen() {
@@ -67,27 +102,172 @@ export default function SimulationExecutionScreen() {
   const router = useRouter();
   const { themed } = useTheme();
 
-  // Stati
-  const [loading, setLoading] = useState(true);
-  const [simulation, setSimulation] = useState<SimulationConfig | null>(null);
-  const [_attemptId, setAttemptId] = useState<string | null>(null);
+  // Stati principali
+  const [hasStarted, setHasStarted] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Answer[]>([]);
-  const [timeRemaining, setTimeRemaining] = useState(0); // secondi
+  const [timeSpent, setTimeSpent] = useState(0); // tempo trascorso in secondi
   const [showQuestionNav, setShowQuestionNav] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [startTime] = useState(Date.now());
+  const [resultId, setResultId] = useState<string | null>(null);
+  
+  // TOLC section states
+  const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
+  const [sectionTimes, setSectionTimes] = useState<Record<number, number>>({});
+  const [completedSections, setCompletedSections] = useState<Set<number>>(new Set());
+  const [_showSectionTransition, setShowSectionTransition] = useState(false);
+  
+  // Virtual Room states
+  const [hasReadInstructions, setHasReadInstructions] = useState(false);
+  const [participantId, setParticipantId] = useState<string | null>(null);
+  const [showMessaging, setShowMessaging] = useState(false);
+  const [messagingUnreadCount, setMessagingUnreadCount] = useState(0);
+  
+  // Feedback modal state
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  
+  // Refs
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const answersRef = useRef<Answer[]>([]);
+  const currentQuestionIndexRef = useRef(currentQuestionIndex);
+  const answersInitializedRef = useRef(false);
+  const lastSectionTimeUpdateRef = useRef(-1);
 
   // Animazioni
   const progressScale = useSharedValue(1);
 
-  // tRPC mutations - usa ref per evitare ri-esecuzione useEffect
-  const startAttemptMutation = trpc.simulations.startAttempt.useMutation();
-  const startAttemptRef = React.useRef(startAttemptMutation);
-  startAttemptRef.current = startAttemptMutation;
+  // Tipi per le risposte API
+  interface SimulationQuestion {
+    questionId: string;
+    question: {
+      text: string;
+      difficulty: string;
+      type: string;
+      points: number;
+      answers: Array<{ id: string; text?: string | null; textLatex?: string | null }>;
+      subject?: { id: string } | null;
+    };
+  }
+
+  // Query per caricare i dati della simulazione
+  const { 
+    data: simulationData, 
+    isLoading: isLoadingSimulation, 
+    error: simulationError 
+  } = trpc.simulations.getSimulationForStudent.useQuery(
+    { id: id || '', assignmentId: assignmentId || undefined },
+    { enabled: !!id, staleTime: Infinity }
+  );
+  
+  // Converti i dati in SimulationConfig
+  const simulation: SimulationConfig | null = useMemo(() => {
+    if (!simulationData) return null;
+    
+    const questions: Question[] = simulationData.questions.map((sq: SimulationQuestion) => ({
+      id: sq.questionId,
+      text: sq.question.text,
+      difficulty: sq.question.difficulty as 'FACILE' | 'MEDIA' | 'DIFFICILE',
+      type: sq.question.type as Question['type'],
+      points: sq.question.points,
+      options: sq.question.answers.map((a) => ({
+        id: a.id,
+        text: a.textLatex || a.text || '',
+      })),
+      subjectId: sq.question.subject?.id || '',
+    }));
+    
+    // Parse sections
+    let sections: SimulationSection[] = [];
+    if (simulationData.hasSections && simulationData.sections) {
+      try {
+        sections = simulationData.sections as unknown as SimulationSection[];
+        if (!Array.isArray(sections)) sections = [];
+      } catch {
+        sections = [];
+      }
+    }
+    
+    return {
+      id: simulationData.id,
+      title: simulationData.title,
+      description: simulationData.description || undefined,
+      duration: simulationData.durationMinutes,
+      questions,
+      hasSections: simulationData.hasSections || false,
+      sections,
+      accessType: simulationData.accessType as 'PUBLIC' | 'ASSIGNED' | 'ROOM',
+      enableAntiCheat: simulationData.enableAntiCheat || false,
+      correctPoints: simulationData.correctPoints,
+      wrongPoints: simulationData.wrongPoints,
+      blankPoints: simulationData.blankPoints,
+      paperInstructions: simulationData.paperInstructions || undefined,
+      isOfficial: simulationData.isOfficial || false,
+      hasInProgressAttempt: simulationData.hasInProgressAttempt || false,
+    };
+  }, [simulationData]);
+  
+  // Check if Virtual Room and TOLC mode
+  const isVirtualRoom = simulation?.accessType === 'ROOM';
+  const hasSectionsMode = simulation?.hasSections && simulation?.sections.length > 0;
+
+  // Tipo per dati mutation startAttempt
+  interface StartAttemptData {
+    resultId: string;
+    resumed: boolean;
+    savedTimeSpent?: number;
+    savedAnswers?: Array<{
+      questionId: string;
+      answerId: string | null;
+      answerText?: string | null;
+      flagged?: boolean;
+      timeSpent?: number;
+    }>;
+    savedSectionTimes?: Record<number, number>;
+    savedCurrentSectionIndex?: number;
+  }
+
+  // tRPC mutations
+  const startAttemptMutation = trpc.simulations.startAttempt.useMutation({
+    onSuccess: (data: StartAttemptData) => {
+      setResultId(data.resultId);
+      
+      if (data.resumed) {
+        // Ripristina i dati salvati
+        if (data.savedTimeSpent) {
+          setTimeSpent(data.savedTimeSpent);
+          lastSectionTimeUpdateRef.current = data.savedTimeSpent;
+        }
+        if (data.savedAnswers && data.savedAnswers.length > 0) {
+          const restoredAnswers: Answer[] = data.savedAnswers.map((a: NonNullable<StartAttemptData['savedAnswers']>[number]) => ({
+            questionId: a.questionId,
+            selectedOptionId: a.answerId,
+            answerText: a.answerText || null,
+            isMarked: a.flagged || false,
+            timeSpent: a.timeSpent || 0,
+          }));
+          setAnswers(restoredAnswers);
+          answersInitializedRef.current = true;
+        }
+        if (data.savedSectionTimes) {
+          setSectionTimes(data.savedSectionTimes);
+        }
+        if (data.savedCurrentSectionIndex !== undefined) {
+          setCurrentSectionIndex(data.savedCurrentSectionIndex);
+        }
+        Alert.alert('Ripreso', 'Hai ripreso il tuo tentativo precedente');
+      }
+      
+      setHasStarted(true);
+    },
+    onError: (error: { message?: string }) => {
+      const message = error.message || 'Impossibile avviare la simulazione';
+      Alert.alert('Errore', message);
+    },
+  });
   
   const submitMutation = trpc.simulations.submit.useMutation();
   const saveProgressMutation = trpc.simulations.saveProgress.useMutation();
+  const heartbeatMutation = trpc.virtualRoom.heartbeat.useMutation();
 
   // Styles dinamici
   const dynamicStyles = useMemo(
@@ -103,113 +283,121 @@ export default function SimulationExecutionScreen() {
     [themed]
   );
 
-  // Ref per submitSimulation per evitare re-render
-  const submitSimulationRef = React.useRef<(() => Promise<void>) | null>(null);
+  // Initialize answers when simulation loads
+  useEffect(() => {
+    if (simulation && hasStarted && answers.length === 0 && !answersInitializedRef.current) {
+      answersInitializedRef.current = true;
+      setAnswers(
+        simulation.questions.map((q) => ({
+          questionId: q.id,
+          selectedOptionId: null,
+          answerText: null,
+          isMarked: false,
+          timeSpent: 0,
+        }))
+      );
+    }
+  }, [simulation, hasStarted, answers.length]);
 
-  // Tempo scaduto
-  const handleTimeExpired = useCallback(() => {
-    Alert.alert(
-      'Tempo scaduto',
-      'Il tempo a disposizione è terminato. La simulazione verrà consegnata automaticamente.',
-      [{ text: 'OK', onPress: () => submitSimulationRef.current?.() }]
-    );
-  }, []);
+  // Keep refs in sync
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
+
+  useEffect(() => {
+    currentQuestionIndexRef.current = currentQuestionIndex;
+  }, [currentQuestionIndex]);
+
+  // Timer
+  useEffect(() => {
+    if (!hasStarted || !simulation) return;
+
+    timerRef.current = setInterval(() => {
+      setTimeSpent((prev) => prev + 1);
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [hasStarted, simulation]);
+
+  // Section timer management
+  useEffect(() => {
+    if (!hasStarted || !hasSectionsMode) return;
+    if (timeSpent <= lastSectionTimeUpdateRef.current) return;
+    lastSectionTimeUpdateRef.current = timeSpent;
+
+    setSectionTimes(prev => ({
+      ...prev,
+      [currentSectionIndex]: (prev[currentSectionIndex] || 0) + 1,
+    }));
+  }, [timeSpent, hasStarted, hasSectionsMode, currentSectionIndex]);
+
+  // Calculate section time remaining
+  const sectionTimeRemaining = useMemo(() => {
+    if (!hasSectionsMode || !simulation?.sections[currentSectionIndex]) return null;
+    const sectionDuration = simulation.sections[currentSectionIndex].durationMinutes * 60;
+    const sectionTimeUsed = sectionTimes[currentSectionIndex] || 0;
+    return sectionDuration - sectionTimeUsed;
+  }, [hasSectionsMode, simulation, currentSectionIndex, sectionTimes]);
+
+  // Calculate total time remaining
+  const timeRemaining = useMemo(() => {
+    if (!simulation || simulation.duration <= 0) return null;
+    return simulation.duration * 60 - timeSpent;
+  }, [simulation, timeSpent]);
+
+  // Virtual Room heartbeat
+  useEffect(() => {
+    if (!isVirtualRoom || !participantId || !hasStarted) return;
+
+    const sendHeartbeat = () => {
+      const currentAnsweredCount = answersRef.current.filter(
+        a => a.selectedOptionId !== null || a.answerText !== null
+      ).length;
+      
+      heartbeatMutation.mutate({
+        participantId,
+        currentQuestionIndex: currentQuestionIndexRef.current,
+        answeredCount: currentAnsweredCount,
+      });
+    };
+
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 3000);
+    return () => clearInterval(interval);
+  }, [isVirtualRoom, participantId, hasStarted, heartbeatMutation]);
+
+  // Auto-save progress periodically
+  useEffect(() => {
+    if (!hasStarted || !resultId) return;
+
+    const saveProgress = () => {
+      const answersWithTimes = answers.map((a) => ({
+        questionId: a.questionId,
+        answerId: a.selectedOptionId,
+        answerText: a.answerText,
+        timeSpent: a.timeSpent,
+        flagged: a.isMarked,
+      }));
+
+      saveProgressMutation.mutate({
+        resultId,
+        answers: answersWithTimes,
+        timeSpent,
+        sectionTimes,
+        currentSectionIndex,
+      });
+    };
+
+    const interval = setInterval(saveProgress, 30000);
+    return () => clearInterval(interval);
+  }, [hasStarted, resultId, answers, timeSpent, sectionTimes, currentSectionIndex, saveProgressMutation]);
 
   // Funzione per gestire uscita
   const handleExitConfirm = useCallback(() => {
     router.back();
   }, [router]);
-
-  // Caricamento simulazione con API reale
-  useEffect(() => {
-    const loadSimulation = async () => {
-      if (!id) {
-        Alert.alert('Errore', 'ID simulazione mancante');
-        router.back();
-        return;
-      }
-
-      try {
-        // Start attempt - ottieni i dati della simulazione usando la ref
-        const result = await startAttemptRef.current.mutateAsync({
-          simulationId: id,
-          assignmentId: assignmentId || undefined,
-        });
-
-        if (!result) {
-          throw new Error('Nessun risultato');
-        }
-
-        // Trasforma i dati nel formato locale
-        const questions: Question[] = result.questions.map((sq: {
-          id: string;
-          question: {
-            text: string;
-            difficulty: string;
-            type: string;
-            points: number;
-            answers: Array<{ id: string; text?: string | null; textLatex?: string | null }>;
-            subject?: { id: string } | null;
-          };
-        }) => ({
-          id: sq.id,
-          text: sq.question.text,
-          difficulty: sq.question.difficulty as 'FACILE' | 'MEDIA' | 'DIFFICILE',
-          type: sq.question.type as Question['type'],
-          points: sq.question.points,
-          options: sq.question.answers.map((a: { id: string; text?: string | null; textLatex?: string | null }) => ({
-            id: a.id,
-            text: a.textLatex || a.text || '',
-          })),
-          subjectId: sq.question.subject?.id || '',
-        }));
-
-        const simConfig: SimulationConfig = {
-          id: result.simulation.id,
-          title: result.simulation.title,
-          duration: result.simulation.duration,
-          questions,
-        };
-
-        setSimulation(simConfig);
-        setAttemptId(result.resultId);
-        setTimeRemaining(result.remainingTime || result.simulation.duration * 60);
-        setAnswers(
-          questions.map((q) => ({
-            questionId: q.id,
-            selectedOptionId: null,
-            isMarked: false,
-          }))
-        );
-        setLoading(false);
-      } catch (error) {
-        console.error('Errore caricamento simulazione:', error);
-        const message = error instanceof Error ? error.message : 'Impossibile caricare la simulazione';
-        Alert.alert('Errore', message);
-        router.back();
-      }
-    };
-
-    loadSimulation();
-  }, [id, assignmentId, router]);
-
-  // Timer countdown
-  useEffect(() => {
-    if (loading || timeRemaining <= 0) return;
-
-    const timer = setInterval(() => {
-      setTimeRemaining((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          handleTimeExpired();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [loading, timeRemaining, handleTimeExpired]);
 
   // Gestione tasto back hardware (Android)
   useEffect(() => {
@@ -242,6 +430,7 @@ export default function SimulationExecutionScreen() {
 
   // Colore timer in base al tempo rimanente
   const getTimerColor = (): string => {
+    if (timeRemaining === null) return colors.primary.main;
     const percentRemaining = timeRemaining / ((simulation?.duration || 100) * 60);
     if (percentRemaining <= 0.1) return colors.status.error.main;
     if (percentRemaining <= 0.25) return colors.status.warning.main;
@@ -280,25 +469,48 @@ export default function SimulationExecutionScreen() {
     }
   };
 
+  // Complete section (TOLC mode)
+  const handleCompleteSection = useCallback(() => {
+    if (!simulation || !hasSectionsMode) return;
+    
+    setCompletedSections(prev => new Set(prev).add(currentSectionIndex));
+    setShowSectionTransition(false);
+    
+    // Move to next section if available
+    if (currentSectionIndex < simulation.sections.length - 1) {
+      setCurrentSectionIndex(prev => prev + 1);
+      // Find first question of next section
+      const nextSection = simulation.sections[currentSectionIndex + 1];
+      if (nextSection) {
+        const firstQuestionIndex = simulation.questions.findIndex(
+          q => nextSection.questionIds.includes(q.id)
+        );
+        if (firstQuestionIndex >= 0) {
+          setCurrentQuestionIndex(firstQuestionIndex);
+        }
+      }
+    }
+  }, [simulation, hasSectionsMode, currentSectionIndex]);
+
   // Invio simulazione con API reale
-  const submitSimulation = async () => {
+  const submitSimulation = useCallback(async () => {
     if (!simulation || !id) return;
     
     setIsSubmitting(true);
     try {
-      // Calcola tempo totale trascorso in secondi
-      const totalTimeSpent = Math.floor((Date.now() - startTime) / 1000);
-      
       // Prepara le risposte nel formato API
       const apiAnswers = answers.map((a) => ({
         questionId: a.questionId,
         answerId: a.selectedOptionId,
+        answerText: a.answerText,
+        timeSpent: a.timeSpent,
+        flagged: a.isMarked,
       }));
 
       await submitMutation.mutateAsync({
         simulationId: id,
         answers: apiAnswers,
-        totalTimeSpent,
+        totalTimeSpent: timeSpent,
       });
 
       // Naviga ai risultati
@@ -309,45 +521,30 @@ export default function SimulationExecutionScreen() {
       Alert.alert('Errore', message);
       setIsSubmitting(false);
     }
-  };
+  }, [simulation, id, answers, timeSpent, submitMutation, router]);
 
-  // Aggiorna la ref per handleTimeExpired
-  submitSimulationRef.current = submitSimulation;
-
-  // Salva progresso periodicamente
-  const saveProgress = useCallback(async () => {
-    if (!simulation || !id) return;
-    
-    try {
-      const apiAnswers = answers.map((a) => ({
-        questionId: a.questionId,
-        answerId: a.selectedOptionId,
-      }));
-
-      await saveProgressMutation.mutateAsync({
-        simulationId: id,
-        answers: apiAnswers,
-        currentQuestion: currentQuestionIndex,
-      });
-    } catch (error) {
-      console.error('Errore salvataggio progresso:', error);
-    }
-  }, [simulation, id, answers, currentQuestionIndex, saveProgressMutation]);
-
-  // Salva progresso ogni 30 secondi
+  // Auto-submit when time expires (after submitSimulation is defined)
   useEffect(() => {
-    if (loading || !simulation) return;
+    if (hasStarted && simulation && simulation.duration > 0 && timeRemaining !== null && timeRemaining <= 0) {
+      Alert.alert(
+        'Tempo scaduto',
+        'Il tempo a disposizione è terminato. La simulazione verrà consegnata automaticamente.',
+        [{ text: 'OK', onPress: () => submitSimulation() }]
+      );
+    }
+  }, [hasStarted, simulation, timeRemaining, submitSimulation]);
 
-    const interval = setInterval(() => {
-      saveProgress();
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [loading, simulation, saveProgress]);
+  // Section time auto-advance (after handleCompleteSection is defined)
+  useEffect(() => {
+    if (!hasSectionsMode || sectionTimeRemaining === null) return;
+    if (sectionTimeRemaining <= 0 && !completedSections.has(currentSectionIndex)) {
+      handleCompleteSection();
+    }
+  }, [hasSectionsMode, sectionTimeRemaining, currentSectionIndex, completedSections, handleCompleteSection]);
 
   // Conferma invio
   const confirmSubmit = () => {
-    const answeredCount = answers.filter((a) => a.selectedOptionId !== null).length;
+    const answeredCount = answers.filter((a) => a.selectedOptionId !== null || a.answerText !== null).length;
     const totalQuestions = simulation?.questions.length || 0;
     const unansweredCount = totalQuestions - answeredCount;
 
@@ -373,8 +570,261 @@ export default function SimulationExecutionScreen() {
   }));
 
   // Loading state
-  if (loading || !simulation) {
+  if (isLoadingSimulation || !simulation) {
     return <PageLoader />;
+  }
+  
+  // Error state
+  if (simulationError) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={[styles.container, dynamicStyles.container, styles.errorContainer]}>
+          <Ionicons name="alert-circle" size={48} color={colors.status.error.main} />
+          <Text style={[styles.errorText, { color: dynamicStyles.textPrimary }]}>
+            {simulationError.message || 'Impossibile caricare la simulazione'}
+          </Text>
+          <Button onPress={() => router.back()}>Torna indietro</Button>
+        </View>
+      </>
+    );
+  }
+
+  // Virtual Room: show waiting room (before hasStarted)
+  if (!hasStarted && isVirtualRoom && assignmentId) {
+    // For TOLC-style simulations, show instructions first
+    if (hasSectionsMode && !hasReadInstructions) {
+      return (
+        <>
+          <Stack.Screen options={{ headerShown: false }} />
+          <TolcInstructions
+            simulationTitle={simulation.title}
+            durationMinutes={simulation.duration}
+            totalQuestions={simulation.questions.length}
+            sectionsCount={simulation.sections.length}
+            onContinue={() => setHasReadInstructions(true)}
+          />
+        </>
+      );
+    }
+    
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <StudentWaitingRoom
+          assignmentId={assignmentId}
+          simulationTitle={simulation.title}
+          durationMinutes={simulation.duration}
+          instructions={simulation.paperInstructions}
+          onSessionStart={(_actualStartAt, pId) => {
+            setParticipantId(pId);
+            startAttemptMutation.mutate({
+              simulationId: id,
+              assignmentId,
+            });
+          }}
+        />
+      </>
+    );
+  }
+
+  // Start screen (for non-Virtual Room simulations)
+  if (!hasStarted) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <ScrollView 
+          style={[styles.container, dynamicStyles.container]}
+          contentContainerStyle={styles.startScreenContent}
+        >
+          <View style={styles.startCard}>
+            {simulation.isOfficial && (
+              <View style={styles.officialBadge}>
+                <Ionicons name="ribbon" size={16} color={colors.status.error.main} />
+                <Text style={styles.officialBadgeText}>Simulazione Ufficiale</Text>
+              </View>
+            )}
+            
+            <Text style={[styles.startTitle, { color: dynamicStyles.textPrimary }]}>
+              {simulation.title}
+            </Text>
+            
+            {simulation.description && (
+              <Text style={[styles.startDescription, { color: dynamicStyles.textSecondary }]}>
+                {simulation.description}
+              </Text>
+            )}
+            
+            <View style={styles.statsRow}>
+              <View style={[styles.statCard, { backgroundColor: dynamicStyles.cardBg }]}>
+                <Ionicons name="help-circle-outline" size={24} color={colors.primary.main} />
+                <Text style={[styles.statValue, { color: dynamicStyles.textPrimary }]}>
+                  {simulation.questions.length}
+                </Text>
+                <Text style={[styles.statLabel, { color: dynamicStyles.textSecondary }]}>
+                  Domande
+                </Text>
+              </View>
+              <View style={[styles.statCard, { backgroundColor: dynamicStyles.cardBg }]}>
+                <Ionicons name="time-outline" size={24} color={colors.primary.main} />
+                <Text style={[styles.statValue, { color: dynamicStyles.textPrimary }]}>
+                  {simulation.duration > 0 ? `${simulation.duration} min` : '∞'}
+                </Text>
+                <Text style={[styles.statLabel, { color: dynamicStyles.textSecondary }]}>
+                  Tempo
+                </Text>
+              </View>
+            </View>
+            
+            <View style={[styles.scoringCard, { backgroundColor: dynamicStyles.cardBg }]}>
+              <Text style={[styles.scoringTitle, { color: dynamicStyles.textPrimary }]}>
+                Punteggio:
+              </Text>
+              <Text style={[styles.scoringItem, { color: colors.status.success.main }]}>
+                ✓ Risposta corretta: +{simulation.correctPoints}
+              </Text>
+              <Text style={[styles.scoringItem, { color: colors.status.error.main }]}>
+                ✗ Risposta errata: {simulation.wrongPoints}
+              </Text>
+              <Text style={[styles.scoringItem, { color: dynamicStyles.textSecondary }]}>
+                ○ Non risposta: {simulation.blankPoints}
+              </Text>
+            </View>
+            
+            {simulation.hasInProgressAttempt && (
+              <View style={styles.resumeBanner}>
+                <Ionicons name="information-circle" size={20} color={colors.primary.main} />
+                <Text style={styles.resumeText}>
+                  Hai un tentativo in corso. Cliccando &quot;Inizia&quot; riprenderai da dove ti eri fermato.
+                </Text>
+              </View>
+            )}
+            
+            <Button
+              onPress={() => {
+                startAttemptMutation.mutate({
+                  simulationId: id,
+                  assignmentId: assignmentId || undefined,
+                });
+              }}
+              loading={startAttemptMutation.isPending}
+              style={styles.startButton}
+            >
+              {simulation.hasInProgressAttempt ? 'Riprendi Simulazione' : 'Inizia Simulazione'}
+            </Button>
+            
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <Text style={[styles.backButtonText, { color: dynamicStyles.textSecondary }]}>
+                ← Torna indietro
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </>
+    );
+  }
+
+  // TOLC mode: use TolcSimulationLayout
+  if (hasSectionsMode && simulation.sections.length > 0) {
+    const tolcAnswers = answers.map(a => ({
+      questionId: a.questionId,
+      answerId: a.selectedOptionId,
+      answerText: a.answerText,
+      timeSpent: a.timeSpent,
+      flagged: a.isMarked,
+    }));
+    
+    const tolcQuestions = simulation.questions.map(q => ({
+      questionId: q.id,
+      question: {
+        text: q.text,
+        answers: q.options.map(o => ({
+          id: o.id,
+          text: o.text,
+        })),
+      },
+    }));
+
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <TolcSimulationLayout
+          simulationTitle={simulation.title}
+          questions={tolcQuestions}
+          sections={simulation.sections}
+          currentSectionIndex={currentSectionIndex}
+          currentQuestionIndex={currentQuestionIndex}
+          answers={tolcAnswers}
+          sectionTimeRemaining={sectionTimeRemaining}
+          completedSections={completedSections}
+          onAnswerSelect={(answerId: string) => {
+            const currentQ = simulation.questions[currentQuestionIndex];
+            if (!currentQ) return;
+            setAnswers(prev => prev.map(a => 
+              a.questionId === currentQ.id 
+                ? { ...a, selectedOptionId: a.selectedOptionId === answerId ? null : answerId }
+                : a
+            ));
+          }}
+          onOpenTextChange={(text: string) => {
+            const currentQ = simulation.questions[currentQuestionIndex];
+            if (!currentQ) return;
+            setAnswers(prev => prev.map(a => 
+              a.questionId === currentQ.id ? { ...a, answerText: text } : a
+            ));
+          }}
+          onToggleFlag={() => {
+            const currentQ = simulation.questions[currentQuestionIndex];
+            if (!currentQ) return;
+            setAnswers(prev => prev.map(a => 
+              a.questionId === currentQ.id ? { ...a, isMarked: !a.isMarked } : a
+            ));
+          }}
+          onGoToQuestion={goToQuestion}
+          onGoNext={goNext}
+          onGoPrev={goPrev}
+          onCompleteSection={() => setShowSectionTransition(true)}
+          onSubmit={confirmSubmit}
+          onReportQuestion={() => setShowFeedbackModal(true)}
+          answeredCount={answers.filter(a => a.selectedOptionId !== null || a.answerText !== null).length}
+          totalQuestions={simulation.questions.length}
+        />
+        
+        {/* In-test messaging for Virtual Room */}
+        {isVirtualRoom && participantId && (
+          <InTestMessaging
+            participantId={participantId}
+            isOpen={showMessaging}
+            onClose={() => setShowMessaging(false)}
+            unreadCount={messagingUnreadCount}
+            onUnreadChange={setMessagingUnreadCount}
+          />
+        )}
+        
+        {/* Messaging button */}
+        {isVirtualRoom && participantId && !showMessaging && (
+          <TouchableOpacity
+            style={styles.messagingButton}
+            onPress={() => setShowMessaging(true)}
+          >
+            <Ionicons name="chatbubble-ellipses" size={24} color="#fff" />
+            {messagingUnreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>{messagingUnreadCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        )}
+        
+        {/* Question Feedback Modal for TOLC */}
+        <QuestionFeedbackModal
+          visible={showFeedbackModal}
+          questionId={simulation.questions[currentQuestionIndex]?.id || ''}
+          questionText={simulation.questions[currentQuestionIndex]?.text}
+          onClose={() => setShowFeedbackModal(false)}
+        />
+      </>
+    );
   }
 
   const currentQuestion = simulation.questions[currentQuestionIndex];
@@ -412,7 +862,7 @@ export default function SimulationExecutionScreen() {
           <View style={styles.timerContainer}>
             <Ionicons name="time-outline" size={20} color={getTimerColor()} />
             <Text style={[styles.timer, { color: getTimerColor() }]}>
-              {formatTime(timeRemaining)}
+              {timeRemaining !== null ? formatTime(timeRemaining) : formatTime(timeSpent)}
             </Text>
           </View>
 
@@ -483,13 +933,34 @@ export default function SimulationExecutionScreen() {
                   {currentAnswer?.isMarked ? 'Segnata' : 'Segna'}
                 </Text>
               </TouchableOpacity>
+              
+              {/* Pulsante segnala problema */}
+              <TouchableOpacity 
+                onPress={() => setShowFeedbackModal(true)} 
+                style={[styles.markButton, { marginLeft: spacing[2] }]}
+              >
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={20}
+                  color={dynamicStyles.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.markText,
+                    { color: dynamicStyles.textSecondary },
+                  ]}
+                >
+                  Segnala
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {/* Testo domanda */}
             <Card style={[styles.questionCard, { backgroundColor: dynamicStyles.cardBg }]}>
-              <Text style={[styles.questionText, { color: dynamicStyles.textPrimary }]}>
-                {currentQuestion.text}
-              </Text>
+              <RichTextWithLaTeX 
+                content={currentQuestion.textLatex || currentQuestion.text} 
+                fontSize={16}
+              />
             </Card>
 
             {/* Opzioni */}
@@ -533,18 +1004,12 @@ export default function SimulationExecutionScreen() {
                           {optionLetter}
                         </Text>
                       </View>
-                      <Text
-                        style={[
-                          styles.optionText,
-                          {
-                            color: isSelected
-                              ? colors.primary.main
-                              : dynamicStyles.textPrimary,
-                          },
-                        ]}
-                      >
-                        {option.text}
-                      </Text>
+                      <View style={{ flex: 1 }}>
+                        <RichTextWithLaTeX 
+                          content={option.textLatex || option.text} 
+                          fontSize={15}
+                        />
+                      </View>
                       {isSelected && (
                         <Ionicons
                           name="checkmark-circle"
@@ -719,6 +1184,14 @@ export default function SimulationExecutionScreen() {
             </Animated.View>
           </Animated.View>
         )}
+        
+        {/* Question Feedback Modal */}
+        <QuestionFeedbackModal
+          visible={showFeedbackModal}
+          questionId={currentQuestion?.id || ''}
+          questionText={currentQuestion?.text}
+          onClose={() => setShowFeedbackModal(false)}
+        />
       </View>
     </>
   );
@@ -947,5 +1420,145 @@ const styles = StyleSheet.create({
   },
   legendText: {
     fontSize: typography.fontSize.xs,
+  },
+  // New styles for start screen and error states
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing[6],
+    gap: spacing[4],
+  },
+  errorText: {
+    fontSize: typography.fontSize.base,
+    textAlign: 'center',
+    marginTop: spacing[2],
+  },
+  startScreenContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: spacing[4],
+  },
+  startCard: {
+    padding: spacing[6],
+    alignItems: 'center',
+  },
+  officialBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1],
+    borderRadius: 20,
+    backgroundColor: 'rgba(220, 38, 38, 0.1)',
+    marginBottom: spacing[4],
+  },
+  officialBadgeText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.status.error.main,
+  },
+  startTitle: {
+    fontSize: typography.fontSize['2xl'],
+    fontWeight: typography.fontWeight.bold,
+    textAlign: 'center',
+    marginBottom: spacing[2],
+  },
+  startDescription: {
+    fontSize: typography.fontSize.base,
+    textAlign: 'center',
+    marginBottom: spacing[6],
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: spacing[4],
+    marginBottom: spacing[6],
+  },
+  statCard: {
+    flex: 1,
+    padding: spacing[4],
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
+    marginTop: spacing[2],
+  },
+  statLabel: {
+    fontSize: typography.fontSize.sm,
+    marginTop: spacing[1],
+  },
+  scoringCard: {
+    width: '100%',
+    padding: spacing[4],
+    borderRadius: 12,
+    marginBottom: spacing[4],
+  },
+  scoringTitle: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
+    marginBottom: spacing[2],
+  },
+  scoringItem: {
+    fontSize: typography.fontSize.sm,
+    marginVertical: spacing[0.5],
+  },
+  resumeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    padding: spacing[3],
+    borderRadius: 12,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    marginBottom: spacing[4],
+    width: '100%',
+  },
+  resumeText: {
+    flex: 1,
+    fontSize: typography.fontSize.sm,
+    color: colors.primary.main,
+  },
+  startButton: {
+    width: '100%',
+    marginBottom: spacing[4],
+  },
+  backButton: {
+    paddingVertical: spacing[2],
+  },
+  backButtonText: {
+    fontSize: typography.fontSize.base,
+  },
+  messagingButton: {
+    position: 'absolute',
+    bottom: spacing[20],
+    right: spacing[4],
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary.main,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  unreadBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.status.error.main,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing[1],
+  },
+  unreadBadgeText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    color: '#fff',
   },
 });

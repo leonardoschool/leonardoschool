@@ -185,4 +185,5 @@ export const storage = {
   },
 };
 
-export default { secureStorage, storage };
+const storageExports = { secureStorage, storage };
+export default storageExports;
