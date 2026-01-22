@@ -1,5 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "develop": false,
+      "main": false,
+      "test": false
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/check-expired-contracts",
