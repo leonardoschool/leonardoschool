@@ -103,39 +103,60 @@ export function proxy(request: NextRequest) {
     }
     
     // Check if student/collaborator has completed profile (skip for admins)
-    if ((userRole === 'STUDENT' || userRole === 'COLLABORATOR') && !profileCompleted && !pathname.startsWith('/auth/complete-profile')) {
-      // Profile incomplete, redirect to complete profile page
-      return NextResponse.redirect(new URL('/auth/complete-profile', request.url));
+    // Allow access to complete-profile even if account is not active yet (new users)
+    if ((userRole === 'STUDENT' || userRole === 'COLLABORATOR') && !profileCompleted) {
+      if (!pathname.startsWith('/auth/complete-profile')) {
+        // Profile incomplete, redirect to complete profile page
+        return NextResponse.redirect(new URL('/auth/complete-profile', request.url));
+      }
+      // Allow access to complete-profile page even if !userActive
+      return NextResponse.next();
     }
 
-    // Check if user account is deactivated
-    if (!userActive) {
-      // If student has parentDataRequired, they can still access /profilo and /auth/complete-profile to add parent data
-      if (userRole === 'STUDENT' && parentDataRequired) {
-        if (!pathname.startsWith('/profilo') && !pathname.startsWith('/auth/complete-profile')) {
-          return NextResponse.redirect(new URL('/profilo?section=genitore', request.url));
-        }
-        // Allow access to profile page and complete-profile page
-      } else {
-        // Account manually deactivated - redirect to login with message
-        const loginUrl = new URL('/auth/login', request.url);
-        loginUrl.searchParams.set('error', 'account-deactivated');
-        return NextResponse.redirect(loginUrl);
-      }
-    } else if (userRole === 'STUDENT' && parentDataRequired) {
-      // Account is active but parent data is required (edge case)
-      // Still block all routes except profile and complete-profile
+    // Check if student needs to add parent/guardian data
+    if (userRole === 'STUDENT' && parentDataRequired) {
+      // Allow access ONLY to profile page and complete-profile page
       if (!pathname.startsWith('/profilo') && !pathname.startsWith('/auth/complete-profile')) {
         return NextResponse.redirect(new URL('/profilo?section=genitore', request.url));
       }
+      // Allow access to these pages even if !userActive
+      return NextResponse.next();
     }
 
     // Check if user has a pending contract to sign (blocks platform access until signed)
+    // This check comes BEFORE isActive check, because user needs to sign contract first
     if (pendingContract && (userRole === 'STUDENT' || userRole === 'COLLABORATOR')) {
       // Allow access ONLY to the contract signing page
       if (!pathname.startsWith('/contratto')) {
         return NextResponse.redirect(new URL(`/contratto/${pendingContract}`, request.url));
       }
+      // Allow access to contract page even if !userActive
+      return NextResponse.next();
+    }
+
+    // For students/collaborators without a pending contract and not yet active:
+    // They are waiting for admin to assign a contract - allow access to dashboard
+    // The dashboard will show "In Attesa di Contratto" message
+    if (!userActive && (userRole === 'STUDENT' || userRole === 'COLLABORATOR') && !pendingContract) {
+      // Allow access to dashboard and basic profile pages while waiting for contract
+      const allowedWaitingPaths = ['/dashboard', '/profilo', '/impostazioni'];
+      const isAllowedPath = allowedWaitingPaths.some(path => pathname.startsWith(path));
+      
+      if (!isAllowedPath) {
+        // Redirect to dashboard where they'll see the waiting message
+        return NextResponse.redirect(new URL('/dashboard', request.url));
+      }
+      // Allow access to these limited pages
+      return NextResponse.next();
+    }
+
+    // Check if user account is deactivated (admin manually deactivated an active account)
+    if (!userActive) {
+      // This case is for users who were previously active but got deactivated
+      // Redirect to login with message
+      const loginUrl = new URL('/auth/login', request.url);
+      loginUrl.searchParams.set('error', 'account-deactivated');
+      return NextResponse.redirect(loginUrl);
     }
     
     // Check role-based access using PAGE_PERMISSIONS
@@ -155,8 +176,15 @@ export function proxy(request: NextRequest) {
   }
   
   // If authenticated and trying to access auth pages (except complete-profile), redirect to dashboard
+  // BUT only if the account is active and profile is complete
   if (authToken && pathname.startsWith('/auth') && !pathname.startsWith('/auth/complete-profile')) {
-    // If user with incomplete profile, allow access to complete-profile
+    // If account is deactivated, allow them to stay on login page (don't redirect to dashboard)
+    if (!userActive && !(userRole === 'STUDENT' && parentDataRequired)) {
+      // Account is deactivated and not waiting for parent data - let them see login with error
+      return NextResponse.next();
+    }
+    
+    // If user with incomplete profile, redirect to complete-profile
     if ((userRole === 'STUDENT' || userRole === 'COLLABORATOR') && !profileCompleted) {
       return NextResponse.redirect(new URL('/auth/complete-profile', request.url));
     }

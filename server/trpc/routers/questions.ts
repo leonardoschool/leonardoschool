@@ -275,83 +275,74 @@ export const questionsRouter = router({
         });
       }
 
-      // Create question with answers and keywords in a transaction
-      const question = await ctx.prisma.$transaction(async (tx) => {
-        // Create the question
-        const newQuestion = await tx.question.create({
-          data: {
-            type: questionData.type,
-            status: questionData.status,
-            text: questionData.text,
-            textLatex: questionData.textLatex,
-            description: questionData.description,
-            imageUrl: questionData.imageUrl,
-            imageAlt: questionData.imageAlt,
-            subjectId: questionData.subjectId,
-            topicId: questionData.topicId,
-            subTopicId: questionData.subTopicId,
-            difficulty: questionData.difficulty,
-            points: questionData.points,
-            negativePoints: questionData.negativePoints,
-            blankPoints: questionData.blankPoints,
-            timeLimitSeconds: questionData.timeLimitSeconds,
-            correctExplanation: questionData.correctExplanation,
-            wrongExplanation: questionData.wrongExplanation,
-            generalExplanation: questionData.generalExplanation,
-            explanationVideoUrl: questionData.explanationVideoUrl,
-            explanationPdfUrl: questionData.explanationPdfUrl,
-            openValidationType: questionData.openValidationType,
-            openMinLength: questionData.openMinLength,
-            openMaxLength: questionData.openMaxLength,
-            openCaseSensitive: questionData.openCaseSensitive,
-            openPartialMatch: questionData.openPartialMatch,
-            shuffleAnswers: questionData.shuffleAnswers,
-            showExplanation: questionData.showExplanation,
-            legacyTags: questionData.tags,
-            year: questionData.year,
-            source: questionData.source,
-            externalId: questionData.externalId,
-            createdById: ctx.user.id,
-            updatedById: ctx.user.id,
-            publishedAt: questionData.status === 'PUBLISHED' ? new Date() : null,
-          },
-        });
-
-        // Create answers
-        if (answers && answers.length > 0) {
-          await tx.questionAnswer.createMany({
-            data: answers.map((answer, index) => ({
-              questionId: newQuestion.id,
-              text: answer.text,
-              textLatex: answer.textLatex ?? null,
-              imageUrl: answer.imageUrl ?? null,
-              imageAlt: answer.imageAlt ?? null,
-              isCorrect: answer.isCorrect ?? false,
-              explanation: answer.explanation ?? null,
-              order: answer.order ?? index,
-              label: answer.label ?? String.fromCharCode(65 + index),
-            })),
-          });
-        }
-
-        // Create keywords
-        if (keywords && keywords.length > 0) {
-          await tx.questionKeyword.createMany({
-            data: keywords.map((keyword) => ({
-              questionId: newQuestion.id,
-              keyword: keyword.keyword,
-              weight: keyword.weight ?? 1.0,
-              isRequired: keyword.isRequired ?? false,
-              isSuggested: keyword.isSuggested ?? false,
-              caseSensitive: keyword.caseSensitive ?? false,
-              exactMatch: keyword.exactMatch ?? false,
-              synonyms: keyword.synonyms ?? [],
-              createdById: ctx.user.id,
-            })),
-          });
-        }
-
-        return newQuestion;
+      // Create question with answers and keywords using nested writes
+      const question = await ctx.prisma.question.create({
+        data: {
+          type: questionData.type,
+          status: questionData.status,
+          text: questionData.text,
+          textLatex: questionData.textLatex,
+          description: questionData.description,
+          imageUrl: questionData.imageUrl,
+          imageAlt: questionData.imageAlt,
+          subjectId: questionData.subjectId,
+          topicId: questionData.topicId,
+          subTopicId: questionData.subTopicId,
+          difficulty: questionData.difficulty,
+          points: questionData.points,
+          negativePoints: questionData.negativePoints,
+          blankPoints: questionData.blankPoints,
+          timeLimitSeconds: questionData.timeLimitSeconds,
+          correctExplanation: questionData.correctExplanation,
+          wrongExplanation: questionData.wrongExplanation,
+          generalExplanation: questionData.generalExplanation,
+          explanationVideoUrl: questionData.explanationVideoUrl,
+          explanationPdfUrl: questionData.explanationPdfUrl,
+          openValidationType: questionData.openValidationType,
+          openMinLength: questionData.openMinLength,
+          openMaxLength: questionData.openMaxLength,
+          openCaseSensitive: questionData.openCaseSensitive,
+          openPartialMatch: questionData.openPartialMatch,
+          shuffleAnswers: questionData.shuffleAnswers,
+          showExplanation: questionData.showExplanation,
+          legacyTags: questionData.tags,
+          year: questionData.year,
+          source: questionData.source,
+          externalId: questionData.externalId,
+          createdById: ctx.user.id,
+          updatedById: ctx.user.id,
+          publishedAt: questionData.status === 'PUBLISHED' ? new Date() : null,
+          // Create answers with nested write
+          ...(answers && answers.length > 0 ? {
+            answers: {
+              create: answers.map((answer, index) => ({
+                text: answer.text,
+                textLatex: answer.textLatex ?? null,
+                imageUrl: answer.imageUrl ?? null,
+                imageAlt: answer.imageAlt ?? null,
+                isCorrect: answer.isCorrect ?? false,
+                explanation: answer.explanation ?? null,
+                order: answer.order ?? index,
+                label: answer.label ?? String.fromCharCode(65 + index),
+              })),
+            }
+          } : {}),
+          // Create keywords with nested write
+          ...(keywords && keywords.length > 0 ? {
+            keywords: {
+              create: keywords.map((keyword) => ({
+                keyword: keyword.keyword,
+                weight: keyword.weight ?? 1.0,
+                isRequired: keyword.isRequired ?? false,
+                isSuggested: keyword.isSuggested ?? false,
+                caseSensitive: keyword.caseSensitive ?? false,
+                exactMatch: keyword.exactMatch ?? false,
+                synonyms: keyword.synonyms ?? [],
+                createdById: ctx.user.id,
+              })),
+            }
+          } : {}),
+        },
       });
 
       return ctx.prisma.question.findUnique({
@@ -418,10 +409,10 @@ export const questionsRouter = router({
         }
       }
 
-      // Update in transaction
-      const updatedQuestion = await ctx.prisma.$transaction(async (tx) => {
+      // Update using sequential operations with callback transaction (using ctx.prisma inside)
+      const updatedQuestion = await ctx.prisma.$transaction(async () => {
         // Create version snapshot before update
-        await tx.questionVersion.create({
+        await ctx.prisma.questionVersion.create({
           data: {
             questionId: id,
             version: currentQuestion.version,
@@ -435,11 +426,21 @@ export const questionsRouter = router({
           },
         });
 
+        // Delete answers if provided (before update to avoid foreign key issues)
+        if (answers) {
+          await ctx.prisma.questionAnswer.deleteMany({ where: { questionId: id } });
+        }
+
+        // Delete keywords if provided
+        if (keywords) {
+          await ctx.prisma.questionKeyword.deleteMany({ where: { questionId: id } });
+        }
+
         // Extract relation IDs and legacy tags from questionData
         const { subjectId, topicId, subTopicId, tags, ...restData } = questionData;
 
-        // Update question
-        const updated = await tx.question.update({
+        // Update question with nested creates for answers and keywords
+        const updated = await ctx.prisma.question.update({
           where: { id },
           data: {
             ...restData,
@@ -469,50 +470,38 @@ export const questionsRouter = router({
               ? new Date()
               : currentQuestion.publishedAt,
             archivedAt: restData.status === 'ARCHIVED' ? new Date() : null,
+            // Create new answers with nested write
+            ...(answers ? {
+              answers: {
+                create: answers.map((answer, index) => ({
+                  text: answer.text,
+                  textLatex: answer.textLatex ?? null,
+                  imageUrl: answer.imageUrl ?? null,
+                  imageAlt: answer.imageAlt ?? null,
+                  isCorrect: answer.isCorrect ?? false,
+                  explanation: answer.explanation ?? null,
+                  order: answer.order ?? index,
+                  label: answer.label ?? String.fromCharCode(65 + index),
+                })),
+              }
+            } : {}),
+            // Create new keywords with nested write
+            ...(keywords ? {
+              keywords: {
+                create: keywords.map((keyword) => ({
+                  keyword: keyword.keyword,
+                  weight: keyword.weight ?? 1.0,
+                  isRequired: keyword.isRequired ?? false,
+                  isSuggested: keyword.isSuggested ?? false,
+                  caseSensitive: keyword.caseSensitive ?? false,
+                  exactMatch: keyword.exactMatch ?? false,
+                  synonyms: keyword.synonyms ?? [],
+                  createdById: ctx.user.id,
+                })),
+              }
+            } : {}),
           },
         });
-
-        // Update answers if provided
-        if (answers) {
-          // Delete old answers
-          await tx.questionAnswer.deleteMany({ where: { questionId: id } });
-          
-          // Create new answers
-          await tx.questionAnswer.createMany({
-            data: answers.map((answer, index) => ({
-              questionId: id,
-              text: answer.text,
-              textLatex: answer.textLatex ?? null,
-              imageUrl: answer.imageUrl ?? null,
-              imageAlt: answer.imageAlt ?? null,
-              isCorrect: answer.isCorrect ?? false,
-              explanation: answer.explanation ?? null,
-              order: answer.order ?? index,
-              label: answer.label ?? String.fromCharCode(65 + index),
-            })),
-          });
-        }
-
-        // Update keywords if provided
-        if (keywords) {
-          // Delete old keywords
-          await tx.questionKeyword.deleteMany({ where: { questionId: id } });
-          
-          // Create new keywords
-          await tx.questionKeyword.createMany({
-            data: keywords.map((keyword) => ({
-              questionId: id,
-              keyword: keyword.keyword,
-              weight: keyword.weight ?? 1.0,
-              isRequired: keyword.isRequired ?? false,
-              isSuggested: keyword.isSuggested ?? false,
-              caseSensitive: keyword.caseSensitive ?? false,
-              exactMatch: keyword.exactMatch ?? false,
-              synonyms: keyword.synonyms ?? [],
-              createdById: ctx.user.id,
-            })),
-          });
-        }
 
         return updated;
       });
@@ -679,57 +668,49 @@ export const questionsRouter = router({
         });
       }
 
-      // Create duplicate
-      const duplicate = await ctx.prisma.$transaction(async (tx) => {
-        const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publishedAt: _publishedAt, archivedAt: _archivedAt, version: _version, 
-                timesUsed: _timesUsed, timesAnswered: _timesAnswered, timesCorrect: _timesCorrect, timesWrong: _timesWrong, timesSkipped: _timesSkipped,
-                avgTimeSeconds: _avgTimeSeconds, avgCorrectRate: _avgCorrectRate, answers, keywords, ...questionData } = original;
+      // Create duplicate using nested writes
+      const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publishedAt: _publishedAt, archivedAt: _archivedAt, version: _version, 
+              timesUsed: _timesUsed, timesAnswered: _timesAnswered, timesCorrect: _timesCorrect, timesWrong: _timesWrong, timesSkipped: _timesSkipped,
+              avgTimeSeconds: _avgTimeSeconds, avgCorrectRate: _avgCorrectRate, answers, keywords, ...questionData } = original;
 
-        const newQuestion = await tx.question.create({
-          data: {
-            ...questionData,
-            text: `${original.text} (copia)`,
-            status: 'DRAFT',
-            createdById: ctx.user.id,
-            updatedById: ctx.user.id,
-          },
-        });
-
-        // Duplicate answers
-        if (answers.length > 0) {
-          await tx.questionAnswer.createMany({
-            data: answers.map((a) => ({
-              text: a.text,
-              textLatex: a.textLatex,
-              imageUrl: a.imageUrl,
-              imageAlt: a.imageAlt,
-              isCorrect: a.isCorrect,
-              explanation: a.explanation,
-              order: a.order,
-              label: a.label,
-              questionId: newQuestion.id,
-            })),
-          });
-        }
-
-        // Duplicate keywords
-        if (keywords.length > 0) {
-          await tx.questionKeyword.createMany({
-            data: keywords.map((k) => ({
-              keyword: k.keyword,
-              weight: k.weight,
-              isRequired: k.isRequired,
-              isSuggested: k.isSuggested,
-              caseSensitive: k.caseSensitive,
-              exactMatch: k.exactMatch,
-              synonyms: k.synonyms,
-              questionId: newQuestion.id,
-              createdById: ctx.user.id,
-            })),
-          });
-        }
-
-        return newQuestion;
+      const duplicate = await ctx.prisma.question.create({
+        data: {
+          ...questionData,
+          text: `${original.text} (copia)`,
+          status: 'DRAFT',
+          createdById: ctx.user.id,
+          updatedById: ctx.user.id,
+          // Duplicate answers with nested write
+          ...(answers.length > 0 ? {
+            answers: {
+              create: answers.map((a) => ({
+                text: a.text,
+                textLatex: a.textLatex,
+                imageUrl: a.imageUrl,
+                imageAlt: a.imageAlt,
+                isCorrect: a.isCorrect,
+                explanation: a.explanation,
+                order: a.order,
+                label: a.label,
+              })),
+            }
+          } : {}),
+          // Duplicate keywords with nested write
+          ...(keywords.length > 0 ? {
+            keywords: {
+              create: keywords.map((k) => ({
+                keyword: k.keyword,
+                weight: k.weight,
+                isRequired: k.isRequired,
+                isSuggested: k.isSuggested,
+                caseSensitive: k.caseSensitive,
+                exactMatch: k.exactMatch,
+                synonyms: k.synonyms,
+                createdById: ctx.user.id,
+              })),
+            }
+          } : {}),
+        },
       });
 
       return ctx.prisma.question.findUnique({
@@ -1110,10 +1091,10 @@ export const questionsRouter = router({
           }
 
           // Match subject
-          let subjectId = input.defaultSubjectId;
+          let subjectId: string | undefined = input.defaultSubjectId;
           if (row.subjectCode) {
             const matchedId = subjectByCode.get(row.subjectCode.toUpperCase());
-            if (matchedId) subjectId = matchedId;
+            if (matchedId) subjectId = matchedId as string;
           }
 
           // Match topic
@@ -1158,40 +1139,52 @@ export const questionsRouter = router({
               }))
             : [];
 
-          // Create question
-          await ctx.prisma.$transaction(async (tx) => {
-            const question = await tx.question.create({
-              data: {
-                text: row.text,
-                type: row.type ?? 'SINGLE_CHOICE',
-                status: 'DRAFT',
-                difficulty: row.difficulty ?? 'MEDIUM',
-                subjectId,
-                topicId,
-                points: row.points ?? 1.0,
-                negativePoints: row.negativePoints ?? 0,
-                correctExplanation: row.correctExplanation ?? null,
-                wrongExplanation: row.wrongExplanation ?? null,
-                legacyTags: row.tags ? row.tags.split(',').map(t => t.trim()) : [],
-                year: row.year ?? null,
-                source: row.source ?? null,
-                externalId: row.externalId ?? null,
-                createdById: ctx.user.id,
-                updatedById: ctx.user.id,
-              },
-            });
-
-            if (answers.length > 0) {
-              await tx.questionAnswer.createMany({
-                data: answers.map(a => ({ ...a, questionId: question.id })),
-              });
-            }
-
-            if (keywords.length > 0) {
-              await tx.questionKeyword.createMany({
-                data: keywords.map(k => ({ ...k, questionId: question.id, createdById: ctx.user.id })),
-              });
-            }
+          // Create question with nested writes
+          await ctx.prisma.question.create({
+            data: {
+              text: row.text,
+              type: row.type ?? 'SINGLE_CHOICE',
+              status: 'DRAFT',
+              difficulty: row.difficulty ?? 'MEDIUM',
+              subjectId,
+              topicId,
+              points: row.points ?? 1.0,
+              negativePoints: row.negativePoints ?? 0,
+              correctExplanation: row.correctExplanation ?? null,
+              wrongExplanation: row.wrongExplanation ?? null,
+              legacyTags: row.tags ? row.tags.split(',').map(t => t.trim()) : [],
+              year: row.year ?? null,
+              source: row.source ?? null,
+              externalId: row.externalId ?? null,
+              createdById: ctx.user.id,
+              updatedById: ctx.user.id,
+              // Create answers with nested write
+              ...(answers.length > 0 ? {
+                answers: {
+                  create: answers.map(a => ({
+                    text: a.text,
+                    isCorrect: a.isCorrect,
+                    order: a.order,
+                    label: a.label,
+                  })),
+                }
+              } : {}),
+              // Create keywords with nested write
+              ...(keywords.length > 0 ? {
+                keywords: {
+                  create: keywords.map(k => ({
+                    keyword: k.keyword,
+                    weight: k.weight,
+                    isRequired: k.isRequired,
+                    isSuggested: k.isSuggested,
+                    caseSensitive: k.caseSensitive,
+                    exactMatch: k.exactMatch,
+                    synonyms: k.synonyms,
+                    createdById: ctx.user.id,
+                  })),
+                }
+              } : {}),
+            },
           });
 
           results.imported++;

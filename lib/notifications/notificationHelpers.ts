@@ -19,6 +19,7 @@
  */
 
 import type { PrismaClient } from '@prisma/client';
+import { sendPushNotification, sendBulkPushNotifications } from '@/server/services/expoPushService';
 import { 
   getNotificationConfig, 
   getNotificationRoute,
@@ -75,6 +76,7 @@ interface BulkNotificationResult {
 
 /**
  * Crea una notifica per un singolo utente
+ * Invia automaticamente anche una push notification se l'utente ha un token registrato
  */
 export async function createNotification(
   prisma: PrismaClient,
@@ -99,6 +101,31 @@ export async function createNotification(
       },
     });
 
+    // Send push notification if user has a registered token
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: params.userId },
+        select: { expoPushToken: true },
+      });
+
+      if (user?.expoPushToken) {
+        await sendPushNotification(
+          user.expoPushToken,
+          params.title,
+          params.message,
+          {
+            type: params.type,
+            notificationId: notification.id,
+            linkUrl: params.linkUrl,
+            linkEntityId: params.linkEntityId,
+          }
+        );
+      }
+    } catch (pushError) {
+      // Log but don't fail the notification creation
+      console.warn('[Notifications] Failed to send push notification:', pushError);
+    }
+
     return { success: true, notificationId: notification.id };
   } catch (error) {
     console.error('[Notifications] Failed to create notification:', error);
@@ -111,6 +138,7 @@ export async function createNotification(
 
 /**
  * Crea notifiche per più utenti contemporaneamente
+ * Invia automaticamente push notifications agli utenti con token registrato
  */
 export async function createBulkNotifications(
   prisma: PrismaClient,
@@ -134,6 +162,39 @@ export async function createBulkNotifications(
         expiresAt: params.expiresAt,
       })),
     });
+
+    // Send push notifications to users with registered tokens
+    try {
+      const usersWithTokens = await prisma.user.findMany({
+        where: { 
+          id: { in: params.userIds },
+          expoPushToken: { not: null },
+        },
+        select: { id: true, expoPushToken: true },
+      });
+
+      if (usersWithTokens.length > 0) {
+        const pushMessages = usersWithTokens.map(user => ({
+          expoPushToken: user.expoPushToken!,
+          title: params.title,
+          body: params.message,
+          data: {
+            type: params.type,
+            linkUrl: params.linkUrl,
+            linkEntityId: params.linkEntityId,
+          },
+        }));
+
+        const result = await sendBulkPushNotifications(pushMessages);
+        
+        // Log invalid tokens for manual cleanup if needed
+        if (result.invalidTokens.length > 0) {
+          console.log(`[Notifications] ${result.invalidTokens.length} invalid push tokens detected`);
+        }
+      }
+    } catch (pushError) {
+      console.warn('[Notifications] Failed to send bulk push notifications:', pushError);
+    }
 
     return { success: true, count: params.userIds.length, errors: [] };
   } catch (error) {

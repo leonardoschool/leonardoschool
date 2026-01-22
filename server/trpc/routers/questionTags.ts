@@ -654,24 +654,28 @@ export const questionTagsRouter = router({
         }
       }
 
-      // Use transaction to replace all tags
-      await ctx.prisma.$transaction(async (tx) => {
+      // Use array-based transaction to replace all tags
+      const operations = [
         // Remove all existing
-        await tx.questionTagAssignment.deleteMany({
+        ctx.prisma.questionTagAssignment.deleteMany({
           where: { questionId },
-        });
+        }),
+      ];
 
-        // Add new ones
-        if (tagIds.length > 0) {
-          await tx.questionTagAssignment.createMany({
+      // Add new ones
+      if (tagIds.length > 0) {
+        operations.push(
+          ctx.prisma.questionTagAssignment.createMany({
             data: tagIds.map(tagId => ({
               questionId,
               tagId,
               assignedBy: ctx.user.id,
             })),
-          });
-        }
-      });
+          }) as never // Type assertion needed for mixed array
+        );
+      }
+
+      await ctx.prisma.$transaction(operations);
 
       return { success: true, newTagCount: tagIds.length };
     }),

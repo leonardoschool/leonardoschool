@@ -24,6 +24,9 @@ export interface User {
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;
+  // Onboarding fields (from /api/auth/me)
+  pendingContractToken?: string | null;
+  parentDataRequired?: boolean;
 }
 
 export interface StudentProfile {

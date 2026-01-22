@@ -13,9 +13,11 @@ if (!databaseUrl) {
 }
 
 try {
-  console.log('🚀 Avvio Prisma Studio...\n');
+  console.log('🚀 Avvio Prisma Studio...');
+  console.log(`📊 Database: ${databaseUrl}\n`);
   
-  execSync(`prisma studio --url "${databaseUrl}"`, {
+  // Con Prisma 7, specifichiamo --config con il path corretto
+  execSync('prisma studio --config ./prisma/prisma.config.ts', {
     stdio: 'inherit',
     cwd: resolve(__dirname, '..'),
   });

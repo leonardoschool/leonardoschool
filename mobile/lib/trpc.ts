@@ -35,12 +35,13 @@ export const trpc = trpcReact;
 export const TRPCProvider = trpcReact.Provider;
 
 // Create links with auth header
-const createLinks = () => [
+const createLinks = (overrideToken?: string) => [
   httpBatchLink({
     url: config.api.trpcUrl,
     transformer: superjson,
     async headers() {
-      const token = await secureStorage.getAuthToken();
+      // Use override token if provided (for registration flow), else from storage
+      const token = overrideToken ?? (await secureStorage.getAuthToken());
       return {
         authorization: token ? `Bearer ${token}` : '',
         'x-platform': 'mobile',
@@ -59,6 +60,16 @@ const createLinks = () => [
 export const trpcClient = createTRPCClient<AppRouter>({
   links: createLinks(),
 });
+
+/**
+ * Create a tRPC client with a specific token.
+ * Useful for registration flow where token is not yet saved in secure storage.
+ */
+export const createTRPCClientWithToken = (token: string) => {
+  return createTRPCClient<AppRouter>({
+    links: createLinks(token),
+  });
+};
 
 // Create tRPC client for React Query provider
 export const createTRPCReactClient = () => {

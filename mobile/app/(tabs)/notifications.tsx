@@ -5,7 +5,7 @@
  * Dati caricati dalle API tRPC reali.
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   ScrollView,
@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text, Body, Caption } from '../../components/ui/Text';
 import { useThemedColors } from '../../contexts/ThemeContext';
 import { useAuthStore } from '../../stores/authStore';
+import { useNotificationStore } from '../../stores/notificationStore';
 import { trpc } from '../../lib/trpc';
 import { colors } from '../../lib/theme/colors';
 import { spacing, layout } from '../../lib/theme/spacing';
@@ -39,6 +40,7 @@ interface NotificationItem {
 export default function NotificationsScreen() {
   const themedColors = useThemedColors();
   const { user } = useAuthStore();
+  const { setNotifications, markAsRead: markAsReadInStore, markAllAsRead: markAllAsReadInStore } = useNotificationStore();
 
   // Fetch notifications from API
   const {
@@ -46,10 +48,17 @@ export default function NotificationsScreen() {
     isLoading,
     refetch,
     isRefetching,
-  } = trpc.notifications.getMyNotifications.useQuery(
+  } = trpc.notifications.getNotifications.useQuery(
     { page: 1, pageSize: 50 },
     { enabled: !!user }
   );
+
+  // Update notification store when data changes
+  useEffect(() => {
+    if (notificationsData?.notifications) {
+      setNotifications(notificationsData.notifications);
+    }
+  }, [notificationsData, setNotifications]);
 
   // Mark as read mutation
   const markAsReadMutation = trpc.notifications.markAsRead.useMutation({
@@ -118,9 +127,10 @@ export default function NotificationsScreen() {
   };
 
   const handleNotificationPress = (notification: NotificationItem) => {
-    // Mark as read via API
+    // Mark as read via API and update local store
     if (!notification.isRead) {
       markAsReadMutation.mutate({ notificationId: notification.id });
+      markAsReadInStore(notification.id);
     }
 
     // Navigate based on type
@@ -146,6 +156,7 @@ export default function NotificationsScreen() {
 
   const handleMarkAllAsRead = () => {
     markAllAsReadMutation.mutate();
+    markAllAsReadInStore();
   };
 
   const unreadCount = notifications.filter(n => !n.isRead).length;

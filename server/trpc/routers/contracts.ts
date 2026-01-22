@@ -1358,6 +1358,29 @@ export const contractsRouter = router({
 
       const signedAt = new Date();
 
+      // Calculate contract expiration date based on template duration
+      let contractExpiresAt: Date | null = null;
+      const duration = contract.template.duration;
+      if (duration) {
+        // Parse duration string (e.g., "12 mesi", "6 mesi", "1 anno")
+        const durationLower = duration.toLowerCase();
+        const now = new Date();
+        
+        if (durationLower.includes('anno') || durationLower.includes('anni')) {
+          const years = parseInt(durationLower.match(/\d+/)?.[0] || '1');
+          contractExpiresAt = new Date(now.setFullYear(now.getFullYear() + years));
+        } else if (durationLower.includes('mese') || durationLower.includes('mesi')) {
+          const months = parseInt(durationLower.match(/\d+/)?.[0] || '1');
+          contractExpiresAt = new Date(now.setMonth(now.getMonth() + months));
+        } else if (durationLower.includes('settiman')) {
+          const weeks = parseInt(durationLower.match(/\d+/)?.[0] || '1');
+          contractExpiresAt = new Date(now.setDate(now.getDate() + (weeks * 7)));
+        } else if (durationLower.includes('giorn')) {
+          const days = parseInt(durationLower.match(/\d+/)?.[0] || '1');
+          contractExpiresAt = new Date(now.setDate(now.getDate() + days));
+        }
+      }
+
       // Sign the contract
       const signedContract = await ctx.prisma.contract.update({
         where: { id: input.contractId },
@@ -1365,8 +1388,15 @@ export const contractsRouter = router({
           status: 'SIGNED',
           signedAt,
           signatureData: input.signatureData,
+          contractExpiresAt,
           // Note: IP and User-Agent should be captured from request headers in production
         },
+      });
+
+      // Automatically activate the user account after signing the contract
+      await ctx.prisma.user.update({
+        where: { id: ctx.user.id },
+        data: { isActive: true },
       });
 
       // Send notifications using the unified notification service

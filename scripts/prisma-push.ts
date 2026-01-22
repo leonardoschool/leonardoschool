@@ -13,9 +13,11 @@ if (!databaseUrl) {
 }
 
 try {
-  console.log('🔄 Sincronizzazione schema Prisma con il database...\n');
+  console.log('🔄 Sincronizzazione schema Prisma con il database...');
+  console.log(`📊 Database: ${databaseUrl}\n`);
   
-  execSync(`prisma db push --url "${databaseUrl}"`, {
+  // Con Prisma 7, specifichiamo --config per usare prisma.config.ts
+  execSync('prisma db push --config ./prisma/prisma.config.ts', {
     stdio: 'inherit',
     cwd: resolve(__dirname, '..'),
   });

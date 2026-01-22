@@ -73,6 +73,13 @@ async function registerForPushNotifications(): Promise<string | null> {
   // Get the Expo push token
   try {
     const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    // TODO: Verificare che il projectId sia configurato correttamente e rimuovere questo commento
+    if (!projectId) {
+      console.warn('[Notifications] No projectId found. Push notifications require EAS project setup.');
+      console.warn('[Notifications] Run: cd mobile && npx eas-cli init');
+      return null;
+    }
+    
     const expoPushToken = await Notifications.getExpoPushTokenAsync({
       projectId,
     });

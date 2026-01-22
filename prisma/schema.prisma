@@ -274,6 +274,9 @@ model User {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   lastLoginAt DateTime?
+  
+  // Push notifications
+  expoPushToken String?   // Expo push notification token for mobile app
 
   // Relations
   student          Student?
@@ -1512,7 +1515,10 @@ model Contract {
 
   // Timestamps
   assignedAt DateTime  @default(now())
-  expiresAt  DateTime? // Deadline for signing
+  expiresAt  DateTime? // Deadline for signing (sign token expiration)
+
+  // Contract validity period (after signing)
+  contractExpiresAt DateTime? // When the signed contract expires (e.g., 1 year from signing)
 
   // Revocation info (for revoked contracts that were previously signed)
   revokedAt   DateTime?

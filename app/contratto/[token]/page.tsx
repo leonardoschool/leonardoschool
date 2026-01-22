@@ -172,16 +172,9 @@ export default function ContractSignPage() {
     return canvas.toDataURL('image/png');
   };
 
-  // Funzione per scaricare il contratto come PDF
+  // Funzione per scaricare il contratto come PDF/HTML
   const handleDownloadPDF = async () => {
     if (!contract) return;
-
-    // Crea una finestra di stampa con il contenuto del contratto
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      setError('Abilita i popup per scaricare il contratto');
-      return;
-    }
 
     const contractName = contract.template?.name || 'Contratto';
     const contractPrice = contract.template?.price 
@@ -189,10 +182,13 @@ export default function ContractSignPage() {
       : '-';
     const contractDuration = contract.template?.duration || '-';
 
-    printWindow.document.write(`
+    // Generate HTML content
+    const htmlContent = `
       <!DOCTYPE html>
       <html>
       <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${contractName}</title>
         <style>
           @media print {
@@ -291,14 +287,22 @@ export default function ContractSignPage() {
         </div>
       </body>
       </html>
-    `);
+    `;
 
-    printWindow.document.close();
-    
-    // Aspetta che il contenuto sia caricato, poi stampa
-    printWindow.onload = () => {
-      printWindow.print();
-    };
+    // Create a blob from the HTML content
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+
+    // Create a temporary link element and trigger download
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${contractName.replace(/\s+/g, '_')}_${new Date().getTime()}.html`;
+    document.body.appendChild(link);
+    link.click();
+
+    // Cleanup
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleSign = async () => {

@@ -347,7 +347,8 @@ export const notificationsRouter = router({
 
       // Get all notification types and merge with existing preferences
       const allTypes = NotificationTypeEnum.options;
-      const preferencesMap = new Map(
+      type PreferenceType = typeof preferences[number];
+      const preferencesMap = new Map<string, PreferenceType>(
         preferences.map(p => [p.notificationType, p])
       );
 
@@ -594,4 +595,36 @@ export const notificationsRouter = router({
 
       return { success: true, deletedCount: result.count };
     }),
+
+  // ==================== PUSH NOTIFICATIONS ====================
+
+  /**
+   * Register or update Expo push token for the current user
+   */
+  registerPushToken: protectedProcedure
+    .input(z.object({
+      expoPushToken: z.string().min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.prisma.user.update({
+        where: { id: ctx.user.id },
+        data: { expoPushToken: input.expoPushToken },
+      });
+
+      return { success: true };
+    }),
+
+  /**
+   * Remove push token (e.g., on logout)
+   */
+  removePushToken: protectedProcedure
+    .mutation(async ({ ctx }) => {
+      await ctx.prisma.user.update({
+        where: { id: ctx.user.id },
+        data: { expoPushToken: null },
+      });
+
+      return { success: true };
+    }),
 });
+

@@ -246,15 +246,16 @@ export async function handleContactRequest(options: HandleContactRequestOptions)
     
     if (isJobApplication) {
       // Parse FormData for job applications (with file upload)
-      const formData = await request.formData();
+      // Cast to globalThis.FormData to use Web API FormData type
+      const formData = await request.formData() as unknown as globalThis.FormData;
       
       data = {
-        name: formData.get('name') as string || '',
-        phone: formData.get('phone') as string || '',
-        email: formData.get('email') as string || '',
-        subject: formData.get('subject') as string || '',
-        message: formData.get('message') as string || '',
-        materia: formData.get('materia') as string || '',
+        name: (formData.get('name') as string) || '',
+        phone: (formData.get('phone') as string) || '',
+        email: (formData.get('email') as string) || '',
+        subject: (formData.get('subject') as string) || '',
+        message: (formData.get('message') as string) || '',
+        materia: (formData.get('materia') as string) || '',
       };
       
       cvFile = formData.get('cv') as File | null;

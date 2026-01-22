@@ -211,9 +211,9 @@ export const studentsRouter = router({
       }
 
       // Update student with transaction (student + user profileCompleted)
-      const updatedStudent = await ctx.prisma.$transaction(async (tx) => {
+      const [updatedStudent] = await ctx.prisma.$transaction([
         // Update student data
-        const studentUpdate = await tx.student.update({
+        ctx.prisma.student.update({
           where: { id: student.id },
           data: {
             fiscalCode: input.fiscalCode,
@@ -224,16 +224,13 @@ export const studentsRouter = router({
             province: input.province,
             postalCode: input.postalCode,
           },
-        });
-
+        }),
         // Mark profile as completed in User table
-        await tx.user.update({
+        ctx.prisma.user.update({
           where: { id: ctx.user!.id },
           data: { profileCompleted: true },
-        });
-
-        return studentUpdate;
-      });
+        }),
+      ]);
 
       // Send notifications using the unified notification service
       await notificationService.notifyProfileCompleted(

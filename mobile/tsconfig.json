@@ -8,9 +8,10 @@
     "esModuleInterop": true,
     "ignoreDeprecations": "5.0",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@app/*": ["./src/app/*"],
+      "@lib/*": ["./src/lib/*"]
     },
-    "baseUrl": ".",
     "rootDir": "."
   },
   "include": [

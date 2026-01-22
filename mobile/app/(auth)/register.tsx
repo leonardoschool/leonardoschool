@@ -25,7 +25,7 @@ import { colors } from '../../lib/theme/colors';
 import { spacing, layout } from '../../lib/theme/spacing';
 import { showErrorAlert, showSuccessAlert, logError, parseError } from '../../lib/errorHandler';
 import { firebaseAuth } from '../../lib/firebase/auth';
-import { config } from '../../lib/config';
+import { createTRPCClientWithToken } from '../../lib/trpc';
 
 interface FormData {
   name: string;
@@ -144,21 +144,20 @@ export default function RegisterScreen() {
       // 2. Send email verification
       await firebaseAuth.sendVerificationEmail();
       
-      // 3. Get Firebase ID token
-      const token = await firebaseUser.getIdToken();
+      // 3. Get fresh token immediately after registration
+      const freshToken = await firebaseUser.getIdToken(true);
       
-      // 4. Sync with backend to create user in PostgreSQL
-      const response = await fetch(`${config.api.baseUrl}/api/auth/me`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+      // 4. Sync with backend via tRPC to create user in PostgreSQL
+      // Use the fresh token since it's not yet saved in secure storage
+      // This is REQUIRED - if it fails, we need to show an error
+      const authenticatedClient = createTRPCClientWithToken(freshToken);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (authenticatedClient as any).auth.syncUser.mutate({
+        firebaseUid: firebaseUser.uid,
+        email: formData.email.toLowerCase().trim(),
+        name: formData.name.trim(),
+        role: 'STUDENT',
       });
-      
-      if (!response.ok) {
-        console.warn('[Register] Backend sync failed, but Firebase account created');
-      }
       
       // 5. Logout (user needs to verify email first)
       await firebaseAuth.logout();

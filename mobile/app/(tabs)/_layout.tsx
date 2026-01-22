@@ -4,7 +4,7 @@
  * Layout con bottom tabs per la navigazione principale.
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Platform, StyleSheet } from 'react-native';
@@ -13,6 +13,10 @@ import { useThemedColors } from '../../contexts/ThemeContext';
 import { colors } from '../../lib/theme/colors';
 import { CountBadge } from '../../components/ui/Badge';
 import { useNotificationStore } from '../../stores/notificationStore';
+import { useAuthStore } from '../../stores/authStore';
+import { trpc } from '../../lib/trpc';
+import { pushNotifications, handleNotificationResponse } from '../../services/pushNotifications';
+import type { NotificationType } from '../../types';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -42,7 +46,83 @@ function TabBarIcon({ name, color, focused, badge }: TabBarIconProps) {
 
 export default function TabsLayout() {
   const themedColors = useThemedColors();
-  const { unreadCount } = useNotificationStore();
+  const { unreadCount, setNotifications, setFcmToken, setPermissionStatus, addNotification } = useNotificationStore();
+  const { user, isAuthenticated } = useAuthStore();
+
+  // Fetch notifications on mount to populate badge
+  const { data: notificationsData } = trpc.notifications.getNotifications.useQuery(
+    { page: 1, pageSize: 50 },
+    { enabled: isAuthenticated && !!user }
+  );
+
+  // Update store when notifications data changes
+  useEffect(() => {
+    if (notificationsData?.notifications) {
+      setNotifications(notificationsData.notifications);
+    }
+  }, [notificationsData, setNotifications]);
+
+  // Register push token mutation
+  const registerPushTokenMutation = trpc.notifications.registerPushToken.useMutation();
+
+  // Initialize push notifications
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+
+    let receivedSubscription: ReturnType<typeof pushNotifications.addNotificationReceivedListener>;
+    let responseSubscription: ReturnType<typeof pushNotifications.addNotificationResponseListener>;
+
+    async function initPushNotifications() {
+      try {
+        // Register for push notifications and get token
+        const token = await pushNotifications.registerForPushNotifications();
+        
+        if (token) {
+          setFcmToken(token);
+          setPermissionStatus('granted');
+          console.log('[TabsLayout] Push token registered:', token);
+          
+          // Register token in backend
+          registerPushTokenMutation.mutate({ expoPushToken: token });
+        } else {
+          setPermissionStatus('denied');
+        }
+
+        // Listen for notifications when app is in foreground
+        receivedSubscription = pushNotifications.addNotificationReceivedListener((notification) => {
+          console.log('[TabsLayout] Notification received:', notification);
+          
+          // Add to local store for immediate badge update
+          const { title, body, data } = notification.request.content;
+          addNotification({
+            id: notification.request.identifier,
+            type: (data?.type as NotificationType) || 'GENERAL',
+            title: title || 'Nuova notifica',
+            body: body || '',
+            isRead: false,
+            createdAt: new Date().toISOString(),
+          });
+        });
+
+        // Handle notification taps
+        responseSubscription = pushNotifications.addNotificationResponseListener((response) => {
+          handleNotificationResponse(response);
+        });
+
+      } catch (error) {
+        console.error('[TabsLayout] Error initializing push notifications:', error);
+      }
+    }
+
+    initPushNotifications();
+
+    // Cleanup listeners
+    return () => {
+      receivedSubscription?.remove();
+      responseSubscription?.remove();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, user, setFcmToken, setPermissionStatus, addNotification]);
 
   return (
     <Tabs

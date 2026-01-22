@@ -872,11 +872,11 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Una o più domande non esistono' });
       }
 
-      await ctx.prisma.$transaction(async (tx) => {
+      await ctx.prisma.$transaction(async () => {
         if (mode === 'replace') {
           // Delete all existing questions and add new ones
-          await tx.simulationQuestion.deleteMany({ where: { simulationId } });
-          await tx.simulationQuestion.createMany({
+          await ctx.prisma.simulationQuestion.deleteMany({ where: { simulationId } });
+          await ctx.prisma.simulationQuestion.createMany({
             data: questions.map((q, index) => ({
               simulationId,
               questionId: q.questionId,
@@ -885,20 +885,20 @@ export const simulationsRouter = router({
               customNegativePoints: q.customNegativePoints,
             })),
           });
-          await tx.simulation.update({
+          await ctx.prisma.simulation.update({
             where: { id: simulationId },
             data: { totalQuestions: questions.length },
           });
         } else if (mode === 'append') {
           // Get current max order
-          const maxOrder = await tx.simulationQuestion.findFirst({
+          const maxOrder = await ctx.prisma.simulationQuestion.findFirst({
             where: { simulationId },
             orderBy: { order: 'desc' },
             select: { order: true },
           });
           const startOrder = (maxOrder?.order ?? -1) + 1;
 
-          await tx.simulationQuestion.createMany({
+          await ctx.prisma.simulationQuestion.createMany({
             data: questions.map((q, index) => ({
               simulationId,
               questionId: q.questionId,
@@ -909,21 +909,21 @@ export const simulationsRouter = router({
           });
 
           // Update total
-          const newTotal = await tx.simulationQuestion.count({ where: { simulationId } });
-          await tx.simulation.update({
+          const newTotal = await ctx.prisma.simulationQuestion.count({ where: { simulationId } });
+          await ctx.prisma.simulation.update({
             where: { id: simulationId },
             data: { totalQuestions: newTotal },
           });
         } else if (mode === 'remove') {
-          await tx.simulationQuestion.deleteMany({
+          await ctx.prisma.simulationQuestion.deleteMany({
             where: {
               simulationId,
               questionId: { in: questionIds },
             },
           });
 
-          const newTotal = await tx.simulationQuestion.count({ where: { simulationId } });
-          await tx.simulation.update({
+          const newTotal = await ctx.prisma.simulationQuestion.count({ where: { simulationId } });
+          await ctx.prisma.simulation.update({
             where: { id: simulationId },
             data: { totalQuestions: newTotal },
           });
@@ -1323,14 +1323,14 @@ export const simulationsRouter = router({
       }
 
       // Create assignments and auto-publish simulation
-      const created = await ctx.prisma.$transaction(async (tx) => {
+      const created = await ctx.prisma.$transaction(async () => {
         const results = [];
         for (const target of targets) {
           const startDate = target.startDate ? new Date(target.startDate) : null;
           const endDate = target.endDate ? new Date(target.endDate) : null;
 
           // Create the assignment
-          const assignment = await tx.simulationAssignment.create({
+          const assignment = await ctx.prisma.simulationAssignment.create({
             data: {
               simulationId,
               studentId: target.studentId,
@@ -1350,7 +1350,7 @@ export const simulationsRouter = router({
 
         // Auto-publish simulation when assignments are created
         if (results.length > 0 && simulation.status === 'DRAFT') {
-          await tx.simulation.update({
+          await ctx.prisma.simulation.update({
             where: { id: simulationId },
             data: { status: 'PUBLISHED' },
           });
@@ -3374,7 +3374,7 @@ export const simulationsRouter = router({
         titleSubject = 'Multi-materia';
       } else {
         // 2-3 subjects: show most common one
-        const mainSubject = Object.entries(subjectCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+        const mainSubject = Object.entries(subjectCounts).sort((a, b) => (b[1] as number) - (a[1] as number))[0]?.[0];
         titleSubject = mainSubject || 'Varie';
       }
 
@@ -5121,9 +5121,9 @@ export const simulationsRouter = router({
       }
 
       // Update all open answers in a transaction
-      await ctx.prisma.$transaction(async (tx) => {
+      await ctx.prisma.$transaction(async () => {
         for (const validation of input.validations) {
-          await tx.openAnswerSubmission.update({
+          await ctx.prisma.openAnswerSubmission.update({
             where: { id: validation.openAnswerId },
             data: {
               manualScore: validation.manualScore,
@@ -5137,7 +5137,7 @@ export const simulationsRouter = router({
         }
 
         // Check remaining pending
-        const remainingPending = await tx.openAnswerSubmission.count({
+        const remainingPending = await ctx.prisma.openAnswerSubmission.count({
           where: {
             simulationResultId: input.resultId,
             isValidated: false,
@@ -5145,7 +5145,7 @@ export const simulationsRouter = router({
         });
 
         // Update result
-        await tx.simulationResult.update({
+        await ctx.prisma.simulationResult.update({
           where: { id: input.resultId },
           data: {
             pendingOpenAnswers: remainingPending,

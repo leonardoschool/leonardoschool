@@ -87,7 +87,7 @@ const FloatingCircle = ({ size, delay, x, y }: { size: number; delay: number; x:
 
 export default function LoginScreen() {
   const themedColors = useThemedColors();
-  const { login } = useAuthStore();
+  const { login, logout } = useAuthStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -156,27 +156,60 @@ export default function LoginScreen() {
         throw new Error(errorMessage);
       }
       
-      // La risposta contiene i dati utente direttamente (non wrappati in .user)
+      // La risposta contiene i dati utente direttamente
       const user = JSON.parse(responseText);
-      console.log('[Login] Parsed user:', user.name, user.role);
+      console.log('[Login] Parsed user:', user.name, user.role, 'profileCompleted:', user.profileCompleted, 'isActive:', user.isActive, 'parentDataRequired:', user.parentDataRequired, 'pendingContractToken:', user.pendingContractToken);
       
-      // 4. Check if profile is completed
-      if (!user.profileCompleted) {
-        // User needs to complete profile
-        showErrorAlert('Per favore completa il tuo profilo nella webapp.');
-        await firebaseAuth.logout();
-        return;
-      }
-      
-      // 5. Check if account is active
-      if (!user.isActive) {
-        showErrorAlert('Il tuo account è in attesa di approvazione.');
-        await firebaseAuth.logout();
-        return;
-      }
-      
-      // 6. Save to auth store and navigate
+      // Salva l'utente nello store (serve per le schermate di onboarding)
       await login(user, token, undefined);
+      
+      // ONBOARDING FLOW - Segui esattamente l'ordine della webapp (proxy.ts)
+      
+      // 1. Solo gli studenti possono usare l'app mobile
+      if (user.role !== 'STUDENT') {
+        // Admin e collaboratori devono usare la webapp
+        showErrorAlert('L\'app mobile è disponibile solo per gli studenti. Usa la piattaforma web.');
+        await logout();
+        return;
+      }
+      
+      // 2. Controlla se il profilo è completato
+      if (!user.profileCompleted) {
+        console.log('[Login] Profile not completed, redirecting to complete-profile');
+        router.replace('/(onboarding)/complete-profile');
+        return;
+      }
+      
+      // 3. Controlla se ci sono dati del genitore richiesti (minorenne)
+      // Questo ha priorità sul contratto secondo la logica webapp
+      if (user.parentDataRequired) {
+        console.log('[Login] Parent data required, redirecting to parent-data');
+        router.replace('/(onboarding)/parent-data');
+        return;
+      }
+      
+      // 4. Controlla se c'è un contratto da firmare
+      // Se c'è un pendingContractToken, l'utente DEVE firmare prima di accedere
+      if (user.pendingContractToken) {
+        console.log('[Login] Pending contract, redirecting to pending-contract');
+        router.replace({
+          pathname: '/(onboarding)/pending-contract',
+          params: { token: user.pendingContractToken },
+        });
+        return;
+      }
+      
+      // 5. Se l'account non è attivo e non ha contratto pendente,
+      // l'utente sta aspettando che l'admin assegni un contratto
+      // Mostriamo la schermata di attesa contratto (senza token)
+      if (!user.isActive) {
+        console.log('[Login] Account not active, no pending contract - waiting for contract assignment');
+        router.replace('/(onboarding)/pending-contract');
+        return;
+      }
+      
+      // 6. Tutto ok, vai alla home
+      console.log('[Login] All checks passed, navigating to tabs');
       router.replace('/(tabs)');
       
     } catch (error) {

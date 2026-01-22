@@ -80,12 +80,36 @@ export default function LoginPage() {
           
           if (response.ok) {
             const dbUser = await response.json();
-            // Redirect based on profile completion status
+            
+            // Follow the complete onboarding flow:
+            // 1. Profile not complete → complete-profile
+            // 2. Parent data required → complete-profile (parent section)
+            // 3. Pending contract → contract signing page
+            // 4. Not active but no pending contract → dashboard (shows "waiting for contract" message)
+            // 5. All good → dashboard
+            
+            // Check if user needs to complete profile
             if ((dbUser.role === 'STUDENT' || dbUser.role === 'COLLABORATOR') && !dbUser.profileCompleted) {
               router.push('/auth/complete-profile');
-            } else {
-              window.location.href = '/dashboard';
+              return;
             }
+            
+            // Check if student needs to add parent/guardian data
+            if (dbUser.role === 'STUDENT' && dbUser.parentDataRequired) {
+              router.push('/auth/complete-profile');
+              return;
+            }
+            
+            // Check if user has a pending contract to sign
+            if (dbUser.pendingContractToken) {
+              router.push(`/contratto/${dbUser.pendingContractToken}`);
+              return;
+            }
+            
+            // If account is not active but has no pending contract, user is waiting for contract assignment
+            // Let them access the dashboard where they'll see the "waiting for contract" message
+            // All conditions passed (or waiting for contract), redirect to dashboard
+            window.location.href = '/dashboard';
             return;
           }
         } catch (err) {
@@ -143,13 +167,35 @@ export default function LoginPage() {
         name: dbUser.name,
       }));
       
-      // 5. Redirect in base a completamento profilo
-      // Use hard navigation for protected routes to ensure cookies are properly read by middleware
+      // 5. Follow the complete onboarding flow:
+      // 1. Profile not complete → complete-profile
+      // 2. Parent data required → complete-profile (parent section)
+      // 3. Pending contract → contract signing page
+      // 4. Not active but no pending contract → dashboard (shows "waiting for contract" message)
+      // 5. All good → dashboard
+      
+      // Check if user needs to complete profile
       if ((dbUser.role === 'STUDENT' || dbUser.role === 'COLLABORATOR') && !dbUser.profileCompleted) {
         router.push('/auth/complete-profile');
-      } else {
-        window.location.href = '/dashboard';
+        return;
       }
+      
+      // Check if student needs to add parent/guardian data
+      if (dbUser.role === 'STUDENT' && dbUser.parentDataRequired) {
+        router.push('/auth/complete-profile');
+        return;
+      }
+      
+      // Check if user has a pending contract to sign
+      if (dbUser.pendingContractToken) {
+        router.push(`/contratto/${dbUser.pendingContractToken}`);
+        return;
+      }
+      
+      // If account is not active but has no pending contract, user is waiting for contract assignment
+      // Let them access the dashboard where they'll see the "waiting for contract" message
+      // All conditions passed (or waiting for contract), redirect to dashboard
+      window.location.href = '/dashboard';
     } catch (err) {
       console.error('Login error:', err);
       const firebaseError = err as { code?: string };
