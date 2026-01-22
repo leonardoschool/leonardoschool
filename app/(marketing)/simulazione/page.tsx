@@ -298,7 +298,7 @@ export default function SimulazionePage() {
               TOLC & CEnT
             </h2>
             <p className="text-lg text-gray-600 max-w-3xl mx-auto mb-4">
-              Esercitati per i Test On-Line CISIA (TOLC) e il CEnT-S  (CISIA English Test-Sciences) utilizzati da molte università italiane per l&apos;accesso ai corsi di laurea.
+              Esercitati per i Test On-Line CISIA (TOLC) e il CEnT-S  (CISIA English Test-Sciences) utilizzati da molte università italiane per l&#39;accesso ai corsi di laurea.
             </p>
           </div>
 
