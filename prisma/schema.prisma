@@ -7,7 +7,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ==================== ENUMS ====================
@@ -16,15 +15,6 @@ enum UserRole {
   ADMIN
   COLLABORATOR
   STUDENT
-}
-
-enum Subject {
-  BIOLOGIA
-  CHIMICA
-  FISICA
-  MATEMATICA
-  LOGICA
-  CULTURA_GENERALE
 }
 
 enum DifficultyLevel {
@@ -137,6 +127,7 @@ enum ContractStatus {
   SIGNED // Contratto firmato dallo studente
   EXPIRED // Contratto scaduto (non firmato in tempo)
   CANCELLED // Contratto annullato dall'admin
+  REVOKED // Contratto firmato ma poi revocato dall'admin (storico)
 }
 
 enum NotificationType {
@@ -144,6 +135,7 @@ enum NotificationType {
   ACCOUNT_ACTIVATED // Account approvato dall'admin
   NEW_REGISTRATION // Nuovo utente registrato (per admin)
   PROFILE_COMPLETED // Utente ha completato profilo (per admin)
+  PARENT_DATA_REQUESTED // Richiesta dati genitore/tutore
 
   // === CONTRACTS ===
   CONTRACT_ASSIGNED // Contratto assegnato
@@ -340,8 +332,16 @@ model Student {
   enrollmentDate DateTime @default(now())
   graduationYear Int?
 
+  // Parent/Guardian requirement flags
+  // Admin can request parent data for adult students via requiresParentData
+  // For minors (<18), parent data is always required at registration
+  requiresParentData Boolean @default(false) // Admin can set this to true for adult students
+  parentDataRequestedAt DateTime? // When admin requested the parent data
+  parentDataRequestedById String? // Admin user ID who requested
+
   // Relations
   user                   User                            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentGuardian         ParentGuardian? // Dati del genitore/tutore
   simulationResults      SimulationResult[]
   stats                  StudentStats?
   contracts              Contract[]
@@ -366,6 +366,40 @@ model Student {
 
   @@index([userId])
   @@map("students")
+}
+
+// ==================== PARENT/GUARDIAN ====================
+
+// Dati del genitore/tutore dello studente
+// Obbligatorio per studenti minorenni, facoltativo (o richiesto dall'admin) per maggiorenni
+model ParentGuardian {
+  id        String @id @default(cuid())
+  studentId String @unique
+
+  // Relationship type
+  relationship String // "PADRE", "MADRE", "TUTORE_LEGALE", "ALTRO"
+
+  // Personal data
+  firstName  String
+  lastName   String
+  fiscalCode String // Codice fiscale genitore
+  phone      String
+  email      String?
+
+  // Address (can be different from student)
+  address    String?
+  city       String?
+  province   String?
+  postalCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@map("parent_guardians")
 }
 
 // ==================== ADMIN ====================
@@ -505,9 +539,6 @@ model Question {
   // === VERSIONING ===
   version Int @default(1) // Versione corrente
 
-  // === LEGACY (per retrocompatibilità con enum Subject) ===
-  legacySubject Subject? // Mantenuto per migrazione
-
   // === RELATIONS ===
   subject   CustomSubject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
   topic     Topic?         @relation(fields: [topicId], references: [id], onDelete: SetNull)
@@ -530,7 +561,6 @@ model Question {
   @@index([type])
   @@index([status])
   @@index([year])
-  @@index([legacySubject])
   @@index([createdById])
   @@map("questions")
 }
@@ -1477,9 +1507,17 @@ model Contract {
   signToken          String    @unique @default(cuid())
   signTokenExpiresAt DateTime?
 
+  // Download permission - admin controls if user can download the signed contract
+  canDownload Boolean @default(false)
+
   // Timestamps
   assignedAt DateTime  @default(now())
   expiresAt  DateTime? // Deadline for signing
+
+  // Revocation info (for revoked contracts that were previously signed)
+  revokedAt   DateTime?
+  revokedBy   String? // Admin userId who revoked
+  revokeNotes String? @db.Text // Reason for revocation
 
   // Admin notes
   adminNotes String? @db.Text

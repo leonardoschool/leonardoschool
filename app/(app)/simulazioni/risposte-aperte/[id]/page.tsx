@@ -8,6 +8,7 @@ import { PageLoader, Spinner } from '@/components/ui/loaders';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
+import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -297,9 +298,9 @@ export default function ReviewResultPage() {
                   <span className={`text-xs font-medium ${colors.text.muted} uppercase`}>
                     Domanda {idx + 1}
                   </span>
-                  <p className={`mt-1 ${colors.text.primary}`}>
-                    {oa.question.text}
-                  </p>
+                  <div className={`mt-1 ${colors.text.primary}`}>
+                    <RichTextRenderer text={oa.question.text} />
+                  </div>
                   {oa.question.textLatex && (
                     <div className="mt-2">
                       <LaTeXRenderer latex={oa.question.textLatex} className={colors.text.primary} />
@@ -308,9 +309,9 @@ export default function ReviewResultPage() {
                   {oa.question.correctExplanation && (
                     <div className="mt-2 flex items-start gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20">
                       <Lightbulb className="w-4 h-4 text-blue-500 mt-0.5" />
-                      <p className="text-sm text-blue-700 dark:text-blue-300">
-                        {oa.question.correctExplanation}
-                      </p>
+                      <div className="text-sm text-blue-700 dark:text-blue-300">
+                        <RichTextRenderer text={oa.question.correctExplanation} />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -320,9 +321,9 @@ export default function ReviewResultPage() {
                   <span className={`text-xs font-medium ${colors.text.muted} uppercase`}>
                     Risposta dello Studente
                   </span>
-                  <p className={`mt-1 ${colors.text.primary} whitespace-pre-wrap`}>
-                    {oa.answerText}
-                  </p>
+                  <div className={`mt-1 ${colors.text.primary} whitespace-pre-wrap`}>
+                    <RichTextRenderer text={oa.answerText} />
+                  </div>
                 </div>
 
                 {/* Keywords Match (if any) */}
@@ -542,12 +543,12 @@ export default function ReviewResultPage() {
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <p className={`text-sm ${colors.text.primary} line-clamp-2`}>
-                      {oa.question.text}
-                    </p>
-                    <p className={`mt-2 text-sm ${colors.text.muted} line-clamp-2`}>
-                      Risposta: {oa.answerText}
-                    </p>
+                    <div className={`text-sm ${colors.text.primary} line-clamp-2`}>
+                      <RichTextRenderer text={oa.question.text} />
+                    </div>
+                    <div className={`mt-2 text-sm ${colors.text.muted} line-clamp-2`}>
+                      Risposta: <RichTextRenderer text={oa.answerText} />
+                    </div>
                   </div>
                   <div className="ml-4 text-right">
                     <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-sm font-medium ${getScoreBg(oa.finalScore ?? 0)} ${getScoreColor(oa.finalScore ?? 0)}`}>

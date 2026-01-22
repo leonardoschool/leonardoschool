@@ -27,8 +27,7 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageSquare,
-  Star,
-  Layers,
+  BookOpen,
   FileText,
   Eye,
   Tag,
@@ -83,6 +82,10 @@ export default function AdminQuestionsContent() {
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showFilters, setShowFilters] = useState(false);
+  const [showBulkSubjectSelect, setShowBulkSubjectSelect] = useState(false);
+  const [showBulkTagSelect, setShowBulkTagSelect] = useState(false);
+  const [bulkTagMode, setBulkTagMode] = useState<'add' | 'remove'>('add');
+  const [selectedBulkTagIds, setSelectedBulkTagIds] = useState<Set<string>>(new Set());
 
   // Export state
   const [isExporting, setIsExporting] = useState(false);
@@ -105,6 +108,37 @@ export default function AdminQuestionsContent() {
     window.addEventListener('scroll', handleScroll, true);
     return () => window.removeEventListener('scroll', handleScroll, true);
   }, [openMenuId]);
+
+  // Close bulk subject dropdown on click outside
+  useEffect(() => {
+    if (!showBulkSubjectSelect) return;
+    
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-bulk-subject-dropdown]')) {
+        setShowBulkSubjectSelect(false);
+      }
+    };
+    
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [showBulkSubjectSelect]);
+
+  // Close bulk tag dropdown on click outside
+  useEffect(() => {
+    if (!showBulkTagSelect) return;
+    
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-bulk-tag-dropdown]')) {
+        setShowBulkTagSelect(false);
+        setSelectedBulkTagIds(new Set());
+      }
+    };
+    
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [showBulkTagSelect]);
 
   // Fetch questions
   const { data: questionsData, isLoading } = trpc.questions.getQuestions.useQuery({
@@ -202,6 +236,29 @@ export default function AdminQuestionsContent() {
     onError: handleMutationError,
   });
 
+  const bulkSubjectMutation = trpc.questions.bulkUpdateSubject.useMutation({
+    onSuccess: (result) => {
+      showSuccess('Materia aggiornata', `${result.updated} domande spostate in "${result.subjectName}".`);
+      utils.questions.getQuestions.invalidate();
+      utils.questions.getQuestionStats.invalidate();
+      setSelectedIds(new Set());
+      setShowBulkSubjectSelect(false);
+    },
+    onError: handleMutationError,
+  });
+
+  const bulkTagMutation = trpc.questions.bulkAddTags.useMutation({
+    onSuccess: (result) => {
+      const modeText = bulkTagMode === 'add' ? 'aggiunti a' : 'rimossi da';
+      showSuccess('Tag aggiornati', `Tag ${modeText} ${result.updated} domande: ${result.tags}.`);
+      utils.questions.getQuestions.invalidate();
+      setSelectedIds(new Set());
+      setShowBulkTagSelect(false);
+      setSelectedBulkTagIds(new Set());
+    },
+    onError: handleMutationError,
+  });
+
   // Export function
   const handleExportCSV = async () => {
     setIsExporting(true);
@@ -273,6 +330,31 @@ export default function AdminQuestionsContent() {
   };
 
   const hasActiveFilters = search || subjectId || topicId || type || status || difficulty || selectedTagId;
+
+  // Get unique tags from selected questions for replace mode
+  const selectedQuestionsTags = useMemo(() => {
+    if (selectedIds.size === 0) return [];
+    
+    const tagsMap = new Map<string, { id: string; name: string; color: string | null; categoryName: string | null; categoryColor: string | null }>();
+    
+    questions
+      .filter(q => selectedIds.has(q.id))
+      .forEach(q => {
+        q.questionTags?.forEach((qt: { tag: { id: string; name: string; color: string | null; category: { id: string; name: string; color: string } | null } }) => {
+          if (!tagsMap.has(qt.tag.id)) {
+            tagsMap.set(qt.tag.id, {
+              id: qt.tag.id,
+              name: qt.tag.name,
+              color: qt.tag.color,
+              categoryName: qt.tag.category?.name || null,
+              categoryColor: qt.tag.category?.color || null,
+            });
+          }
+        });
+      });
+    
+    return Array.from(tagsMap.values());
+  }, [questions, selectedIds]);
 
   // Subject options for select
   const subjectOptions = useMemo(
@@ -530,11 +612,156 @@ export default function AdminQuestionsContent() {
 
       {/* Bulk Actions */}
       {selectedIds.size > 0 && (
-        <div className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} flex items-center justify-between`}>
+        <div className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
           <span className={colors.text.secondary}>
             {selectedIds.size} domand{selectedIds.size === 1 ? 'a' : 'e'} selezionat{selectedIds.size === 1 ? 'a' : 'e'}
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Change Subject Dropdown */}
+            <div className="relative" data-bulk-subject-dropdown>
+              <button
+                onClick={() => setShowBulkSubjectSelect(!showBulkSubjectSelect)}
+                disabled={bulkSubjectMutation.isPending}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors text-sm"
+              >
+                <BookOpen className="w-4 h-4" />
+                Cambia Materia
+              </button>
+              {showBulkSubjectSelect && (
+                <div className={`absolute top-full left-0 mt-1 z-50 min-w-[200px] ${colors.background.card} ${colors.effects.shadow.lg} rounded-lg border ${colors.border.primary} py-1`}>
+                  {subjects?.map((subject) => (
+                    <button
+                      key={subject.id}
+                      onClick={() => {
+                        bulkSubjectMutation.mutate({
+                          ids: [...selectedIds],
+                          subjectId: subject.id,
+                        });
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:${colors.background.secondary} ${colors.text.primary} flex items-center gap-2 transition-colors`}
+                    >
+                      <span
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: subject.color || '#6b7280' }}
+                      />
+                      {subject.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* Change Tag Dropdown */}
+            <div className="relative" data-bulk-tag-dropdown>
+              <button
+                onClick={() => setShowBulkTagSelect(!showBulkTagSelect)}
+                disabled={bulkTagMutation.isPending}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors text-sm"
+              >
+                <Tag className="w-4 h-4" />
+                Cambia Tag
+              </button>
+              {showBulkTagSelect && (
+                <div className={`absolute top-full left-0 mt-1 z-50 min-w-[280px] max-h-[400px] overflow-y-auto ${colors.background.card} ${colors.effects.shadow.lg} rounded-lg border ${colors.border.primary} py-2`}>
+                  {/* Mode toggle */}
+                  <div className="px-4 pb-2 border-b border-gray-200 dark:border-gray-700 mb-2">
+                    <label className={`text-xs font-medium ${colors.text.muted} block mb-1.5`}>
+                      Modalità
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setBulkTagMode('add'); }}
+                        className={`flex-1 text-xs px-2 py-1.5 rounded transition-colors ${
+                          bulkTagMode === 'add'
+                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300'
+                            : `${colors.background.secondary} ${colors.text.muted}`
+                        }`}
+                      >
+                        Aggiungi
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setBulkTagMode('remove'); }}
+                        className={`flex-1 text-xs px-2 py-1.5 rounded transition-colors ${
+                          bulkTagMode === 'remove'
+                            ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300'
+                            : `${colors.background.secondary} ${colors.text.muted}`
+                        }`}
+                      >
+                        Rimuovi
+                      </button>
+                    </div>
+                    <p className={`text-xs ${colors.text.muted} mt-1`}>
+                      {bulkTagMode === 'add' ? 'I tag selezionati verranno aggiunti' : 'I tag selezionati verranno rimossi'}
+                    </p>
+                  </div>
+                  
+                  {/* Tags list - show all tags in add mode, only selected questions' tags in remove mode */}
+                  <div className="px-2">
+                    {bulkTagMode === 'remove' && selectedQuestionsTags.length === 0 ? (
+                      <p className={`text-xs ${colors.text.muted} text-center py-4`}>
+                        Le domande selezionate non hanno tag
+                      </p>
+                    ) : (
+                      (bulkTagMode === 'remove' ? selectedQuestionsTags : tagsData?.tags || []).map((tag) => {
+                        const tagId = tag.id;
+                        const tagName = tag.name;
+                        const tagColor = tag.color || ('categoryColor' in tag ? tag.categoryColor : tag.category?.color) || '#6366f1';
+                        const categoryName = 'categoryName' in tag ? tag.categoryName : tag.category?.name;
+                        
+                        return (
+                          <button
+                            key={tagId}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const newSet = new Set(selectedBulkTagIds);
+                              if (newSet.has(tagId!)) {
+                                newSet.delete(tagId!);
+                              } else {
+                                newSet.add(tagId!);
+                              }
+                              setSelectedBulkTagIds(newSet);
+                            }}
+                            className={`w-full text-left px-3 py-2 text-sm rounded-lg mb-1 flex items-center gap-2 transition-colors ${
+                              selectedBulkTagIds.has(tagId!)
+                                ? 'bg-purple-100 dark:bg-purple-900/40'
+                                : `hover:${colors.background.secondary}`
+                            } ${colors.text.primary}`}
+                          >
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: tagColor }}
+                            />
+                            <span className="flex-1 truncate">
+                              {categoryName ? `${categoryName} > ${tagName}` : tagName}
+                            </span>
+                            {selectedBulkTagIds.has(tagId!) && (
+                              <Check className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+                            )}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                  
+                  {/* Apply button */}
+                  {selectedBulkTagIds.size > 0 && (
+                    <div className="px-4 pt-2 mt-2 border-t border-gray-200 dark:border-gray-700">
+                      <button
+                        onClick={() => {
+                          bulkTagMutation.mutate({
+                            ids: [...selectedIds],
+                            tagIds: [...selectedBulkTagIds],
+                            mode: bulkTagMode,
+                          });
+                        }}
+                        className={`w-full py-2 rounded-lg ${bulkTagMode === 'remove' ? 'bg-red-600' : colors.primary.bg} text-white text-sm font-medium hover:opacity-90 transition-opacity`}
+                      >
+                        {bulkTagMode === 'add' ? 'Aggiungi' : 'Rimuovi'} {selectedBulkTagIds.size} tag {bulkTagMode === 'add' ? 'a' : 'da'} {selectedIds.size} domande
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             <button
               onClick={() => bulkStatusMutation.mutate({ ids: [...selectedIds], status: 'PUBLISHED' })}
               disabled={bulkStatusMutation.isPending}
@@ -564,12 +791,12 @@ export default function AdminQuestionsContent() {
       )}
 
       {/* Questions Table */}
-      <div className={`${colors.background.card} rounded-xl ${colors.effects.shadow.sm} overflow-visible`}>
-        <div className="pb-16 overflow-x-auto overflow-y-visible">
-          <table className="w-full min-w-[900px]">
+      <div className={`${colors.background.card} rounded-xl ${colors.effects.shadow.sm} overflow-hidden`}>
+        <div className="overflow-x-auto">
+          <table className="w-full">
             <thead>
               <tr className={`border-b ${colors.border.primary}`}>
-                <th className="px-4 py-3 text-left">
+                <th className="px-3 py-3 text-left w-12">
                   <button onClick={toggleSelectAll} className="p-1">
                     {allSelected ? (
                       <CheckSquare className={`w-5 h-5 ${colors.primary.text}`} />
@@ -578,39 +805,36 @@ export default function AdminQuestionsContent() {
                     )}
                   </button>
                 </th>
-                <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary}`}>
+                <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} min-w-[200px]`}>
                   Domanda
                 </th>
-                <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden lg:table-cell`}>
+                <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden lg:table-cell min-w-[120px]`}>
                   Creatore
                 </th>
-                <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden md:table-cell`}>
+                <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden md:table-cell min-w-[140px]`}>
                   Materia
                 </th>
-                <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden lg:table-cell`}>
+                <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden xl:table-cell`}>
                   Tipo
                 </th>
-                <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden sm:table-cell`}>
+                <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden sm:table-cell`}>
                   Stato
                 </th>
-                <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden xl:table-cell`}>
+                <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden xl:table-cell`}>
                   Difficoltà
                 </th>
-                <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden lg:table-cell`}>
+                <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden lg:table-cell min-w-[100px]`}>
                   Tag
                 </th>
-                <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden xl:table-cell`}>
-                  Uso
-                </th>
-                <th className={`px-4 py-3 text-right text-sm font-medium ${colors.text.secondary}`}>
-                  Azioni
+                <th className={`px-3 py-3 text-right text-sm font-medium ${colors.text.secondary} w-14`}>
+                  
                 </th>
               </tr>
             </thead>
             <tbody>
               {questions.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center">
+                  <td colSpan={9} className="px-4 py-12 text-center">
                     <div className="flex flex-col items-center">
                       <FileText className={`w-12 h-12 ${colors.text.muted} mb-3`} />
                       <p className={`font-medium ${colors.text.primary}`}>Nessuna domanda trovata</p>
@@ -637,7 +861,7 @@ export default function AdminQuestionsContent() {
                     key={question.id}
                     className={`border-b ${colors.border.primary} hover:${colors.background.secondary} transition-colors`}
                   >
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       <button onClick={() => toggleSelect(question.id)} className="p-1">
                         {selectedIds.has(question.id) ? (
                           <CheckSquare className={`w-5 h-5 ${colors.primary.text}`} />
@@ -646,71 +870,46 @@ export default function AdminQuestionsContent() {
                         )}
                       </button>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="max-w-xs lg:max-w-sm xl:max-w-md">
-                        <p className={`font-medium ${colors.text.primary} line-clamp-2`}>
+                    <td className="px-3 py-3">
+                      <div className="max-w-[300px]">
+                        <p 
+                          className={`font-medium ${colors.text.primary} truncate`}
+                          title={question.text}
+                        >
                           {question.text}
                         </p>
-                        {question.legacyTags.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1 max-w-full">
-                            {question.legacyTags.slice(0, 3).map((tag) => (
-                              <span
-                                key={tag}
-                                className={`text-xs px-1.5 py-0.5 rounded truncate max-w-[100px] ${colors.background.secondary} ${colors.text.muted}`}
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                            {question.legacyTags.length > 3 && (
-                              <span className={`text-xs ${colors.text.muted}`}>
-                                +{question.legacyTags.length - 3}
-                              </span>
-                            )}
-                          </div>
-                        )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 hidden lg:table-cell">
+                    <td className="px-3 py-3 hidden lg:table-cell">
                       {question.createdBy ? (
-                        <div className="flex items-center gap-2">
-                          <div className={`w-7 h-7 rounded-full flex items-center justify-center ${
-                            question.createdBy.role === 'ADMIN' 
-                              ? colors.roles.admin.softBg
-                              : colors.roles.collaborator.softBg
-                          }`}>
-                            <span className={`text-xs font-medium ${
-                              question.createdBy.role === 'ADMIN'
-                                ? colors.roles.admin.text
-                                : colors.roles.collaborator.text
-                            }`}>
-                              {question.createdBy.name.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                          <div className="flex flex-col">
-                            <span className={`text-sm ${colors.text.primary}`}>
-                              {question.createdBy.name}
-                            </span>
-                            <span className={`text-xs ${
-                              question.createdBy.role === 'ADMIN'
-                                ? colors.roles.admin.text
-                                : colors.roles.collaborator.text
-                            }`}>
-                              {question.createdBy.role === 'ADMIN' ? 'Admin' : 'Collaboratore'}
-                            </span>
-                          </div>
-                        </div>
+                        <span 
+                          className={`text-sm ${colors.text.primary} truncate block max-w-[100px]`}
+                          title={question.createdBy.name}
+                        >
+                          {question.createdBy.name}
+                        </span>
+                      ) : question.source ? (
+                        <span 
+                          className={`text-sm ${colors.text.muted} truncate block max-w-[100px] italic`}
+                          title={`Importata: ${question.source}`}
+                        >
+                          {question.source}
+                        </span>
                       ) : (
                         <span className={`text-sm ${colors.text.muted}`}>-</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 hidden md:table-cell whitespace-nowrap">
+                    <td className="px-3 py-3 hidden md:table-cell">
                       {question.subject ? (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <div
-                            className="w-3 h-3 rounded-full flex-shrink-0"
+                            className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                             style={{ backgroundColor: question.subject.color ?? '#6366f1' }}
                           />
-                          <span className={`text-sm ${colors.text.primary}`}>
+                          <span 
+                            className={`text-sm ${colors.text.primary} truncate max-w-[120px]`}
+                            title={question.subject.name}
+                          >
                             {question.subject.name}
                           </span>
                         </div>
@@ -718,63 +917,45 @@ export default function AdminQuestionsContent() {
                         <span className={`text-sm ${colors.text.muted}`}>-</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 hidden lg:table-cell whitespace-nowrap">
-                      <span className={`text-xs px-2 py-1 rounded-full ${typeColors[question.type as QuestionType]}`}>
+                    <td className="px-3 py-3 hidden xl:table-cell">
+                      <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${typeColors[question.type as QuestionType]}`}>
                         {questionTypeLabels[question.type as QuestionType]}
                       </span>
                     </td>
-                    <td className="px-4 py-3 hidden sm:table-cell whitespace-nowrap">
-                      <span className={`text-xs px-2 py-1 rounded-full ${statusColors[question.status as QuestionStatus]}`}>
+                    <td className="px-3 py-3 hidden sm:table-cell">
+                      <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${statusColors[question.status as QuestionStatus]}`}>
                         {questionStatusLabels[question.status as QuestionStatus]}
                       </span>
                     </td>
-                    <td className="px-4 py-3 hidden xl:table-cell whitespace-nowrap">
-                      <span className={`text-xs px-2 py-1 rounded-full ${difficultyColors[question.difficulty as DifficultyLevel]}`}>
+                    <td className="px-3 py-3 hidden xl:table-cell">
+                      <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${difficultyColors[question.difficulty as DifficultyLevel]}`}>
                         {difficultyLabels[question.difficulty as DifficultyLevel]}
                       </span>
                     </td>
-                    <td className="px-4 py-3 hidden lg:table-cell">
+                    <td className="px-3 py-3 hidden lg:table-cell">
                       {question.questionTags && question.questionTags.length > 0 ? (
-                        <div className="flex flex-wrap gap-1 max-w-[200px]">
-                          {question.questionTags.slice(0, 2).map((qt: { tag: { id: string; name: string; color: string | null; category: { id: string; name: string; color: string } | null } }) => (
-                            <span
-                              key={qt.tag.id}
-                              className="text-xs px-2 py-0.5 rounded-full font-medium"
-                              style={{
-                                backgroundColor: qt.tag.color ? `${qt.tag.color}20` : (qt.tag.category?.color ? `${qt.tag.category.color}20` : '#6366f120'),
-                                color: qt.tag.color || qt.tag.category?.color || '#6366f1',
-                              }}
-                              title={qt.tag.category ? `${qt.tag.category.name}: ${qt.tag.name}` : qt.tag.name}
-                            >
-                              {qt.tag.name}
-                            </span>
-                          ))}
-                          {question.questionTags.length > 2 && (
-                            <span className={`text-xs ${colors.text.muted}`}>
-                              +{question.questionTags.length - 2}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className={`text-xs ${colors.text.muted} flex items-center gap-1`}>
-                          <Tag className="w-3 h-3" />
-                          -
+                        <span
+                          className="text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap"
+                          style={{
+                            backgroundColor: question.questionTags[0].tag.color 
+                              ? `${question.questionTags[0].tag.color}20` 
+                              : (question.questionTags[0].tag.category?.color 
+                                  ? `${question.questionTags[0].tag.category.color}20` 
+                                  : '#6366f120'),
+                            color: question.questionTags[0].tag.color 
+                              || question.questionTags[0].tag.category?.color 
+                              || '#6366f1',
+                          }}
+                          title={question.questionTags.map(qt => qt.tag?.name).filter(Boolean).join(', ')}
+                        >
+                          {question.questionTags[0].tag.name}
+                          {question.questionTags.length > 1 && ` +${question.questionTags.length - 1}`}
                         </span>
+                      ) : (
+                        <span className={`text-xs ${colors.text.muted}`}>-</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 hidden xl:table-cell">
-                      <div className="flex items-center gap-3 text-sm">
-                        <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400" title="Usata in simulazioni">
-                          <Layers className="w-4 h-4" />
-                          {question._count.simulationQuestions}
-                        </span>
-                        <span className="flex items-center gap-1 text-amber-500 dark:text-amber-400" title="Preferiti">
-                          <Star className="w-4 h-4" />
-                          {question._count.favorites}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-3 py-3 text-right">
                       <button
                         onClick={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect();
@@ -790,9 +971,9 @@ export default function AdminQuestionsContent() {
                           setMenuPosition({ top, left: rect.right - 192 });
                           setOpenMenuId(openMenuId === question.id ? null : question.id);
                         }}
-                        className={`p-2 rounded-lg ${colors.background.tertiary} hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors`}
+                        className={`p-1.5 rounded-lg ${colors.background.tertiary} hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors`}
                       >
-                        <MoreVertical className={`w-5 h-5 ${colors.text.secondary}`} />
+                        <MoreVertical className={`w-4 h-4 ${colors.text.secondary}`} />
                       </button>
                     </td>
                   </tr>

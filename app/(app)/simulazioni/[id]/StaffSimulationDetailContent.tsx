@@ -24,6 +24,7 @@ import {
   AlertCircle,
   Clock,
   FileDown,
+  Printer,
 } from 'lucide-react';
 import type { SimulationType, SimulationStatus } from '@/lib/validations/simulationValidation';
 
@@ -255,9 +256,18 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
                 <span className="hidden lg:inline">Statistiche</span>
               </Link>
             )}
+            <Link
+              href={`/simulazioni/${id}/stampa`}
+              className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg border border-blue-300 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20`}
+              title="Versione stampabile con formule LaTeX"
+            >
+              <Printer className="w-4 h-4" />
+              <span className="hidden xl:inline">Stampa</span>
+            </Link>
             <button
               onClick={handleDownloadPdf}
               className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg border border-purple-300 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20`}
+              title="PDF semplice (senza formule LaTeX grafiche)"
             >
               <FileDown className="w-4 h-4" />
               <span className="hidden xl:inline">PDF</span>

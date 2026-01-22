@@ -34,6 +34,20 @@ interface ContractSignedEmailData {
   price: number;
 }
 
+interface ContractReminderEmailData {
+  recipientName: string;
+  recipientEmail: string;
+  contractName: string;
+  expiresAt: Date;
+  signLink: string;
+}
+
+interface ContractExpiredEmailData {
+  recipientName: string;
+  recipientEmail: string;
+  contractName: string;
+}
+
 interface AccountActivatedEmailData {
   studentName: string;
   studentEmail: string;
@@ -235,8 +249,8 @@ function getBaseEmailTemplate(content: string, title: string): string {
             <div class="footer">
               <p>© ${new Date().getFullYear()} Leonardo School. Tutti i diritti riservati.</p>
               <p style="margin-top: 10px;">
-                <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}">Visita il sito</a> | 
-                <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}/contattaci">Contattaci</a>
+                <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://www.leonardoschool.it'}">Visita il sito</a> | 
+                <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://www.leonardoschool.it'}/contattaci">Contattaci</a>
               </p>
             </div>
           </div>
@@ -377,6 +391,87 @@ export async function sendContractSignedConfirmationEmail(data: ContractSignedEm
 }
 
 /**
+ * Invia email di promemoria per contratto in scadenza
+ */
+export async function sendContractReminderEmail(data: ContractReminderEmailData): Promise<{ success: boolean; error?: string }> {
+  const formattedExpiry = new Intl.DateTimeFormat('it-IT', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(data.expiresAt);
+
+  const content = `
+    <p class="greeting">Ciao <strong>${data.recipientName}</strong>,</p>
+    
+    <div class="warning-box">
+      <strong>⏰ Promemoria: Contratto in scadenza</strong>
+    </div>
+    
+    <p>Ti ricordiamo che hai un contratto da firmare che sta per scadere.</p>
+    
+    <div class="info-box">
+      <strong>📋 Dettagli Contratto</strong>
+      <div style="margin-top: 10px;">
+        <div class="detail-row">
+          <span class="detail-label">Tipologia:</span>
+          <span class="detail-value">${data.contractName}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Scadenza:</span>
+          <span class="detail-value">${formattedExpiry}</span>
+        </div>
+      </div>
+    </div>
+    
+    <p style="text-align: center;">
+      <a href="${data.signLink}" class="button">✍️ Firma il Contratto</a>
+    </p>
+    
+    <p style="font-size: 14px; color: #6b7280;">
+      Dopo la scadenza, sarà necessario richiedere un nuovo contratto. Non perdere questa opportunità!
+    </p>
+  `;
+
+  return sendEmail({
+    to: data.recipientEmail,
+    subject: `⏰ Promemoria: Contratto in scadenza - ${data.contractName}`,
+    html: getBaseEmailTemplate(content, 'Promemoria Contratto'),
+  });
+}
+
+/**
+ * Invia email quando un contratto è scaduto senza firma
+ */
+export async function sendContractExpiredEmail(data: ContractExpiredEmailData): Promise<{ success: boolean; error?: string }> {
+  const content = `
+    <p class="greeting">Ciao <strong>${data.recipientName}</strong>,</p>
+    
+    <div class="warning-box">
+      <strong>⚠️ Contratto scaduto</strong>
+    </div>
+    
+    <p>Purtroppo il termine per firmare il contratto "<strong>${data.contractName}</strong>" è scaduto.</p>
+    
+    <p>Se desideri ancora procedere con l'iscrizione, contattaci per richiedere un nuovo contratto.</p>
+    
+    <div class="divider"></div>
+    
+    <p style="font-size: 14px; color: #6b7280;">
+      Hai domande? Rispondi a questa email o contattaci attraverso il nostro sito.
+    </p>
+  `;
+
+  return sendEmail({
+    to: data.recipientEmail,
+    subject: `⚠️ Contratto scaduto - ${data.contractName}`,
+    html: getBaseEmailTemplate(content, 'Contratto Scaduto'),
+  });
+}
+
+/**
  * Invia email allo studente quando l'account viene attivato
  */
 export async function sendAccountActivatedEmail(data: AccountActivatedEmailData): Promise<{ success: boolean; error?: string }> {
@@ -432,7 +527,7 @@ export async function sendProfileCompletedAdminNotification(data: ProfileComplet
     return { success: false, error: 'No admin email configured' };
   }
 
-  const adminUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}/utenti`;
+  const adminUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.leonardoschool.it'}/utenti`;
 
   const content = `
     <p class="greeting">Nuovo studente registrato!</p>
@@ -486,7 +581,7 @@ export async function sendContractSignedAdminNotification(data: {
     return { success: false, error: 'No admin email configured' };
   }
 
-  const adminUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}/contratti`;
+  const adminUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.leonardoschool.it'}/contratti`;
   
   const formattedSignDate = new Intl.DateTimeFormat('it-IT', {
     weekday: 'long',
@@ -548,9 +643,11 @@ export const emailService = {
   // Base
   sendEmail,
   
-  // Contract emails (to student)
+  // Contract emails (to student/collaborator)
   sendContractAssignedEmail,
   sendContractSignedConfirmationEmail,
+  sendContractReminderEmail,
+  sendContractExpiredEmail,
   sendAccountActivatedEmail,
   
   // Admin notifications

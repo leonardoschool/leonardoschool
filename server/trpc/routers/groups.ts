@@ -880,21 +880,22 @@ export const groupsRouter = router({
           .map((m) => m.studentId)
           .filter((id): id is string => id !== null);
 
+        // Build search conditions - need to match name OR email OR matricola
+        const searchConditions = input.search
+          ? {
+              OR: [
+                { user: { name: { contains: input.search, mode: 'insensitive' as const } } },
+                { user: { email: { contains: input.search, mode: 'insensitive' as const } } },
+                { matricola: { contains: input.search, mode: 'insensitive' as const } },
+              ],
+            }
+          : {};
+
         const students = await ctx.prisma.student.findMany({
           where: {
             id: { notIn: existingIds },
-            user: {
-              isActive: true,
-              ...(input.search && {
-                OR: [
-                  { name: { contains: input.search, mode: 'insensitive' } },
-                  { email: { contains: input.search, mode: 'insensitive' } },
-                ],
-              }),
-            },
-            ...(input.search && {
-              matricola: { contains: input.search, mode: 'insensitive' },
-            }),
+            user: { isActive: true },
+            ...searchConditions,
           },
           select: {
             id: true,

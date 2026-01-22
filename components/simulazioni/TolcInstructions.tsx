@@ -36,7 +36,7 @@ interface TolcInstructionsProps {
  * Mostra tutte le regole e informazioni prima di entrare nella waiting room
  */
 export default function TolcInstructions({
-  simulationTitle,
+  simulationTitle: _simulationTitle,
   durationMinutes,
   totalQuestions,
   sectionsCount,

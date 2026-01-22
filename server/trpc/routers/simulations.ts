@@ -3425,10 +3425,29 @@ export const simulationsRouter = router({
         },
       });
 
-      // If correction requested from staff, create notification
-      if (openQuestionCorrection === 'staff' && requestCorrectionFromId) {
-        // TODO: Create notification for staff member
-        // This would require a notification service/system
+      // Count open questions for notification
+      const openQuestionsCount = simulation.questions.filter(
+        q => q.question.type === 'OPEN_TEXT'
+      ).length;
+
+      // If correction requested from staff, create notification for the specific staff member
+      if (openQuestionCorrection === 'staff' && requestCorrectionFromId && openQuestionsCount > 0) {
+        // Get the current user's name for the notification
+        const student = await ctx.prisma.user.findUnique({
+          where: { id: ctx.user.id },
+          select: { name: true },
+        });
+
+        await notificationService.notifyOpenAnswerCorrectionRequest(ctx.prisma, {
+          staffUserId: requestCorrectionFromId,
+          simulationId: simulation.id,
+          simulationTitle: simulation.title,
+          studentName: student?.name || 'Uno studente',
+          openQuestionsCount,
+        }).catch(err => {
+          // Log but don't fail the mutation if notification fails
+          console.error('[Simulations] Failed to notify staff for correction request:', err);
+        });
       }
 
       return { 

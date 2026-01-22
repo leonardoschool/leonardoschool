@@ -104,7 +104,7 @@ export const authRouter = router({
     }),
 
   /**
-   * Get current user info
+   * Get current user info with student data including parent guardian
    */
   me: publicProcedure.query(async ({ ctx }) => {
     if (!ctx.user) {
@@ -114,7 +114,53 @@ export const authRouter = router({
       });
     }
 
-    return ctx.user;
+    // Get fresh user data including student info and parent guardian
+    const user = await ctx.prisma.user.findUnique({
+      where: { id: ctx.user.id },
+      include: {
+        student: {
+          include: {
+            parentGuardian: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: 'User not found',
+      });
+    }
+
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive,
+      profileCompleted: user.profileCompleted,
+      createdAt: user.createdAt?.toISOString(),
+      lastLoginAt: user.lastLoginAt?.toISOString(),
+      student: user.student ? {
+        id: user.student.id,
+        userId: user.student.userId,
+        matricola: user.student.matricola,
+        fiscalCode: user.student.fiscalCode,
+        dateOfBirth: user.student.dateOfBirth?.toISOString(),
+        phone: user.student.phone,
+        address: user.student.address,
+        city: user.student.city,
+        province: user.student.province,
+        postalCode: user.student.postalCode,
+        enrollmentDate: user.student.enrollmentDate?.toISOString(),
+        graduationYear: user.student.graduationYear,
+        requiresParentData: user.student.requiresParentData,
+        parentDataRequestedAt: user.student.parentDataRequestedAt?.toISOString(),
+        parentDataRequestedById: user.student.parentDataRequestedById,
+        parentGuardian: user.student.parentGuardian,
+      } : undefined,
+    };
   }),
 
   /**

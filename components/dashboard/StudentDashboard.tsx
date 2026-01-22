@@ -19,10 +19,10 @@ import {
   ArrowRight,
   Sparkles,
   Users,
-  ExternalLink,
   TrendingUp,
   Target,
   GraduationCap,
+  AlertTriangle,
 } from 'lucide-react';
 
 // Dynamic imports for SSR safety
@@ -83,6 +83,11 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
     { enabled: !!user?.student, retry: false }
   );
 
+  // Get parent data requirement status
+  const { data: parentDataReq } = trpc.students.getParentDataRequirement.useQuery(undefined, {
+    enabled: !!user?.student,
+  });
+
   // Get calendar events for the next month
   const dateRange = useMemo(() => {
     const start = new Date();
@@ -137,6 +142,18 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
   // Contract status info
   const getContractAlert = () => {
     if (contractLoading) return null;
+
+    // Check if parent data is required (highest priority - blocks account)
+    if (parentDataReq?.required && parentDataReq?.requestedByAdmin) {
+      return {
+        type: 'parent-data',
+        title: 'Account Bloccato - Dati Genitore Richiesti',
+        description: 'L\'amministrazione ha richiesto l\'inserimento dei dati del genitore/tutore legale. Completa i dati per sbloccare l\'account.',
+        action: '/profilo?section=genitore',
+        actionLabel: 'Compila dati',
+        icon: AlertTriangle,
+      };
+    }
     
     if (contract?.status === 'PENDING') {
       return {
@@ -247,23 +264,29 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
         <div className={`rounded-2xl p-5 border ${
           contractAlert.type === 'pending' 
             ? `bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-blue-200 dark:border-blue-800`
+            : contractAlert.type === 'parent-data'
+            ? `bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-950/30 dark:to-rose-950/30 border-red-300 dark:border-red-800 border-2`
             : `${colors.status.warning.bgLight} ${colors.status.warning.border}`
         }`}>
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
               contractAlert.type === 'pending' 
                 ? 'bg-blue-100 dark:bg-blue-900/50' 
+                : contractAlert.type === 'parent-data'
+                ? 'bg-red-100 dark:bg-red-900/50'
                 : colors.status.warning.softBg
             }`}>
               <contractAlert.icon className={`w-6 h-6 ${
                 contractAlert.type === 'pending' 
                   ? 'text-blue-600 dark:text-blue-400' 
+                  : contractAlert.type === 'parent-data'
+                  ? 'text-red-600 dark:text-red-400'
                   : colors.status.warning.text
               }`} />
             </div>
             <div className="flex-1">
-              <h2 className={`text-lg font-semibold ${colors.text.primary}`}>
-                {contractAlert.title}
+              <h2 className={`text-lg font-semibold ${contractAlert.type === 'parent-data' ? 'text-red-700 dark:text-red-300' : colors.text.primary}`}>
+                {contractAlert.type === 'parent-data' && '⚠️ '}{contractAlert.title}
               </h2>
               <p className={`mt-0.5 ${colors.text.secondary}`}>
                 {contractAlert.description}
@@ -271,11 +294,15 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
               {contractAlert.action && (
                 <a
                   href={contractAlert.action}
-                  className={`inline-flex items-center gap-2 mt-3 px-5 py-2.5 rounded-xl ${colors.primary.gradient} text-white font-medium shadow-lg hover:shadow-xl transition-all`}
+                  className={`inline-flex items-center gap-2 mt-3 px-5 py-2.5 rounded-xl ${
+                    contractAlert.type === 'parent-data' 
+                      ? 'bg-red-600 hover:bg-red-700' 
+                      : colors.primary.gradient
+                  } text-white font-medium shadow-lg hover:shadow-xl transition-all`}
                 >
-                  <PenTool className="w-4 h-4" />
+                  {contractAlert.type === 'parent-data' ? <AlertTriangle className="w-4 h-4" /> : <PenTool className="w-4 h-4" />}
                   {contractAlert.actionLabel}
-                  <ExternalLink className="w-4 h-4" />
+                  <ArrowRight className="w-4 h-4" />
                 </a>
               )}
             </div>

@@ -2,6 +2,7 @@
 import { router, adminProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import { createCachedQuery, CACHE_TIMES } from '@/lib/cache/serverCache';
 
 export const jobApplicationsRouter = router({
   /**
@@ -153,20 +154,28 @@ export const jobApplicationsRouter = router({
    * Get statistics for job applications
    */
   getStats: adminProcedure.query(async ({ ctx }) => {
-    const [total, pending, reviewing, approved, rejected] = await Promise.all([
-      ctx.prisma.jobApplication.count(),
-      ctx.prisma.jobApplication.count({ where: { status: 'PENDING' } }),
-      ctx.prisma.jobApplication.count({ where: { status: 'REVIEWING' } }),
-      ctx.prisma.jobApplication.count({ where: { status: 'APPROVED' } }),
-      ctx.prisma.jobApplication.count({ where: { status: 'REJECTED' } }),
-    ]);
+    const getCachedStats = createCachedQuery(
+      async () => {
+        const [total, pending, reviewing, approved, rejected] = await Promise.all([
+          ctx.prisma.jobApplication.count(),
+          ctx.prisma.jobApplication.count({ where: { status: 'PENDING' } }),
+          ctx.prisma.jobApplication.count({ where: { status: 'REVIEWING' } }),
+          ctx.prisma.jobApplication.count({ where: { status: 'APPROVED' } }),
+          ctx.prisma.jobApplication.count({ where: { status: 'REJECTED' } }),
+        ]);
 
-    return {
-      total,
-      pending,
-      reviewing,
-      approved,
-      rejected,
-    };
+        return {
+          total,
+          pending,
+          reviewing,
+          approved,
+          rejected,
+        };
+      },
+      ['job-applications-stats'],
+      { revalidate: CACHE_TIMES.MEDIUM } // 5 minutes
+    );
+
+    return await getCachedStats();
   }),
 });

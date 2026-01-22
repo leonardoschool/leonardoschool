@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { colors } from '@/lib/theme/colors';
-import { ChevronDown, ChevronUp, Keyboard } from 'lucide-react';
+import { ChevronDown, ChevronUp, Keyboard, Info, Eye } from 'lucide-react';
+import RichTextRenderer from '@/components/ui/RichTextRenderer';
 
 interface SymbolKeyboardProps {
   onInsert: (symbol: string) => void;
@@ -267,6 +268,8 @@ interface TextareaWithSymbolsProps {
   maxLength?: number;
   minLength?: number;
   disabled?: boolean;
+  showFormattingHelp?: boolean; // Show LaTeX/HTML formatting help
+  showPreview?: boolean; // Show live preview
 }
 
 export function TextareaWithSymbols({
@@ -280,8 +283,12 @@ export function TextareaWithSymbols({
   maxLength,
   minLength,
   disabled = false,
+  showFormattingHelp = true,
+  showPreview = true,
 }: TextareaWithSymbolsProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [showLivePreview, setShowLivePreview] = useState(false);
 
   const handleInsertSymbol = useCallback((symbol: string) => {
     const textarea = textareaRef.current;
@@ -303,6 +310,34 @@ export function TextareaWithSymbols({
     }, 0);
   }, [value, onChange]);
 
+  // Insert LaTeX template
+  const insertLatexTemplate = useCallback((template: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = value.substring(start, end);
+    
+    // Replace placeholder with selected text if any
+    const newTemplate = selectedText ? template.replace('...', selectedText) : template;
+    const newValue = value.substring(0, start) + newTemplate + value.substring(end);
+    
+    onChange(newValue);
+    
+    setTimeout(() => {
+      textarea.focus();
+      // Position cursor at the placeholder or after the template
+      const placeholderIndex = newValue.indexOf('...', start);
+      if (placeholderIndex !== -1) {
+        textarea.setSelectionRange(placeholderIndex, placeholderIndex + 3);
+      } else {
+        const newPosition = start + newTemplate.length;
+        textarea.setSelectionRange(newPosition, newPosition);
+      }
+    }, 0);
+  }, [value, onChange]);
+
   return (
     <div className={className}>
       {label && (
@@ -312,14 +347,111 @@ export function TextareaWithSymbols({
       )}
       
       {/* Toolbar */}
-      <div className={`flex items-center justify-between mb-2`}>
+      <div className={`flex flex-wrap items-center gap-2 mb-2`}>
         <SymbolKeyboard onInsert={handleInsertSymbol} />
+        
+        {showFormattingHelp && (
+          <button
+            type="button"
+            onClick={() => setShowHelp(!showHelp)}
+            className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+              showHelp
+                ? `${colors.primary.softBg} ${colors.primary.text}`
+                : `${colors.background.secondary} ${colors.text.muted} hover:${colors.text.primary} border ${colors.border.primary}`
+            }`}
+          >
+            <Info className="w-4 h-4" />
+            <span className="hidden sm:inline">Formattazione</span>
+          </button>
+        )}
+        
+        {showPreview && value && (
+          <button
+            type="button"
+            onClick={() => setShowLivePreview(!showLivePreview)}
+            className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+              showLivePreview
+                ? `${colors.primary.softBg} ${colors.primary.text}`
+                : `${colors.background.secondary} ${colors.text.muted} hover:${colors.text.primary} border ${colors.border.primary}`
+            }`}
+          >
+            <Eye className="w-4 h-4" />
+            <span className="hidden sm:inline">Anteprima</span>
+          </button>
+        )}
+        
         {maxLength && (
-          <span className={`text-xs ${value.length > maxLength ? 'text-red-500' : colors.text.muted}`}>
+          <span className={`ml-auto text-xs ${value.length > maxLength ? 'text-red-500' : colors.text.muted}`}>
             {value.length}/{maxLength}
           </span>
         )}
       </div>
+
+      {/* Formatting Help Panel */}
+      {showHelp && (
+        <div className={`mb-3 p-4 rounded-lg ${colors.background.secondary} border ${colors.border.primary}`}>
+          <h4 className={`font-medium ${colors.text.primary} mb-3 flex items-center gap-2`}>
+            <Info className="w-4 h-4" />
+            Come formattare la risposta
+          </h4>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            {/* LaTeX Section */}
+            <div>
+              <p className={`font-medium ${colors.text.primary} mb-2`}>📐 Formule LaTeX</p>
+              <div className={`space-y-1.5 ${colors.text.secondary}`}>
+                <p><code className="px-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">$formula$</code> → formula inline</p>
+                <p><code className="px-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">$$formula$$</code> → formula centrata</p>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1">
+                <button type="button" onClick={() => insertLatexTemplate('$...$')} className="px-2 py-1 text-xs rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50">
+                  Inline
+                </button>
+                <button type="button" onClick={() => insertLatexTemplate('$$...$$')} className="px-2 py-1 text-xs rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50">
+                  Centrata
+                </button>
+                <button type="button" onClick={() => insertLatexTemplate('$\\frac{...}{...}$')} className="px-2 py-1 text-xs rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50">
+                  Frazione
+                </button>
+                <button type="button" onClick={() => insertLatexTemplate('$\\sqrt{...}$')} className="px-2 py-1 text-xs rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50">
+                  Radice
+                </button>
+                <button type="button" onClick={() => insertLatexTemplate('$x^{...}$')} className="px-2 py-1 text-xs rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50">
+                  Potenza
+                </button>
+              </div>
+            </div>
+            
+            {/* HTML Section */}
+            <div>
+              <p className={`font-medium ${colors.text.primary} mb-2`}>📝 Formattazione HTML</p>
+              <div className={`space-y-1.5 ${colors.text.secondary}`}>
+                <p><code className="px-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">&lt;sub&gt;2&lt;/sub&gt;</code> → pedice (H₂O)</p>
+                <p><code className="px-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">&lt;sup&gt;2&lt;/sup&gt;</code> → apice (x²)</p>
+                <p><code className="px-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">&lt;b&gt;testo&lt;/b&gt;</code> → <b>grassetto</b></p>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1">
+                <button type="button" onClick={() => insertLatexTemplate('<sub>...</sub>')} className="px-2 py-1 text-xs rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50">
+                  Pedice
+                </button>
+                <button type="button" onClick={() => insertLatexTemplate('<sup>...</sup>')} className="px-2 py-1 text-xs rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50">
+                  Apice
+                </button>
+                <button type="button" onClick={() => insertLatexTemplate('<b>...</b>')} className="px-2 py-1 text-xs rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50">
+                  Grassetto
+                </button>
+                <button type="button" onClick={() => insertLatexTemplate('<i>...</i>')} className="px-2 py-1 text-xs rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50">
+                  Corsivo
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <p className={`mt-3 text-xs ${colors.text.muted}`}>
+            💡 Esempi: <code className="px-1 bg-gray-200 dark:bg-gray-700 rounded">$x^2 + y^2 = r^2$</code> • <code className="px-1 bg-gray-200 dark:bg-gray-700 rounded">H&lt;sub&gt;2&lt;/sub&gt;O</code> • <code className="px-1 bg-gray-200 dark:bg-gray-700 rounded">{'$\\frac{a}{b}$'}</code>
+          </p>
+        </div>
+      )}
 
       {/* Textarea */}
       <textarea
@@ -335,6 +467,16 @@ export function TextareaWithSymbols({
           error ? 'border-red-500' : colors.border.primary
         } ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 transition-colors resize-y disabled:opacity-50 disabled:cursor-not-allowed`}
       />
+
+      {/* Live Preview */}
+      {showLivePreview && value && (
+        <div className={`mt-3 p-4 rounded-lg ${colors.background.secondary} border ${colors.border.primary}`}>
+          <p className={`text-xs font-medium ${colors.text.muted} mb-2`}>Anteprima:</p>
+          <div className={`${colors.text.primary}`}>
+            <RichTextRenderer text={value} />
+          </div>
+        </div>
+      )}
 
       {error && (
         <p className="mt-1 text-sm text-red-500">{error}</p>

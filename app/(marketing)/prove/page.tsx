@@ -94,28 +94,7 @@ export default function ProvePage() {
                         </div>
                     </div>
 
-                    {/* Alert for 2° appello */}
-                    {selectedAppeal === '2' && (
-                        <div className="max-w-4xl mx-auto mb-8">
-                            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-6 rounded-lg shadow-md">
-                                <div className="flex items-start">
-                                    <div className="flex-shrink-0">
-                                        <svg className="h-6 w-6 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                        </svg>
-                                    </div>
-                                    <div className="ml-4">
-                                        <h3 className="text-lg font-semibold text-yellow-800 mb-1">
-                                            Contenuto non ancora disponibile
-                                        </h3>
-                                        <p className="text-sm text-yellow-700">
-                                            Le prove del 2° appello saranno disponibili a breve. Nel frattempo, puoi consultare il materiale del 1° appello.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+
 
                     {/* Subject Cards */}
                     <div className="max-w-6xl mx-auto">
@@ -147,67 +126,38 @@ export default function ProvePage() {
                                             </h3>
 
                                             {/* PDF Link */}
-                                            {selectedAppeal === '2' ? (
-                                                <div className="flex items-center justify-between p-4 bg-gray-100 rounded-xl border-2 border-gray-300 opacity-60 cursor-not-allowed">
-                                                    <div className="flex items-center gap-3">
-                                                        <div
-                                                            className="text-white p-2 rounded-lg"
-                                                            style={{ backgroundColor: subject.color }}
-                                                        >
-                                                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                                                <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                                                            </svg>
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-sm font-semibold text-gray-600">
-                                                                {selectedAppeal}° appello
-                                                            </p>
-                                                            <p className="text-xs text-gray-500">Non ancora disponibile</p>
-                                                        </div>
-                                                    </div>
-                                                    <svg
-                                                        className="w-5 h-5 text-gray-400"
-                                                        fill="none"
-                                                        stroke="currentColor"
-                                                        viewBox="0 0 24 24"
+                                            <a
+                                                href={pdfPath}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-xl transition-all group border-2 border-gray-200 hover:border-gray-300"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div
+                                                        className="text-white p-2 rounded-lg group-hover:scale-110 transition-transform"
+                                                        style={{ backgroundColor: subject.color }}
                                                     >
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                    </svg>
+                                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                                                        </svg>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-gray-900">
+                                                            {selectedAppeal}° appello {selectedAppeal === '1' ? '(20 novembre 2025)' : '(10 dicembre 2025)'}
+                                                        </p>
+                                                        <p className="text-xs text-gray-500">Soluzioni</p>
+                                                    </div>
                                                 </div>
-                                            ) : (
-                                                <a
-                                                    href={pdfPath}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-xl transition-all group border-2 border-gray-200 hover:border-gray-300"
+                                                <svg
+                                                    className="w-5 h-5 text-gray-400 group-hover:translate-x-1 transition-all"
+                                                    style={{ color: subject.color }}
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    viewBox="0 0 24 24"
                                                 >
-                                                    <div className="flex items-center gap-3">
-                                                        <div
-                                                            className="text-white p-2 rounded-lg group-hover:scale-110 transition-transform"
-                                                            style={{ backgroundColor: subject.color }}
-                                                        >
-                                                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                                                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
-                                                            </svg>
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-sm font-semibold text-gray-900">
-                                                                {selectedAppeal}° appello {selectedAppeal === '1' ? '(20 novembre 2025)' : ''}
-                                                            </p>
-                                                            <p className="text-xs text-gray-500">Soluzioni</p>
-                                                        </div>
-                                                    </div>
-                                                    <svg
-                                                        className="w-5 h-5 text-gray-400 group-hover:translate-x-1 transition-all"
-                                                        style={{ color: subject.color }}
-                                                        fill="none"
-                                                        stroke="currentColor"
-                                                        viewBox="0 0 24 24"
-                                                    >
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                                    </svg>
-                                                </a>
-                                            )}
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                </svg>
+                                            </a>
                                         </div>
                                     </div>
                                 );

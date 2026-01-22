@@ -29,8 +29,10 @@ import {
   ArrowDownRight,
 } from 'lucide-react';
 import type { SimulationType } from '@/lib/validations/simulationValidation';
-import type { Subject } from '@prisma/client';
 import dynamic from 'next/dynamic';
+
+// Type for subject names used in getSubjectColor
+type SubjectName = 'MATEMATICA' | 'BIOLOGIA' | 'CHIMICA' | 'FISICA' | 'LOGICA' | 'CULTURA_GENERALE';
 
 // Dynamically import charts to avoid SSR issues with recharts
 const ScoreTrendChart = dynamic(
@@ -359,9 +361,9 @@ export default function StudentStatisticheContent() {
       {(bestSubject || worstSubject) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {bestSubject && (
-            <div className={`rounded-2xl p-5 sm:p-6 shadow-sm border ${getSubjectColor(bestSubject.subject as Subject, 'bg')} bg-opacity-10 dark:bg-opacity-20 border-gray-100 dark:border-gray-700`}>
+            <div className={`rounded-2xl p-5 sm:p-6 shadow-sm border ${getSubjectColor(bestSubject.subject as SubjectName, 'bg')} bg-opacity-10 dark:bg-opacity-20 border-gray-100 dark:border-gray-700`}>
               <div className="flex items-center gap-3 mb-4">
-                <div className={`p-2 rounded-lg ${getSubjectColor(bestSubject.subject as Subject, 'bg')}`}>
+                <div className={`p-2 rounded-lg ${getSubjectColor(bestSubject.subject as SubjectName, 'bg')}`}>
                   <TrendingUp className="w-5 h-5 text-white" />
                 </div>
                 <div>

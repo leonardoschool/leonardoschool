@@ -260,8 +260,8 @@ leonardoschool/
 // Ruoli
 enum UserRole { ADMIN, COLLABORATOR, STUDENT }
 
-// Materie
-enum Subject { BIOLOGIA, CHIMICA, FISICA, MATEMATICA, LOGICA, CULTURA_GENERALE }
+// Materie gestite dinamicamente dagli admin
+model CustomSubject { id, name, code, color, icon, ... }
 
 // Modelli principali
 model User { ... }          // Utente base

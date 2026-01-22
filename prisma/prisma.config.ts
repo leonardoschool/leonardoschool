@@ -1,5 +1,12 @@
 import { defineConfig } from 'prisma/config';
+import { config } from 'dotenv';
+import { resolve } from 'path';
+
+// Carica il file .env dalla root del progetto
+config({ path: resolve(__dirname, '../.env') });
 
 export default defineConfig({
-  schema: './schema.prisma',
+  datasource: {
+    url: process.env.DATABASE_URL!,
+  },
 });

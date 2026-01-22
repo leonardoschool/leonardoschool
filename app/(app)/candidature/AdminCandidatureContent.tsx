@@ -319,10 +319,10 @@ export default function AdminCandidatureContent() {
 
       {/* Detail Modal */}
       {selectedApplication && applicationDetail && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className={`${colors.background.card} rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl`}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 overflow-y-auto">
+          <div className={`${colors.background.card} rounded-2xl max-w-2xl w-full my-8 shadow-2xl relative max-h-[calc(100vh-4rem)] flex flex-col`}>
             {/* Modal Header */}
-            <div className="sticky top-0 bg-inherit border-b px-6 py-4 flex items-center justify-between">
+            <div className="sticky top-0 bg-inherit border-b px-6 py-4 flex items-center justify-between z-10 rounded-t-2xl">
               <h2 className="text-xl font-bold">Dettaglio Candidatura</h2>
               <button
                 onClick={() => setSelectedApplication(null)}
@@ -333,7 +333,7 @@ export default function AdminCandidatureContent() {
             </div>
 
             {/* Modal Content */}
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-6 overflow-y-auto flex-1">
               {/* Candidato Info */}
               <div className="flex items-start gap-4">
                 <div className={`w-16 h-16 rounded-xl ${colors.primary.softBg} flex items-center justify-center flex-shrink-0`}>
@@ -412,20 +412,22 @@ export default function AdminCandidatureContent() {
               </div>
 
               {/* CV */}
-              {applicationDetail.cvUrl && (
-                <div className={`${colors.background.secondary} rounded-xl p-4`}>
-                  <p className={`text-sm ${colors.text.muted} mb-2`}>Curriculum Vitae</p>
+              <div className={`${colors.background.secondary} rounded-xl p-4`}>
+                <p className={`text-sm ${colors.text.muted} mb-2`}>Curriculum Vitae</p>
+                {applicationDetail.cvUrl ? (
                   <a
                     href={applicationDetail.cvUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.softBg} ${colors.primary.text} hover:opacity-80`}
+                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.softBg} ${colors.primary.text} hover:opacity-80 transition-opacity`}
                   >
                     <Download className="w-4 h-4" />
                     <span>{applicationDetail.cvFileName || 'Scarica CV'}</span>
                   </a>
-                </div>
-              )}
+                ) : (
+                  <p className={`text-sm ${colors.text.muted} italic`}>Nessun CV allegato</p>
+                )}
+              </div>
 
               {/* Admin Notes */}
               {applicationDetail.adminNotes && (
@@ -448,7 +450,7 @@ export default function AdminCandidatureContent() {
             </div>
 
             {/* Modal Footer */}
-            <div className="sticky bottom-0 bg-inherit border-t px-6 py-4 flex justify-between">
+            <div className="sticky bottom-0 bg-inherit border-t px-6 py-4 flex justify-between z-10 rounded-b-2xl">
               <button
                 onClick={() => setDeleteModal({ open: true, id: applicationDetail.id, name: applicationDetail.name })}
                 className={`px-4 py-2 rounded-lg ${colors.status.error.softBg} ${colors.status.error.text} hover:opacity-80 flex items-center gap-2`}

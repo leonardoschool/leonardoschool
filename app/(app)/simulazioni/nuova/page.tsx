@@ -8,6 +8,8 @@ import { useToast } from '@/components/ui/Toast';
 import { Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import Checkbox from '@/components/ui/Checkbox';
+import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import { Modal } from '@/components/ui/Modal';
 import { previewSimulationPdf } from '@/lib/utils/simulationPdfGenerator';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -39,7 +41,7 @@ import {
   Layers,
   Info,
 } from 'lucide-react';
-import type { SimulationType, LocationType } from '@/lib/validations/simulationValidation';
+import type { SimulationType, LocationType, SimulationSection } from '@/lib/validations/simulationValidation';
 import { SIMULATION_PRESETS } from '@/lib/validations/simulationValidation';
 import type { SmartRandomPreset, DifficultyMix } from '@/lib/validations/simulationValidation';
 
@@ -158,7 +160,7 @@ export default function NewSimulationPage() {
   // Attendance tracking
   const [trackAttendance, setTrackAttendance] = useState(false);
   const [locationType, setLocationType] = useState<LocationType | ''>('');
-  const [locationDetails, setLocationDetails] = useState('');
+  const [locationDetails, _setLocationDetails] = useState('');
 
   
   // Anti-cheat settings
@@ -170,6 +172,10 @@ export default function NewSimulationPage() {
   
   // Sections (for TOLC-style)
   const [hasSections, setHasSections] = useState(false);
+  const [sectionMode, setSectionMode] = useState<'auto' | 'manual'>('auto');
+  const [sections, setSections] = useState<SimulationSection[]>([]);
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  const [newSectionName, setNewSectionName] = useState('');
   
   // Questions
   const [selectedQuestions, setSelectedQuestions] = useState<SelectedQuestion[]>([]);
@@ -191,6 +197,9 @@ export default function NewSimulationPage() {
   
   // Question detail modal
   const [previewQuestion, setPreviewQuestion] = useState<string | null>(null);
+  
+  // Print preview modal
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   // Loading states
   const [isSaving, setIsSaving] = useState(false);
@@ -478,11 +487,100 @@ export default function NewSimulationPage() {
     );
   };
 
+  // Section management functions
+  const addSection = () => {
+    const name = newSectionName.trim() || `Sezione ${sections.length + 1}`;
+    const newSection: SimulationSection = {
+      id: `section-${Date.now()}`,
+      name,
+      durationMinutes: Math.floor(durationMinutes / (sections.length + 1)) || 10,
+      questionIds: [],
+      questionCount: 0,
+      subjectId: null,
+      order: sections.length,
+    };
+    setSections([...sections, newSection]);
+    setNewSectionName('');
+  };
+
+  const removeSection = (sectionId: string) => {
+    // Get questions from this section and move them to unassigned
+    const sectionToRemove = sections.find(s => s.id === sectionId);
+    if (sectionToRemove) {
+      // Questions in this section become unassigned (no section)
+      // We don't need to do anything to the questions since we track section assignment via questionIds in sections
+    }
+    setSections(sections.filter(s => s.id !== sectionId).map((s, i) => ({ ...s, order: i })));
+  };
+
+  const updateSection = (sectionId: string, updates: Partial<SimulationSection>) => {
+    setSections(sections.map(s => 
+      s.id === sectionId ? { ...s, ...updates } : s
+    ));
+  };
+
+  const moveSectionUp = (index: number) => {
+    if (index <= 0) return;
+    const newSections = [...sections];
+    [newSections[index - 1], newSections[index]] = [newSections[index], newSections[index - 1]];
+    newSections.forEach((s, i) => s.order = i);
+    setSections(newSections);
+  };
+
+  const moveSectionDown = (index: number) => {
+    if (index >= sections.length - 1) return;
+    const newSections = [...sections];
+    [newSections[index], newSections[index + 1]] = [newSections[index + 1], newSections[index]];
+    newSections.forEach((s, i) => s.order = i);
+    setSections(newSections);
+  };
+
+  const assignQuestionToSection = (questionId: string, sectionId: string | null) => {
+    // Remove question from all sections first
+    const updatedSections = sections.map(s => ({
+      ...s,
+      questionIds: s.questionIds?.filter(id => id !== questionId) || [],
+    }));
+
+    // If sectionId is provided, add to that section
+    if (sectionId) {
+      const targetIndex = updatedSections.findIndex(s => s.id === sectionId);
+      if (targetIndex >= 0) {
+        updatedSections[targetIndex].questionIds = [
+          ...(updatedSections[targetIndex].questionIds || []),
+          questionId,
+        ];
+      }
+    }
+
+    // Update question counts
+    updatedSections.forEach(s => {
+      s.questionCount = s.questionIds?.length || 0;
+    });
+
+    setSections(updatedSections);
+  };
+
+  const getQuestionSection = (questionId: string): string | null => {
+    for (const section of sections) {
+      if (section.questionIds?.includes(questionId)) {
+        return section.id;
+      }
+    }
+    return null;
+  };
+
+  const getUnassignedQuestions = () => {
+    const allAssignedIds = sections.flatMap(s => s.questionIds || []);
+    return selectedQuestions.filter(sq => !allAssignedIds.includes(sq.questionId));
+  };
+
   // Fetch questions with answers utility (using refetch)
   const questionsWithAnswersQuery = trpc.questions.getQuestionsWithAnswers.useQuery(
     { questionIds: selectedQuestions.map(sq => sq.questionId) },
     { enabled: false } // Disabled by default, we'll call refetch manually
   );
+
 
   // Handle PDF preview - fetch complete question data with answers
   const handlePdfPreview = async () => {
@@ -582,6 +680,18 @@ export default function NewSimulationPage() {
         locationDetails: locationDetails || undefined,
         isScheduled,
         hasSections,
+        // Pass sections only if using manual mode, otherwise let backend auto-generate
+        sections: hasSections && sectionMode === 'manual' && sections.length > 0 
+          ? sections.map(s => ({
+              id: s.id,
+              name: s.name,
+              durationMinutes: s.durationMinutes,
+              questionIds: s.questionIds || [],
+              questionCount: s.questionIds?.length || 0,
+              subjectId: s.subjectId,
+              order: s.order,
+            }))
+          : undefined,
         enableAntiCheat,
         forceFullscreen,
         blockTabChange,
@@ -984,7 +1094,13 @@ export default function NewSimulationPage() {
                   <Checkbox
                     id="hasSections"
                     checked={hasSections}
-                    onChange={(e) => setHasSections(e.target.checked)}
+                    onChange={(e) => {
+                      setHasSections(e.target.checked);
+                      if (!e.target.checked) {
+                        setSections([]);
+                        setSectionMode('auto');
+                      }
+                    }}
                   />
                   <div className="flex-1">
                     <label htmlFor="hasSections" className={`font-medium ${colors.text.primary} cursor-pointer`}>
@@ -993,10 +1109,181 @@ export default function NewSimulationPage() {
                     <p className={`text-sm ${colors.text.muted} mt-1`}>
                       Dividi la simulazione in sezioni con tempi e domande specifiche (es. Comprensione del testo, Biologia, Chimica...)
                     </p>
+                    
                     {hasSections && (
-                      <p className={`text-xs ${colors.text.muted} mt-2 italic`}>
-                        Le sezioni verranno configurate nel passo successivo insieme alle domande.
-                      </p>
+                      <div className="mt-4 space-y-4">
+                        {/* Section mode toggle */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setSectionMode('auto');
+                              setSections([]);
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                              sectionMode === 'auto' 
+                                ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' 
+                                : `${colors.background.card} ${colors.text.muted}`
+                            }`}
+                          >
+                            Automatico (per materia)
+                          </button>
+                          <button
+                            onClick={() => setSectionMode('manual')}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                              sectionMode === 'manual' 
+                                ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' 
+                                : `${colors.background.card} ${colors.text.muted}`
+                            }`}
+                          >
+                            Manuale
+                          </button>
+                        </div>
+
+                        {sectionMode === 'auto' && (
+                          <p className={`text-xs ${colors.text.muted} italic`}>
+                            Le sezioni verranno create automaticamente in base alla materia di ciascuna domanda.
+                          </p>
+                        )}
+
+                        {sectionMode === 'manual' && (
+                          <div className="space-y-3">
+                            <p className={`text-xs ${colors.text.muted} italic`}>
+                              Crea le sezioni qui e assegna le domande nel passo successivo.
+                            </p>
+                            
+                            {/* Add new section */}
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={newSectionName}
+                                onChange={(e) => setNewSectionName(e.target.value)}
+                                placeholder="Nome nuova sezione..."
+                                className={`flex-1 px-3 py-2 rounded-lg border ${colors.border.input} ${colors.background.input} ${colors.text.primary} text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    addSection();
+                                  }
+                                }}
+                              />
+                              <button
+                                onClick={addSection}
+                                className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1 text-sm"
+                              >
+                                <Plus className="w-4 h-4" />
+                                Aggiungi
+                              </button>
+                            </div>
+
+                            {/* Sections list */}
+                            {sections.length > 0 && (
+                              <div className="space-y-2">
+                                {sections.map((section, index) => (
+                                  <div 
+                                    key={section.id} 
+                                    className={`flex items-center gap-2 p-3 rounded-lg border ${colors.border.light} ${colors.background.card}`}
+                                  >
+                                    {/* Order controls */}
+                                    <div className="flex flex-col gap-0.5">
+                                      <button
+                                        onClick={() => moveSectionUp(index)}
+                                        disabled={index === 0}
+                                        className={`p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 ${colors.text.secondary}`}
+                                      >
+                                        <ChevronUp className="w-3 h-3" />
+                                      </button>
+                                      <button
+                                        onClick={() => moveSectionDown(index)}
+                                        disabled={index === sections.length - 1}
+                                        className={`p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 ${colors.text.secondary}`}
+                                      >
+                                        <ChevronDown className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                    
+                                    {/* Section number */}
+                                    <span className={`w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-blue-400`}>
+                                      {index + 1}
+                                    </span>
+                                    
+                                    {/* Section name (editable) */}
+                                    {editingSectionId === section.id ? (
+                                      <input
+                                        type="text"
+                                        value={section.name}
+                                        onChange={(e) => updateSection(section.id, { name: e.target.value })}
+                                        onBlur={() => setEditingSectionId(null)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') setEditingSectionId(null);
+                                        }}
+                                        autoFocus
+                                        className={`flex-1 px-2 py-1 rounded border ${colors.border.input} ${colors.background.input} ${colors.text.primary} text-sm`}
+                                      />
+                                    ) : (
+                                      <span 
+                                        className={`flex-1 ${colors.text.primary} text-sm font-medium cursor-pointer hover:text-blue-600`}
+                                        onClick={() => setEditingSectionId(section.id)}
+                                        title="Clicca per modificare"
+                                      >
+                                        {section.name}
+                                      </span>
+                                    )}
+                                    
+                                    {/* Duration */}
+                                    <div className="flex items-center gap-1">
+                                      <Clock className="w-3 h-3 text-gray-400" />
+                                      <input
+                                        type="number"
+                                        value={section.durationMinutes}
+                                        onChange={(e) => updateSection(section.id, { durationMinutes: parseInt(e.target.value) || 0 })}
+                                        className={`w-16 px-2 py-1 rounded border ${colors.border.input} ${colors.background.input} ${colors.text.primary} text-sm text-center`}
+                                        min="1"
+                                      />
+                                      <span className={`text-xs ${colors.text.muted}`}>min</span>
+                                    </div>
+                                    
+                                    {/* Question count badge */}
+                                    <span className={`px-2 py-0.5 rounded text-xs ${
+                                      (section.questionIds?.length || 0) > 0 
+                                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                        : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                                    }`}>
+                                      {section.questionIds?.length || 0} domande
+                                    </span>
+                                    
+                                    {/* Remove button */}
+                                    <button
+                                      onClick={() => removeSection(section.id)}
+                                      className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                                      title="Rimuovi sezione"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                ))}
+                                
+                                {/* Total duration info */}
+                                <div className={`flex items-center justify-between px-3 py-2 rounded-lg ${colors.background.tertiary}`}>
+                                  <span className={`text-sm ${colors.text.muted}`}>Durata totale sezioni:</span>
+                                  <span className={`font-medium ${
+                                    sections.reduce((sum, s) => sum + s.durationMinutes, 0) === durationMinutes
+                                      ? 'text-green-600 dark:text-green-400'
+                                      : 'text-yellow-600 dark:text-yellow-400'
+                                  }`}>
+                                    {sections.reduce((sum, s) => sum + s.durationMinutes, 0)} / {durationMinutes} min
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {sections.length === 0 && (
+                              <p className={`text-sm ${colors.text.muted} text-center py-4`}>
+                                Nessuna sezione creata. Aggiungi una sezione per iniziare.
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1386,6 +1673,16 @@ export default function NewSimulationPage() {
                   <h3 className={`font-medium ${colors.text.primary}`}>
                     Domande selezionate ({selectedQuestions.length})
                   </h3>
+                  {hasSections && sectionMode === 'manual' && sections.length > 0 && (
+                    <p className={`text-xs ${colors.text.muted} mt-1`}>
+                      Assegna ciascuna domanda a una sezione usando il selettore
+                    </p>
+                  )}
+                  {hasSections && sectionMode === 'manual' && getUnassignedQuestions().length > 0 && (
+                    <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                      ⚠️ {getUnassignedQuestions().length} domande non assegnate a nessuna sezione
+                    </p>
+                  )}
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   {selectedQuestions.length === 0 ? (
@@ -1393,6 +1690,118 @@ export default function NewSimulationPage() {
                       <Target className="w-12 h-12 mx-auto text-gray-400 mb-2" />
                       <p className={colors.text.muted}>Nessuna domanda selezionata</p>
                       <p className={`text-sm ${colors.text.muted}`}>Aggiungi domande dalla lista a sinistra</p>
+                    </div>
+                  ) : hasSections && sectionMode === 'manual' && sections.length > 0 ? (
+                    // Group questions by section
+                    <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {/* Unassigned questions section */}
+                      {getUnassignedQuestions().length > 0 && (
+                        <div className={`${colors.background.tertiary}`}>
+                          <div className={`px-3 py-2 flex items-center gap-2 border-b ${colors.border.light}`}>
+                            <span className={`text-sm font-medium ${colors.text.muted}`}>Non assegnate</span>
+                            <span className={`px-1.5 py-0.5 rounded text-xs bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400`}>
+                              {getUnassignedQuestions().length}
+                            </span>
+                          </div>
+                          {getUnassignedQuestions().map((sq) => (
+                            <div key={sq.questionId} className={`p-3 flex items-center gap-3 ${colors.background.card}`}>
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-sm ${colors.text.primary} line-clamp-1`}>
+                                  {sq.question?.text?.replace(/<[^>]*>/g, '') || 'Domanda'}
+                                </p>
+                              </div>
+                              <div className="w-36">
+                                <CustomSelect
+                                  value=""
+                                  onChange={(value) => assignQuestionToSection(sq.questionId, value || null)}
+                                  options={[
+                                    { value: '', label: 'Assegna a...' },
+                                    ...sections.map((s) => ({ value: s.id, label: s.name }))
+                                  ]}
+                                  placeholder="Assegna a..."
+                                  size="sm"
+                                />
+                              </div>
+                              <button
+                                onClick={() => removeQuestion(sq.questionId)}
+                                className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* Questions grouped by section */}
+                      {sections.map((section) => {
+                        const sectionQuestions = selectedQuestions.filter(sq => 
+                          section.questionIds?.includes(sq.questionId)
+                        );
+                        return (
+                          <div key={section.id}>
+                            <div className={`px-3 py-2 flex items-center gap-2 border-b ${colors.border.light} ${colors.background.secondary}`}>
+                              <span className={`w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-blue-400`}>
+                                {section.order + 1}
+                              </span>
+                              <span className={`text-sm font-medium ${colors.text.primary}`}>{section.name}</span>
+                              <span className={`px-1.5 py-0.5 rounded text-xs ${
+                                sectionQuestions.length > 0 
+                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                  : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                              }`}>
+                                {sectionQuestions.length} domande
+                              </span>
+                            </div>
+                            {sectionQuestions.length === 0 ? (
+                              <div className={`p-3 text-center ${colors.background.card}`}>
+                                <p className={`text-xs ${colors.text.muted}`}>Nessuna domanda in questa sezione</p>
+                              </div>
+                            ) : (
+                              sectionQuestions.map((sq) => (
+                                <div key={sq.questionId} className={`p-3 flex items-center gap-3 ${colors.background.card}`}>
+                                  <div className="flex-1 min-w-0">
+                                    <p className={`text-sm ${colors.text.primary} line-clamp-1`}>
+                                      {sq.question?.text?.replace(/<[^>]*>/g, '') || 'Domanda'}
+                                    </p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      {sq.question?.subject && (
+                                        <span 
+                                          className="px-2 py-0.5 rounded text-xs font-medium"
+                                          style={{ 
+                                            backgroundColor: (sq.question.subject.color || '#6b7280') + 'd9', 
+                                            color: 'white'
+                                          }}
+                                        >
+                                          {sq.question.subject.name}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="w-36">
+                                    <CustomSelect
+                                      value={section.id}
+                                      onChange={(value) => assignQuestionToSection(sq.questionId, value || null)}
+                                      options={[
+                                        { value: '', label: 'Rimuovi sezione' },
+                                        ...sections.map((s) => ({ value: s.id, label: s.name }))
+                                      ]}
+                                      placeholder={section.name}
+                                      size="sm"
+                                    />
+                                  </div>
+                                  <button
+                                    onClick={() => removeQuestion(sq.questionId)}
+                                    className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -1506,11 +1915,56 @@ export default function NewSimulationPage() {
                   {hasSections && (
                     <div className="flex justify-between">
                       <dt className={colors.text.muted}>Sezioni</dt>
-                      <dd className={`font-medium text-blue-600 dark:text-blue-400`}>Attive</dd>
+                      <dd className={`font-medium text-blue-600 dark:text-blue-400`}>
+                        {sectionMode === 'auto' ? 'Automatiche (per materia)' : `${sections.length} manuali`}
+                      </dd>
                     </div>
                   )}
                 </dl>
               </div>
+
+              {/* Sections detail (only for manual mode) */}
+              {hasSections && sectionMode === 'manual' && sections.length > 0 && (
+                <div className={`p-6 rounded-xl ${colors.background.secondary} md:col-span-2`}>
+                  <h3 className={`font-medium ${colors.text.primary} mb-4 flex items-center gap-2`}>
+                    <Layers className="w-4 h-4 text-blue-600" />
+                    Dettaglio Sezioni
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {sections.map((section, idx) => (
+                      <div 
+                        key={section.id} 
+                        className={`p-3 rounded-lg border ${colors.border.light} ${colors.background.card}`}
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className={`w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-blue-400`}>
+                            {idx + 1}
+                          </span>
+                          <span className={`font-medium ${colors.text.primary} text-sm`}>{section.name}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className={colors.text.muted}>
+                            <Clock className="w-3 h-3 inline mr-1" />
+                            {section.durationMinutes} min
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded ${
+                            (section.questionIds?.length || 0) > 0 
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                              : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                          }`}>
+                            {section.questionIds?.length || 0} domande
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {getUnassignedQuestions().length > 0 && (
+                    <p className="mt-3 text-sm text-yellow-600 dark:text-yellow-400">
+                      ⚠️ Attenzione: {getUnassignedQuestions().length} domande non assegnate a nessuna sezione
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Scoring */}
               <div className={`p-6 rounded-xl ${colors.background.secondary}`}>
@@ -1592,25 +2046,22 @@ export default function NewSimulationPage() {
                 <Printer className={`w-12 h-12 mx-auto ${colors.text.muted} mb-3`} />
                 <h3 className={`font-medium ${colors.text.primary} mb-2`}>Anteprima Stampa</h3>
                 <p className={`text-sm ${colors.text.muted} mb-4`}>
-                  Visualizza come apparirà il test stampato prima di crearlo
+                  Visualizza come apparirà il test stampato (con formule LaTeX renderizzate)
                 </p>
                 <button
                   type="button"
-                  onClick={handlePdfPreview}
-                  disabled={selectedQuestions.length === 0 || isPdfLoading}
+                  onClick={() => {
+                    if (selectedQuestions.length === 0) {
+                      alert('Seleziona almeno una domanda per visualizzare l\'anteprima');
+                      return;
+                    }
+                    setShowPrintPreview(true);
+                  }}
+                  disabled={selectedQuestions.length === 0}
                   className={`px-4 py-2 ${colors.background.secondary} border ${colors.border.light} rounded-lg text-sm font-medium ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
-                  {isPdfLoading ? (
-                    <>
-                      <Spinner size="xs" variant="muted" className="inline mr-2" />
-                      Caricamento...
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="w-4 h-4 inline mr-2" />
-                      Visualizza anteprima PDF
-                    </>
-                  )}
+                  <Eye className="w-4 h-4 inline mr-2" />
+                  Visualizza anteprima stampa
                 </button>
               </div>
             )}
@@ -1748,83 +2199,213 @@ export default function NewSimulationPage() {
       </div>
 
       {/* Question Preview Modal */}
-      {previewQuestion && questionDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setPreviewQuestion(null)}>
-          <div 
-            className={`w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-xl ${colors.background.card} shadow-2xl`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className={`p-4 border-b ${colors.border.light} flex items-center justify-between`}>
-              <h3 className={`font-semibold ${colors.text.primary}`}>Anteprima Domanda</h3>
-              <button
-                onClick={() => setPreviewQuestion(null)}
-                className={`p-1 rounded-lg ${colors.text.muted} hover:bg-gray-100 dark:hover:bg-gray-800`}
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              {/* Question metadata */}
-              <div className="flex items-center gap-2 flex-wrap">
-                {questionDetail.subject && (
-                  <span 
-                    className="px-2 py-1 rounded text-xs font-medium text-white"
-                    style={{ backgroundColor: questionDetail.subject.color || '#6b7280' }}
-                  >
-                    {questionDetail.subject.name}
-                  </span>
-                )}
-                {questionDetail.topic && (
-                  <span className={`px-2 py-1 rounded text-xs ${colors.background.secondary} ${colors.text.secondary}`}>
-                    {questionDetail.topic.name}
-                  </span>
-                )}
-                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                  questionDetail.difficulty === 'EASY' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                  questionDetail.difficulty === 'MEDIUM' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                }`}>
-                  {questionDetail.difficulty === 'EASY' ? 'Facile' : questionDetail.difficulty === 'MEDIUM' ? 'Media' : 'Difficile'}
+      <Modal
+        isOpen={!!previewQuestion && !!questionDetail}
+        onClose={() => setPreviewQuestion(null)}
+        title="Anteprima Domanda"
+        icon={<Eye className="w-6 h-6" />}
+        size="2xl"
+        variant="primary"
+      >
+        {questionDetail && (
+          <div className="space-y-4">
+            {/* Question metadata */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {questionDetail.subject && (
+                <span 
+                  className="px-2 py-1 rounded text-xs font-medium text-white"
+                  style={{ backgroundColor: questionDetail.subject.color || '#6b7280' }}
+                >
+                  {questionDetail.subject.name}
                 </span>
-              </div>
+              )}
+              {questionDetail.topic && (
+                <span className={`px-2 py-1 rounded text-xs ${colors.background.secondary} ${colors.text.secondary}`}>
+                  {questionDetail.topic.name}
+                </span>
+              )}
+              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                questionDetail.difficulty === 'EASY' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                questionDetail.difficulty === 'MEDIUM' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+              }`}>
+                {questionDetail.difficulty === 'EASY' ? 'Facile' : questionDetail.difficulty === 'MEDIUM' ? 'Media' : 'Difficile'}
+              </span>
+            </div>
 
-              {/* Question text */}
-              <div 
-                className={`prose dark:prose-invert max-w-none ${colors.text.primary}`}
-                dangerouslySetInnerHTML={{ __html: questionDetail.text }}
-              />
+            {/* Question text */}
+            <div className={`${colors.text.primary}`}>
+              <RichTextRenderer text={questionDetail.text} />
+            </div>
 
-              {/* Answers */}
-              <div className="space-y-2 mt-4">
-                <h4 className={`font-medium ${colors.text.primary}`}>Risposte:</h4>
-                {questionDetail.answers?.map((answer, idx) => (
-                  <div 
-                    key={idx}
-                    className={`p-3 rounded-lg border ${
-                      answer.isCorrect 
-                        ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
-                        : `${colors.border.light} ${colors.background.secondary}`
-                    }`}
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className={`font-medium ${answer.isCorrect ? 'text-green-600 dark:text-green-400' : colors.text.secondary}`}>
-                        {String.fromCharCode(65 + idx)}.
-                      </span>
-                      <div 
-                        className={answer.isCorrect ? 'text-green-700 dark:text-green-300' : colors.text.primary}
-                        dangerouslySetInnerHTML={{ __html: answer.text }}
-                      />
-                      {answer.isCorrect && (
-                        <Check className="w-4 h-4 text-green-500 ml-auto flex-shrink-0" />
-                      )}
+            {/* Answers */}
+            <div className="space-y-2 mt-4">
+              <h4 className={`font-medium ${colors.text.primary}`}>Risposte:</h4>
+              {questionDetail.answers?.map((answer, idx) => (
+                <div 
+                  key={idx}
+                  className={`p-3 rounded-lg border ${
+                    answer.isCorrect 
+                      ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
+                      : `${colors.border.light} ${colors.background.secondary}`
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <span className={`font-medium ${answer.isCorrect ? 'text-green-600 dark:text-green-400' : colors.text.secondary}`}>
+                      {String.fromCharCode(65 + idx)}.
+                    </span>
+                    <div className={`flex-1 ${answer.isCorrect ? 'text-green-700 dark:text-green-300' : colors.text.primary}`}>
+                      <RichTextRenderer text={answer.text} />
                     </div>
+                    {answer.isCorrect && (
+                      <Check className="w-4 h-4 text-green-500 ml-auto flex-shrink-0" />
+                    )}
                   </div>
-                ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Print Preview Modal */}
+      <Modal
+        isOpen={showPrintPreview}
+        onClose={() => setShowPrintPreview(false)}
+        title="Anteprima Stampa"
+        icon={<Printer className="w-6 h-6" />}
+        size="full"
+        variant="default"
+        footer={
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                // Open in new window for actual printing
+                const printWindow = window.open('', '_blank');
+                if (printWindow) {
+                  printWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                      <title>${title || 'Simulazione'} - Stampa</title>
+                      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+                      <style>
+                        @page { size: A4; margin: 15mm 20mm; }
+                        body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.4; }
+                        .header { text-align: center; border-bottom: 2px solid #a8012b; padding-bottom: 10px; margin-bottom: 20px; }
+                        .school { color: #a8012b; font-weight: bold; font-size: 14pt; }
+                        .title { font-size: 18pt; font-weight: bold; text-transform: uppercase; margin: 10px 0; }
+                        .date { color: #666; font-size: 10pt; }
+                        .info-box { border: 1px solid #999; border-radius: 5px; padding: 15px; margin-bottom: 20px; }
+                        .instructions { background: #f5f5f5; border: 1px solid #ccc; border-radius: 5px; padding: 15px; margin-bottom: 20px; }
+                        .question { margin-bottom: 20px; page-break-inside: avoid; }
+                        .question-number { font-weight: bold; }
+                        .answers { margin-left: 25px; margin-top: 8px; }
+                        .answer { margin: 5px 0; }
+                        .katex { font-size: 1.1em; }
+                      </style>
+                    </head>
+                    <body>
+                      <div id="content"></div>
+                      <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+                      <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+                      <script>
+                        document.getElementById('content').innerHTML = ${JSON.stringify(document.getElementById('print-preview-content')?.innerHTML || '')};
+                        renderMathInElement(document.body, {
+                          delimiters: [
+                            {left: '$$', right: '$$', display: true},
+                            {left: '$', right: '$', display: false},
+                            {left: '\\\\[', right: '\\\\]', display: true},
+                            {left: '\\\\(', right: '\\\\)', display: false}
+                          ]
+                        });
+                        setTimeout(() => window.print(), 500);
+                      </script>
+                    </body>
+                    </html>
+                  `);
+                  printWindow.document.close();
+                }
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.bg} text-white hover:opacity-90`}
+            >
+              <Printer className="w-4 h-4" />
+              Stampa / Salva PDF
+            </button>
+            <button
+              onClick={() => setShowPrintPreview(false)}
+              className={`px-4 py-2 rounded-lg border ${colors.border.light} ${colors.text.secondary}`}
+            >
+              Chiudi
+            </button>
+          </div>
+        }
+      >
+        <div id="print-preview-content" className="bg-white text-black p-6 rounded-lg max-h-[70vh] overflow-y-auto">
+          {/* Header */}
+          <div className="text-center mb-6 border-b-2 border-[#a8012b] pb-4">
+            <p className="text-[#a8012b] font-bold text-lg">LEONARDO SCHOOL</p>
+            <h2 className="text-2xl font-bold uppercase my-2">{title || 'Simulazione'}</h2>
+            <p className="text-gray-600 text-sm">
+              Anno Accademico {new Date().getFullYear()}/{new Date().getFullYear() + 1} - {new Date().toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+          </div>
+
+          {/* Student Info Box */}
+          <div className="border border-gray-400 rounded-lg p-4 mb-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm">Cognome e Nome: <span className="border-b border-gray-400 inline-block w-64">&nbsp;</span></p>
+                <p className="text-sm mt-2">Matricola: <span className="border-b border-gray-400 inline-block w-40">&nbsp;</span></p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm">Data: {new Date().toLocaleDateString('it-IT')}</p>
               </div>
             </div>
           </div>
+
+          {/* Instructions */}
+          <div className="bg-gray-100 border border-gray-300 rounded-lg p-4 mb-6">
+            <h3 className="font-bold text-sm mb-2">ISTRUZIONI</h3>
+            <ul className="text-sm space-y-1">
+              <li>• Tempo a disposizione: {durationMinutes} minuti</li>
+              <li>• Punteggio: Risposta corretta +{correctPoints}, Risposta errata {wrongPoints}, Non risposta {blankPoints}</li>
+              <li>• Numero domande: {selectedQuestions.length}</li>
+              {paperInstructions && <li>• {paperInstructions}</li>}
+            </ul>
+          </div>
+
+          {/* Questions */}
+          <h3 className="text-center font-bold uppercase mb-6">DOMANDE A RISPOSTA MULTIPLA</h3>
+          <div className="space-y-6">
+            {selectedQuestions.map((sq, index) => {
+              const question = questionsData?.questions.find(q => q.id === sq.questionId);
+              if (!question) return null;
+              
+              return (
+                <div key={sq.questionId} className="mb-4">
+                  <div className="mb-2">
+                    <span className="font-bold">{index + 1}. </span>
+                    <RichTextRenderer text={question.text} className="inline font-bold" />
+                  </div>
+                  {question.answers && question.answers.length > 0 && (
+                    <div className="ml-6 space-y-1">
+                      {[...question.answers]
+                        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                        .map((answer, ansIndex) => (
+                          <div key={answer.id} className="flex items-start gap-2">
+                            <span className="font-medium w-6">{String.fromCharCode(65 + ansIndex)})</span>
+                            <RichTextRenderer text={answer.text} />
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

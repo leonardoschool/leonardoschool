@@ -8,19 +8,61 @@ import { TRPCError } from '@trpc/server';
 import { adminAuth } from '@/lib/firebase/admin';
 import { Prisma } from '@prisma/client';
 import { generateMatricola } from '@/lib/utils/matricolaUtils';
+import { createCachedQuery, CACHE_TIMES, CACHE_TAGS } from '@/lib/cache/serverCache';
 
 export const usersRouter = router({
   /**
    * Get current user information
    */
   me: protectedProcedure.query(async ({ ctx }) => {
+    // Get fresh user data including student info
+    const user = await ctx.prisma.user.findUnique({
+      where: { id: ctx.user.id },
+      include: {
+        student: {
+          include: {
+            parentGuardian: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      return {
+        id: ctx.user.id,
+        name: ctx.user.name,
+        email: ctx.user.email,
+        role: ctx.user.role,
+        isActive: ctx.user.isActive,
+        profileCompleted: ctx.user.profileCompleted,
+      };
+    }
+
     return {
-      id: ctx.user.id,
-      name: ctx.user.name,
-      email: ctx.user.email,
-      role: ctx.user.role,
-      isActive: ctx.user.isActive,
-      profileCompleted: ctx.user.profileCompleted,
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive,
+      profileCompleted: user.profileCompleted,
+      student: user.student ? {
+        fiscalCode: user.student.fiscalCode,
+        dateOfBirth: user.student.dateOfBirth?.toISOString(),
+        phone: user.student.phone,
+        address: user.student.address,
+        city: user.student.city,
+        province: user.student.province,
+        postalCode: user.student.postalCode,
+        id: user.student.id,
+        userId: user.student.userId,
+        matricola: user.student.matricola,
+        enrollmentDate: user.student.enrollmentDate?.toISOString(),
+        graduationYear: user.student.graduationYear,
+        requiresParentData: user.student.requiresParentData,
+        parentDataRequestedAt: user.student.parentDataRequestedAt?.toISOString(),
+        parentDataRequestedById: user.student.parentDataRequestedById,
+        parentGuardian: user.student.parentGuardian,
+      } : undefined,
     };
   }),
 
@@ -208,6 +250,24 @@ export const usersRouter = router({
                 city: true,
                 province: true,
                 postalCode: true,
+                // Parent data requirement and parent guardian
+                requiresParentData: true,
+                parentDataRequestedAt: true,
+                parentGuardian: {
+                  select: {
+                    id: true,
+                    relationship: true,
+                    firstName: true,
+                    lastName: true,
+                    fiscalCode: true,
+                    phone: true,
+                    email: true,
+                    address: true,
+                    city: true,
+                    province: true,
+                    postalCode: true,
+                  },
+                },
                 contracts: {
                   orderBy: { assignedAt: 'desc' },
                   take: 1,
@@ -215,6 +275,7 @@ export const usersRouter = router({
                     id: true,
                     status: true,
                     signedAt: true,
+                    canDownload: true,
                     template: {
                       select: { name: true },
                     },
@@ -325,6 +386,7 @@ export const usersRouter = router({
                     id: true,
                     status: true,
                     signedAt: true,
+                    canDownload: true,
                     template: {
                       select: { name: true },
                     },
@@ -445,7 +507,10 @@ export const usersRouter = router({
     const roleFilter = input?.role || 'ALL';
     const roleWhere = roleFilter !== 'ALL' ? { role: roleFilter } : {};
 
-    const [total, students, collaborators, admins, active, pendingProfile] = await Promise.all([
+    // Cache stats for 2 minutes - they don't change frequently
+    const getCachedStats = createCachedQuery(
+      async () => {
+        const [total, students, collaborators, admins, active, pendingProfile] = await Promise.all([
       ctx.prisma.user.count({ where: roleWhere }),
       ctx.prisma.user.count({ where: { role: 'STUDENT' } }),
       ctx.prisma.user.count({ where: { role: 'COLLABORATOR' as any } }),
@@ -541,6 +606,32 @@ export const usersRouter = router({
       inactive: inactiveCount,
       noSignedContract: noSignedContractCount,
     };
+      },
+      [CACHE_TAGS.STATS, CACHE_TAGS.USERS, `user-stats-${roleFilter}`],
+      { revalidate: CACHE_TIMES.SHORT } // 1 minute cache
+    );
+
+    return await getCachedStats();
+  }),
+
+  /**
+   * Get all collaborators (for assignment modals)
+   */
+  getCollaborators: adminProcedure.query(async ({ ctx }) => {
+    const collaborators = await ctx.prisma.user.findMany({
+      where: {
+        role: 'COLLABORATOR',
+        isActive: true,
+        profileCompleted: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+    return collaborators;
   }),
 
   /**

@@ -54,6 +54,93 @@ function stripHtml(html: string): string {
 }
 
 /**
+ * Clean text for PDF output - removes HTML and simplifies LaTeX
+ * Note: LaTeX formulas cannot be rendered in jsPDF, so we convert them to readable text
+ */
+function cleanTextForPdf(text: string): string {
+  let cleaned = text;
+  
+  // First, handle LaTeX environments (convert to readable format)
+  // \begin{cases}...\end{cases} -> simplified system notation
+  cleaned = cleaned.replace(/\\begin\{cases\}([\s\S]*?)\\end\{cases\}/g, (_, content) => {
+    // Convert cases content to readable format
+    const equations = content
+      .split('\\\\')
+      .map((eq: string) => eq.trim())
+      .filter((eq: string) => eq.length > 0)
+      .join('; ');
+    return `{ ${equations} }`;
+  });
+  
+  // Handle other common LaTeX environments
+  cleaned = cleaned.replace(/\\begin\{(\w+)\}([\s\S]*?)\\end\{\1\}/g, (_, _env, content) => {
+    return content.replace(/\\\\/g, '; ').trim();
+  });
+  
+  // Handle display math delimiters: $$ ... $$ or \[ ... \]
+  cleaned = cleaned.replace(/\$\$([\s\S]*?)\$\$/g, (_, latex) => simplifyLatex(latex));
+  cleaned = cleaned.replace(/\\\[([\s\S]*?)\\\]/g, (_, latex) => simplifyLatex(latex));
+  
+  // Handle inline math: $ ... $ or \( ... \)
+  cleaned = cleaned.replace(/(?<!\$)\$(?!\$)(.*?)(?<!\$)\$(?!\$)/g, (_, latex) => simplifyLatex(latex));
+  cleaned = cleaned.replace(/\\\(([\s\S]*?)\\\)/g, (_, latex) => simplifyLatex(latex));
+  
+  // Now strip HTML
+  return stripHtml(cleaned);
+}
+
+/**
+ * Simplify LaTeX formula to readable text
+ */
+function simplifyLatex(latex: string): string {
+  let simplified = latex.trim();
+  
+  // Common LaTeX to text conversions
+  simplified = simplified
+    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1)/($2)') // fractions
+    .replace(/\\sqrt\{([^}]+)\}/g, '√($1)') // square root
+    .replace(/\\sqrt\[(\d+)\]\{([^}]+)\}/g, '$1√($2)') // nth root
+    .replace(/\^(\d)/g, '^$1') // simple exponents
+    .replace(/\^\{([^}]+)\}/g, '^($1)') // complex exponents
+    .replace(/_(\d)/g, '₍$1₎') // simple subscripts (approximate)
+    .replace(/_\{([^}]+)\}/g, '_($1)') // complex subscripts
+    .replace(/\\times/g, '×')
+    .replace(/\\cdot/g, '·')
+    .replace(/\\div/g, '÷')
+    .replace(/\\pm/g, '±')
+    .replace(/\\neq/g, '≠')
+    .replace(/\\leq/g, '≤')
+    .replace(/\\geq/g, '≥')
+    .replace(/\\approx/g, '≈')
+    .replace(/\\infty/g, '∞')
+    .replace(/\\pi/g, 'π')
+    .replace(/\\alpha/g, 'α')
+    .replace(/\\beta/g, 'β')
+    .replace(/\\gamma/g, 'γ')
+    .replace(/\\delta/g, 'δ')
+    .replace(/\\theta/g, 'θ')
+    .replace(/\\lambda/g, 'λ')
+    .replace(/\\mu/g, 'μ')
+    .replace(/\\sigma/g, 'σ')
+    .replace(/\\omega/g, 'ω')
+    .replace(/\\sum/g, 'Σ')
+    .replace(/\\prod/g, 'Π')
+    .replace(/\\int/g, '∫')
+    .replace(/\\partial/g, '∂')
+    .replace(/\\nabla/g, '∇')
+    .replace(/\\rightarrow/g, '→')
+    .replace(/\\leftarrow/g, '←')
+    .replace(/\\Rightarrow/g, '⇒')
+    .replace(/\\Leftarrow/g, '⇐')
+    .replace(/\\[a-zA-Z]+/g, '') // remove remaining LaTeX commands
+    .replace(/\{|\}/g, '') // remove braces
+    .replace(/\s+/g, ' ') // normalize spaces
+    .trim();
+  
+  return simplified;
+}
+
+/**
  * Generate exam PDF
  */
 export function generateSimulationPdf(data: SimulationPdfData): jsPDF {
@@ -164,7 +251,7 @@ export function generateSimulationPdf(data: SimulationPdfData): jsPDF {
     }
 
     const questionNumber = index + 1;
-    const questionText = stripHtml(question.text);
+    const questionText = cleanTextForPdf(question.text);
 
     // Question number and text
     doc.setFontSize(10);
@@ -196,7 +283,7 @@ export function generateSimulationPdf(data: SimulationPdfData): jsPDF {
     sortedAnswers.forEach((answer, ansIndex) => {
       if (ansIndex >= letters.length) return;
       
-      const answerText = stripHtml(answer.text);
+      const answerText = cleanTextForPdf(answer.text);
       const answerLines = doc.splitTextToSize(`${letters[ansIndex]})  ${answerText}`, contentWidth - 15);
       
       // Check page break

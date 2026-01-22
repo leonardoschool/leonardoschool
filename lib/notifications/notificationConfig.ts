@@ -48,6 +48,7 @@ export type NotificationType =
   | 'ACCOUNT_ACTIVATED'
   | 'NEW_REGISTRATION'
   | 'PROFILE_COMPLETED'
+  | 'PARENT_DATA_REQUESTED'
   // Contracts
   | 'CONTRACT_ASSIGNED'
   | 'CONTRACT_SIGNED'
@@ -166,6 +167,14 @@ export const notificationConfigs: Record<NotificationType, NotificationConfig> =
     iconColorClass: 'text-purple-600 dark:text-purple-400',
     canBeUrgent: false,
     defaultSendEmail: false,
+  },
+  PARENT_DATA_REQUESTED: {
+    category: 'account',
+    icon: UserPlus,
+    iconBgClass: 'bg-amber-100 dark:bg-amber-900/30',
+    iconColorClass: 'text-amber-600 dark:text-amber-400',
+    canBeUrgent: true,
+    defaultSendEmail: true,
   },
 
   // === CONTRACTS ===
@@ -457,14 +466,27 @@ export function getNotificationRoute(
     case 'ACCOUNT_ACTIVATED':
       // Lo studente va alla dashboard, l'admin alla lista utenti
       return userRole === 'ADMIN' && params?.studentId 
-        ? `/utenti/${params.studentId}` 
+        ? `/utenti?highlight=${params.studentId}` 
         : basePath;
     
     case 'NEW_REGISTRATION':
     case 'PROFILE_COMPLETED':
       if (userRole === 'ADMIN') {
         return params?.studentId 
-          ? `/utenti/${params.studentId}` 
+          ? `/utenti?highlight=${params.studentId}` 
+          : '/utenti';
+      }
+      return null;
+
+    case 'PARENT_DATA_REQUESTED':
+      // Student goes to profile to add parent data
+      if (userRole === 'STUDENT') {
+        return '/profilo?section=genitore';
+      }
+      // Admin goes to user list
+      if (userRole === 'ADMIN') {
+        return params?.studentId 
+          ? `/utenti?highlight=${params.studentId}` 
           : '/utenti';
       }
       return null;

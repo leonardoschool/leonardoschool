@@ -13,6 +13,7 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const _redirect = searchParams.get('redirect') || '/app';
+  const errorParam = searchParams.get('error');
   const { showError } = useToast();
 
   const [email, setEmail] = useState('');
@@ -21,7 +22,39 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
-  const theme = typeof window !== 'undefined' ? localStorage.getItem('theme') || 'system' : 'system';
+  const [isDarkTheme, setIsDarkTheme] = useState(false);
+
+  // Show error from URL params (e.g., account deactivated)
+  useEffect(() => {
+    if (errorParam === 'account-deactivated') {
+      setError('Il tuo account è stato disattivato. Contatta l\'amministrazione per maggiori informazioni.');
+    }
+  }, [errorParam]);
+
+  // Detect and update theme dynamically
+  useEffect(() => {
+    const updateTheme = () => {
+      const savedTheme = localStorage.getItem('theme') || 'system';
+      const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const isDark = savedTheme === 'dark' || (savedTheme === 'system' && systemPrefersDark);
+      setIsDarkTheme(isDark);
+    };
+
+    updateTheme();
+
+    // Listen for theme changes
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => updateTheme();
+    mediaQuery.addEventListener('change', handleChange);
+
+    // Listen for localStorage changes (when theme is changed in other tabs/components)
+    window.addEventListener('storage', updateTheme);
+
+    return () => {
+      mediaQuery.removeEventListener('change', handleChange);
+      window.removeEventListener('storage', updateTheme);
+    };
+  }, []);
 
   // Check if user is already logged in Firebase - if so, sync cookies and redirect
   useEffect(() => {
@@ -166,7 +199,7 @@ export default function LoginPage() {
           {/* Logo with smooth float animation */}
           <div className="relative animate-float">
             <Image
-              src={`/images/logo_${theme === 'dark' ? 'bianco' : 'nero'}.png`}
+              src={`/images/logo_${isDarkTheme ? 'bianco' : 'nero'}.png`}
               alt="Leonardo School"
               className="object-contain transition-transform duration-500 group-hover:scale-105"
               width={200}
@@ -190,7 +223,7 @@ export default function LoginPage() {
               {/* Mobile glow effect */}
               <div className="absolute inset-0 bg-gradient-to-r from-[#a8012b]/20 via-[#8a0125]/20 to-[#a8012b]/20 rounded-full blur-2xl animate-pulse" />
               <Image
-                src={`/images/logo_${theme === 'dark' ? 'bianco' : 'nero'}.png`}
+                src={`/images/logo_${isDarkTheme ? 'bianco' : 'nero'}.png`}
                 alt="Leonardo School"
                 className="object-contain relative z-10"
                 width={120}

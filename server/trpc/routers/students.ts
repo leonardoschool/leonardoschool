@@ -22,6 +22,9 @@ const PROVINCE_ITALIANE = [
 // Regex per codice fiscale italiano
 const CODICE_FISCALE_REGEX = /^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$/;
 
+// Parent/Guardian relationship types
+const PARENT_RELATIONSHIP_TYPES = ['PADRE', 'MADRE', 'TUTORE_LEGALE', 'ALTRO'] as const;
+
 // Funzione per capitalizzare correttamente nomi di città/indirizzi
 const capitalizeWords = (str: string): string => {
   return str.trim().toLowerCase()
@@ -32,6 +35,17 @@ const capitalizeWords = (str: string): string => {
       return word.charAt(0).toUpperCase() + word.slice(1);
     })
     .join(' ');
+};
+
+// Funzione per capitalizzare nomi propri (gestisce apostrofi e trattini)
+const capitalizeProperName = (str: string): string => {
+  return str.trim().toLowerCase()
+    .split(/(\s+|'|-)/)
+    .map((part) => {
+      if (part === ' ' || part === "'" || part === '-') return part;
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join('');
 };
 
 // Funzione per formattare il telefono
@@ -48,6 +62,71 @@ const formatPhone = (phone: string): string => {
   // Formatta come +39 XXX XXX XXXX
   return `+39 ${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6)}`;
 };
+
+// Helper to calculate age from date of birth
+const calculateAge = (dateOfBirth: Date): number => {
+  const today = new Date();
+  let age = today.getFullYear() - dateOfBirth.getFullYear();
+  const monthDiff = today.getMonth() - dateOfBirth.getMonth();
+  
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dateOfBirth.getDate())) {
+    age--;
+  }
+  
+  return age;
+};
+
+// Parent/Guardian schema
+const parentGuardianSchema = z.object({
+  relationship: z.enum(PARENT_RELATIONSHIP_TYPES, {
+    errorMap: () => ({ message: 'Tipo di relazione non valido' }),
+  }),
+  firstName: z.string()
+    .min(2, 'Il nome è troppo corto')
+    .max(50, 'Il nome è troppo lungo')
+    .transform(capitalizeProperName),
+  lastName: z.string()
+    .min(2, 'Il cognome è troppo corto')
+    .max(50, 'Il cognome è troppo lungo')
+    .transform(capitalizeProperName),
+  fiscalCode: z.string()
+    .length(16, 'Il codice fiscale deve essere di 16 caratteri')
+    .regex(CODICE_FISCALE_REGEX, 'Formato codice fiscale non valido')
+    .transform(val => val.toUpperCase()),
+  phone: z.string()
+    .min(9, 'Il numero di telefono è troppo corto')
+    .max(20, 'Il numero di telefono è troppo lungo')
+    .transform(formatPhone),
+  email: z.string()
+    .email('Formato email non valido')
+    .transform(val => val.toLowerCase())
+    .optional()
+    .or(z.literal('')),
+  address: z.string()
+    .min(5, "L'indirizzo è troppo corto")
+    .max(200, "L'indirizzo è troppo lungo")
+    .transform(capitalizeWords)
+    .optional()
+    .or(z.literal('')),
+  city: z.string()
+    .min(2, 'Il nome della città è troppo corto')
+    .max(100, 'Il nome della città è troppo lungo')
+    .transform(capitalizeWords)
+    .optional()
+    .or(z.literal('')),
+  province: z.string()
+    .length(2, 'La provincia deve essere di 2 lettere')
+    .transform(val => val.toUpperCase())
+    .refine(val => PROVINCE_ITALIANE.includes(val as typeof PROVINCE_ITALIANE[number]), 
+      'Sigla provincia non valida')
+    .optional()
+    .or(z.literal('')),
+  postalCode: z.string()
+    .length(5, 'Il CAP deve essere di 5 cifre')
+    .regex(/^\d{5}$/, 'Il CAP deve contenere solo numeri')
+    .optional()
+    .or(z.literal('')),
+});
 
 export const studentsRouter = router({
   /**
@@ -973,7 +1052,7 @@ export const studentsRouter = router({
 
   /**
    * Get detailed student info for collaborator view
-   * Includes groups, assigned simulations, and materials (no sensitive personal data)
+   * Includes groups, assigned simulations, materials and parent/guardian data
    */
   getStudentDetailForCollaborator: staffProcedure
     .input(z.object({ studentId: z.string() }))
@@ -985,6 +1064,7 @@ export const studentsRouter = router({
           student: {
             include: {
               stats: true,
+              parentGuardian: true,
               groupMemberships: {
                 include: {
                   group: {
@@ -1026,6 +1106,7 @@ export const studentsRouter = router({
           include: {
             user: true,
             stats: true,
+            parentGuardian: true,
             groupMemberships: {
               include: {
                 group: {
@@ -1126,7 +1207,9 @@ export const studentsRouter = router({
         matricola: user.student.matricola,
         enrollmentDate: user.student.enrollmentDate,
         graduationYear: user.student.graduationYear,
+        dateOfBirth: user.student.dateOfBirth,
         stats: user.student.stats,
+        parentGuardian: user.student.parentGuardian,
         groups: user.student.groupMemberships.map(gm => ({
           id: gm.group.id,
           name: gm.group.name,
@@ -1503,6 +1586,457 @@ export const studentsRouter = router({
           correctPercentage: totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0,
         },
         simulations: simulationsWithDetails,
+      };
+    }),
+
+  // ==================== PARENT/GUARDIAN PROCEDURES ====================
+
+  /**
+   * Save or update parent/guardian data
+   * Can be called during profile completion or when admin requests it
+   */
+  saveParentGuardian: protectedProcedure
+    .input(parentGuardianSchema)
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.user) {
+        throw new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: 'Not authenticated',
+        });
+      }
+
+      if (ctx.user.role !== 'STUDENT') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Solo gli studenti possono aggiornare i dati del genitore',
+        });
+      }
+
+      const student = await ctx.prisma.student.findUnique({
+        where: { userId: ctx.user.id },
+        include: { parentGuardian: true },
+      });
+
+      if (!student) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Profilo studente non trovato',
+        });
+      }
+
+      // Prepare data (filter out empty strings for optional fields)
+      const parentData = {
+        relationship: input.relationship,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        fiscalCode: input.fiscalCode,
+        phone: input.phone,
+        email: input.email || null,
+        address: input.address || null,
+        city: input.city || null,
+        province: input.province || null,
+        postalCode: input.postalCode || null,
+      };
+
+      // Upsert parent guardian
+      const parentGuardian = await ctx.prisma.parentGuardian.upsert({
+        where: { studentId: student.id },
+        create: {
+          studentId: student.id,
+          ...parentData,
+        },
+        update: parentData,
+      });
+
+      // If parent data was required by admin, clear the requirement and reactivate account
+      if (student.requiresParentData) {
+        await ctx.prisma.student.update({
+          where: { id: student.id },
+          data: {
+            requiresParentData: false,
+            parentDataRequestedAt: null,
+            parentDataRequestedById: null,
+          },
+        });
+
+        // Reactivate the user account
+        await ctx.prisma.user.update({
+          where: { id: ctx.user.id },
+          data: { isActive: true },
+        });
+
+        // Notify admins that parent data has been provided
+        await notificationService.notifyAdmins(ctx.prisma, {
+          type: 'GENERAL',
+          title: 'Dati genitore inseriti',
+          message: `${ctx.user.name} ha inserito i dati del genitore/tutore richiesti`,
+          linkUrl: `/utenti?highlight=${ctx.user.id}`,
+          linkType: 'user',
+          linkEntityId: ctx.user.id,
+        });
+      }
+
+      return {
+        success: true,
+        parentGuardian,
+      };
+    }),
+
+  /**
+   * Get current student's parent/guardian data
+   */
+  getMyParentGuardian: protectedProcedure.query(async ({ ctx }) => {
+    if (!ctx.user) {
+      throw new TRPCError({
+        code: 'UNAUTHORIZED',
+        message: 'Not authenticated',
+      });
+    }
+
+    if (ctx.user.role !== 'STUDENT') {
+      return null;
+    }
+
+    const student = await ctx.prisma.student.findUnique({
+      where: { userId: ctx.user.id },
+      include: { parentGuardian: true },
+    });
+
+    return student?.parentGuardian || null;
+  }),
+
+  /**
+   * Check if student needs to provide parent data
+   * Returns: { required: boolean, isMinor: boolean, hasData: boolean, requestedByAdmin: boolean }
+   */
+  getParentDataRequirement: protectedProcedure.query(async ({ ctx }) => {
+    if (!ctx.user) {
+      throw new TRPCError({
+        code: 'UNAUTHORIZED',
+        message: 'Not authenticated',
+      });
+    }
+
+    if (ctx.user.role !== 'STUDENT') {
+      return { required: false, isMinor: false, hasData: false, requestedByAdmin: false };
+    }
+
+    const student = await ctx.prisma.student.findUnique({
+      where: { userId: ctx.user.id },
+      include: { parentGuardian: true },
+    });
+
+    if (!student) {
+      return { required: false, isMinor: false, hasData: false, requestedByAdmin: false };
+    }
+
+    const isMinorStudent = student.dateOfBirth ? calculateAge(student.dateOfBirth) < 18 : false;
+    const hasData = !!student.parentGuardian;
+    const requestedByAdmin = student.requiresParentData;
+
+    // Parent data is required if:
+    // 1. Student is a minor
+    // 2. Admin has requested it (for adult students)
+    const required = (isMinorStudent || requestedByAdmin) && !hasData;
+
+    return {
+      required,
+      isMinor: isMinorStudent,
+      hasData,
+      requestedByAdmin,
+      requiresParentData: student.requiresParentData,
+      requestedAt: student.parentDataRequestedAt,
+    };
+  }),
+
+  /**
+   * Admin: Request parent data from an adult student
+   */
+  requestParentData: adminProcedure
+    .input(z.object({
+      studentId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Find the student (can be userId or studentId)
+      const student = await ctx.prisma.student.findFirst({
+        where: {
+          OR: [
+            { id: input.studentId },
+            { userId: input.studentId },
+          ],
+        },
+        include: {
+          user: true,
+          parentGuardian: true,
+        },
+      });
+
+      if (!student) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Studente non trovato',
+        });
+      }
+
+      // Check if student already has parent data
+      if (student.parentGuardian) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Lo studente ha già fornito i dati del genitore',
+        });
+      }
+
+      // Update the student to require parent data
+      await ctx.prisma.student.update({
+        where: { id: student.id },
+        data: {
+          requiresParentData: true,
+          parentDataRequestedAt: new Date(),
+          parentDataRequestedById: ctx.user?.id,
+        },
+      });
+
+      // Also set user as inactive until parent data is provided
+      await ctx.prisma.user.update({
+        where: { id: student.userId },
+        data: {
+          isActive: false,
+        },
+      });
+
+      // Send notification to the student
+      await notificationService.createNotification(ctx.prisma, {
+        userId: student.userId,
+        type: 'PARENT_DATA_REQUESTED',
+        title: 'Richiesta dati genitore/tutore',
+        message: 'L\'amministrazione richiede di inserire i dati del tuo genitore o tutore. Accedi al tuo profilo per completare le informazioni.',
+        linkUrl: '/profilo?section=genitore',
+        linkType: 'profile',
+        isUrgent: true,
+        channel: 'BOTH',
+      });
+
+      return { success: true };
+    }),
+
+  /**
+   * Admin: Remove parent data requirement for a student (unblocks the account)
+   */
+  cancelParentDataRequest: adminProcedure
+    .input(z.object({
+      studentId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Find the student
+      const student = await ctx.prisma.student.findFirst({
+        where: {
+          OR: [
+            { id: input.studentId },
+            { userId: input.studentId },
+          ],
+        },
+        include: {
+          user: { select: { id: true, name: true } },
+        },
+      });
+
+      if (!student) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Studente non trovato',
+        });
+      }
+
+      // Update the student to not require parent data and reactivate the user
+      await ctx.prisma.$transaction([
+        ctx.prisma.student.update({
+          where: { id: student.id },
+          data: {
+            requiresParentData: false,
+            parentDataRequestedAt: null,
+            parentDataRequestedById: null,
+          },
+        }),
+        ctx.prisma.user.update({
+          where: { id: student.userId },
+          data: { isActive: true },
+        }),
+      ]);
+
+      return { success: true };
+    }),
+
+  /**
+   * Staff: Get parent/guardian data for a student
+   */
+  getStudentParentGuardian: staffProcedure
+    .input(z.object({
+      studentId: z.string(),
+    }))
+    .query(async ({ ctx, input }) => {
+      // Find the student (can be userId or studentId)
+      const student = await ctx.prisma.student.findFirst({
+        where: {
+          OR: [
+            { id: input.studentId },
+            { userId: input.studentId },
+          ],
+        },
+        include: {
+          user: { select: { name: true } },
+          parentGuardian: true,
+        },
+      });
+
+      if (!student) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Studente non trovato',
+        });
+      }
+
+      const isMinorStudent = student.dateOfBirth ? calculateAge(student.dateOfBirth) < 18 : null;
+
+      return {
+        studentName: student.user.name,
+        isMinor: isMinorStudent,
+        dateOfBirth: student.dateOfBirth,
+        requiresParentData: student.requiresParentData,
+        parentDataRequestedAt: student.parentDataRequestedAt,
+        parentGuardian: student.parentGuardian,
+      };
+    }),
+
+  /**
+   * Get full student details for admin view (includes parent/guardian data)
+   */
+  getFullStudentDetails: staffProcedure
+    .input(z.object({ studentId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      // Find student by userId or studentId
+      const user = await ctx.prisma.user.findFirst({
+        where: {
+          OR: [
+            { id: input.studentId },
+            { student: { id: input.studentId } },
+          ],
+        },
+        include: {
+          student: {
+            include: {
+              parentGuardian: true,
+              stats: true,
+              groupMemberships: {
+                include: {
+                  group: {
+                    select: {
+                      id: true,
+                      name: true,
+                      color: true,
+                      description: true,
+                    },
+                  },
+                },
+              },
+              contracts: {
+                where: { status: 'SIGNED' },
+                orderBy: { signedAt: 'desc' },
+                take: 1,
+              },
+              simulationAssignments: {
+                include: {
+                  simulation: {
+                    select: {
+                      id: true,
+                      title: true,
+                      type: true,
+                    },
+                  },
+                },
+                orderBy: { assignedAt: 'desc' },
+                take: 10,
+              },
+              materialAccess: {
+                include: {
+                  material: {
+                    select: {
+                      id: true,
+                      title: true,
+                      type: true,
+                    },
+                  },
+                },
+                orderBy: { grantedAt: 'desc' },
+                take: 10,
+              },
+            },
+          },
+        },
+      });
+
+      if (!user || !user.student) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Studente non trovato',
+        });
+      }
+
+      const isMinorStudent = user.student.dateOfBirth 
+        ? calculateAge(user.student.dateOfBirth) < 18 
+        : null;
+
+      return {
+        // User info
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        isActive: user.isActive,
+        profileCompleted: user.profileCompleted,
+        createdAt: user.createdAt,
+
+        // Student info
+        studentId: user.student.id,
+        matricola: user.student.matricola,
+        fiscalCode: user.student.fiscalCode,
+        dateOfBirth: user.student.dateOfBirth,
+        isMinor: isMinorStudent,
+        phone: user.student.phone,
+        address: user.student.address,
+        city: user.student.city,
+        province: user.student.province,
+        postalCode: user.student.postalCode,
+        enrollmentDate: user.student.enrollmentDate,
+        graduationYear: user.student.graduationYear,
+
+        // Parent data requirement
+        requiresParentData: user.student.requiresParentData,
+        parentDataRequestedAt: user.student.parentDataRequestedAt,
+
+        // Parent/Guardian
+        parentGuardian: user.student.parentGuardian,
+
+        // Other relations
+        stats: user.student.stats,
+        groups: user.student.groupMemberships.map(gm => ({
+          id: gm.group.id,
+          name: gm.group.name,
+          color: gm.group.color,
+          description: gm.group.description,
+          joinedAt: gm.joinedAt,
+        })),
+        simulations: user.student.simulationAssignments.map(sa => ({
+          id: sa.id,
+          title: sa.simulation?.title,
+          type: sa.simulation?.type,
+          assignedAt: sa.assignedAt,
+        })),
+        materials: user.student.materialAccess.map(ma => ({
+          id: ma.material.id,
+          title: ma.material.title,
+          type: ma.material.type,
+          grantedAt: ma.grantedAt,
+        })),
+        hasSignedContract: user.student.contracts.length > 0,
       };
     }),
 });

@@ -201,8 +201,7 @@ const coursesData: Record<string, Course[]> = {
         {
           icon: '🗓',
           label: 'PERIODO',
-          text: 'Dicembre - Maggio 2026',
-          subtext: 'Sabato / Domenica',
+          text: 'dicembre-maggio 2026',
         },
         {
           icon: '🧑‍🏫',

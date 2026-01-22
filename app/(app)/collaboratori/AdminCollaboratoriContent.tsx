@@ -382,7 +382,9 @@ export default function AdminCollaboratoriContent() {
                             )}
                           </button>
 
-                          {/* TODO: Implementare UI per selezione template contratto */}
+                          {/* Future enhancement: Add UI for contract template selection
+                              This would allow admins to assign contracts directly from this panel
+                              instead of using the dedicated contracts management page */}
 
                           <button
                             onClick={(e) => {

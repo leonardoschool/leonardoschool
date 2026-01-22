@@ -310,6 +310,7 @@ export const contractsRouter = router({
         adminNotes: z.string().optional(),
         customContent: z.string().optional(), // Admin can customize the contract content
         customPrice: z.number().optional(), // Admin can override the price
+        canDownload: z.boolean().default(false), // If true, user can download the signed contract
       }).refine(
         (data) => data.studentId || data.collaboratorId,
         { message: 'Devi specificare studentId o collaboratorId' }
@@ -456,6 +457,7 @@ export const contractsRouter = router({
           signTokenExpiresAt,
           adminNotes: input.adminNotes,
           assignedBy: ctx.user.id,
+          canDownload: input.canDownload,
         },
         include: {
           student: {
@@ -471,7 +473,7 @@ export const contractsRouter = router({
       // Send notifications using the unified notification service
       // Use relative URL for in-app navigation, full URL for emails
       const signLinkRelative = `/contratto/${contract.signToken}`;
-      const signLinkAbsolute = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}/contratto/${contract.signToken}`;
+      const signLinkAbsolute = `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.leonardoschool.it'}/contratto/${contract.signToken}`;
       
       await notificationService.notifyContractAssigned(ctx.prisma, {
         contractId: contract.id,
@@ -541,7 +543,7 @@ export const contractsRouter = router({
       });
 
       // Send notifications using the unified notification service
-      const loginUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.leonardoschool.it'}/auth/login`;
+      const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.leonardoschool.it'}/auth/login`;
       await notificationService.notifyAccountActivated(ctx.prisma, {
         userId: student.user.id,
         userName: student.user.name,
@@ -899,6 +901,107 @@ export const contractsRouter = router({
       });
 
       return { success: true, message: 'Contratto revocato ed eliminato' };
+    }),
+
+  /**
+   * Toggle contract download permission
+   */
+  toggleContractDownload: adminProcedure
+    .input(z.object({
+      contractId: z.string(),
+      canDownload: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const contract = await ctx.prisma.contract.findUnique({
+        where: { id: input.contractId },
+      });
+
+      if (!contract) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Contratto non trovato',
+        });
+      }
+
+      await ctx.prisma.contract.update({
+        where: { id: input.contractId },
+        data: { canDownload: input.canDownload },
+      });
+
+      return { 
+        success: true, 
+        message: input.canDownload 
+          ? 'Download contratto abilitato' 
+          : 'Download contratto disabilitato',
+        canDownload: input.canDownload,
+      };
+    }),
+
+  /**
+   * Revoke a signed contract (keeps history, allows reassignment)
+   */
+  revokeSignedContract: adminProcedure
+    .input(z.object({
+      contractId: z.string(),
+      revokeNotes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const contract = await ctx.prisma.contract.findUnique({
+        where: { id: input.contractId },
+        include: {
+          student: { include: { user: true } },
+          collaborator: { include: { user: true } },
+          template: true,
+        },
+      });
+
+      if (!contract) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Contratto non trovato',
+        });
+      }
+
+      if (contract.status !== 'SIGNED') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Solo i contratti firmati possono essere revocati. Usa "Annulla" per i contratti in attesa.',
+        });
+      }
+
+      // Update contract status to REVOKED
+      await ctx.prisma.contract.update({
+        where: { id: input.contractId },
+        data: { 
+          status: 'REVOKED',
+          revokedAt: new Date(),
+          revokedBy: ctx.user.id,
+          revokeNotes: input.revokeNotes ? sanitizeText(input.revokeNotes) : null,
+          canDownload: false, // Disable download on revocation
+        },
+      });
+
+      // Get user info for notification
+      const userName = contract.student?.user?.name || contract.collaborator?.user?.name || 'Utente';
+      const userUserId = contract.student?.user?.id || contract.collaborator?.user?.id;
+      const templateName = contract.template.name;
+
+      // Send notification to user about contract revocation
+      if (userUserId) {
+        await ctx.prisma.notification.create({
+          data: {
+            userId: userUserId,
+            type: 'CONTRACT_CANCELLED',
+            title: 'Contratto revocato',
+            message: `Il tuo contratto "${templateName}" è stato revocato dall'amministrazione.${input.revokeNotes ? ` Motivo: ${input.revokeNotes}` : ''}`,
+          },
+        });
+      }
+
+      return { 
+        success: true, 
+        message: `Contratto di ${userName} revocato. Ora puoi assegnarne uno nuovo.` 
+      };
     }),
 
   // ==================== STUDENT ENDPOINTS ====================

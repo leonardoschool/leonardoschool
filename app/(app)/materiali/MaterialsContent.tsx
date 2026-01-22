@@ -9,6 +9,7 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import TopicsManager from '@/components/admin/TopicsManager';
 import CategoryManager from '@/components/admin/CategoryManager';
 import { GroupInfoModal } from '@/components/ui/GroupInfoModal';
@@ -189,6 +190,13 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
   
   // Group info modal
   const [selectedGroupInfo, setSelectedGroupInfo] = useState<string | null>(null);
+
+  // Delete confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    type: 'subject' | 'material';
+    id: string;
+    name: string;
+  } | null>(null);
   
   // Filters
   const [filterType, setFilterType] = useState<MaterialType | ''>('');
@@ -238,6 +246,10 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
     groupIds: [] as string[],
     studentIds: [] as string[],
   });
+  
+  // User filter and search for assignment modal
+  const [userTypeFilter, setUserTypeFilter] = useState<'all' | 'students' | 'collaborators'>('all');
+  const [userSearchTerm, setUserSearchTerm] = useState('');
 
   // Portal mounting state
   const [mounted, setMounted] = useState(false);
@@ -260,6 +272,7 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
   });
   const { data: groupsData } = trpc.groups.getGroups.useQuery({ page: 1, pageSize: 100 });
   const { data: allStudents } = trpc.students.getAllForAdmin.useQuery();
+  const { data: allCollaborators } = trpc.users.getCollaborators.useQuery();
   const { data: stats } = trpc.materials.getStats.useQuery();
 
   // Categories for material forms (standalone containers) - fetched but used for cache invalidation
@@ -634,6 +647,8 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
       groupIds: material.groupAccess?.map((ga: any) => ga.groupId) || [],
       studentIds: material.studentAccess?.map((sa: any) => sa.studentId) || [],
     });
+    setUserTypeFilter('all');
+    setUserSearchTerm('');
     setShowAssignModal(true);
   };
 
@@ -800,7 +815,7 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
             }`}
           >
             <Folder className={`w-5 h-5 ${activeTab === 'categories' ? 'text-[#a8012b] dark:text-[#d1163b]' : ''}`} />
-            Categorie
+            Cartelle
           </button>
         </div>
 
@@ -896,11 +911,11 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                           {/* Delete button - visible only for admins */}
                           {subject.canDelete && (
                             <button
-                              onClick={() => {
-                                if (confirm('Sei sicuro di voler eliminare questa materia?')) {
-                                  deleteSubjectMutation.mutate({ id: subject.id });
-                                }
-                              }}
+                              onClick={() => setDeleteConfirm({
+                                type: 'subject',
+                                id: subject.id,
+                                name: subject.name,
+                              })}
                               className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
                               title="Elimina"
                               disabled={(subject._count?.materials || 0) > 0}
@@ -1035,20 +1050,20 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                     {/* Category Assignment (Optional Container) */}
                     <div>
                       <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        Categoria (Cartella) 
+                        Cartella 
                         <span className={`ml-2 text-xs ${colors.text.muted} font-normal`}>Opzionale - Raggruppa i materiali in una cartella</span>
                       </label>
                       <CustomSelect
                         value={multiUploadData.categoryId}
                         onChange={(value) => setMultiUploadData({ ...multiUploadData, categoryId: value })}
                         options={[
-                          { value: '', label: 'Nessuna categoria' },
+                          { value: '', label: 'Nessuna cartella' },
                           ...(_allCategories?.map((cat: any) => ({ 
                             value: cat.id, 
                             label: `${cat.name} (${cat._count?.materials || 0} materiali)` 
                           })) || [])
                         ]}
-                        placeholder="Seleziona una categoria..."
+                        placeholder="Seleziona una cartella..."
                       />
                       {multiUploadData.categoryId && _allCategories?.find((c: any) => c.id === multiUploadData.categoryId) && (() => {
                         const selectedCategory = _allCategories.find((c: any) => c.id === multiUploadData.categoryId);
@@ -1621,11 +1636,11 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                               <Edit2 className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                             </button>
                             <button
-                              onClick={() => {
-                                if (confirm('Sei sicuro di voler eliminare questo materiale?')) {
-                                  deleteMaterialMutation.mutate({ id: material.id });
-                                }
-                              }}
+                              onClick={() => setDeleteConfirm({
+                                type: 'material',
+                                id: material.id,
+                                name: material.title,
+                              })}
                               className="p-2.5 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                               title="Elimina"
                             >
@@ -1657,7 +1672,7 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                               {material.categories.map((cat: any) => (
                                 <span key={cat.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/30">
                                   <Folder className="w-3.5 h-3.5" />
-                                  {cat.category?.name || 'Categoria'}
+                                  {cat.category?.name || 'Cartella'}
                                 </span>
                               ))}
                             </>
@@ -1777,7 +1792,7 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                   >
                     <UserCheck className={`w-6 h-6 ${assignmentData.visibility === 'SELECTED_STUDENTS' ? 'text-indigo-600' : colors.text.muted}`} />
                     <span className={`text-sm font-medium ${assignmentData.visibility === 'SELECTED_STUDENTS' ? 'text-indigo-600' : colors.text.secondary}`}>
-                      Gruppi / Studenti specifici
+                      Gruppi / Utenti specifici
                     </span>
                   </button>
                 </div>
@@ -1851,61 +1866,139 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                     </div>
                   </div>
 
-                  {/* Student Selection */}
+                  {/* User Selection (Students + Collaborators) */}
                   <div>
                     <label className={`block text-sm font-medium ${colors.text.primary} mb-2 flex items-center gap-2`}>
                       <User className="w-4 h-4 text-indigo-600" />
-                      Aggiungi Studenti Singoli
+                      Seleziona Utenti
                       {assignmentData.studentIds.length > 0 && (
                         <span className="px-2 py-0.5 text-xs bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 rounded-full">
                           {assignmentData.studentIds.length} selezionati
                         </span>
                       )}
                     </label>
-                    <p className={`text-xs ${colors.text.muted} mb-2`}>
-                      Seleziona studenti aggiuntivi che non fanno parte dei gruppi selezionati
-                    </p>
-                    <div className={`rounded-xl border ${colors.border.primary} max-h-48 overflow-y-auto`}>
-                      {allStudents && allStudents.length > 0 ? allStudents.map((student) => {
-                        const studentId = student.student?.id || student.id;
-                        if (!studentId) return null;
-                        const isChecked = assignmentData.studentIds.includes(studentId);
-                        return (
-                          <label
-                            key={student.id}
-                            className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b last:border-b-0 border-gray-100 dark:border-gray-700 ${
-                              isChecked ? 'bg-indigo-50 dark:bg-indigo-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                            }`}
-                          >
-                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                              isChecked ? 'bg-indigo-600 border-indigo-600' : colors.border.primary
-                            }`}>
-                              {isChecked && <Check className="w-3 h-3 text-white" />}
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setAssignmentData({ ...assignmentData, studentIds: [...assignmentData.studentIds, studentId] });
-                                } else {
-                                  setAssignmentData({ ...assignmentData, studentIds: assignmentData.studentIds.filter(id => id !== studentId) });
-                                }
-                              }}
-                              className="sr-only"
-                            />
-                            <User className="w-4 h-4 text-gray-400" />
-                            <div className="flex-1 min-w-0">
-                              <p className={`font-medium ${colors.text.primary} truncate`}>{student.name}</p>
-                              <p className={`text-xs ${colors.text.muted} truncate`}>{student.email}</p>
-                            </div>
-                          </label>
+                    
+                    {/* User Type Filter */}
+                    <div className="flex gap-2 mb-3">
+                      <button
+                        type="button"
+                        onClick={() => setUserTypeFilter('all')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          userTypeFilter === 'all'
+                            ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+                            : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                        }`}
+                      >
+                        Tutti
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setUserTypeFilter('students')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          userTypeFilter === 'students'
+                            ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+                            : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                        }`}
+                      >
+                        Studenti
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setUserTypeFilter('collaborators')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          userTypeFilter === 'collaborators'
+                            ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+                            : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                        }`}
+                      >
+                        Collaboratori
+                      </button>
+                    </div>
+                    
+                    {/* Search Input */}
+                    <div className="relative mb-3">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <input
+                        type="text"
+                        value={userSearchTerm}
+                        onChange={(e) => setUserSearchTerm(e.target.value)}
+                        placeholder="Cerca utente..."
+                        className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto p-3 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50">
+                      {(() => {
+                        // Combine students and collaborators into a single list
+                        const users: Array<{ id: string; name: string; type: 'student' | 'collaborator' }> = [];
+                        
+                        if (userTypeFilter === 'all' || userTypeFilter === 'students') {
+                          allStudents?.forEach((student) => {
+                            const studentId = student.student?.id || student.id;
+                            if (studentId) {
+                              users.push({
+                                id: studentId,
+                                name: student.name,
+                                type: 'student',
+                              });
+                            }
+                          });
+                        }
+                        
+                        if (userTypeFilter === 'all' || userTypeFilter === 'collaborators') {
+                          allCollaborators?.forEach((collaborator) => {
+                            users.push({
+                              id: collaborator.id,
+                              name: collaborator.name,
+                              type: 'collaborator',
+                            });
+                          });
+                        }
+                        
+                        if (users.length === 0) {
+                          return <p className={`text-sm ${colors.text.muted}`}>Nessun utente disponibile</p>;
+                        }
+                        
+                        const filtered = users.filter(user =>
+                          user.name.toLowerCase().includes(userSearchTerm.toLowerCase())
                         );
-                      }).filter(Boolean) : (
-                        <div className="px-4 py-6 text-center">
-                          <p className={`text-sm ${colors.text.muted}`}>Nessuno studente disponibile</p>
-                        </div>
-                      )}
+                        
+                        if (filtered.length === 0) {
+                          return <p className={`text-sm ${colors.text.muted}`}>Nessun utente trovato</p>;
+                        }
+                        
+                        return filtered.map((user) => {
+                          const isSelected = assignmentData.studentIds.includes(user.id);
+                          return (
+                            <button
+                              key={user.id}
+                              type="button"
+                              onClick={() => {
+                                const newIds = isSelected
+                                  ? assignmentData.studentIds.filter(id => id !== user.id)
+                                  : [...assignmentData.studentIds, user.id];
+                                setAssignmentData({ ...assignmentData, studentIds: newIds });
+                              }}
+                              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                                isSelected
+                                  ? 'bg-indigo-500 text-white'
+                                  : 'bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 border border-gray-200 dark:border-gray-500'
+                              }`}
+                            >
+                              {user.name}
+                              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                isSelected
+                                  ? 'bg-white/20 text-white'
+                                  : user.type === 'student'
+                                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                    : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                              }`}>
+                                {user.type === 'student' ? 'S' : 'C'}
+                              </span>
+                            </button>
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
                 </>
@@ -2014,6 +2107,32 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
           isLoading={updateMaterialFromModalMutation.isPending}
         />
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={() => {
+          if (deleteConfirm) {
+            if (deleteConfirm.type === 'subject') {
+              deleteSubjectMutation.mutate({ id: deleteConfirm.id });
+            } else {
+              deleteMaterialMutation.mutate({ id: deleteConfirm.id });
+            }
+            setDeleteConfirm(null);
+          }
+        }}
+        title={deleteConfirm?.type === 'subject' ? 'Elimina materia' : 'Elimina materiale'}
+        message={
+          deleteConfirm?.type === 'subject'
+            ? `Sei sicuro di voler eliminare la materia "${deleteConfirm?.name}"?\n\nQuesta azione non può essere annullata.`
+            : `Sei sicuro di voler eliminare il materiale "${deleteConfirm?.name}"?\n\nQuesta azione non può essere annullata.`
+        }
+        confirmLabel="Elimina"
+        cancelLabel="Annulla"
+        variant="danger"
+        isLoading={deleteSubjectMutation.isPending || deleteMaterialMutation.isPending}
+      />
     </div>
   );
 }

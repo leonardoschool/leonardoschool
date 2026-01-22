@@ -1357,13 +1357,11 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
                 <TextareaWithSymbols
                   value={currentAnswer?.answerText || ''}
                   onChange={handleOpenTextChange}
-                  placeholder="Inserisci la tua risposta..."
+                  placeholder="Inserisci la tua risposta... Puoi usare formule LaTeX ($x^2$) e HTML (<sub>2</sub>)"
                   rows={6}
-                  className={`w-full px-4 py-3 rounded-xl border ${colors.border.light} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-colors resize-y`}
+                  showFormattingHelp={true}
+                  showPreview={true}
                 />
-                <p className={`text-xs ${colors.text.muted}`}>
-                  Usa la tastiera dei simboli per inserire caratteri speciali e formule matematiche.
-                </p>
               </div>
             ) : (
               /* Multiple choice answers */

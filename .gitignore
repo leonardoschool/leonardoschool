@@ -30,12 +30,19 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files - IMPORTANTE: non committare mai credenziali!
+.env
+.env.*
+!.env.example
+env/.env.*
+!env/.env.example
+!env/README.md
 
 # Firebase sensitive files (SECURITY)
 *firebase*adminsdk*.json
+*service-account*.json
 firebase-uids.json
+leonardo-school-*.json
 
 # vercel
 .vercel
@@ -43,7 +50,6 @@ firebase-uids.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
 
 #old webapp
 /webapp_old
