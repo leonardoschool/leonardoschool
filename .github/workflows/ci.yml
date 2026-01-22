@@ -62,10 +62,6 @@ jobs:
       - name: Prisma generate
         run: pnpm prisma generate
 
-      # Usa db push SOLO per CI (crea tabelle senza migration history)
-      - name: Prisma push
-        run: pnpm prisma db push --skip-generate
-
       - name: Run tests with coverage
         run: pnpm test:coverage
 
