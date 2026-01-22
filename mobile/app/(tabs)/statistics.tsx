@@ -18,6 +18,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+import { AppHeader, DrawerMenu } from '../../components/navigation';
+
 import { Text, Heading3, Caption } from '../../components/ui/Text';
 import { Card } from '../../components/ui/Card';
 import { useThemedColors } from '../../contexts/ThemeContext';
@@ -34,6 +36,7 @@ export default function StatisticsScreen() {
   const themedColors = useThemedColors();
   const { user } = useAuthStore();
   const [period, setPeriod] = useState<Period>('month');
+  const [drawerVisible, setDrawerVisible] = useState(false);
 
   // Fetch detailed stats from API
   const {
@@ -97,7 +100,9 @@ export default function StatisticsScreen() {
   if (!user) return null;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={[]}>
+      <AppHeader title="Statistiche" onMenuPress={() => setDrawerVisible(true)} />
+      
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -288,6 +293,12 @@ export default function StatisticsScreen() {
         {/* Bottom spacing */}
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      <DrawerMenu
+        visible={drawerVisible}
+        onClose={() => setDrawerVisible(false)}
+        currentRoute="/statistics"
+      />
     </SafeAreaView>
   );
 }

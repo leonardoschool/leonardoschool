@@ -2,6 +2,7 @@
  * Leonardo School Mobile - Tabs Layout
  * 
  * Layout con bottom tabs per la navigazione principale.
+ * Include tutte le pagine studente con alcune accessibili solo dal drawer menu.
  */
 
 import React, { useEffect } from 'react';
@@ -150,8 +151,10 @@ export default function TabsLayout() {
         },
         headerShadowVisible: false,
         headerTintColor: colors.primary.main,
+        headerShown: false, // We use custom AppHeader in each screen
       }}
     >
+      {/* Main tabs visible in bottom bar */}
       <Tabs.Screen
         name="index"
         options={{
@@ -169,6 +172,16 @@ export default function TabsLayout() {
           title: 'Simulazioni',
           tabBarIcon: ({ color, focused }) => (
             <TabBarIcon name="document-text" color={color} focused={focused} />
+          ),
+        }}
+      />
+      
+      <Tabs.Screen
+        name="materiali"
+        options={{
+          title: 'Materiale',
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon name="folder-open" color={color} focused={focused} />
           ),
         }}
       />
@@ -197,14 +210,37 @@ export default function TabsLayout() {
           ),
         }}
       />
-      
+
+      {/* Hidden screens - accessible from drawer menu only */}
       <Tabs.Screen
         name="profile"
         options={{
+          href: null, // Hide from tab bar
           title: 'Profilo',
-          tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon name="person" color={color} focused={focused} />
-          ),
+        }}
+      />
+      
+      <Tabs.Screen
+        name="calendario"
+        options={{
+          href: null, // Hide from tab bar
+          title: 'Calendario',
+        }}
+      />
+      
+      <Tabs.Screen
+        name="gruppo"
+        options={{
+          href: null, // Hide from tab bar
+          title: 'Gruppo',
+        }}
+      />
+      
+      <Tabs.Screen
+        name="messaggi"
+        options={{
+          href: null, // Hide from tab bar
+          title: 'Messaggi',
         }}
       />
     </Tabs>

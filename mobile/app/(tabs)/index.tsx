@@ -5,7 +5,7 @@
  * Dati caricati dalle API tRPC reali.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   ScrollView,
@@ -26,10 +26,12 @@ import { useAuthStore } from '../../stores/authStore';
 import { trpc } from '../../lib/trpc';
 import { colors } from '../../lib/theme/colors';
 import { spacing, layout } from '../../lib/theme/spacing';
+import { DrawerMenu, AppHeader } from '../../components/navigation';
 
 export default function DashboardScreen() {
   const themedColors = useThemedColors();
   const { user } = useAuthStore();
+  const [drawerVisible, setDrawerVisible] = useState(false);
   
   // Fetch stats from API
   const { 
@@ -101,7 +103,12 @@ export default function DashboardScreen() {
   if (!user) return null;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={[]}>
+      <AppHeader 
+        title="Dashboard" 
+        onMenuPress={() => setDrawerVisible(true)} 
+      />
+      
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -114,7 +121,7 @@ export default function DashboardScreen() {
           />
         }
       >
-        {/* Header */}
+        {/* Welcome Header */}
         <View style={styles.header}>
           <View>
             <Text variant="bodySmall" color="muted">{getGreeting()}</Text>
@@ -304,6 +311,12 @@ export default function DashboardScreen() {
         {/* Bottom spacing */}
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      <DrawerMenu
+        visible={drawerVisible}
+        onClose={() => setDrawerVisible(false)}
+        currentRoute="/"
+      />
     </SafeAreaView>
   );
 }

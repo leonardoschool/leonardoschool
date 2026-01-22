@@ -18,6 +18,8 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+import { AppHeader, DrawerMenu } from '../../components/navigation';
+
 import { Text, Body, Caption } from '../../components/ui/Text';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -51,6 +53,7 @@ export default function SimulationsScreen() {
   const themedColors = useThemedColors();
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
+  const [drawerVisible, setDrawerVisible] = useState(false);
 
   // Fetch simulations from API
   const {
@@ -198,7 +201,9 @@ export default function SimulationsScreen() {
   if (!user) return null;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={[]}>
+      <AppHeader title="Simulazioni" onMenuPress={() => setDrawerVisible(true)} />
+      
       {/* Tabs */}
       <View style={[styles.tabsContainer, { borderBottomColor: themedColors.border }]}>
         {(['all', 'pending', 'completed'] as TabFilter[]).map((tab) => (
@@ -263,6 +268,12 @@ export default function SimulationsScreen() {
           simulations.map(renderSimulationCard)
         )}
       </ScrollView>
+
+      <DrawerMenu
+        visible={drawerVisible}
+        onClose={() => setDrawerVisible(false)}
+        currentRoute="/simulations"
+      />
     </SafeAreaView>
   );
 }

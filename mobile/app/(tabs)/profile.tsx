@@ -4,7 +4,7 @@
  * Profilo utente e impostazioni account.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   ScrollView,
@@ -14,6 +14,8 @@ import {
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+
+import { AppHeader, DrawerMenu } from '../../components/navigation';
 
 import { Text, Heading3, Caption } from '../../components/ui/Text';
 import { Card } from '../../components/ui/Card';
@@ -90,6 +92,7 @@ export default function ProfileScreen() {
   const themedColors = useThemedColors();
   const { themePreference, setThemePreference } = useTheme();
   const { user, logout } = useAuthStore();
+  const [drawerVisible, setDrawerVisible] = useState(false);
 
   const handleLogout = () => {
     showConfirmAlert(
@@ -121,7 +124,9 @@ export default function ProfileScreen() {
   if (!user) return null;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={[]}>
+      <AppHeader title="Profilo" onMenuPress={() => setDrawerVisible(true)} />
+      
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -236,6 +241,12 @@ export default function ProfileScreen() {
           <Caption>Leonardo School v1.0.0</Caption>
         </View>
       </ScrollView>
+
+      <DrawerMenu
+        visible={drawerVisible}
+        onClose={() => setDrawerVisible(false)}
+        currentRoute="/profile"
+      />
     </SafeAreaView>
   );
 }

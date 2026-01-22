@@ -5,7 +5,7 @@
  * Dati caricati dalle API tRPC reali.
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   ScrollView,
@@ -17,6 +17,8 @@ import {
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+
+import { AppHeader, DrawerMenu } from '../../components/navigation';
 
 import { Text, Body, Caption } from '../../components/ui/Text';
 import { useThemedColors } from '../../contexts/ThemeContext';
@@ -41,6 +43,7 @@ export default function NotificationsScreen() {
   const themedColors = useThemedColors();
   const { user } = useAuthStore();
   const { setNotifications, markAsRead: markAsReadInStore, markAllAsRead: markAllAsReadInStore } = useNotificationStore();
+  const [drawerVisible, setDrawerVisible] = useState(false);
 
   // Fetch notifications from API
   const {
@@ -164,16 +167,24 @@ export default function NotificationsScreen() {
   // Loading state
   if (isLoading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={['top']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={[]}>
+        <AppHeader title="Notifiche" onMenuPress={() => setDrawerVisible(true)} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary.main} />
         </View>
+        <DrawerMenu
+          visible={drawerVisible}
+          onClose={() => setDrawerVisible(false)}
+          currentRoute="/notifications"
+        />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={[]}>
+      <AppHeader title="Notifiche" onMenuPress={() => setDrawerVisible(true)} />
+      
       {/* Header actions */}
       {unreadCount > 0 && (
         <View style={styles.headerActions}>
@@ -265,6 +276,12 @@ export default function NotificationsScreen() {
           ))
         )}
       </ScrollView>
+
+      <DrawerMenu
+        visible={drawerVisible}
+        onClose={() => setDrawerVisible(false)}
+        currentRoute="/notifications"
+      />
     </SafeAreaView>
   );
 }
