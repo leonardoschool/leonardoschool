@@ -124,9 +124,8 @@ const defaultAssignmentData: AssignmentData = {
 
 // ==================== MAIN COMPONENT ====================
 
-export default function CategoryManager({ onClose, role = 'ADMIN' }: CategoryManagerProps) {
-  // Suppress unused warning - onClose kept for interface compatibility
-  void onClose;
+export default function CategoryManager({ onClose: _onClose, role = 'ADMIN' }: CategoryManagerProps) {
+  // _onClose kept for interface compatibility
 
   const isAdmin = role === 'ADMIN';
 

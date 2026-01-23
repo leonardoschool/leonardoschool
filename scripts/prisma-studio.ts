@@ -1,6 +1,6 @@
-import { execSync } from 'child_process';
+import { execSync } from 'node:child_process';
 import { config } from 'dotenv';
-import { resolve } from 'path';
+import { resolve } from 'node:path';
 
 // Carica variabili d'ambiente dal file .env
 config({ path: resolve(__dirname, '../.env') });
@@ -17,6 +17,7 @@ try {
   console.log(`📊 Database: ${databaseUrl}\n`);
   
   // Con Prisma 7, specifichiamo --config con il path corretto
+  // eslint-disable-next-line sonarjs/no-os-command-from-path -- dev script, PATH is trusted
   execSync('prisma studio --config ./prisma/prisma.config.ts', {
     stdio: 'inherit',
     cwd: resolve(__dirname, '..'),

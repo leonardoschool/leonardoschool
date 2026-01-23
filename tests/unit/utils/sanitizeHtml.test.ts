@@ -178,6 +178,7 @@ describe('sanitizeHtml', () => {
       });
     });
 
+    /* eslint-disable sonarjs/code-eval -- Test data for XSS prevention contains intentional malicious patterns */
     describe('XSS prevention - javascript protocol', () => {
       it('should remove javascript: in any context', () => {
         const malicious = '<a href="javascript:alert(1)">Click</a>';
@@ -197,6 +198,7 @@ describe('sanitizeHtml', () => {
         expect(result).not.toContain('vbscript');
       });
     });
+    /* eslint-enable sonarjs/code-eval */
 
     describe('XSS prevention - SVG and MathML', () => {
       it('should remove SVG tags', () => {
@@ -337,6 +339,7 @@ describe('sanitizeHtml', () => {
       });
 
       it('should sanitize javascript: in href', () => {
+        // eslint-disable-next-line sonarjs/code-eval -- Test data for XSS prevention
         expect(sanitizeAttribute('a', 'href', 'javascript:alert(1)')).toBe('#');
       });
 

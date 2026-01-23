@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
+import { stripHtml } from '@/lib/utils/sanitizeHtml';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { PageLoader, Spinner } from '@/components/ui/loaders';
@@ -333,7 +334,7 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                       </button>
                       <div className="flex-1 min-w-0">
                         <p className={`text-sm ${colors.text.primary} line-clamp-2`}>
-                          {question.text.replace(/<[^>]*>/g, '')}
+                          {stripHtml(question.text)}
                         </p>
                         <div className="flex items-center gap-2 mt-1">
                           {question.subject && (
@@ -422,7 +423,7 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm ${colors.text.primary} line-clamp-2`}>
-                        {sq.question?.text?.replace(/<[^>]*>/g, '') || 'Domanda'}
+                        {stripHtml(sq.question?.text) || 'Domanda'}
                       </p>
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
                         {sq.question?.subject && (

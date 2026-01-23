@@ -296,12 +296,12 @@ export default function ContractSignPage() {
     // Create a temporary link element and trigger download
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${contractName.replace(/\s+/g, '_')}_${new Date().getTime()}.html`;
+    link.download = `${contractName.replaceAll(' ', '_')}_${Date.now()}.html`;
     document.body.appendChild(link);
     link.click();
 
     // Cleanup
-    document.body.removeChild(link);
+    link.remove();
     URL.revokeObjectURL(url);
   };
 
@@ -380,7 +380,7 @@ export default function ContractSignPage() {
   }
 
   // Format dates - kept for future use
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, sonarjs/no-dead-store, sonarjs/no-unused-vars
   const formatDate = (date: Date | string | null) => {
     if (!date) return '-';
     return new Intl.DateTimeFormat('it-IT', {

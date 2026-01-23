@@ -20,7 +20,7 @@ export default function DashboardPage() {
         } catch (e) {
           console.error('Logout error:', e);
         } finally {
-          window.location.href = '/auth/login';
+          globalThis.location.href = '/auth/login';
         }
       };
       handleLogout();

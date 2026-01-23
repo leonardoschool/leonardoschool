@@ -68,7 +68,7 @@ export default function DateTimePicker({
       document.addEventListener('mousedown', handleClickOutside);
       
       // Prevent body scroll on mobile when picker is open
-      const isMobile = window.innerWidth < 640; // sm breakpoint
+      const isMobile = globalThis.innerWidth < 640; // sm breakpoint
       if (isMobile) {
         document.body.style.overflow = 'hidden';
       }
@@ -252,15 +252,14 @@ export default function DateTimePicker({
           {value ? formatDisplayValue() : placeholder}
         </span>
         {value && !disabled && (
-          <span
-            role="button"
-            tabIndex={0}
+          <button
+            type="button"
             onClick={handleClear}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleClear(e as unknown as React.MouseEvent); }}
             className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 ${colors.text.muted} cursor-pointer`}
+            aria-label="Cancella data"
           >
             <X className="w-4 h-4" />
-          </span>
+          </button>
         )}
       </button>
 

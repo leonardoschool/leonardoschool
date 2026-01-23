@@ -335,6 +335,7 @@ export const contractsRouter = router({
       );
       
       // Use custom price if provided, otherwise use template price
+      // eslint-disable-next-line sonarjs/no-unused-vars -- price calculation reserved for future invoice feature
       const _finalPrice = input.customPrice ?? template.price;
 
       // Calculate expiration

@@ -159,10 +159,10 @@ export default function NotificationsScreen() {
         break;
       case 'EVENT_INVITATION':
       case 'EVENT_REMINDER':
-        // router.push('/(tabs)/calendar');
+        // TODO: Navigate to calendar when tab is implemented
         break;
       case 'MATERIAL_AVAILABLE':
-        // router.push('/(tabs)/materials');
+        // TODO: Navigate to materials when tab is implemented
         break;
       default:
         break;

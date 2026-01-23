@@ -109,10 +109,7 @@ export default function RegisterPage() {
         }
         console.warn('reCAPTCHA verification failed:', data.error);
         // In development, allow to continue if reCAPTCHA fails
-        if (process.env.NODE_ENV === 'development') {
-          return true;
-        }
-        return false;
+        return process.env.NODE_ENV === 'development';
       }
       
       return data.success;

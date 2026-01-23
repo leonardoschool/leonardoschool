@@ -12,15 +12,14 @@
 
 // IMPORTANTE: caricare dotenv PRIMA di qualsiasi altro import
 import { config } from 'dotenv';
-import { resolve } from 'path';
+import { resolve, join } from 'node:path';
 config({ path: resolve(__dirname, '../.env') });
 
 // Ora gli import che usano process.env
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { UserRole, PrismaClient } from '@prisma/client';
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readFileSync } from 'node:fs';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 
@@ -29,6 +28,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
+// eslint-disable-next-line sonarjs/no-hardcoded-passwords -- Intentional test password for seed data
 const TEST_PASSWORD = 'TestPassword123!';
 
 // Determina ambiente da DATABASE_URL (il modo più affidabile)
@@ -263,11 +263,12 @@ async function main() {
   console.log('🔗 Login: http://localhost:3000/auth/login\n');
 }
 
-main()
-  .catch((e) => {
-    console.error('❌ Seed failed:', e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+// Execute seed with proper cleanup
+try {
+  await main();
+} catch (e) {
+  console.error('❌ Seed failed:', e);
+  process.exit(1);
+} finally {
+  await prisma.$disconnect();
+}

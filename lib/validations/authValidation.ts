@@ -5,13 +5,31 @@
 import { colors } from '@/lib/theme/colors';
 
 /**
- * Validates email format using regex
+ * Validates email format using structural checks
  * @param email - Email address to validate
  * @returns true if email is valid, false otherwise
  */
 export const isValidEmail = (email: string): boolean => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
+  // Prevent DoS by limiting input length before validation
+  if (!email || email.length > 254) return false;
+  
+  // Check for any whitespace characters (space, tab, newline, etc.)
+  for (let i = 0; i < email.length; i++) {
+    const char = email.charCodeAt(i);
+    if (char <= 32 || char === 127) return false; // Control characters and space
+  }
+  
+  // Simple structural check without regex (faster for basic validation)
+  const atIndex = email.indexOf('@');
+  if (atIndex < 1 || atIndex === email.length - 1) return false;
+  
+  // Check for multiple @ symbols
+  if (email.indexOf('@', atIndex + 1) !== -1) return false;
+  
+  const dotIndex = email.lastIndexOf('.');
+  if (dotIndex < atIndex + 2 || dotIndex === email.length - 1) return false;
+  
+  return true;
 };
 
 /**

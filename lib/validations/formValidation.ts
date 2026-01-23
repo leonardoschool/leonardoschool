@@ -20,20 +20,34 @@ export interface ValidationResult {
 
 /**
  * Sanitize input by removing HTML tags and dangerous characters
+ * Uses iterative approach to avoid regex backtracking vulnerabilities
  */
 export function sanitizeInput(input: string): string {
-  return input
-    .replace(/<[^>]*>/g, '') // Remove HTML tags
-    .replace(/[<>"']/g, '') // Remove potentially dangerous characters
-    .trim();
+  let result = input;
+  
+  // Remove HTML tags iteratively
+  let startIdx = result.indexOf('<');
+  while (startIdx !== -1) {
+    const endIdx = result.indexOf('>', startIdx);
+    if (endIdx === -1) break;
+    result = result.slice(0, startIdx) + result.slice(endIdx + 1);
+    startIdx = result.indexOf('<');
+  }
+  
+  // Remove dangerous characters
+  result = result
+    .split('<').join('')
+    .split('>').join('')
+    .split('"').join('')
+    .split("'").join('');
+  
+  return result.trim();
 }
 
 /**
  * Validate email format
  */
 export function validateEmail(email: string): ValidationResult {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  
   if (!email) {
     return { valid: false, error: 'Email obbligatoria', field: 'email' };
   }
@@ -42,7 +56,18 @@ export function validateEmail(email: string): ValidationResult {
     return { valid: false, error: 'Email troppo lunga (max 100 caratteri)', field: 'email' };
   }
   
-  if (!emailRegex.test(email)) {
+  // Simple structural check without regex (avoids backtracking vulnerabilities)
+  const atIndex = email.indexOf('@');
+  if (atIndex < 1 || atIndex === email.length - 1) {
+    return { valid: false, error: 'Formato email non valido', field: 'email' };
+  }
+  
+  const dotIndex = email.lastIndexOf('.');
+  if (dotIndex < atIndex + 2 || dotIndex === email.length - 1) {
+    return { valid: false, error: 'Formato email non valido', field: 'email' };
+  }
+  
+  if (email.includes(' ')) {
     return { valid: false, error: 'Formato email non valido', field: 'email' };
   }
   
@@ -57,7 +82,7 @@ export function validatePhone(phone: string): ValidationResult {
     return { valid: false, error: 'Telefono obbligatorio', field: 'phone' };
   }
   
-  const phoneDigits = phone.replace(/[\s\-\+]/g, '');
+  const phoneDigits = phone.replaceAll(/[\s\-\+]/g, '');
   
   if (phoneDigits.length < 10 || phoneDigits.length > 15) {
     return { valid: false, error: 'Numero di telefono non valido (10-15 cifre)', field: 'phone' };
@@ -83,7 +108,8 @@ export function validateName(name: string): ValidationResult {
   }
   
   // Allow letters (including accented), spaces, and apostrophes
-  if (!/^[a-zA-ZàèéìòùÀÈÉÌÒÙáéíóúÁÉÍÓÚäëïöüÄËÏÖÜâêîôûÂÊÎÔÛ\s']+$/.test(name)) {
+  // Using Unicode categories for better coverage and no duplicates
+  if (!/^[\p{L}\s']+$/u.test(name)) {
     return { valid: false, error: 'Il nome può contenere solo lettere', field: 'name' };
   }
   

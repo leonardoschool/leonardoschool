@@ -43,7 +43,7 @@ export function useAuth() {
                 await auth.signOut();
                 await fetch('/api/auth/logout', { method: 'POST' });
                 lastSyncedUid.current = null;
-                window.location.href = '/auth/login';
+                globalThis.location.href = '/auth/login';
                 return;
               }
               

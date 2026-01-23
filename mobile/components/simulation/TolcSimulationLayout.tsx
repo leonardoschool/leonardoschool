@@ -23,6 +23,11 @@ import { useTheme } from '../../contexts/ThemeContext';
 
 // ==================== TYPES ====================
 
+/**
+ * Status type for question navigation buttons
+ */
+type QuestionStatus = 'answered' | 'flagged' | 'unanswered';
+
 interface SimulationSection {
   name: string;
   durationMinutes: number;
@@ -76,6 +81,39 @@ interface TolcSimulationLayoutProps {
   totalQuestions: number;
 }
 
+// Helper function to get background color based on question status
+const getStatusBackgroundColor = (
+  status: QuestionStatus,
+  isActive: boolean,
+  themed: (value: string) => string
+): string => {
+  if (isActive) return colors.neutral[800];
+  if (status === 'answered') return colors.status.success.main;
+  if (status === 'flagged') return colors.status.warning.light;
+  return themed(colors.background.secondary);
+};
+
+// Helper function to get border color based on question status
+const getStatusBorderColor = (
+  status: QuestionStatus
+): string => {
+  if (status === 'flagged') return colors.status.warning.main;
+  if (status === 'unanswered') return colors.status.error.light;
+  return 'transparent';
+};
+
+// Helper function to get text color based on question status
+const getStatusTextColor = (
+  status: QuestionStatus,
+  isActive: boolean,
+  themed: (value: string) => string
+): string => {
+  if (isActive) return '#fff';
+  if (status === 'answered') return '#fff';
+  if (status === 'flagged') return colors.status.warning.main;
+  return themed(colors.text.primary);
+};
+
 // ==================== HELPER FUNCTIONS ====================
 
 const formatTime = (seconds: number) => {
@@ -108,12 +146,12 @@ function QuestionNavigator({
   onGoToQuestion,
   onCompleteSection,
   sectionName,
-}: QuestionNavigatorProps) {
+}: Readonly<QuestionNavigatorProps>) {
   const { themed } = useTheme();
   const screenWidth = Dimensions.get('window').width;
   const buttonSize = Math.floor((screenWidth - spacing[8] - spacing[2] * 4) / 5);
 
-  const getQuestionStatus = (question: Question) => {
+  const getQuestionStatus = (question: Question): QuestionStatus => {
     const answer = answers.find((a) => a.questionId === question.questionId);
     if (!answer) return 'unanswered';
     if (answer.flagged) return 'flagged';
@@ -190,33 +228,16 @@ function QuestionNavigator({
                       borderRadius: 8,
                       justifyContent: 'center',
                       alignItems: 'center',
-                      backgroundColor: isActive
-                        ? colors.neutral[800]
-                        : status === 'answered'
-                          ? colors.status.success.main
-                          : status === 'flagged'
-                            ? colors.status.warning.light
-                            : themed(colors.background.secondary),
+                      backgroundColor: getStatusBackgroundColor(status, isActive, themed),
                       borderWidth: status === 'flagged' || status === 'unanswered' ? 2 : 0,
-                      borderColor:
-                        status === 'flagged'
-                          ? colors.status.warning.main
-                          : status === 'unanswered'
-                            ? colors.status.error.light
-                            : 'transparent',
+                      borderColor: getStatusBorderColor(status),
                     }}
                   >
                     <Text
                       variant="body"
                       style={{
                         fontWeight: '600',
-                        color: isActive
-                          ? '#fff'
-                          : status === 'answered'
-                            ? '#fff'
-                            : status === 'flagged'
-                              ? colors.status.warning.main
-                              : themed(colors.text.primary),
+                        color: getStatusTextColor(status, isActive, themed),
                       }}
                     >
                       {idx + 1}
@@ -323,13 +344,17 @@ export default function TolcSimulationLayout({
   sectionTimeRemaining,
   completedSections: _completedSections,
   onAnswerSelect,
+  onOpenTextChange: _onOpenTextChange,
   onToggleFlag,
   onGoToQuestion,
   onGoNext,
   onGoPrev,
   onCompleteSection,
+  onSubmit: _onSubmit,
   onReportQuestion,
-}: TolcSimulationLayoutProps) {
+  answeredCount: _answeredCount,
+  totalQuestions: _totalQuestions,
+}: Readonly<TolcSimulationLayoutProps>) {
   const { themed } = useTheme();
   const [showNavigator, setShowNavigator] = useState(false);
 
@@ -352,7 +377,7 @@ export default function TolcSimulationLayout({
     const idx = currentSectionQuestions.findIndex(
       (q) => q.questionId === currentQ.questionId
     );
-    return idx >= 0 ? idx : 0;
+    return Math.max(idx, 0);
   }, [questions, currentQuestionIndex, currentSectionQuestions]);
 
   const currentQuestion = questions[currentQuestionIndex];
@@ -365,6 +390,7 @@ export default function TolcSimulationLayout({
   const canGoPrev = sectionQuestionIndex > 0;
 
   // Get question status
+  // eslint-disable-next-line sonarjs/no-unused-vars -- utility for question status indicator
   const _getQuestionStatus = useCallback(
     (question: Question) => {
       const answer = answers.find((a) => a.questionId === question.questionId);
@@ -449,7 +475,7 @@ export default function TolcSimulationLayout({
           >
             <Ionicons name="time-outline" size={18} color={getTimerColor()} />
             <Text variant="h6" style={{ color: getTimerColor() }}>
-              {sectionTimeRemaining !== null ? formatTime(sectionTimeRemaining) : '--:--'}
+              {sectionTimeRemaining === null ? '--:--' : formatTime(sectionTimeRemaining)}
             </Text>
           </View>
 

@@ -36,6 +36,32 @@ const eslintConfig = defineConfig([
       // setState in useEffect for data initialization is a valid and common React pattern
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/purity": "off",
+      
+      // SonarJS rule adjustments for React/Next.js codebase
+      // Nested conditionals in JSX (ternaries for conditional rendering) are idiomatic React
+      "sonarjs/no-nested-conditional": "off",
+      // Nested functions (callbacks in JSX props, event handlers) are idiomatic React
+      "sonarjs/no-nested-functions": "off",
+      // Cognitive complexity - disabled for React components which often have high complexity
+      // due to conditional rendering, event handlers, and state management
+      // Consider refactoring functions with complexity > 50 when possible
+      "sonarjs/cognitive-complexity": "off",
+      // Other rules
+      "sonarjs/no-nested-template-literals": "warn",
+      "sonarjs/use-type-alias": "warn",
+      "sonarjs/redundant-type-aliases": "warn",
+      "sonarjs/no-identical-functions": "warn",
+      "sonarjs/pseudo-random": "warn",
+      "sonarjs/todo-tag": "warn",
+    },
+  },
+  // Relaxed rules for test files
+  {
+    files: ["tests/**/*.{ts,tsx}", "**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
+    rules: {
+      "sonarjs/no-unused-vars": "off", // Test mocks often have unused variables
+      "sonarjs/no-identical-functions": "off", // Test setup often has repeated patterns
+      "sonarjs/pseudo-random": "off", // Math.random() in tests is acceptable
     },
   },
 ]);

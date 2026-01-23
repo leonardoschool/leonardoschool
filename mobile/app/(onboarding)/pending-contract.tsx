@@ -22,6 +22,130 @@ import { config } from '../../lib/config';
 import { firebaseAuth } from '../../lib/firebase/auth';
 import { secureStorage } from '../../lib/storage';
 
+// Helper per gestire la navigazione dopo il check dello stato
+function handleNavigationAfterCheck(userData: {
+  parentDataRequired?: boolean;
+  pendingContractToken?: string;
+  isActive?: boolean;
+}): void {
+  if (userData.parentDataRequired) {
+    router.replace('/(onboarding)/parent-data');
+  } else if (!userData.pendingContractToken && userData.isActive) {
+    router.replace('/(tabs)');
+  }
+  // Se non active e no pending contract, resta su questa schermata
+}
+
+// Componente per la descrizione quando c'è un contratto da firmare
+interface ContractToSignDescriptionProps {
+  readonly userName?: string | null;
+  readonly textColor: string;
+}
+
+function ContractToSignDescription({ userName, textColor }: ContractToSignDescriptionProps) {
+  return (
+    <>
+      <Body style={[styles.description, { color: textColor }]}>
+        Ciao{userName ? ` ${userName.split(' ')[0]}` : ''}! Prima di poter utilizzare 
+        la piattaforma, devi firmare il contratto di iscrizione.
+      </Body>
+      <Body style={[styles.description, { color: textColor, marginTop: spacing[2] }]}>
+        Il contratto contiene i termini di utilizzo e le condizioni del servizio.
+      </Body>
+    </>
+  );
+}
+
+// Componente per la descrizione quando si attende il contratto
+interface WaitingForContractDescriptionProps {
+  readonly userName?: string | null;
+  readonly textColor: string;
+}
+
+function WaitingForContractDescription({ userName, textColor }: WaitingForContractDescriptionProps) {
+  return (
+    <>
+      <Body style={[styles.description, { color: textColor }]}>
+        Ciao{userName ? ` ${userName.split(' ')[0]}` : ''}! Il tuo profilo è completo.
+      </Body>
+      <Body style={[styles.description, { color: textColor, marginTop: spacing[2] }]}>
+        L&apos;amministrazione sta preparando il tuo contratto di iscrizione. 
+        Riceverai una notifica quando sarà pronto per la firma.
+      </Body>
+    </>
+  );
+}
+
+// Componente per i bottoni azioni
+interface ActionButtonsProps {
+  readonly hasContractToSign: boolean;
+  readonly isChecking: boolean;
+  readonly onOpenContract: () => void;
+  readonly onCheckStatus: () => void;
+  readonly onLogout: () => void;
+  readonly textSecondaryColor: string;
+}
+
+function ActionButtons({
+  hasContractToSign,
+  isChecking,
+  onOpenContract,
+  onCheckStatus,
+  onLogout,
+  textSecondaryColor,
+}: ActionButtonsProps) {
+  return (
+    <Animated.View 
+      entering={FadeInDown.delay(600).duration(600)}
+      style={styles.buttonsContainer}
+    >
+      {hasContractToSign && (
+        <Button onPress={onOpenContract} fullWidth size="lg">
+          <View style={styles.buttonContent}>
+            <Ionicons name="create-outline" size={20} color="#FFFFFF" />
+            <Body style={{ color: '#FFFFFF', fontWeight: '600' }}>
+              Firma il contratto
+            </Body>
+          </View>
+        </Button>
+      )}
+
+      <Button
+        variant={hasContractToSign ? "outline" : "primary"}
+        onPress={onCheckStatus}
+        fullWidth
+        size="lg"
+        disabled={isChecking}
+      >
+        <View style={styles.buttonContent}>
+          {isChecking ? (
+            <Body style={{ color: hasContractToSign ? colors.primary.main : '#FFFFFF', fontWeight: '600' }}>
+              Verifico...
+            </Body>
+          ) : (
+            <>
+              <Ionicons 
+                name={hasContractToSign ? "checkmark-circle-outline" : "refresh-outline"}
+                size={20} 
+                color={hasContractToSign ? colors.primary.main : '#FFFFFF'}
+              />
+              <Body style={{ color: hasContractToSign ? colors.primary.main : '#FFFFFF', fontWeight: '600' }}>
+                {hasContractToSign ? 'Ho firmato il contratto' : 'Controlla stato'}
+              </Body>
+            </>
+          )}
+        </View>
+      </Button>
+
+      <Button variant="ghost" onPress={onLogout} fullWidth>
+        <Body style={{ color: textSecondaryColor }}>
+          Esci dall&apos;account
+        </Body>
+      </Button>
+    </Animated.View>
+  );
+}
+
 export default function PendingContractScreen() {
   const themedColors = useThemedColors();
   const { logout, user, login } = useAuthStore();
@@ -56,18 +180,8 @@ export default function PendingContractScreen() {
         await secureStorage.setAuthToken(token);
         await login(userData, token, undefined);
         
-        // Navigate based on current state
-        if (userData.parentDataRequired) {
-          router.replace('/(onboarding)/parent-data');
-        } else if (userData.pendingContractToken) {
-          // Still has a contract to sign - stay here but update the token
-          // The UI will now show the "sign contract" state
-        } else if (userData.isActive) {
-          // Account is active, go to main app
-          router.replace('/(tabs)');
-        }
-        // If not active and no pending contract, stay on this screen
-        // The UI will show "waiting for contract assignment"
+        // Navigate based on current state using helper
+        handleNavigationAfterCheck(userData);
       }
     } catch (error) {
       console.error('[PendingContract] Check failed:', error);
@@ -132,25 +246,9 @@ export default function PendingContractScreen() {
         {/* Description */}
         <Animated.View entering={FadeInDown.delay(400).duration(600)}>
           {hasContractToSign ? (
-            <>
-              <Body style={[styles.description, { color: themedColors.textSecondary }]}>
-                Ciao{user?.name ? ` ${user.name.split(' ')[0]}` : ''}! Prima di poter utilizzare 
-                la piattaforma, devi firmare il contratto di iscrizione.
-              </Body>
-              <Body style={[styles.description, { color: themedColors.textSecondary, marginTop: spacing[2] }]}>
-                Il contratto contiene i termini di utilizzo e le condizioni del servizio.
-              </Body>
-            </>
+            <ContractToSignDescription userName={user?.name} textColor={themedColors.textSecondary} />
           ) : (
-            <>
-              <Body style={[styles.description, { color: themedColors.textSecondary }]}>
-                Ciao{user?.name ? ` ${user.name.split(' ')[0]}` : ''}! Il tuo profilo è completo.
-              </Body>
-              <Body style={[styles.description, { color: themedColors.textSecondary, marginTop: spacing[2] }]}>
-                L&apos;amministrazione sta preparando il tuo contratto di iscrizione. 
-                Riceverai una notifica quando sarà pronto per la firma.
-              </Body>
-            </>
+            <WaitingForContractDescription userName={user?.name} textColor={themedColors.textSecondary} />
           )}
         </Animated.View>
 
@@ -172,62 +270,14 @@ export default function PendingContractScreen() {
         </Animated.View>
 
         {/* Buttons */}
-        <Animated.View 
-          entering={FadeInDown.delay(600).duration(600)}
-          style={styles.buttonsContainer}
-        >
-          {hasContractToSign ? (
-            <Button
-              onPress={handleOpenContract}
-              fullWidth
-              size="lg"
-            >
-              <View style={styles.buttonContent}>
-                <Ionicons name="create-outline" size={20} color="#FFFFFF" />
-                <Body style={{ color: '#FFFFFF', fontWeight: '600' }}>
-                  Firma il contratto
-                </Body>
-              </View>
-            </Button>
-          ) : null}
-
-          <Button
-            variant={hasContractToSign ? "outline" : "primary"}
-            onPress={handleCheckStatus}
-            fullWidth
-            size="lg"
-            disabled={isChecking}
-          >
-            <View style={styles.buttonContent}>
-              {isChecking ? (
-                <Body style={{ color: hasContractToSign ? colors.primary.main : '#FFFFFF', fontWeight: '600' }}>
-                  Verifico...
-                </Body>
-              ) : (
-                <>
-                  <Ionicons 
-                    name={hasContractToSign ? "checkmark-circle-outline" : "refresh-outline"}
-                    size={20} 
-                    color={hasContractToSign ? colors.primary.main : '#FFFFFF'}
-                  />
-                  <Body style={{ color: hasContractToSign ? colors.primary.main : '#FFFFFF', fontWeight: '600' }}>
-                    {hasContractToSign ? 'Ho firmato il contratto' : 'Controlla stato'}
-                  </Body>
-                </>
-              )}
-            </View>
-          </Button>
-
-          <Button
-            variant="ghost"
-            onPress={handleLogout}
-            fullWidth
-          >
-            <Body style={{ color: themedColors.textSecondary }}>
-              Esci dall&apos;account
-            </Body>
-          </Button>
-        </Animated.View>
+        <ActionButtons
+          hasContractToSign={hasContractToSign}
+          isChecking={isChecking}
+          onOpenContract={handleOpenContract}
+          onCheckStatus={handleCheckStatus}
+          onLogout={handleLogout}
+          textSecondaryColor={themedColors.textSecondary}
+        />
       </View>
     </SafeAreaView>
   );

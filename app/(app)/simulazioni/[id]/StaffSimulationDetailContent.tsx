@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
+import { stripHtml } from '@/lib/utils/sanitizeHtml';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { PageLoader, Spinner } from '@/components/ui/loaders';
@@ -329,7 +330,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm ${colors.text.primary} line-clamp-2 leading-relaxed`}>
-                        {sq.question.text.replace(/<[^>]*>/g, '')}
+                        {stripHtml(sq.question.text)}
                       </p>
                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-2">
                         {sq.question.subject && (

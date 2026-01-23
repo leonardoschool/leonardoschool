@@ -18,6 +18,8 @@ import { notifySimulationCreated } from '@/server/services/simulationNotificatio
 import * as notificationService from '@/server/services/notificationService';
 import { notifications } from '@/lib/notifications';
 import { createLogger } from '@/lib/utils/logger';
+import { stripHtml } from '@/lib/utils/sanitizeHtml';
+import { secureShuffleArray } from '@/lib/utils';
 
 const log = createLogger('Simulations');
 
@@ -444,7 +446,7 @@ async function selectQuestionsAutomatically(
       : questions;
 
     // Shuffle and select
-    const shuffled = [...filteredQuestions].toSorted(() => Math.random() - 0.5);
+    const shuffled = secureShuffleArray(filteredQuestions);
     const selected = shuffled.slice(0, count);
 
     for (const q of selected) {
@@ -3076,7 +3078,7 @@ export const simulationsRouter = router({
       // Randomize if needed
       let questions = simulation.questions;
       if (simulation.randomizeOrder) {
-        questions = [...questions].sort(() => Math.random() - 0.5);
+        questions = secureShuffleArray(questions);
       }
 
       if (simulation.randomizeAnswers) {
@@ -3084,7 +3086,7 @@ export const simulationsRouter = router({
           ...sq,
           question: {
             ...sq.question,
-            answers: [...sq.question.answers].sort(() => Math.random() - 0.5),
+            answers: secureShuffleArray(sq.question.answers),
           },
         }));
       }
@@ -3837,8 +3839,8 @@ export const simulationsRouter = router({
         });
       }
 
-      // Shuffle using toSorted for immutability and select
-      const shuffled = [...questions].toSorted(() => Math.random() - 0.5);
+      // Shuffle using secure shuffle and select
+      const shuffled = secureShuffleArray(questions);
       const selected = shuffled.slice(0, questionCount);
 
       // Create simulation
@@ -4885,7 +4887,7 @@ export const simulationsRouter = router({
         questions: simulation.questions.map((sq, index) => ({
           id: sq.questionId,
           order: index + 1,
-          text: sq.question.text.replaceAll(/<[^>]*>/g, '').substring(0, 100) + '...',
+          text: stripHtml(sq.question.text).substring(0, 100) + '...',
           subject: sq.question.subject?.name,
           answers: sq.question.answers.map(a => ({
             id: a.id,
@@ -5293,7 +5295,7 @@ export const simulationsRouter = router({
         questionMap.set(sq.questionId, {
           id: sq.questionId,
           order: idx + 1,
-          text: sq.question.text.replaceAll(/<[^>]*>/g, '').substring(0, 80),
+          text: stripHtml(sq.question.text).substring(0, 80),
           subject: sq.question.subject,
           topic: sq.question.topic,
           correctAnswerLetter: correctLetter,

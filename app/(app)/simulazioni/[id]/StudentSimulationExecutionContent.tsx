@@ -45,8 +45,8 @@ interface SimulationSection {
 }
 
 interface StudentSimulationExecutionContentProps {
-  id: string;
-  assignmentId?: string | null;
+  readonly id: string;
+  readonly assignmentId?: string | null;
 }
 
 export default function StudentSimulationExecutionContent({ id, assignmentId }: StudentSimulationExecutionContentProps) {
@@ -113,6 +113,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
 
   // Get participant ID for Virtual Room simulations - run immediately when isVirtualRoom
   // Uses assignmentId to get the session status for this specific assignment
+  // eslint-disable-next-line sonarjs/no-unused-vars -- refetch reserved for manual status refresh
   const { data: sessionStatus, refetch: _refetchSessionStatus } = trpc.virtualRoom.getStudentSessionStatus.useQuery(
     { assignmentId: assignmentId ?? undefined },
     { 
@@ -142,7 +143,8 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     // Check if kicked
     if (sessionStatus?.hasSession && 'isKicked' in sessionStatus && sessionStatus.isKicked) {
       setIsKicked(true);
-      setKickedReason('kickedReason' in sessionStatus ? (sessionStatus.kickedReason as string) : 'Sei stato espulso dalla sessione');
+      const reason = 'kickedReason' in sessionStatus ? sessionStatus.kickedReason : 'Sei stato espulso dalla sessione';
+      setKickedReason(typeof reason === 'string' ? reason : 'Sei stato espulso dalla sessione');
     }
   }, [sessionStatus, hasStarted]);
 
@@ -364,7 +366,8 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
       // Check if student has been kicked (type guard for kicked response)
       if (data.isKicked && 'kickedReason' in data) {
         setIsKicked(true);
-        setKickedReason((data.kickedReason as string) || 'Sei stato espulso dalla sessione');
+        const reason = data.kickedReason;
+        setKickedReason(typeof reason === 'string' && reason ? reason : 'Sei stato espulso dalla sessione');
       }
     },
   });
@@ -462,12 +465,14 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
 
       // Show confirmation dialog
       e.preventDefault();
-      e.returnValue = 'Hai una simulazione in corso. Sei sicuro di voler lasciare la pagina?';
-      return e.returnValue;
+      // returnValue is deprecated but still needed for cross-browser compatibility
+      const message = 'Hai una simulazione in corso. Sei sicuro di voler lasciare la pagina?';
+      e.returnValue = message;
+      return message;
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    globalThis.addEventListener('beforeunload', handleBeforeUnload);
+    return () => globalThis.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasStarted, startAttemptMutation.data?.resultId, answers, questionTimes, timeSpent, sectionTimes, currentSectionIndex]);
 
   // Auto-save progress periodically
@@ -608,7 +613,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   // Keep autoSubmitRef updated with the latest handleSubmit function
   // This allows external triggers (like Virtual Room session end) to auto-submit
   useEffect(() => {
-    autoSubmitRef.current = handleSubmit;
+    autoSubmitRef.current = () => { void handleSubmit(); };
   }, [handleSubmit]);
 
   // Parse sections from simulation (if TOLC-style)

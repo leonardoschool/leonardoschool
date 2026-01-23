@@ -163,6 +163,7 @@ export default function AdminAssenzeContent() {
   };
   
   // Quick actions (prefixed with _ as they're reserved for future inline buttons)
+  // eslint-disable-next-line sonarjs/no-unused-vars -- reserved for future inline action buttons
   const _handleQuickApprove = (absenceId: string) => {
     updateAbsenceStatus.mutate({
       id: absenceId,
@@ -170,6 +171,7 @@ export default function AdminAssenzeContent() {
     });
   };
   
+  // eslint-disable-next-line sonarjs/no-unused-vars -- reserved for future inline action buttons
   const _handleQuickReject = (absenceId: string) => {
     updateAbsenceStatus.mutate({
       id: absenceId,

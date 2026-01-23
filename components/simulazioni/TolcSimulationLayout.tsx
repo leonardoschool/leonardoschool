@@ -28,7 +28,7 @@ interface SimulationSection {
 }
 
 // Generic question type
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, sonarjs/redundant-type-aliases
 type Question = any;
 
 interface Answer {
@@ -40,25 +40,25 @@ interface Answer {
 }
 
 interface TolcSimulationLayoutProps {
-  simulationTitle: string;
-  questions: Question[];
-  sections: SimulationSection[];
-  currentSectionIndex: number;
-  currentQuestionIndex: number;
-  answers: Answer[];
-  sectionTimeRemaining: number | null;
-  completedSections: Set<number>;
-  onAnswerSelect: (answerId: string) => void;
-  onOpenTextChange?: (text: string) => void;
-  onToggleFlag: () => void;
-  onGoToQuestion: (index: number) => void;
-  onGoNext: () => void;
-  onGoPrev: () => void;
-  onCompleteSection: () => void;
-  onSubmit: () => void;
-  onReportQuestion: () => void;
-  answeredCount: number;
-  totalQuestions: number;
+  readonly simulationTitle: string;
+  readonly questions: Question[];
+  readonly sections: SimulationSection[];
+  readonly currentSectionIndex: number;
+  readonly currentQuestionIndex: number;
+  readonly answers: Answer[];
+  readonly sectionTimeRemaining: number | null;
+  readonly completedSections: Set<number>;
+  readonly onAnswerSelect: (answerId: string) => void;
+  readonly onOpenTextChange?: (text: string) => void;
+  readonly onToggleFlag: () => void;
+  readonly onGoToQuestion: (index: number) => void;
+  readonly onGoNext: () => void;
+  readonly onGoPrev: () => void;
+  readonly onCompleteSection: () => void;
+  readonly onSubmit: () => void;
+  readonly onReportQuestion: () => void;
+  readonly answeredCount: number;
+  readonly totalQuestions: number;
 }
 
 export default function TolcSimulationLayout({
@@ -78,6 +78,9 @@ export default function TolcSimulationLayout({
   onGoPrev,
   onCompleteSection,
   onReportQuestion,
+  // Props available for future use
+  // onSubmit - for final submission
+  // answeredCount, totalQuestions - for progress display
 }: TolcSimulationLayoutProps) {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
@@ -108,7 +111,7 @@ export default function TolcSimulationLayout({
       sectionIndex: idx,
       totalInSection: currentSectionQuestions.length,
     });
-    return idx >= 0 ? idx : 0; // Fallback to 0 if not found
+    return Math.max(idx, 0); // Fallback to 0 if not found
   }, [questions, currentQuestionIndex, currentSectionQuestions]);
 
   const currentQuestion = questions[currentQuestionIndex];
@@ -129,6 +132,50 @@ export default function TolcSimulationLayout({
     if (answer.answerId) return 'answered';
     return 'unanswered';
   }, [answers]);
+
+  // Get button class for question status
+  const getQuestionButtonClass = (status: string, isActive: boolean) => {
+    if (isActive) return 'bg-cyan-600 dark:bg-cyan-700 text-white shadow-lg';
+    if (status === 'answered') return 'bg-green-500 dark:bg-green-600 text-white';
+    if (status === 'flagged') return 'bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-300 border-2 border-orange-400 dark:border-orange-500';
+    return 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600';
+  };
+
+  // Get button title for question status
+  const getQuestionButtonTitle = (status: string) => {
+    if (status === 'answered') return 'Risposta data';
+    if (status === 'flagged') return 'Domanda segnalata';
+    return 'Nessuna risposta';
+  };
+
+  // Get section container class
+  const getSectionContainerClass = (isActive: boolean, isCompleted: boolean, isLocked: boolean) => {
+    if (isActive) return 'bg-cyan-50 dark:bg-cyan-900/20 border-cyan-400 dark:border-cyan-600 shadow-lg';
+    if (isCompleted) return 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800';
+    if (isLocked) return 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-50';
+    return 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700';
+  };
+
+  // Get section title class
+  const getSectionTitleClass = (isActive: boolean, isCompleted: boolean) => {
+    if (isActive) return 'text-cyan-700 dark:text-cyan-300';
+    if (isCompleted) return 'text-green-700 dark:text-green-400';
+    return 'text-gray-600 dark:text-gray-400';
+  };
+
+  // Get timer stroke class
+  const getTimerStrokeClass = (isUrgent: boolean, isCritical: boolean) => {
+    if (isCritical) return 'stroke-red-500';
+    if (isUrgent) return 'stroke-yellow-500';
+    return 'stroke-cyan-500';
+  };
+
+  // Get timer text class
+  const getTimerTextClass = (isUrgent: boolean, isCritical: boolean) => {
+    if (isCritical) return 'text-red-600 dark:text-red-400';
+    if (isUrgent) return 'text-yellow-600 dark:text-yellow-400';
+    return 'text-cyan-600 dark:text-cyan-400';
+  };
 
   // Navigation bounds - based on position within section
   const canGoNext = sectionQuestionIndex < currentSectionQuestions.length - 1;
@@ -203,6 +250,9 @@ export default function TolcSimulationLayout({
                 const globalIdx = questions.findIndex(gq => gq.questionId === q.questionId);
                 const status = getQuestionStatus(q);
                 const isActive = globalIdx === currentQuestionIndex;
+                const buttonClass = isActive 
+                  ? 'bg-gray-800 dark:bg-white text-white dark:text-gray-800 ring-2 ring-offset-2 ring-gray-800 dark:ring-white' 
+                  : getQuestionButtonClass(status, false);
                 
                 return (
                   <button
@@ -210,22 +260,9 @@ export default function TolcSimulationLayout({
                     onClick={() => onGoToQuestion(globalIdx)}
                     className={`
                       relative w-8 h-8 rounded text-sm font-medium transition-all
-                      ${isActive 
-                        ? 'bg-gray-800 dark:bg-white text-white dark:text-gray-800 ring-2 ring-offset-2 ring-gray-800 dark:ring-white' 
-                        : status === 'answered'
-                          ? 'bg-green-500 dark:bg-green-600 text-white'
-                          : status === 'flagged'
-                            ? 'bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-300 border-2 border-orange-400 dark:border-orange-500'
-                            : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-2 border-red-300 dark:border-red-500/50 hover:bg-gray-50 dark:hover:bg-gray-600'
-                      }
+                      ${buttonClass}
                     `}
-                    title={
-                      status === 'answered' 
-                        ? 'Risposta data' 
-                        : status === 'flagged'
-                          ? 'Domanda segnalata'
-                          : 'Nessuna risposta'
-                    }
+                    title={getQuestionButtonTitle(status)}
                   >
                     {idx + 1}
                     {/* Red dot for unanswered questions */}
@@ -256,30 +293,20 @@ export default function TolcSimulationLayout({
               const isCompleted = completedSections.has(idx);
               const isCurrent = idx === currentSectionIndex;
               const isLocked = idx > currentSectionIndex && !isCompleted;
+              const containerClass = isCurrent 
+                ? 'bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600' 
+                : getSectionContainerClass(false, isCompleted, isLocked);
+              const titleClass = isCurrent 
+                ? 'text-gray-800 dark:text-gray-100' 
+                : getSectionTitleClass(false, isCompleted);
 
               return (
                 <div
-                  key={idx}
-                  className={`
-                    py-3 px-4 mb-2 rounded-lg border transition-colors
-                    ${isCurrent 
-                      ? 'bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600' 
-                      : isCompleted
-                        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-                        : isLocked
-                          ? 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-50'
-                          : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
-                    }
-                  `}
+                  key={section.name}
+                  className={`py-3 px-4 mb-2 rounded-lg border transition-colors ${containerClass}`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className={`text-sm font-medium ${
-                      isCurrent 
-                        ? 'text-gray-800 dark:text-gray-100' 
-                        : isCompleted
-                          ? 'text-green-700 dark:text-green-400'
-                          : 'text-gray-600 dark:text-gray-400'
-                    }`}>
+                    <span className={`text-sm font-medium ${titleClass}`}>
                       {section.name}
                     </span>
                     {isCompleted && (
@@ -352,9 +379,9 @@ export default function TolcSimulationLayout({
             {currentQuestion.question?.type === 'OPEN_TEXT' ? (
               /* Open text answer input with symbol keyboard */
               <div className="space-y-3">
-                <label className={`block text-sm font-medium ${colors.text.secondary} mb-2`}>
+                <span className={`block text-sm font-medium ${colors.text.secondary} mb-2`}>
                   Scrivi la tua risposta:
-                </label>
+                </span>
                 <TextareaWithSymbols
                   value={currentAnswer?.answerText || ''}
                   onChange={(text) => onOpenTextChange?.(text)}
@@ -477,36 +504,42 @@ export default function TolcSimulationLayout({
                   fill="none"
                 />
                 {/* Progress circle */}
-                <circle
-                  cx="64"
-                  cy="64"
-                  r="56"
-                  className={`${
-                    sectionTimeRemaining !== null && sectionTimeRemaining < 60
-                      ? 'stroke-red-500'
-                      : sectionTimeRemaining !== null && sectionTimeRemaining < 300
-                        ? 'stroke-yellow-500'
-                        : 'stroke-cyan-500'
-                  } transition-all duration-1000`}
-                  strokeWidth="8"
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeDasharray={`${2 * Math.PI * 56}`}
-                  strokeDashoffset={`${2 * Math.PI * 56 * (1 - (sectionTimeRemaining !== null ? sectionTimeRemaining / (currentSection?.durationMinutes || 1) / 60 : 1))}`}
-                />
+                {(() => {
+                  const isCritical = sectionTimeRemaining !== null && sectionTimeRemaining < 60;
+                  const isUrgent = sectionTimeRemaining !== null && sectionTimeRemaining < 300;
+                  const strokeClass = getTimerStrokeClass(isUrgent, isCritical);
+                  const progress = sectionTimeRemaining === null 
+                    ? 1 
+                    : sectionTimeRemaining / (currentSection?.durationMinutes || 1) / 60;
+                  return (
+                    <circle
+                      cx="64"
+                      cy="64"
+                      r="56"
+                      className={`${strokeClass} transition-all duration-1000`}
+                      strokeWidth="8"
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeDasharray={`${2 * Math.PI * 56}`}
+                      strokeDashoffset={`${2 * Math.PI * 56 * (1 - progress)}`}
+                    />
+                  );
+                })()}
               </svg>
               
               {/* Timer Text */}
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className={`text-2xl font-bold ${
-                  sectionTimeRemaining !== null && sectionTimeRemaining < 60
-                    ? 'text-red-600 dark:text-red-400'
-                    : sectionTimeRemaining !== null && sectionTimeRemaining < 300
-                      ? 'text-yellow-600 dark:text-yellow-400'
-                      : 'text-cyan-600 dark:text-cyan-400'
-                }`}>
-                  {sectionTimeRemaining !== null ? formatTime(sectionTimeRemaining) : '--:--'}
-                </span>
+                {(() => {
+                  const isCritical = sectionTimeRemaining !== null && sectionTimeRemaining < 60;
+                  const isUrgent = sectionTimeRemaining !== null && sectionTimeRemaining < 300;
+                  const textClass = getTimerTextClass(isUrgent, isCritical);
+                  const timeDisplay = sectionTimeRemaining === null ? '--:--' : formatTime(sectionTimeRemaining);
+                  return (
+                    <span className={`text-2xl font-bold ${textClass}`}>
+                      {timeDisplay}
+                    </span>
+                  );
+                })()}
                 <span className="text-sm text-gray-500 dark:text-gray-400">
                   {answeredInSection}/{currentSectionQuestions.length}
                 </span>
@@ -540,9 +573,11 @@ export default function TolcSimulationLayout({
       {showMobileMenu && (
         <div className="lg:hidden fixed inset-0 z-50">
           {/* Backdrop */}
-          <div 
-            className="absolute inset-0 bg-black/50" 
-            onClick={() => setShowMobileMenu(false)} 
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50 cursor-default"
+            onClick={() => setShowMobileMenu(false)}
+            aria-label="Chiudi menu"
           />
           
           {/* Drawer */}
@@ -560,24 +595,21 @@ export default function TolcSimulationLayout({
 
             {/* Timer */}
             <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-gray-100 dark:bg-gray-700">
-                <Clock className={`w-6 h-6 ${
-                  sectionTimeRemaining !== null && sectionTimeRemaining < 60
-                    ? 'text-red-500'
-                    : sectionTimeRemaining !== null && sectionTimeRemaining < 300
-                      ? 'text-yellow-500'
-                      : 'text-cyan-500'
-                }`} />
-                <span className={`text-2xl font-bold font-mono ${
-                  sectionTimeRemaining !== null && sectionTimeRemaining < 60
-                    ? 'text-red-600 dark:text-red-400'
-                    : sectionTimeRemaining !== null && sectionTimeRemaining < 300
-                      ? 'text-yellow-600 dark:text-yellow-400'
-                      : 'text-cyan-600 dark:text-cyan-400'
-                }`}>
-                  {sectionTimeRemaining !== null ? formatTime(sectionTimeRemaining) : '--:--'}
-                </span>
-              </div>
+              {(() => {
+                const isCritical = sectionTimeRemaining !== null && sectionTimeRemaining < 60;
+                const isUrgent = sectionTimeRemaining !== null && sectionTimeRemaining < 300;
+                const iconClass = getTimerStrokeClass(isUrgent, isCritical).replace('stroke-', 'text-');
+                const textClass = getTimerTextClass(isUrgent, isCritical);
+                const timeDisplay = sectionTimeRemaining === null ? '--:--' : formatTime(sectionTimeRemaining);
+                return (
+                  <div className="flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-gray-100 dark:bg-gray-700">
+                    <Clock className={`w-6 h-6 ${iconClass}`} />
+                    <span className={`text-2xl font-bold font-mono ${textClass}`}>
+                      {timeDisplay}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Current Section */}
@@ -592,6 +624,9 @@ export default function TolcSimulationLayout({
                   const globalIdx = questions.findIndex(gq => gq.questionId === q.questionId);
                   const status = getQuestionStatus(q);
                   const isActive = globalIdx === currentQuestionIndex;
+                  const buttonClass = isActive 
+                    ? 'bg-gray-800 dark:bg-white text-white dark:text-gray-800 ring-2 ring-offset-2 ring-gray-800 dark:ring-white' 
+                    : getQuestionButtonClass(status, false);
                   
                   return (
                     <button
@@ -602,22 +637,9 @@ export default function TolcSimulationLayout({
                       }}
                       className={`
                         relative w-10 h-10 rounded-lg text-sm font-medium transition-all
-                        ${isActive 
-                          ? 'bg-gray-800 dark:bg-white text-white dark:text-gray-800 ring-2 ring-offset-2 ring-gray-800 dark:ring-white' 
-                          : status === 'answered'
-                            ? 'bg-green-500 dark:bg-green-600 text-white'
-                            : status === 'flagged'
-                              ? 'bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-300 border-2 border-orange-400 dark:border-orange-500'
-                              : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-2 border-red-300 dark:border-red-500/50'
-                        }
+                        ${buttonClass}
                       `}
-                      title={
-                        status === 'answered' 
-                          ? 'Risposta data' 
-                          : status === 'flagged'
-                            ? 'Domanda segnalata'
-                            : 'Nessuna risposta'
-                      }
+                      title={getQuestionButtonTitle(status)}
                     >
                       {idx + 1}
                       {/* Red dot for unanswered questions */}
@@ -649,19 +671,14 @@ export default function TolcSimulationLayout({
               {sections.map((section, idx) => {
                 const isCompleted = completedSections.has(idx);
                 const isCurrent = idx === currentSectionIndex;
+                const containerClass = isCurrent 
+                  ? 'bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600' 
+                  : getSectionContainerClass(false, isCompleted, !isCompleted && !isCurrent);
 
                 return (
                   <div
-                    key={idx}
-                    className={`
-                      py-3 px-4 mb-2 rounded-lg border
-                      ${isCurrent 
-                        ? 'bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600' 
-                        : isCompleted
-                          ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-                          : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-50'
-                      }
-                    `}
+                    key={section.name}
+                    className={`py-3 px-4 mb-2 rounded-lg border ${containerClass}`}
                   >
                     <div className="flex items-center justify-between">
                       <span className={`text-sm font-medium ${

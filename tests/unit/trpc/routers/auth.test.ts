@@ -448,10 +448,14 @@ describe('Auth Router', () => {
           name: 'Test User',
         };
 
-        // Valid email check
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        expect(emailRegex.test(validInput.email)).toBe(true);
-        expect(emailRegex.test(invalidInput.email)).toBe(false);
+        // Valid email check using structural validation
+        const isValidEmail = (email: string) => {
+          const atIndex = email.indexOf('@');
+          const dotIndex = email.lastIndexOf('.');
+          return atIndex > 0 && dotIndex > atIndex + 1 && dotIndex < email.length - 1 && !email.includes(' ');
+        };
+        expect(isValidEmail(validInput.email)).toBe(true);
+        expect(isValidEmail(invalidInput.email)).toBe(false);
       });
 
       it('should require firebaseUid', () => {

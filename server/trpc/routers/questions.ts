@@ -2,6 +2,7 @@
 import { router, adminProcedure, staffProcedure, protectedProcedure, studentProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import { secureShuffleArray } from '@/lib/utils';
 import {
   createQuestionSchema,
   updateQuestionSchema,
@@ -576,7 +577,7 @@ async function selectQuestionsForDifficulty(
     : questions;
 
   // Shuffle and take only what we need
-  const shuffled = [...finalQuestions].sort(() => Math.random() - 0.5);
+  const shuffled = secureShuffleArray(finalQuestions);
   const picked = shuffled.slice(0, count);
 
   const selectedIds = picked.map((q: QuestionQueryResult) => q.id);
@@ -1268,10 +1269,12 @@ export const questionsRouter = router({
         });
       }
 
-      // Create duplicate using nested writes
+      // Create duplicate using nested writes - destructure to exclude fields that shouldn't be copied
+      /* eslint-disable sonarjs/no-unused-vars -- Destructuring to exclude fields */
       const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publishedAt: _publishedAt, archivedAt: _archivedAt, version: _version, 
               timesUsed: _timesUsed, timesAnswered: _timesAnswered, timesCorrect: _timesCorrect, timesWrong: _timesWrong, timesSkipped: _timesSkipped,
               avgTimeSeconds: _avgTimeSeconds, avgCorrectRate: _avgCorrectRate, answers, keywords, ...questionData } = original;
+      /* eslint-enable sonarjs/no-unused-vars */
 
       const duplicate = await ctx.prisma.question.create({
         data: {
@@ -1792,6 +1795,7 @@ export const questionsRouter = router({
         .slice(0, 10);
 
       // Scientific/technical terms patterns
+      /* eslint-disable sonarjs/slow-regex -- Intentional patterns for scientific term extraction, input is sanitized */
       const scientificPatterns = [
         { pattern: /\b(cellul\w+|protein\w+|enzim\w+|molecol\w+|atom\w+)\b/gi, reason: 'Termine scientifico' },
         { pattern: /\b(reazion\w+|process\w+|sistem\w+|struttur\w+)\b/gi, reason: 'Concetto chiave' },
@@ -1799,6 +1803,7 @@ export const questionsRouter = router({
         { pattern: /\b(acido|base|sale|ione|legame)\b/gi, reason: 'Termine chimico' },
         { pattern: /\b(\d+[.,]?\d*)\s*(kg|g|mg|l|ml|m|cm|mm|mol)\b/gi, reason: 'Valore numerico' },
       ];
+      /* eslint-enable sonarjs/slow-regex */
 
       // Check for scientific patterns
       scientificPatterns.forEach(({ pattern, reason }) => {
@@ -2368,8 +2373,7 @@ export const questionsRouter = router({
       }
 
       // Final shuffle to mix subjects together
-      const finalQuestions = [...selectedQuestions]
-        .sort(() => Math.random() - 0.5)
+      const finalQuestions = secureShuffleArray(selectedQuestions)
         .map((q, idx) => ({ ...q, order: idx }));
 
       // Calculate statistics using helper

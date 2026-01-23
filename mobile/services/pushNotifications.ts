@@ -221,15 +221,15 @@ export function handleNotificationResponse(
       break;
     case 'EVENT_INVITATION':
     case 'EVENT_REMINDER':
-      // router.push('/(tabs)/calendar');
+      // TODO: Navigate to calendar when implemented
       router.push('/(tabs)');
       break;
     case 'MATERIAL_AVAILABLE':
-      // router.push('/(tabs)/materials');
+      // TODO: Navigate to materials when implemented
       router.push('/(tabs)');
       break;
     case 'MESSAGE_RECEIVED':
-      // router.push('/(tabs)/messages');
+      // TODO: Navigate to messages when implemented
       router.push('/(tabs)');
       break;
     default:

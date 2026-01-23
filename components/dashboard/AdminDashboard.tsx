@@ -54,7 +54,7 @@ function WidgetSkeleton() {
 }
 
 interface AdminDashboardProps {
-  userName: string;
+  readonly userName: string;
 }
 
 export function AdminDashboard({ userName }: AdminDashboardProps) {
@@ -99,8 +99,8 @@ export function AdminDashboard({ userName }: AdminDashboardProps) {
       id: e.id,
       title: e.title,
       type: e.type || 'OTHER',
-      startDate: new Date(e.startDate!),
-      endDate: new Date(e.endDate!),
+      startDate: new Date(e.startDate),
+      endDate: new Date(e.endDate),
       isAllDay: e.isAllDay || false,
       locationType: e.locationType || 'IN_PERSON',
       locationDetails: e.locationDetails,

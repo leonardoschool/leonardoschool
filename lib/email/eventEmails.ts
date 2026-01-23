@@ -74,7 +74,7 @@ export function generateICalendar(
   event: EventEmailData,
   method: 'REQUEST' | 'CANCEL' = 'REQUEST'
 ): string {
-  const uid = event.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const uid = event.id || crypto.randomUUID();
   const now = new Date();
   const dtStamp = formatICalDate(now, false);
   

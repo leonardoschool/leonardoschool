@@ -31,6 +31,36 @@ import { generateContractPdf } from '@/lib/utils/contractPdf';
 import { useToast } from '@/components/ui/Toast';
 
 /**
+ * Gets the profile data based on user role
+ */
+function getProfileForRole(
+  role: string,
+  studentProfile: unknown,
+  collaboratorProfile: unknown
+): unknown {
+  const profileByRole: Record<string, unknown> = {
+    STUDENT: studentProfile,
+    COLLABORATOR: collaboratorProfile,
+  };
+  return profileByRole[role] ?? null;
+}
+
+/**
+ * Gets the contract data based on user role
+ */
+function getContractForRole(
+  role: string,
+  studentContract: unknown,
+  collaboratorContract: unknown
+): unknown {
+  const contractByRole: Record<string, unknown> = {
+    STUDENT: studentContract,
+    COLLABORATOR: collaboratorContract,
+  };
+  return contractByRole[role] ?? null;
+}
+
+/**
  * Unified profile page - accessible by all authenticated users
  * Shows user's profile information based on their role
  * Displays pending contracts if any
@@ -74,9 +104,9 @@ export default function ProfiloPage() {
     enabled: !!user && user.role === 'STUDENT',
   });
 
-  const isLoading = loading || 
-    (user?.role === 'STUDENT' && (studentLoading || studentContractLoading || parentLoading)) || 
-    (user?.role === 'COLLABORATOR' && (collaboratorLoading || collaboratorContractLoading));
+  const isStudentLoading = user?.role === 'STUDENT' && (studentLoading || studentContractLoading || parentLoading);
+  const isCollaboratorLoading = user?.role === 'COLLABORATOR' && (collaboratorLoading || collaboratorContractLoading);
+  const isLoading = loading || isStudentLoading || isCollaboratorLoading;
 
   if (isLoading) {
     return <PageLoader />;
@@ -86,8 +116,9 @@ export default function ProfiloPage() {
     return null;
   }
 
-  const profile = user.role === 'STUDENT' ? studentProfile : user.role === 'COLLABORATOR' ? collaboratorProfile : null;
-  const pendingContract = user.role === 'STUDENT' ? studentContract : user.role === 'COLLABORATOR' ? collaboratorContract : null;
+  // Select profile and contract based on role using helpers
+  const profile = getProfileForRole(user.role, studentProfile, collaboratorProfile);
+  const pendingContract = getContractForRole(user.role, studentContract, collaboratorContract);
   
   // Role info
   const roleConfig = {
@@ -103,7 +134,7 @@ export default function ProfiloPage() {
       <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6">
         
         {/* Pending Contract Alert */}
-        {pendingContract && pendingContract.status === 'PENDING' && (
+        {(pendingContract as { status?: string })?.status === 'PENDING' && (
           <ContractAlert contract={pendingContract} />
         )}
         
@@ -149,7 +180,7 @@ export default function ProfiloPage() {
         </div>
 
         {/* Signed Contract Info - if contract is signed */}
-        {pendingContract && pendingContract.status === 'SIGNED' && (
+        {(pendingContract as { status?: string })?.status === 'SIGNED' && (
           <SignedContractCard contract={pendingContract} />
         )}
 
@@ -297,8 +328,12 @@ function formatAddress(profile: { address?: string; city?: string; province?: st
 }
 
 // Contract Alert Component - shown for pending contracts
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function ContractAlert({ contract }: { contract: any }) {
+interface ContractAlertProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly contract: any;
+}
+
+function ContractAlert({ contract }: ContractAlertProps) {
   if (!contract?.id || !contract?.signToken || !contract?.template) return null;
   const daysLeft = contract.expiresAt 
     ? Math.ceil((new Date(contract.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
@@ -341,8 +376,12 @@ function ContractAlert({ contract }: { contract: any }) {
 }
 
 // Signed Contract Card
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function SignedContractCard({ contract }: { contract: any }) {
+interface SignedContractCardProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly contract: any;
+}
+
+function SignedContractCard({ contract }: SignedContractCardProps) {
   const { showSuccess, showError } = useToast();
   
   if (!contract?.id || !contract?.template) return null;
@@ -356,6 +395,18 @@ function SignedContractCard({ contract }: { contract: any }) {
 
     try {
       // Build the PDF data structure
+      // Determine user data from student or collaborator
+      const getUserData = () => {
+        if (contract.student) {
+          return { user: { name: contract.student.user.name, email: contract.student.user.email } };
+        }
+        if (contract.collaborator) {
+          return { user: { name: contract.collaborator.user.name, email: contract.collaborator.user.email } };
+        }
+        return undefined;
+      };
+      const userData = getUserData();
+
       const pdfData = {
         id: contract.id,
         contentSnapshot: contract.contentSnapshot,
@@ -365,22 +416,13 @@ function SignedContractCard({ contract }: { contract: any }) {
         template: {
           name: contract.template.name,
         },
-        student: contract.student ? {
-          user: {
-            name: contract.student.user.name,
-            email: contract.student.user.email,
-          }
-        } : contract.collaborator ? {
-          user: {
-            name: contract.collaborator.user.name,
-            email: contract.collaborator.user.email,
-          }
-        } : undefined,
+        student: userData,
       };
 
       generateContractPdf(pdfData);
       showSuccess('Download avviato', 'Il contratto si aprirà in una nuova finestra per il salvataggio.');
-    } catch (_error) {
+    } catch (error) {
+      console.error('Error generating contract PDF:', error);
       showError('Errore', 'Impossibile generare il PDF del contratto.');
     }
   };
@@ -425,7 +467,11 @@ function SignedContractCard({ contract }: { contract: any }) {
 }
 
 // Alert shown to students when admin has requested parent/guardian data
-function ParentDataRequestAlert({ requestedAt }: { requestedAt?: Date | string | null }) {
+interface ParentDataRequestAlertProps {
+  readonly requestedAt?: Date | string | null;
+}
+
+function ParentDataRequestAlert({ requestedAt }: ParentDataRequestAlertProps) {
   return (
     <div className={`${colors.status.error.bgLight} border-2 ${colors.status.error.border} rounded-xl p-4 sm:p-6 animate-pulse`}>
       <div className="flex items-start gap-3">
@@ -480,13 +526,15 @@ interface ParentGuardianData {
   studentId?: string;
 }
 
+interface ParentGuardianSectionProps {
+  readonly parentGuardian: ParentGuardianData | null | undefined;
+  readonly requiresParentData: boolean;
+}
+
 function ParentGuardianSection({ 
   parentGuardian, 
   requiresParentData 
-}: { 
-  parentGuardian: ParentGuardianData | null | undefined;
-  requiresParentData: boolean;
-}) {
+}: ParentGuardianSectionProps) {
   // Map relationship codes to Italian labels
   const relationshipLabels: Record<string, string> = {
     MOTHER: 'Madre',
@@ -593,12 +641,14 @@ function ParentGuardianSection({
 }
 
 // Student-specific section
-// Student-specific section
-function StudentSection({ profile, groups }: { 
+interface StudentSectionProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  profile: any;
-  groups: { id?: string; name?: string; color?: string | null }[];
-}) {
+  readonly profile: any;
+  readonly groups: ReadonlyArray<{ id?: string; name?: string; color?: string | null }>;
+}
+
+// Student-specific section
+function StudentSection({ profile, groups }: StudentSectionProps) {
   if (!profile && groups.length === 0) return null;
   
   return (
@@ -656,8 +706,8 @@ function StudentSection({ profile, groups }: {
 }
 
 // Collaborator-specific section
-function CollaboratorSection({ profile }: { 
-  profile: { 
+interface CollaboratorSectionProps {
+  readonly profile: { 
     hireDate?: Date; 
     specialization?: string | null;
     canManageQuestions?: boolean;
@@ -665,7 +715,9 @@ function CollaboratorSection({ profile }: {
     canViewStats?: boolean;
     canViewStudents?: boolean;
   } | null | undefined;
-}) {
+}
+
+function CollaboratorSection({ profile }: CollaboratorSectionProps) {
   if (!profile) return null;
   
   const permissions = [
@@ -758,11 +810,13 @@ function AdminSection() {
 }
 
 // Helper components
-function InfoRow({ icon: Icon, label, value }: { 
-  icon: React.ComponentType<{ className?: string }>; 
-  label: string; 
-  value: string;
-}) {
+interface InfoRowProps {
+  readonly icon: React.ComponentType<{ className?: string }>; 
+  readonly label: string; 
+  readonly value: string;
+}
+
+function InfoRow({ icon: Icon, label, value }: InfoRowProps) {
   return (
     <div className="flex items-start gap-3">
       <Icon className={`w-5 h-5 ${colors.icon.secondary} mt-0.5 flex-shrink-0`} />
@@ -774,17 +828,19 @@ function InfoRow({ icon: Icon, label, value }: {
   );
 }
 
+interface StatusCardProps {
+  readonly label: string; 
+  readonly value: string; 
+  readonly status: 'success' | 'warning' | 'error';
+  readonly icon: React.ComponentType<{ className?: string }>;
+}
+
 function StatusCard({ 
   label, 
   value, 
   status,
   icon: Icon
-}: { 
-  label: string; 
-  value: string; 
-  status: 'success' | 'warning' | 'error';
-  icon: React.ComponentType<{ className?: string }>;
-}) {
+}: StatusCardProps) {
   const statusColors = {
     success: colors.status.success,
     warning: colors.status.warning,

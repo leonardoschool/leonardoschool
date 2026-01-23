@@ -99,6 +99,41 @@ const difficultyColors: Record<DifficultyLevel, { bg: string; text: string }> = 
   HARD: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-400' },
 };
 
+// Material type background colors
+const materialTypeBgColors: Record<MaterialType, string> = {
+  PDF: 'bg-red-100 dark:bg-red-900/30',
+  VIDEO: 'bg-blue-100 dark:bg-blue-900/30',
+  LINK: 'bg-purple-100 dark:bg-purple-900/30',
+  DOCUMENT: 'bg-gray-100 dark:bg-gray-800',
+};
+
+// Material type text colors  
+const materialTypeTextColors: Record<MaterialType, string> = {
+  PDF: 'text-red-600 dark:text-red-400',
+  VIDEO: 'text-blue-600 dark:text-blue-400',
+  LINK: 'text-purple-600 dark:text-purple-400',
+  DOCUMENT: 'text-gray-600 dark:text-gray-400',
+};
+
+// Visibility badge styles
+const _visibilityBadgeStyles: Record<MaterialVisibility, string> = {
+  NONE: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700',
+  ALL_STUDENTS: 'bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800',
+  GROUP_BASED: 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800',
+  SELECTED_STUDENTS: 'bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-800',
+};
+
+// File accept types for input
+const _fileAcceptTypes: Record<MaterialType, string> = {
+  PDF: '.pdf',
+  VIDEO: 'video/*',
+  LINK: '*',
+  DOCUMENT: '*',
+};
+
+// Get difficulty label
+const _getDifficultyLabel = (difficulty: DifficultyLevel): string => difficultyLabels[difficulty];
+
 // Icon map for subjects
 const iconMap: Record<string, LucideIcon> = {
   dna: GraduationCap,
@@ -118,10 +153,24 @@ const isEmoji = (str: string): boolean => {
 
 // ==================== SUBJECT ICON COMPONENT ====================
 
-const SubjectIcon = ({ icon, color, size = 'md' }: { icon?: string | null; color?: string | null; size?: 'sm' | 'md' | 'lg' }) => {
-  const sizeClasses = size === 'sm' ? 'w-4 h-4' : size === 'lg' ? 'w-6 h-6' : 'w-5 h-5';
-  const containerSize = size === 'sm' ? 'w-8 h-8' : size === 'lg' ? 'w-12 h-12' : 'w-10 h-10';
-  const emojiSize = size === 'sm' ? 'text-lg' : size === 'lg' ? 'text-2xl' : 'text-xl';
+// Size classes for SubjectIcon component
+const SUBJECT_ICON_SIZES = {
+  sm: { icon: 'w-4 h-4', container: 'w-8 h-8', emoji: 'text-lg' },
+  md: { icon: 'w-5 h-5', container: 'w-10 h-10', emoji: 'text-xl' },
+  lg: { icon: 'w-6 h-6', container: 'w-12 h-12', emoji: 'text-2xl' },
+} as const;
+
+interface SubjectIconProps {
+  readonly icon?: string | null;
+  readonly color?: string | null;
+  readonly size?: 'sm' | 'md' | 'lg';
+}
+
+const SubjectIcon = ({ icon, color, size = 'md' }: SubjectIconProps) => {
+  const sizes = SUBJECT_ICON_SIZES[size];
+  const sizeClasses = sizes.icon;
+  const containerSize = sizes.container;
+  const emojiSize = sizes.emoji;
   
   if (!icon) {
     return (
@@ -161,7 +210,11 @@ const SubjectIcon = ({ icon, color, size = 'md' }: { icon?: string | null; color
 
 // ==================== MAIN COMPONENT ====================
 
-export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLABORATOR' }) {
+interface AdminMaterialsContentProps {
+  readonly role: 'ADMIN' | 'COLLABORATOR';
+}
+
+export default function AdminMaterialsContent({ role }: AdminMaterialsContentProps) {
   // Active tab: 'subjects', 'materials', or 'categories'
   const [activeTab, setActiveTab] = useState<'subjects' | 'materials' | 'categories'>('subjects');
   
@@ -559,8 +612,7 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
         }
       } else {
         // Handle files - upload to Firebase
-        for (let i = 0; i < multiUploadFiles.length; i++) {
-          const file = multiUploadFiles[i];
+        for (const file of multiUploadFiles) {
           const fileName = file.name.replace(/\.[^/.]+$/, ''); // Remove extension for title
           
           setMultiUploadProgress((prev) => ({ ...prev, [file.name]: 0 }));
@@ -821,7 +873,9 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
 
         {/* Tab Content */}
         <div className="p-6">
-          {activeTab === 'subjects' ? (
+          {(() => {
+            if (activeTab === 'subjects') {
+              return (
             <div className="space-y-6">
               {/* Add Subject Button */}
               <button
@@ -835,27 +889,36 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
 
 
               {/* Subjects List */}
-              {subjectsLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Spinner size="lg" />
-                </div>
-              ) : !subjects?.length ? (
-                <div className="text-center py-12">
-                  <Palette className={`w-16 h-16 mx-auto mb-4 ${colors.text.muted}`} />
-                  <p className={`text-lg font-medium ${colors.text.primary}`}>Nessuna materia</p>
-                  <p className={`mt-1 ${colors.text.secondary}`}>Crea la prima materia per organizzare i materiali</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {subjects.map((subject) => (
-                    <div
-                      key={subject.id}
-                      className={`rounded-xl border ${colors.border.primary} overflow-hidden`}
-                    >
-                      {/* Subject Header */}
-                      <div className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                        <button
-                          onClick={() => toggleSubject(subject.id)}
+              {(() => {
+                if (subjectsLoading) {
+                  return (
+                    <div className="flex items-center justify-center py-12">
+                      <Spinner size="lg" />
+                    </div>
+                  );
+                }
+                
+                if ((subjects?.length ?? 0) === 0) {
+                  return (
+                    <div className="text-center py-12">
+                      <Palette className={`w-16 h-16 mx-auto mb-4 ${colors.text.muted}`} />
+                      <p className={`text-lg font-medium ${colors.text.primary}`}>Nessuna materia</p>
+                      <p className={`mt-1 ${colors.text.secondary}`}>Crea la prima materia per organizzare i materiali</p>
+                    </div>
+                  );
+                }
+                
+                return (
+                  <div className="space-y-3">
+                    {subjects.map((subject) => (
+                      <div
+                        key={subject.id}
+                        className={`rounded-xl border ${colors.border.primary} overflow-hidden`}
+                      >
+                        {/* Subject Header */}
+                        <div className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                          <button
+                            onClick={() => toggleSubject(subject.id)}
                           className="flex items-center gap-4 flex-1"
                         >
                           {expandedSubjects.has(subject.id) ? (
@@ -943,9 +1006,14 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                     </div>
                   ))}
                 </div>
-              )}
+              );
+              })()}
             </div>
-          ) : activeTab === 'materials' ? (
+              );
+            }
+            
+            if (activeTab === 'materials') {
+              return (
             <div className="space-y-6">
               {/* Add Material Button - Unified */}
               {!showMultiUpload && (
@@ -970,10 +1038,11 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                     {/* Type and Classification - Move FIRST */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div>
-                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                        <label htmlFor="multi-upload-type" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
                           Tipo
                         </label>
                         <CustomSelect
+                          id="multi-upload-type"
                           value={multiUploadData.type}
                           onChange={(value) => {
                             setMultiUploadData({ ...multiUploadData, type: value as MaterialType });
@@ -987,10 +1056,11 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                         />
                       </div>
                       <div>
-                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                        <label htmlFor="multi-upload-subject" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
                           Materia
                         </label>
                         <CustomSelect
+                          id="multi-upload-subject"
                           value={multiUploadData.subjectId}
                           onChange={(value) => setMultiUploadData({ 
                             ...multiUploadData, 
@@ -1006,10 +1076,11 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                         />
                       </div>
                       <div>
-                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                        <label htmlFor="multi-upload-topic" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
                           Argomento
                         </label>
                         <CustomSelect
+                          id="multi-upload-topic"
                           value={multiUploadData.topicId}
                           onChange={(value) => setMultiUploadData({ 
                             ...multiUploadData, 
@@ -1028,10 +1099,11 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                         />
                       </div>
                       <div>
-                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                        <label htmlFor="multi-upload-subtopic" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
                           Sottoargomento
                         </label>
                         <CustomSelect
+                          id="multi-upload-subtopic"
                           value={multiUploadData.subTopicId}
                           onChange={(value) => setMultiUploadData({ ...multiUploadData, subTopicId: value })}
                           options={[
@@ -1049,11 +1121,12 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
 
                     {/* Category Assignment (Optional Container) */}
                     <div>
-                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                        Cartella 
+                      <label htmlFor="multi-upload-category" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                        Cartella{' '}
                         <span className={`ml-2 text-xs ${colors.text.muted} font-normal`}>Opzionale - Raggruppa i materiali in una cartella</span>
                       </label>
                       <CustomSelect
+                        id="multi-upload-category"
                         value={multiUploadData.categoryId}
                         onChange={(value) => setMultiUploadData({ ...multiUploadData, categoryId: value })}
                         options={[
@@ -1106,8 +1179,81 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                       })()}
                     </div>
 
-                    {/* File Selection - Only show for non-LINK types */}
-                    {multiUploadData.type !== 'LINK' ? (
+                    {/* File Selection or Link Input */}
+                    {multiUploadData.type === 'LINK' ? (
+                      <div>
+                        <label htmlFor="multi-upload-links" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                          Link Esterni
+                        </label>
+                        
+                        {/* Existing links */}
+                        {multiUploadLinks.length > 0 && (
+                          <div className={`rounded-lg border ${colors.border.primary} ${colors.background.input} p-4 space-y-2 mb-4`}>
+                            {multiUploadLinks.map((link, index) => (
+                              <div key={`${link.url}-${link.title}`} className="flex items-center gap-3">
+                                <LinkIcon className="w-5 h-5 text-indigo-500" />
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-medium ${colors.text.primary} truncate`}>{link.title}</p>
+                                  <p className={`text-xs ${colors.text.muted} truncate`}>{link.url}</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setMultiUploadLinks(multiUploadLinks.filter((_, i) => i !== index))}
+                                  className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                                >
+                                  <X className="w-4 h-4 text-gray-500" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Add new link form */}
+                        <div className={`p-4 rounded-lg border ${colors.border.primary} ${colors.background.input} space-y-3`}>
+                          <div>
+                            <label htmlFor="new-link-title" className={`block text-xs font-medium ${colors.text.muted} mb-1`}>
+                              Titolo
+                            </label>
+                            <input
+                              id="new-link-title"
+                              type="text"
+                              value={newLinkTitle}
+                              onChange={(e) => setNewLinkTitle(e.target.value)}
+                              className={`w-full px-3 py-2 rounded-lg border ${colors.border.primary} ${colors.background.secondary} ${colors.text.primary} text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
+                              placeholder="Es: Video lezione introduttiva"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="new-link-url" className={`block text-xs font-medium ${colors.text.muted} mb-1`}>
+                              URL
+                            </label>
+                            <input
+                              id="new-link-url"
+                              type="url"
+                              value={newLinkUrl}
+                              onChange={(e) => setNewLinkUrl(e.target.value)}
+                              className={`w-full px-3 py-2 rounded-lg border ${colors.border.primary} ${colors.background.secondary} ${colors.text.primary} text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
+                              placeholder="https://..."
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (newLinkTitle.trim() && newLinkUrl.trim()) {
+                                setMultiUploadLinks([...multiUploadLinks, { title: newLinkTitle.trim(), url: newLinkUrl.trim() }]);
+                                setNewLinkTitle('');
+                                setNewLinkUrl('');
+                              }
+                            }}
+                            disabled={!newLinkTitle.trim() || !newLinkUrl.trim()}
+                            className={`w-full py-2 text-sm font-medium rounded-lg ${colors.primary.bg} text-white hover:opacity-90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2`}
+                          >
+                            <Plus className="w-4 h-4" />
+                            Aggiungi Link
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
                       <div>
                         <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
                           {editingMaterialId ? 'File Attuale (carica nuovo per sostituire)' : 'Seleziona File'} {!editingMaterialId && <span className="text-red-500">*</span>}
@@ -1144,8 +1290,8 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                         />
                         {multiUploadFiles.length > 0 ? (
                           <div className={`rounded-lg border ${colors.border.primary} ${colors.background.input} p-4 space-y-2`}>
-                            {multiUploadFiles.map((file, index) => (
-                              <div key={index} className="flex items-center gap-3">
+                            {multiUploadFiles.map((file) => (
+                              <div key={file.name} className="flex items-center gap-3">
                                 <FileText className="w-5 h-5 text-gray-400" />
                                 <span className={`flex-1 text-sm ${colors.text.primary} truncate`}>{file.name}</span>
                                 <span className={`text-xs ${colors.text.muted}`}>
@@ -1182,77 +1328,6 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                           </button>
                         )}
                       </div>
-                    ) : (
-                      <div>
-                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                          Link Esterni
-                        </label>
-                        
-                        {/* Existing links */}
-                        {multiUploadLinks.length > 0 && (
-                          <div className={`rounded-lg border ${colors.border.primary} ${colors.background.input} p-4 space-y-2 mb-4`}>
-                            {multiUploadLinks.map((link, index) => (
-                              <div key={index} className="flex items-center gap-3">
-                                <LinkIcon className="w-5 h-5 text-indigo-500" />
-                                <div className="flex-1 min-w-0">
-                                  <p className={`text-sm font-medium ${colors.text.primary} truncate`}>{link.title}</p>
-                                  <p className={`text-xs ${colors.text.muted} truncate`}>{link.url}</p>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => setMultiUploadLinks(multiUploadLinks.filter((_, i) => i !== index))}
-                                  className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-                                >
-                                  <X className="w-4 h-4 text-gray-500" />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        
-                        {/* Add new link form */}
-                        <div className={`p-4 rounded-lg border ${colors.border.primary} ${colors.background.input} space-y-3`}>
-                          <div>
-                            <label className={`block text-xs font-medium ${colors.text.muted} mb-1`}>
-                              Titolo
-                            </label>
-                            <input
-                              type="text"
-                              value={newLinkTitle}
-                              onChange={(e) => setNewLinkTitle(e.target.value)}
-                              className={`w-full px-3 py-2 rounded-lg border ${colors.border.primary} ${colors.background.secondary} ${colors.text.primary} text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
-                              placeholder="Es: Video lezione introduttiva"
-                            />
-                          </div>
-                          <div>
-                            <label className={`block text-xs font-medium ${colors.text.muted} mb-1`}>
-                              URL
-                            </label>
-                            <input
-                              type="url"
-                              value={newLinkUrl}
-                              onChange={(e) => setNewLinkUrl(e.target.value)}
-                              className={`w-full px-3 py-2 rounded-lg border ${colors.border.primary} ${colors.background.secondary} ${colors.text.primary} text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
-                              placeholder="https://..."
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (newLinkTitle.trim() && newLinkUrl.trim()) {
-                                setMultiUploadLinks([...multiUploadLinks, { title: newLinkTitle.trim(), url: newLinkUrl.trim() }]);
-                                setNewLinkTitle('');
-                                setNewLinkUrl('');
-                              }
-                            }}
-                            disabled={!newLinkTitle.trim() || !newLinkUrl.trim()}
-                            className={`w-full py-2 text-sm font-medium rounded-lg ${colors.primary.bg} text-white hover:opacity-90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2`}
-                          >
-                            <Plus className="w-4 h-4" />
-                            Aggiungi Link
-                          </button>
-                        </div>
-                      </div>
                     )}
 
                     {/* Actions */}
@@ -1267,30 +1342,45 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                       <button
                         type="button"
                         onClick={handleMultiUpload}
-                        disabled={
-                          editingMaterialId ? (uploading || updateMaterialMutation.isPending) :
-                          ((multiUploadData.type === 'LINK' ? multiUploadLinks.length === 0 : multiUploadFiles.length === 0) || 
-                          uploading || 
-                          createBatchMaterialsMutation.isPending)
-                        }
+                        disabled={(() => {
+                          if (editingMaterialId) {
+                            return uploading || updateMaterialMutation.isPending;
+                          }
+                          const hasContent = multiUploadData.type === 'LINK' 
+                            ? multiUploadLinks.length > 0 
+                            : multiUploadFiles.length > 0;
+                          return !hasContent || uploading || createBatchMaterialsMutation.isPending;
+                        })()}
                         className={`px-6 py-2.5 ${editingMaterialId ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-teal-600 hover:bg-teal-700'} text-white rounded-lg transition-colors font-medium flex items-center gap-2 disabled:opacity-50`}
                       >
-                        {(uploading || createBatchMaterialsMutation.isPending || updateMaterialMutation.isPending) ? (
-                          <>
-                            <Spinner size="xs" variant="white" />
-                            {editingMaterialId ? 'Salvataggio...' : 'Caricamento...'}
-                          </>
-                        ) : editingMaterialId ? (
-                          <>
-                            <Save className="w-4 h-4" />
-                            Salva Modifiche
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="w-4 h-4" />
-                            Carica {multiUploadData.type === 'LINK' ? multiUploadLinks.length : multiUploadFiles.length} {multiUploadData.type === 'LINK' ? 'link' : 'file'}
-                          </>
-                        )}
+                        {(() => {
+                          if (uploading || createBatchMaterialsMutation.isPending || updateMaterialMutation.isPending) {
+                            return (
+                              <>
+                                <Spinner size="xs" variant="white" />
+                                {editingMaterialId ? 'Salvataggio...' : 'Caricamento...'}
+                              </>
+                            );
+                          }
+                          
+                          if (editingMaterialId) {
+                            return (
+                              <>
+                                <Save className="w-4 h-4" />
+                                Salva Modifiche
+                              </>
+                            );
+                          }
+                          
+                          const count = multiUploadData.type === 'LINK' ? multiUploadLinks.length : multiUploadFiles.length;
+                          const label = multiUploadData.type === 'LINK' ? 'link' : 'file';
+                          return (
+                            <>
+                              <Upload className="w-4 h-4" />
+                              Carica {count} {label}
+                            </>
+                          );
+                        })()}
                       </button>
                     </div>
                   </div>
@@ -1309,10 +1399,11 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                     {/* Title & Type */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                        <label htmlFor="material-title" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
                           Titolo <span className="text-red-500">*</span>
                         </label>
                         <input
+                          id="material-title"
                           type="text"
                           value={materialFormData.title}
                           onChange={(e) => setMaterialFormData({ ...materialFormData, title: e.target.value })}
@@ -1322,10 +1413,11 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                         />
                       </div>
                       <div>
-                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                        <label htmlFor="material-type" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
                           Tipo <span className="text-red-500">*</span>
                         </label>
                         <CustomSelect
+                          id="material-type"
                           value={materialFormData.type}
                           onChange={(value) => setMaterialFormData({ ...materialFormData, type: value as MaterialType })}
                           options={Object.entries(typeLabels).map(([key, label]) => ({ value: key, label }))}
@@ -1336,10 +1428,11 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
 
                     {/* Description */}
                     <div>
-                      <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                      <label htmlFor="material-description" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
                         Descrizione
                       </label>
                       <textarea
+                        id="material-description"
                         value={materialFormData.description}
                         onChange={(e) => setMaterialFormData({ ...materialFormData, description: e.target.value })}
                         rows={3}
@@ -1351,14 +1444,19 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                     {/* File Upload / URL */}
                     {(materialFormData.type === 'PDF' || materialFormData.type === 'VIDEO' || materialFormData.type === 'DOCUMENT') && (
                       <div>
-                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                        <label htmlFor="material-file" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
                           Carica File
                         </label>
                         <input
+                          id="material-file"
                           ref={fileInputRef}
                           type="file"
                           onChange={handleFileUpload}
-                          accept={materialFormData.type === 'PDF' ? '.pdf' : materialFormData.type === 'VIDEO' ? 'video/*' : '*'}
+                          accept={(() => {
+                            if (materialFormData.type === 'PDF') return '.pdf';
+                            if (materialFormData.type === 'VIDEO') return 'video/*';
+                            return '*';
+                          })()}
                           className="hidden"
                         />
                         {materialFormData.fileUrl ? (
@@ -1401,10 +1499,11 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
 
                     {materialFormData.type === 'LINK' && (
                       <div>
-                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                        <label htmlFor="material-external-url" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
                           URL Esterno <span className="text-red-500">*</span>
                         </label>
                         <input
+                          id="material-external-url"
                           type="url"
                           value={materialFormData.externalUrl}
                           onChange={(e) => setMaterialFormData({ ...materialFormData, externalUrl: e.target.value })}
@@ -1419,10 +1518,11 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       {/* Subject */}
                       <div>
-                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                        <label htmlFor="material-subject" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
                           Materia
                         </label>
                         <CustomSelect
+                          id="material-subject"
                           value={materialFormData.subjectId}
                           onChange={(value) => setMaterialFormData({ 
                             ...materialFormData, 
@@ -1441,10 +1541,11 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
 
                       {/* Topic */}
                       <div>
-                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                        <label htmlFor="material-topic" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
                           Argomento
                         </label>
                         <CustomSelect
+                          id="material-topic"
                           value={materialFormData.categoryId}
                           onChange={(value) => setMaterialFormData({ 
                             ...materialFormData, 
@@ -1465,18 +1566,26 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
 
                       {/* SubTopic */}
                       <div>
-                        <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                        <label htmlFor="material-subtopic" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
                           Sottoargomento
                         </label>
                         <CustomSelect
+                          id="material-subtopic"
                           value={materialFormData.subTopicId}
                           onChange={(value) => setMaterialFormData({ ...materialFormData, subTopicId: value })}
                           options={[
                             { value: '', label: 'Nessuno' },
-                            ...(selectedTopic?.subTopics?.map((sc) => ({ 
-                              value: sc.id, 
-                              label: `${sc.name} (${sc.difficulty === 'EASY' ? 'Facile' : sc.difficulty === 'MEDIUM' ? 'Medio' : 'Difficile'})` 
-                            })) || [])
+                            ...(selectedTopic?.subTopics?.map((sc) => {
+                              const getDifficultyLabel = (difficulty: string): string => {
+                                if (difficulty === 'EASY') return 'Facile';
+                                if (difficulty === 'MEDIUM') return 'Medio';
+                                return 'Difficile';
+                              };
+                              return { 
+                                value: sc.id, 
+                                label: `${sc.name} (${getDifficultyLabel(sc.difficulty)})` 
+                              };
+                            }) || [])
                           ]}
                           placeholder={materialFormData.categoryId ? "Seleziona sottoargomento..." : "Prima seleziona argomento"}
                           disabled={!materialFormData.categoryId}
@@ -1553,19 +1662,28 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
               </div>
 
               {/* Materials List */}
-              {materialsLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Spinner size="lg" />
-                </div>
-              ) : !filteredMaterials?.length ? (
-                <div className="text-center py-12">
-                  <FolderOpen className={`w-16 h-16 mx-auto mb-4 ${colors.text.muted}`} />
-                  <p className={`text-lg font-medium ${colors.text.primary}`}>Nessun materiale</p>
-                  <p className={`mt-1 ${colors.text.secondary}`}>Clicca su &quot;Nuovo Materiale&quot; per iniziare</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {filteredMaterials.map((material: any) => {
+              {(() => {
+                if (materialsLoading) {
+                  return (
+                    <div className="flex items-center justify-center py-12">
+                      <Spinner size="lg" />
+                    </div>
+                  );
+                }
+                
+                if ((filteredMaterials?.length ?? 0) === 0) {
+                  return (
+                    <div className="text-center py-12">
+                      <FolderOpen className={`w-16 h-16 mx-auto mb-4 ${colors.text.muted}`} />
+                      <p className={`text-lg font-medium ${colors.text.primary}`}>Nessun materiale</p>
+                      <p className={`mt-1 ${colors.text.secondary}`}>Clicca su &quot;Nuovo Materiale&quot; per iniziare</p>
+                    </div>
+                  );
+                }
+                
+                return (
+                  <div className="space-y-3">
+                    {filteredMaterials.map((material: any) => {
                     const TypeIcon = typeIcons[material.type as MaterialType] || File;
                     const VisIcon = visibilityIcons[material.visibility as MaterialVisibility] || EyeOff;
                     const groups = material.groupAccess?.map((ga: any) => ga.group).filter(Boolean) || [];
@@ -1581,18 +1699,8 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                         <div className="flex items-start justify-between gap-4 mb-3">
                           <div className="flex items-start gap-3 flex-1 min-w-0">
                             {/* Icon */}
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                              material.type === 'PDF' ? 'bg-red-100 dark:bg-red-900/30' :
-                              material.type === 'VIDEO' ? 'bg-blue-100 dark:bg-blue-900/30' :
-                              material.type === 'LINK' ? 'bg-purple-100 dark:bg-purple-900/30' :
-                              'bg-gray-100 dark:bg-gray-800'
-                            }`}>
-                              <TypeIcon className={`w-6 h-6 ${
-                                material.type === 'PDF' ? 'text-red-600 dark:text-red-400' :
-                                material.type === 'VIDEO' ? 'text-blue-600 dark:text-blue-400' :
-                                material.type === 'LINK' ? 'text-purple-600 dark:text-purple-400' :
-                                'text-gray-600 dark:text-gray-400'
-                              }`} />
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${materialTypeBgColors[material.type as MaterialType] || materialTypeBgColors.DOCUMENT}`}>
+                              <TypeIcon className={`w-6 h-6 ${materialTypeTextColors[material.type as MaterialType] || materialTypeTextColors.DOCUMENT}`} />
                             </div>
 
                             {/* Title and Description */}
@@ -1653,17 +1761,24 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                         <div className="flex items-center flex-wrap gap-3 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
                           {/* Subject Badge */}
                           {material.subject && (
-                            <span 
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
-                              style={{
-                                backgroundColor: material.subject.color ? `${material.subject.color}15` : 'rgb(243 244 246)',
-                                color: material.subject.color || 'rgb(107 114 128)',
-                                border: `1px solid ${material.subject.color ? `${material.subject.color}30` : 'rgb(229 231 235)'}`
-                              }}
-                            >
-                              <BookOpen className="w-3.5 h-3.5" />
-                              {material.subject.name}
-                            </span>
+                            (() => {
+                              const bgColor = material.subject.color ? `${material.subject.color}15` : 'rgb(243 244 246)';
+                              const textColor = material.subject.color || 'rgb(107 114 128)';
+                              const borderColor = material.subject.color ? `${material.subject.color}30` : 'rgb(229 231 235)';
+                              return (
+                                <span 
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
+                                  style={{
+                                    backgroundColor: bgColor,
+                                    color: textColor,
+                                    border: `1px solid ${borderColor}`
+                                  }}
+                                >
+                                  <BookOpen className="w-3.5 h-3.5" />
+                                  {material.subject.name}
+                                </span>
+                              );
+                            })()
                           )}
 
                           {/* Category Badges (Multiple) */}
@@ -1679,13 +1794,15 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                           )}
 
                           {/* Visibility Badge */}
-                          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
-                            material.visibility === 'NONE' 
-                              ? 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
-                              : material.visibility === 'ALL_STUDENTS'
-                              ? 'bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800/30'
-                              : 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/30'
-                          }`}>
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${(() => {
+                            if (material.visibility === 'NONE') {
+                              return 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700';
+                            }
+                            if (material.visibility === 'ALL_STUDENTS') {
+                              return 'bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800/30';
+                            }
+                            return 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/30';
+                          })()}`}>
                             <VisIcon className="w-3.5 h-3.5" />
                             {visibilityLabels[material.visibility as MaterialVisibility]}
                           </span>
@@ -1714,24 +1831,28 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                     );
                   })}
                 </div>
-              )}
+              );
+              })()}
             </div>
-          ) : (
-            /* Categories Tab */
-            <CategoryManager onClose={() => setActiveTab('materials')} role={role} />
-          )}
+              );
+            }
+            
+            // Categories Tab
+            return <CategoryManager onClose={() => setActiveTab('materials')} role={role} />;
+          })()}
         </div>
       </div>
 
       {/* Assignment Modal - Using Portal */}
       {showAssignModal && assigningMaterialId && mounted && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div 
-            className={`${colors.background.card} rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col`}
-            onClick={(e) => e.stopPropagation()}
+          <dialog 
+            open
+            className={`${colors.background.card} rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col m-0`}
+            aria-labelledby="assign-modal-title"
           >
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className={`text-xl font-semibold ${colors.text.primary} flex items-center gap-2`}>
+              <h2 id="assign-modal-title" className={`text-xl font-semibold ${colors.text.primary} flex items-center gap-2`}>
                 <Users className="w-5 h-5 text-indigo-600" />
                 Gestisci Destinatari
               </h2>
@@ -1748,10 +1869,10 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               {/* Visibility Selection */}
-              <div>
-                <label className={`block text-sm font-medium ${colors.text.primary} mb-3`}>
+              <fieldset className="border-0 p-0 m-0">
+                <legend className={`block text-sm font-medium ${colors.text.primary} mb-3`}>
                   Visibilità base
-                </label>
+                </legend>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <button
                     type="button"
@@ -1796,7 +1917,7 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                     </span>
                   </button>
                 </div>
-              </div>
+              </fieldset>
 
               {/* Groups and Students selection - shown only when SELECTED_STUDENTS */}
               {assignmentData.visibility === 'SELECTED_STUDENTS' && (
@@ -1969,6 +2090,11 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                         
                         return filtered.map((user) => {
                           const isSelected = assignmentData.studentIds.includes(user.id);
+                          const getUserBadgeStyles = (): string => {
+                            if (isSelected) return 'bg-white/20 text-white';
+                            if (user.type === 'student') return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
+                            return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400';
+                          };
                           return (
                             <button
                               key={user.id}
@@ -1986,13 +2112,7 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                               }`}
                             >
                               {user.name}
-                              <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                isSelected
-                                  ? 'bg-white/20 text-white'
-                                  : user.type === 'student'
-                                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                                    : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                              }`}>
+                              <span className={`text-xs px-1.5 py-0.5 rounded ${getUserBadgeStyles()}`}>
                                 {user.type === 'student' ? 'S' : 'C'}
                               </span>
                             </button>
@@ -2058,7 +2178,7 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
                 )}
               </button>
             </div>
-          </div>
+          </dialog>
         </div>,
         document.body
       )}
@@ -2139,7 +2259,12 @@ export default function AdminMaterialsContent({ role }: { role: 'ADMIN' | 'COLLA
 
 // ==================== SUBJECT TOPICS PREVIEW COMPONENT ====================
 
-function SubjectTopicsPreview({ subjectId, subjectColor }: { subjectId: string; subjectColor?: string | null }) {
+interface SubjectTopicsPreviewProps {
+  readonly subjectId: string;
+  readonly subjectColor?: string | null;
+}
+
+function SubjectTopicsPreview({ subjectId, subjectColor }: SubjectTopicsPreviewProps) {
   const { data: topics, isLoading } = trpc.materials.getTopics.useQuery({ 
     subjectId, 
     includeInactive: false 

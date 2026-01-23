@@ -290,13 +290,15 @@ function ParentGuardianSection({
   );
 }
 
+type UserRoleType = 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
+
 // Role dropdown component
 function RoleDropdown({
   currentRole,
   onSelect,
 }: {
-  currentRole: 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
-  onSelect: (role: 'ADMIN' | 'COLLABORATOR' | 'STUDENT') => void;
+  currentRole: UserRoleType;
+  onSelect: (role: UserRoleType) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -1131,6 +1133,7 @@ function ManageSubjectsModal({
 export default function AdminUtentiContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  // eslint-disable-next-line sonarjs/no-unused-vars -- reserved for future cache operations
   const _queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<RoleFilter>('ALL');
@@ -1810,7 +1813,7 @@ export default function AdminUtentiContent() {
                       {hasSignedContract && contractId && (
                         <>
                           <button
-                            onClick={() => window.open(`/api/contracts/${contractId}/view`, '_blank')}
+                            onClick={() => globalThis.open(`/api/contracts/${contractId}/view`, '_blank')}
                             className={`p-2 rounded-lg ${colors.status.success.softBg} ${colors.status.success.text}`}
                             title="Visualizza contratto"
                           >
@@ -1847,7 +1850,7 @@ export default function AdminUtentiContent() {
                       {hasPendingContract && contractId && (
                         <>
                           <button
-                            onClick={() => window.open(`/api/contracts/${contractId}/view`, '_blank')}
+                            onClick={() => globalThis.open(`/api/contracts/${contractId}/view`, '_blank')}
                             className={`p-2 rounded-lg ${colors.status.info.softBg} ${colors.status.info.text}`}
                             title="Visualizza contratto in attesa"
                           >
@@ -2119,7 +2122,7 @@ export default function AdminUtentiContent() {
                             {hasSignedContract && contractId && (
                               <>
                                 <button
-                                  onClick={() => window.open(`/api/contracts/${contractId}/view`, '_blank')}
+                                  onClick={() => globalThis.open(`/api/contracts/${contractId}/view`, '_blank')}
                                   className={`p-1.5 rounded-lg ${colors.status.success.softBg} ${colors.status.success.text} hover:opacity-80 transition-opacity`}
                                   title="Visualizza contratto firmato"
                                 >
@@ -2156,7 +2159,7 @@ export default function AdminUtentiContent() {
                             {hasPendingContract && contractId && (
                               <>
                                 <button
-                                  onClick={() => window.open(`/api/contracts/${contractId}/view`, '_blank')}
+                                  onClick={() => globalThis.open(`/api/contracts/${contractId}/view`, '_blank')}
                                   className={`p-1.5 rounded-lg ${colors.status.info.softBg} ${colors.status.info.text} hover:opacity-80 transition-opacity`}
                                   title="Visualizza contratto in attesa"
                                 >
@@ -2661,8 +2664,14 @@ export default function AdminUtentiContent() {
       {/* Simulazioni Modal */}
       {simulationsModal.isOpen && (
         <Portal>
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]" onClick={() => setSimulationsModal({ isOpen: false, assignments: [], results: [], studentName: '' })}>
-            <div className={`${colors.background.card} rounded-2xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-hidden`} onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]">
+            <button
+              type="button"
+              className="absolute inset-0 cursor-default"
+              onClick={() => setSimulationsModal({ isOpen: false, assignments: [], results: [], studentName: '' })}
+              aria-label="Chiudi modale"
+            />
+            <div className={`${colors.background.card} rounded-2xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-hidden relative`} onClick={(e) => e.stopPropagation()}>
               <div className={`p-6 border-b ${colors.border.primary}`}>
                 <div className="flex items-center justify-between">
                   <div>
@@ -2749,8 +2758,14 @@ export default function AdminUtentiContent() {
       {/* Materiali Modal */}
       {materialsModal.isOpen && (
         <Portal>
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]" onClick={() => setMaterialsModal({ isOpen: false, materials: [], studentName: '' })}>
-            <div className={`${colors.background.card} rounded-2xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-hidden`} onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]">
+            <button
+              type="button"
+              className="absolute inset-0 cursor-default"
+              onClick={() => setMaterialsModal({ isOpen: false, materials: [], studentName: '' })}
+              aria-label="Chiudi modale"
+            />
+            <div className={`${colors.background.card} rounded-2xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-hidden relative`} onClick={(e) => e.stopPropagation()}>
               <div className={`p-6 border-b ${colors.border.primary}`}>
                 <div className="flex items-center justify-between">
                   <div>

@@ -115,6 +115,7 @@ export default function SimulationExecutionScreen() {
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [sectionTimes, setSectionTimes] = useState<Record<number, number>>({});
   const [completedSections, setCompletedSections] = useState<Set<number>>(new Set());
+  // eslint-disable-next-line sonarjs/no-unused-vars -- state reserved for section transition UI
   const [_showSectionTransition, setShowSectionTransition] = useState(false);
   
   // Virtual Room states

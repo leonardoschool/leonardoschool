@@ -20,7 +20,7 @@ const PROVINCE_ITALIANE = [
 ] as const;
 
 // Regex per codice fiscale italiano
-const CODICE_FISCALE_REGEX = /^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$/;
+const CODICE_FISCALE_REGEX = /^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/;
 
 // Parent/Guardian relationship types
 const PARENT_RELATIONSHIP_TYPES = ['PADRE', 'MADRE', 'TUTORE_LEGALE', 'ALTRO'] as const;
@@ -50,7 +50,7 @@ const capitalizeProperName = (str: string): string => {
 
 // Funzione per formattare il telefono
 const formatPhone = (phone: string): string => {
-  let cleaned = phone.replace(/[^\d+]/g, '');
+  let cleaned = phone.replaceAll(/[^\d+]/g, '');
   
   // Rimuovi prefisso internazionale se presente
   if (cleaned.startsWith('+39')) {
@@ -166,7 +166,7 @@ export const studentsRouter = router({
           .length(5, 'Il CAP deve essere di 5 cifre')
           .regex(/^\d{5}$/, 'Il CAP deve contenere solo numeri')
           .refine(val => {
-            const num = parseInt(val, 10);
+            const num = Number.parseInt(val, 10);
             return num >= 10 && num <= 98168;
           }, 'CAP non valido'),
       })
@@ -227,7 +227,7 @@ export const studentsRouter = router({
         }),
         // Mark profile as completed in User table
         ctx.prisma.user.update({
-          where: { id: ctx.user!.id },
+          where: { id: ctx.user.id },
           data: { profileCompleted: true },
         }),
       ]);
@@ -354,7 +354,7 @@ export const studentsRouter = router({
         },
       });
 
-      if (!user || !user.student) {
+      if (!user?.student) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Studente non trovato',
@@ -779,7 +779,7 @@ export const studentsRouter = router({
     // Best and worst subjects
     const sortedByAccuracy = [...subjectStats].filter(s => s.totalQuestions >= 5).sort((a, b) => b.accuracy - a.accuracy);
     const bestSubject = sortedByAccuracy[0] || null;
-    const worstSubject = sortedByAccuracy[sortedByAccuracy.length - 1] || null;
+    const worstSubject = sortedByAccuracy.at(-1) ?? null;
 
     // === ANSWER DISTRIBUTION (for pie chart) ===
     const answerDistribution = {
@@ -1097,7 +1097,7 @@ export const studentsRouter = router({
       });
 
       // If not found by userId, try to find by studentId
-      if (!user || !user.student) {
+      if (!user?.student) {
         const student = await ctx.prisma.student.findUnique({
           where: { id: input.studentId },
           include: {
@@ -1143,7 +1143,7 @@ export const studentsRouter = router({
         }
       }
 
-      if (!user || !user.student) {
+      if (!user?.student) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Studente non trovato',
@@ -1276,13 +1276,13 @@ export const studentsRouter = router({
     });
 
     return groupMembers
-      .filter(gm => gm.student !== null)
+      .filter((gm): gm is typeof gm & { student: NonNullable<typeof gm.student> } => gm.student !== null)
       .map(gm => ({
-        id: gm.student!.id,
-        userId: gm.student!.user.id,
-        name: gm.student!.user.name,
-        email: gm.student!.user.email,
-        user: gm.student!.user,
+        id: gm.student.id,
+        userId: gm.student.user.id,
+        name: gm.student.user.name,
+        email: gm.student.user.email,
+        user: gm.student.user,
       }));
   }),
 
@@ -1499,7 +1499,8 @@ export const studentsRouter = router({
             });
           }
 
-          const stats = subjectStats.get(subjectCode)!;
+          const stats = subjectStats.get(subjectCode);
+          if (!stats) return; // Type guard - should never happen since we just set it
           stats.total++;
           if (answer.isCorrect === null) {
             stats.blank++;
@@ -1520,14 +1521,17 @@ export const studentsRouter = router({
               ? question.answers.find(a => a.id === answer.answerId) 
               : null;
 
-            wrongBySubject.get(subjectCode)!.push({
-              questionId: answer.questionId,
-              questionText: question.text,
-              selectedAnswerText: selectedAnswer?.text || null,
-              correctAnswerText: correctAnswer?.text || 'N/A',
-              explanation: question.generalExplanation || question.correctExplanation || null,
-              topicName: question.topic?.name || null,
-            });
+            const wrongList = wrongBySubject.get(subjectCode);
+            if (wrongList) {
+              wrongList.push({
+                questionId: answer.questionId,
+                questionText: question.text,
+                selectedAnswerText: selectedAnswer?.text || null,
+                correctAnswerText: correctAnswer?.text || 'N/A',
+                explanation: question.generalExplanation || question.correctExplanation || null,
+                topicName: question.topic?.name || null,
+              });
+            }
           }
         });
 
@@ -1971,7 +1975,7 @@ export const studentsRouter = router({
         },
       });
 
-      if (!user || !user.student) {
+      if (!user?.student) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Studente non trovato',

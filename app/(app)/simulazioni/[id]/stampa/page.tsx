@@ -12,7 +12,7 @@ import { colors } from '@/lib/theme/colors';
 import 'katex/dist/katex.min.css';
 
 interface PrintPageProps {
-  params: Promise<{ id: string }>;
+  readonly params: Promise<{ id: string }>;
 }
 
 export default function SimulationPrintPage({ params }: PrintPageProps) {
@@ -28,7 +28,7 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
   const handlePrint = () => {
     setIsPrinting(true);
     setTimeout(() => {
-      window.print();
+      globalThis.print();
       setIsPrinting(false);
     }, 100);
   };
@@ -41,8 +41,8 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
         handlePrint();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    globalThis.addEventListener('keydown', handleKeyDown);
+    return () => globalThis.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   if (isLoading) {
@@ -254,7 +254,7 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
                         .map((answer, ansIndex) => (
                           <div key={answer.id} className="flex items-start gap-2">
                             <span className="font-medium w-6">
-                              {String.fromCharCode(65 + ansIndex)})
+                              {String.fromCodePoint(65 + ansIndex)})
                             </span>
                             <div className="flex-1">
                               <RichTextRenderer text={answer.text} />
@@ -283,8 +283,8 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
             <h3 className="font-bold text-center mb-4">GRIGLIA RISPOSTE</h3>
             <div className="border border-gray-400 rounded-lg p-4">
               <div className="grid grid-cols-10 gap-2 text-center text-sm">
-                {questions.map((_, index) => (
-                  <div key={index} className="border border-gray-300 rounded p-2">
+                {questions.map((q, index) => (
+                  <div key={q.id || `answer-grid-${index}`} className="border border-gray-300 rounded p-2">
                     <p className="font-bold">{index + 1}</p>
                     <div className="flex justify-center gap-1 mt-1 text-xs">
                       <span>A</span>

@@ -60,7 +60,7 @@ export default function RegisterScreen() {
     if (password.length >= 8) strength++;
     if (/[a-z]/.test(password)) strength++;
     if (/[A-Z]/.test(password)) strength++;
-    if (/[0-9]/.test(password)) strength++;
+    if (/\d/.test(password)) strength++;
     if (/[^a-zA-Z0-9]/.test(password)) strength++;
     return strength;
   };
@@ -86,23 +86,31 @@ export default function RegisterScreen() {
   // Validate form
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
+    const trimmedName = formData.name.trim();
+    const trimmedEmail = formData.email.trim();
 
     // Name validation
-    if (!formData.name.trim()) {
+    if (trimmedName.length === 0) {
       newErrors.name = 'Inserisci il tuo nome';
-    } else if (formData.name.trim().length < 2) {
+    } else if (trimmedName.length < 2) {
       newErrors.name = 'Il nome deve avere almeno 2 caratteri';
     }
 
-    // Email validation
-    if (!formData.email.trim()) {
+    // Email validation - structural check without slow regex
+    if (trimmedEmail.length === 0) {
       newErrors.email = 'Inserisci la tua email';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Email non valida';
+    } else {
+      const atIndex = trimmedEmail.indexOf('@');
+      const dotIndex = trimmedEmail.lastIndexOf('.');
+      const isValid = atIndex > 0 && dotIndex > atIndex + 1 && dotIndex < trimmedEmail.length - 1 && !trimmedEmail.includes(' ');
+      if (!isValid) {
+        newErrors.email = 'Email non valida';
+      }
     }
 
+    /* eslint-disable sonarjs/no-hardcoded-passwords -- These are error message assignments, not passwords */
     // Password validation
-    if (!formData.password) {
+    if (formData.password.length === 0) {
       newErrors.password = 'Inserisci una password';
     } else if (formData.password.length < 8) {
       newErrors.password = 'La password deve avere almeno 8 caratteri';
@@ -111,11 +119,12 @@ export default function RegisterScreen() {
     }
 
     // Confirm password
-    if (!formData.confirmPassword) {
+    if (formData.confirmPassword.length === 0) {
       newErrors.confirmPassword = 'Conferma la password';
     } else if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = 'Le password non coincidono';
     }
+    /* eslint-enable sonarjs/no-hardcoded-passwords */
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;

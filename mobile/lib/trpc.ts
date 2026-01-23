@@ -20,9 +20,9 @@ import { secureStorage } from './storage';
 // In production, this should be imported from a shared types package:
 // import type { AppRouter } from '@leonardoschool/api-types';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any, sonarjs/redundant-type-aliases */
 type AppRouter = any;
-/* eslint-enable @typescript-eslint/no-explicit-any */
+/* eslint-enable @typescript-eslint/no-explicit-any, sonarjs/redundant-type-aliases */
 
 // Create tRPC React hooks
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

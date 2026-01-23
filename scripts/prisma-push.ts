@@ -17,6 +17,7 @@ try {
   console.log(`📊 Database: ${databaseUrl}\n`);
   
   // Con Prisma 7, specifichiamo --config per usare prisma.config.ts
+  // eslint-disable-next-line sonarjs/no-os-command-from-path -- dev script, PATH is trusted
   execSync('prisma db push --config ./prisma/prisma.config.ts', {
     stdio: 'inherit',
     cwd: resolve(__dirname, '..'),

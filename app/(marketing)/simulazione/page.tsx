@@ -197,8 +197,8 @@ export default function SimulazionePage() {
                 </h3>
                 
                 <div className="space-y-6">
-                  {testTypes[0].tests?.map((subTest, index) => (
-                    <div key={index} className={`bg-gray-50 rounded-lg p-4 border-l-4`} style={{ borderLeftColor: subTest.color }}>
+                  {testTypes[0].tests?.map((subTest) => (
+                    <div key={subTest.subject} className={`bg-gray-50 rounded-lg p-4 border-l-4`} style={{ borderLeftColor: subTest.color }}>
                       <p className="font-bold text-gray-900 mb-3 text-base">{subTest.subject}</p>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="flex items-center text-sm text-gray-700">
@@ -239,10 +239,13 @@ export default function SimulazionePage() {
 
             {/* Colonna destra con IMAT, Professioni Sanitarie e Architettura */}
             <div className="flex flex-col gap-6">
-              {testTypes.slice(1).map((test) => (
+              {testTypes.slice(1).map((test) => {
+                const subject = `Richiesta Simulazione: ${test.title}`;
+                const contactHref = `/contattaci?oggetto=${encodeURIComponent(subject)}`;
+                return (
                 <Link
                   key={test.id}
-                  href={`/contattaci?oggetto=${encodeURIComponent(`Richiesta Simulazione: ${test.title}`)}`}
+                  href={contactHref}
                   className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow"
                 >
                   <div className={`${test.color} h-2`} />
@@ -284,7 +287,8 @@ export default function SimulazionePage() {
                     </div>
                   </div>
                 </Link>
-              ))}
+              );
+              })}
             </div>
           </div>
         </div>
@@ -303,10 +307,13 @@ export default function SimulazionePage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto pb-16">
-            {tolcTests.map((test) => (
+            {tolcTests.map((test) => {
+              const subject = `Richiesta Simulazione: ${test.title}`;
+              const contactHref = `/contattaci?oggetto=${encodeURIComponent(subject)}`;
+              return (
               <Link
                 key={test.id}
-                href={`/contattaci?oggetto=${encodeURIComponent(`Richiesta Simulazione: ${test.title}`)}`}
+                href={contactHref}
                 className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow"
               >
                 <div style={{ backgroundColor: test.color }} className="h-2" />
@@ -334,7 +341,8 @@ export default function SimulazionePage() {
                   </div>
                 </div>
               </Link>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
