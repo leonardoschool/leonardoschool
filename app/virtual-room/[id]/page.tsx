@@ -257,6 +257,7 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, onKickPar
   );
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity -- Complex real-time component with SSE, polling, and multi-role logic
 export default function VirtualRoomPage() {
   const params = useParams();
   const router = useRouter();

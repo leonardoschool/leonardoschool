@@ -451,6 +451,7 @@ function ConfirmModal({
 }
 
 // Modal assegna contratto avanzato con step
+// eslint-disable-next-line sonarjs/cognitive-complexity -- Complex multi-step modal with conditional rendering
 function AssignContractModal({
   isOpen,
   onClose,
@@ -1130,6 +1131,7 @@ function ManageSubjectsModal({
   );
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity -- Main admin component with complex state management and rendering
 export default function AdminUtentiContent() {
   const router = useRouter();
   const searchParams = useSearchParams();

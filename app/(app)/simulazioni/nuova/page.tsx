@@ -718,7 +718,9 @@ export default function NewSimulationPage() {
     }
   };
 
-  // Render step content
+  // Render step content - complexity is inherent to multi-step wizard design
+  // Each case renders a complete step UI with its own form sections
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- Multi-step wizard pattern requires switch with complex cases
   const renderStepContent = () => {
     switch (currentStep) {
       case 0:

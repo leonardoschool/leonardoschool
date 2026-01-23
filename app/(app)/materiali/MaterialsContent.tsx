@@ -873,6 +873,7 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
 
         {/* Tab Content */}
         <div className="p-6">
+          {/* eslint-disable-next-line sonarjs/cognitive-complexity -- Tab switching IIFE for conditional rendering */}
           {(() => {
             if (activeTab === 'subjects') {
               return (

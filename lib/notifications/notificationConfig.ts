@@ -450,6 +450,165 @@ export const notificationConfigs: Record<NotificationType, NotificationConfig> =
 
 // ==================== ROUTE GENERATION ====================
 
+// Route handler type for notification routing
+type RouteHandler = (userRole: UserRole, basePath: string, params?: RouteParams) => string | null;
+
+// Route handlers map - extracted from switch for lower cognitive complexity
+const notificationRouteHandlers: Record<NotificationType, RouteHandler> = {
+  // === ACCOUNT ===
+  ACCOUNT_ACTIVATED: (userRole, basePath, params) => 
+    userRole === 'ADMIN' && params?.studentId 
+      ? `/utenti?highlight=${params.studentId}` 
+      : basePath || null,
+  
+  NEW_REGISTRATION: (userRole, _basePath, params) => 
+    userRole === 'ADMIN' 
+      ? (params?.studentId ? `/utenti?highlight=${params.studentId}` : '/utenti')
+      : null,
+  
+  PROFILE_COMPLETED: (userRole, _basePath, params) => 
+    userRole === 'ADMIN' 
+      ? (params?.studentId ? `/utenti?highlight=${params.studentId}` : '/utenti')
+      : null,
+
+  PARENT_DATA_REQUESTED: (userRole, _basePath, params) => {
+    if (userRole === 'STUDENT') return '/profilo?section=genitore';
+    if (userRole === 'ADMIN') {
+      return params?.studentId ? `/utenti?highlight=${params.studentId}` : '/utenti';
+    }
+    return null;
+  },
+
+  // === CONTRACTS ===
+  CONTRACT_ASSIGNED: (userRole, _basePath, params) => 
+    userRole === 'ADMIN' 
+      ? (params?.contractId ? `/contratti?highlight=${params.contractId}` : '/contratti')
+      : null,
+
+  CONTRACT_SIGNED: (userRole, basePath, params) => 
+    userRole === 'ADMIN' 
+      ? (params?.contractId ? `/contratti?highlight=${params.contractId}` : '/contratti')
+      : `${basePath}/contratti`,
+
+  CONTRACT_REMINDER: (userRole, basePath, params) => 
+    userRole === 'ADMIN' 
+      ? (params?.contractId ? `/contratti?highlight=${params.contractId}` : '/contratti')
+      : `${basePath}/contratti`,
+
+  CONTRACT_EXPIRED: (userRole, basePath, params) => 
+    userRole === 'ADMIN' 
+      ? (params?.contractId ? `/contratti?highlight=${params.contractId}` : '/contratti')
+      : `${basePath}/contratti`,
+
+  CONTRACT_CANCELLED: (userRole, basePath, params) => 
+    userRole === 'ADMIN' 
+      ? (params?.contractId ? `/contratti?highlight=${params.contractId}` : '/contratti')
+      : `${basePath}/contratti`,
+
+  // === EVENTS ===
+  EVENT_INVITATION: (_userRole, basePath, params) => 
+    params?.eventId ? `${basePath}/calendario?event=${params.eventId}` : `${basePath}/calendario`,
+
+  EVENT_REMINDER: (_userRole, basePath, params) => 
+    params?.eventId ? `${basePath}/calendario?event=${params.eventId}` : `${basePath}/calendario`,
+
+  EVENT_UPDATED: (_userRole, basePath, params) => 
+    params?.eventId ? `${basePath}/calendario?event=${params.eventId}` : `${basePath}/calendario`,
+
+  EVENT_CANCELLED: (_userRole, basePath, params) => 
+    params?.eventId ? `${basePath}/calendario?event=${params.eventId}` : `${basePath}/calendario`,
+
+  // === SIMULATIONS ===
+  SIMULATION_ASSIGNED: (userRole, basePath, params) => 
+    userRole === 'STUDENT'
+      ? (params?.simulationId ? `/simulazioni/${params.simulationId}` : '/simulazioni')
+      : (params?.simulationId ? `${basePath}/simulazioni/${params.simulationId}` : `${basePath}/simulazioni`),
+
+  SIMULATION_REMINDER: (userRole, basePath, params) => 
+    userRole === 'STUDENT'
+      ? (params?.simulationId ? `/simulazioni/${params.simulationId}` : '/simulazioni')
+      : (params?.simulationId ? `${basePath}/simulazioni/${params.simulationId}` : `${basePath}/simulazioni`),
+
+  SIMULATION_READY: (userRole, basePath, params) => 
+    userRole === 'STUDENT'
+      ? (params?.simulationId ? `/simulazioni/${params.simulationId}` : '/simulazioni')
+      : (params?.simulationId ? `${basePath}/simulazioni/${params.simulationId}` : `${basePath}/simulazioni`),
+
+  SIMULATION_STARTED: (userRole, basePath, params) => 
+    userRole === 'STUDENT'
+      ? (params?.simulationId ? `/simulazioni/${params.simulationId}` : '/simulazioni')
+      : (params?.simulationId ? `${basePath}/simulazioni/${params.simulationId}` : `${basePath}/simulazioni`),
+
+  SIMULATION_RESULTS: (_userRole, _basePath, params) => 
+    params?.simulationId ? `/simulazioni/${params.simulationId}/risultati` : '/simulazioni',
+
+  SIMULATION_COMPLETED: (userRole, basePath, params) => 
+    (userRole === 'ADMIN' || userRole === 'COLLABORATOR')
+      ? (params?.simulationId ? `${basePath}/simulazioni/${params.simulationId}` : `${basePath}/simulazioni`)
+      : '/simulazioni',
+
+  // === ABSENCES ===
+  STAFF_ABSENCE: (userRole, basePath) => 
+    (userRole === 'ADMIN' || userRole === 'COLLABORATOR') ? '/presenze' : `${basePath}/calendario`,
+
+  ABSENCE_REQUEST: (userRole, basePath) => 
+    (userRole === 'ADMIN' || userRole === 'COLLABORATOR') ? '/presenze' : `${basePath}/calendario`,
+
+  ABSENCE_CONFIRMED: (userRole, basePath) => 
+    (userRole === 'ADMIN' || userRole === 'COLLABORATOR') ? '/presenze' : `${basePath}/calendario`,
+
+  ABSENCE_REJECTED: (userRole, basePath) => 
+    (userRole === 'ADMIN' || userRole === 'COLLABORATOR') ? '/presenze' : `${basePath}/calendario`,
+
+  SUBSTITUTION_ASSIGNED: (userRole, basePath) => 
+    (userRole === 'ADMIN' || userRole === 'COLLABORATOR') ? '/presenze' : `${basePath}/calendario`,
+
+  // === QUESTIONS ===
+  QUESTION_FEEDBACK: (userRole, basePath, params) => 
+    (userRole === 'ADMIN' || userRole === 'COLLABORATOR')
+      ? (params?.questionId ? `${basePath}/domande/${params.questionId}` : `${basePath}/domande`)
+      : null,
+
+  OPEN_ANSWER_TO_REVIEW: (userRole, basePath, params) => 
+    (userRole === 'ADMIN' || userRole === 'COLLABORATOR')
+      ? (params?.simulationId ? `${basePath}/simulazioni/${params.simulationId}/correzioni` : `${basePath}/simulazioni`)
+      : null,
+
+  // === MATERIALS ===
+  MATERIAL_AVAILABLE: (_userRole, basePath) => `${basePath}/materiali`,
+
+  // === GROUPS ===
+  GROUP_MEMBER_ADDED: (userRole, basePath) => 
+    userRole === 'STUDENT' ? `${basePath}/gruppo` : `${basePath}/gruppi`,
+
+  GROUP_REFERENT_ASSIGNED: (userRole, basePath) => 
+    userRole === 'STUDENT' ? `${basePath}/gruppo` : `${basePath}/gruppi`,
+
+  // === MESSAGES ===
+  MESSAGE_RECEIVED: (_userRole, basePath, params) => 
+    params?.conversationId 
+      ? `${basePath}/messaggi?conversation=${params.conversationId}` 
+      : `${basePath}/messaggi`,
+
+  // === APPLICATIONS ===
+  JOB_APPLICATION: (userRole, _basePath, params) => 
+    userRole === 'ADMIN' 
+      ? (params?.applicationId ? `/candidature?highlight=${params.applicationId}` : '/candidature')
+      : null,
+
+  CONTACT_REQUEST: (userRole, _basePath, params) => 
+    userRole === 'ADMIN' 
+      ? (params?.requestId ? `/richieste?highlight=${params.requestId}` : '/richieste')
+      : null,
+
+  // === ATTENDANCE ===
+  ATTENDANCE_RECORDED: (_userRole, basePath) => `${basePath}/presenze`,
+
+  // === SYSTEM ===
+  SYSTEM_ALERT: () => null,
+  GENERAL: () => null,
+};
+
 /**
  * Genera la route di navigazione per una notifica basandosi su tipo, ruolo e parametri
  * Ritorna un path relativo al basePath del ruolo
@@ -460,175 +619,8 @@ export function getNotificationRoute(
   params?: RouteParams
 ): string | null {
   const basePath = getBasePath(userRole);
-  
-  switch (type) {
-    // === ACCOUNT ===
-    case 'ACCOUNT_ACTIVATED':
-      // Lo studente va alla dashboard, l'admin alla lista utenti
-      return userRole === 'ADMIN' && params?.studentId 
-        ? `/utenti?highlight=${params.studentId}` 
-        : basePath;
-    
-    case 'NEW_REGISTRATION':
-    case 'PROFILE_COMPLETED':
-      if (userRole === 'ADMIN') {
-        return params?.studentId 
-          ? `/utenti?highlight=${params.studentId}` 
-          : '/utenti';
-      }
-      return null;
-
-    case 'PARENT_DATA_REQUESTED':
-      // Student goes to profile to add parent data
-      if (userRole === 'STUDENT') {
-        return '/profilo?section=genitore';
-      }
-      // Admin goes to user list
-      if (userRole === 'ADMIN') {
-        return params?.studentId 
-          ? `/utenti?highlight=${params.studentId}` 
-          : '/utenti';
-      }
-      return null;
-
-    // === CONTRACTS ===
-    case 'CONTRACT_ASSIGNED':
-      // Se è un utente normale, va alla pagina di firma
-      // Se è admin, va alla lista contratti
-      if (userRole === 'ADMIN') {
-        return params?.contractId 
-          ? `/contratti?highlight=${params.contractId}` 
-          : '/contratti';
-      }
-      // Student/Collaborator: usa il link diretto dalla notifica
-      return null; // Il link sarà nel linkUrl della notifica
-
-    case 'CONTRACT_SIGNED':
-    case 'CONTRACT_REMINDER':
-    case 'CONTRACT_EXPIRED':
-    case 'CONTRACT_CANCELLED':
-      if (userRole === 'ADMIN') {
-        return params?.contractId 
-          ? `/contratti?highlight=${params.contractId}` 
-          : '/contratti';
-      }
-      return `${basePath}/contratti`;
-
-    // === EVENTS ===
-    case 'EVENT_INVITATION':
-    case 'EVENT_REMINDER':
-    case 'EVENT_UPDATED':
-    case 'EVENT_CANCELLED':
-      return params?.eventId 
-        ? `${basePath}/calendario?event=${params.eventId}` 
-        : `${basePath}/calendario`;
-
-    // === SIMULATIONS ===
-    case 'SIMULATION_ASSIGNED':
-    case 'SIMULATION_REMINDER':
-    case 'SIMULATION_READY':
-    case 'SIMULATION_STARTED':
-      if (userRole === 'STUDENT') {
-        return params?.simulationId 
-          ? `/simulazioni/${params.simulationId}` 
-          : '/simulazioni';
-      }
-      return params?.simulationId 
-        ? `${basePath}/simulazioni/${params.simulationId}` 
-        : `${basePath}/simulazioni`;
-
-    case 'SIMULATION_RESULTS':
-      return params?.simulationId 
-        ? `/simulazioni/${params.simulationId}/risultati` 
-        : '/simulazioni';
-
-    case 'SIMULATION_COMPLETED':
-      if (userRole === 'ADMIN' || userRole === 'COLLABORATOR') {
-        return params?.simulationId 
-          ? `${basePath}/simulazioni/${params.simulationId}` 
-          : `${basePath}/simulazioni`;
-      }
-      return '/simulazioni';
-
-    // === ABSENCES ===
-    case 'STAFF_ABSENCE':
-    case 'ABSENCE_REQUEST':
-    case 'ABSENCE_CONFIRMED':
-    case 'ABSENCE_REJECTED':
-    case 'SUBSTITUTION_ASSIGNED':
-      if (userRole === 'ADMIN') {
-        return '/presenze';
-      }
-      if (userRole === 'COLLABORATOR') {
-        return '/presenze';
-      }
-      return `${basePath}/calendario`;
-
-    // === QUESTIONS ===
-    case 'QUESTION_FEEDBACK':
-      if (userRole === 'ADMIN' || userRole === 'COLLABORATOR') {
-        return params?.questionId 
-          ? `${basePath}/domande/${params.questionId}` 
-          : `${basePath}/domande`;
-      }
-      return null;
-
-    case 'OPEN_ANSWER_TO_REVIEW':
-      if (userRole === 'ADMIN' || userRole === 'COLLABORATOR') {
-        return params?.simulationId 
-          ? `${basePath}/simulazioni/${params.simulationId}/correzioni` 
-          : `${basePath}/simulazioni`;
-      }
-      return null;
-
-    // === MATERIALS ===
-    case 'MATERIAL_AVAILABLE':
-      return `${basePath}/materiali`;
-
-    // === GROUPS ===
-    case 'GROUP_MEMBER_ADDED':
-    case 'GROUP_REFERENT_ASSIGNED':
-      // Per studenti va al gruppo, per admin/staff va alla gestione gruppi
-      if (userRole === 'STUDENT') {
-        return `${basePath}/gruppo`;
-      }
-      return `${basePath}/gruppi`;
-
-    // === MESSAGES ===
-    case 'MESSAGE_RECEIVED':
-      return params?.conversationId 
-        ? `${basePath}/messaggi?conversation=${params.conversationId}` 
-        : `${basePath}/messaggi`;
-
-    // === APPLICATIONS ===
-    case 'JOB_APPLICATION':
-      if (userRole === 'ADMIN') {
-        return params?.applicationId 
-          ? `/candidature?highlight=${params.applicationId}` 
-          : '/candidature';
-      }
-      return null;
-
-    case 'CONTACT_REQUEST':
-      if (userRole === 'ADMIN') {
-        return params?.requestId 
-          ? `/richieste?highlight=${params.requestId}` 
-          : '/richieste';
-      }
-      return null;
-
-    // === ATTENDANCE ===
-    case 'ATTENDANCE_RECORDED':
-      return `${basePath}/presenze`;
-
-    // === SYSTEM ===
-    case 'SYSTEM_ALERT':
-    case 'GENERAL':
-      return null; // Il link sarà nel linkUrl della notifica se presente
-
-    default:
-      return null;
-  }
+  const handler = notificationRouteHandlers[type];
+  return handler ? handler(userRole, basePath, params) : null;
 }
 
 /**

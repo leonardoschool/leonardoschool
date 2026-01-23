@@ -42,10 +42,9 @@ const eslintConfig = defineConfig([
       "sonarjs/no-nested-conditional": "off",
       // Nested functions (callbacks in JSX props, event handlers) are idiomatic React
       "sonarjs/no-nested-functions": "off",
-      // Cognitive complexity - disabled for React components which often have high complexity
-      // due to conditional rendering, event handlers, and state management
-      // Consider refactoring functions with complexity > 50 when possible
-      "sonarjs/cognitive-complexity": "off",
+      // Cognitive complexity - threshold 25 is more realistic for React components
+      // Functions with complexity > 25 should be refactored into smaller pieces
+      "sonarjs/cognitive-complexity": ["warn", 25],
       // Other rules
       "sonarjs/no-nested-template-literals": "warn",
       "sonarjs/use-type-alias": "warn",
