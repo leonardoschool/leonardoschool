@@ -138,6 +138,8 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
   );
   const [openMinLength, setOpenMinLength] = useState<number | ''>(initialData?.openMinLength ?? '');
   const [openMaxLength, setOpenMaxLength] = useState<number | ''>(initialData?.openMaxLength ?? '');
+  const [year, setYear] = useState<number | ''>(initialData?.year ?? '');
+  const [source, setSource] = useState(initialData?.source ?? '');
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>(initialData?.tagIds ?? []);
   const selectedTagIdsRef = useRef<string[]>(initialData?.tagIds ?? []);
   
@@ -423,8 +425,8 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
         openPartialMatch: true,
         showExplanation: true,
         tags: [], // Legacy tags removed - using new tag system
-        year:  null,
-        source: null,
+        year: year ? Number(year) : null,
+        source: source || null,
         answers: type !== 'OPEN_TEXT' ? answers : [],
         keywords: type === 'OPEN_TEXT' ? keywords : [],
       };
@@ -459,6 +461,8 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
       openMaxLength,
       answers,
       keywords,
+      year,
+      source,
       questionId,
       createMutation,
       updateMutation,
@@ -1200,7 +1204,7 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
             </div>
 
             {/* Time Limit */}
-            <div>
+            {/* <div>
               <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
                 Tempo limite (secondi)
               </label>
@@ -1214,6 +1218,36 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
                 placeholder="Nessun limite"
                 className={`w-full px-4 py-2 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-[#a8012b]/20 focus:border-[#a8012b] transition-colors`}
               />
+            </div> */}
+
+            {/* Year and Source */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                  Anno
+                </label>
+                <input
+                  type="number"
+                  value={year}
+                  onChange={(e) => setYear(e.target.value ? Number(e.target.value) : '')}
+                  min="1990"
+                  max={new Date().getFullYear()}
+                  placeholder="Es: 2024"
+                  className={`w-full px-4 py-2 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-[#a8012b]/20 focus:border-[#a8012b] transition-colors`}
+                />
+              </div>
+              <div>
+                <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
+                  Fonte
+                </label>
+                <input
+                  type="text"
+                  value={source}
+                  onChange={(e) => setSource(e.target.value)}
+                  placeholder="Es: Test ufficiale, Libro, etc."
+                  className={`w-full px-4 py-2 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-[#a8012b]/20 focus:border-[#a8012b] transition-colors`}
+                />
+              </div>
             </div>
 
             {/* Tags */}

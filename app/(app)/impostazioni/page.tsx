@@ -191,8 +191,9 @@ export default function ImpostazioniPage() {
 
   const handleLogout = useCallback(async () => {
     try {
+      // Solo signOut - useAuth gestisce automaticamente la chiamata a /api/auth/logout
+      // tramite il listener onIdTokenChanged
       await auth.signOut();
-      await fetch('/api/auth/logout', { method: 'POST' });
       router.push('/auth/login');
     } catch (error) {
       console.error('Logout error:', error);

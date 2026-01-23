@@ -22,6 +22,15 @@ interface Question {
   }>;
 }
 
+interface PdfSection {
+  id: string;
+  name: string;
+  durationMinutes: number;
+  questionIds?: string[];
+  subjectId?: string | null;
+  order: number;
+}
+
 interface SimulationPdfData {
   title: string;
   description?: string;
@@ -35,6 +44,10 @@ interface SimulationPdfData {
   schoolName?: string;
   academicYear?: string;
   date?: string;
+  // Sections support
+  hasSections?: boolean;
+  showSectionsInPaper?: boolean;
+  sections?: PdfSection[];
 }
 
 /**
@@ -184,6 +197,16 @@ export function generateSimulationPdf(data: SimulationPdfData): jsPDF {
   doc.text(data.title.toUpperCase(), pageWidth / 2, yPos, { align: 'center' });
   yPos += 7;
 
+  // Description (if present)
+  if (data.description) {
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(60, 60, 60);
+    const descLines = doc.splitTextToSize(data.description, contentWidth);
+    doc.text(descLines, pageWidth / 2, yPos, { align: 'center' });
+    yPos += descLines.length * 5 + 3;
+  }
+
   // Academic year and date
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
@@ -254,15 +277,51 @@ export function generateSimulationPdf(data: SimulationPdfData): jsPDF {
   doc.text('DOMANDE A RISPOSTA MULTIPLA', pageWidth / 2, yPos, { align: 'center' });
   yPos += 10;
 
-  // Render each question
-  data.questions.forEach((question, index) => {
+  // Helper function to render a section header
+  const renderSectionHeader = (sectionName: string, sectionDuration: number, sectionQuestionCount: number) => {
+    // Check if we need a new page for section header
+    if (yPos > pageHeight - 60) {
+      doc.addPage();
+      yPos = margin;
+    }
+
+    // Section divider line
+    doc.setDrawColor(...primaryColor);
+    doc.setLineWidth(0.8);
+    doc.line(margin, yPos, pageWidth - margin, yPos);
+    yPos += 6;
+
+    // Section header box
+    doc.setFillColor(245, 245, 250);
+    doc.setDrawColor(...primaryColor);
+    doc.setLineWidth(0.3);
+    doc.rect(margin, yPos, contentWidth, 12, 'FD');
+    
+    // Section name
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...primaryColor);
+    doc.text(sectionName.toUpperCase(), margin + 5, yPos + 8);
+    
+    // Section info (duration and question count)
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(80, 80, 80);
+    const sectionInfo = `${sectionDuration} min · ${sectionQuestionCount} domande`;
+    doc.text(sectionInfo, pageWidth - margin - 5, yPos + 8, { align: 'right' });
+    
+    yPos += 18;
+    doc.setTextColor(0, 0, 0);
+  };
+
+  // Helper function to render a question
+  const renderQuestion = (question: Question, questionNumber: number) => {
     // Check if we need a new page
     if (yPos > pageHeight - 50) {
       doc.addPage();
       yPos = margin;
     }
 
-    const questionNumber = index + 1;
     const questionText = cleanTextForPdf(question.text);
 
     // Question number and text
@@ -309,7 +368,54 @@ export function generateSimulationPdf(data: SimulationPdfData): jsPDF {
     });
 
     yPos += 6; // Space between questions
-  });
+  };
+
+  // Check if we should render with sections
+  const shouldShowSections = data.hasSections && data.showSectionsInPaper && data.sections && data.sections.length > 0;
+
+  if (shouldShowSections) {
+    // Render questions grouped by sections
+    const sortedSections = [...data.sections!].sort((a, b) => a.order - b.order);
+    let globalQuestionNumber = 1;
+
+    for (const section of sortedSections) {
+      // Get questions for this section
+      const sectionQuestionIds = section.questionIds || [];
+      const sectionQuestions = sectionQuestionIds
+        .map(id => data.questions.find(q => q.id === id))
+        .filter((q): q is Question => q !== undefined);
+
+      if (sectionQuestions.length === 0) continue;
+
+      // Render section header
+      renderSectionHeader(section.name, section.durationMinutes, sectionQuestions.length);
+
+      // Render questions in this section
+      for (const question of sectionQuestions) {
+        renderQuestion(question, globalQuestionNumber);
+        globalQuestionNumber++;
+      }
+
+      yPos += 4; // Extra space after section
+    }
+
+    // Render any questions not assigned to sections
+    const assignedQuestionIds = sortedSections.flatMap(s => s.questionIds || []);
+    const unassignedQuestions = data.questions.filter(q => !assignedQuestionIds.includes(q.id));
+    
+    if (unassignedQuestions.length > 0) {
+      renderSectionHeader('Altre domande', 0, unassignedQuestions.length);
+      for (const question of unassignedQuestions) {
+        renderQuestion(question, globalQuestionNumber);
+        globalQuestionNumber++;
+      }
+    }
+  } else {
+    // Render questions without sections (original behavior)
+    data.questions.forEach((question, index) => {
+      renderQuestion(question, index + 1);
+    });
+  }
 
   // ============ FOOTER ============
   const totalPages = doc.getNumberOfPages();

@@ -1,0 +1,575 @@
+{
+  "databases": {
+    "oj6M": "IMAT",
+    "cisia": "CINECA",
+    "k7JL": "CISIA",
+    "WsrF": "MISCELLANEOUS",
+    "miur_05_2024": "MUR 05/2024",
+    "miur_07_2024": "MUR 07/2024",
+    "I2IB": "SELEXI"
+  },
+  "severities": {
+    "0": "Facile",
+    "1": "Intermedio",
+    "2": "Difficile"
+  },
+  "sections": {
+    "logic": {
+      "id": "logic",
+      "title": "Comprensione del testo e conoscenza della lingua italiana",
+      "color": "#fff7cecf",
+      "index": 0,
+      "children": {
+        "s4Pg2": {
+          "id": "s4Pg2",
+          "title": "Competenze di lettura",
+          "color": "#fff7cecf",
+          "index": null,
+          "children": {
+            "UKg80": {
+              "id": "UKg80",
+              "title": "Competenze di lettura",
+              "color": "#ffbbc9e0",
+              "index": null,
+              "children": {}
+            }
+          }
+        },
+        "Cl8Kk": {
+          "id": "Cl8Kk",
+          "title": "Conoscenze acquisite negli studi",
+          "color": "#ff000000",
+          "index": null,
+          "children": {
+            "S6hPb": {
+              "id": "S6hPb",
+              "title": "Conoscenze acquisite negli studi",
+              "color": "#ff000000",
+              "index": null,
+              "children": {}
+            }
+          }
+        },
+        "MVYdf": {
+          "id": "MVYdf",
+          "title": "Lingua italiana",
+          "color": "#fff7cecf",
+          "index": null,
+          "children": {
+            "OrXb9": {
+              "id": "OrXb9",
+              "title": "Lingua italiana",
+              "color": "#fff7cecf",
+              "index": null,
+              "children": null
+            }
+          }
+        }
+      }
+    },
+    "j31GK": {
+      "id": "j31GK",
+      "title": "Conoscenze e competenze acquisite negli studi",
+      "color": "#fff7d147",
+      "index": null,
+      "children": {
+        "8GUlr": {
+          "id": "8GUlr",
+          "title": "Conoscenze acquisite negli studi",
+          "color": "#fff7d147",
+          "index": null,
+          "children": {}
+        }
+      }
+    },
+    "UaETy": {
+      "id": "UaETy",
+      "title": "Inglese",
+      "color": "#ffbbc9e0",
+      "index": null,
+      "children": {}
+    },
+    "reasoning": {
+      "id": "reasoning",
+      "title": "Ragionamento logico",
+      "color": "#ff5fcdf9",
+      "index": 1,
+      "children": {
+        "pDXqW": {
+          "id": "pDXqW",
+          "title": "Ragionamento",
+          "color": "#ff5fcdf9",
+          "index": null,
+          "children": {
+            "gMtPH": {
+              "id": "gMtPH",
+              "title": "Argomentare",
+              "color": "#ff5fcdf9",
+              "index": null,
+              "children": {}
+            },
+            "fjls8": {
+              "id": "fjls8",
+              "title": "Comprendere e rappresentare",
+              "color": "#ff5fcdf9",
+              "index": null,
+              "children": {}
+            },
+            "JT-EH": {
+              "id": "JT-EH",
+              "title": "Modellizzare e risolvere problemi",
+              "color": "#ff5fcdf9",
+              "index": null,
+              "children": {}
+            }
+          }
+        }
+      }
+    },
+    "BImbh": {
+      "id": "BImbh",
+      "title": "Disegno e Rappresentazione",
+      "color": "#ffcccc42",
+      "index": 2,
+      "children": {
+        "nMReJ": {
+          "id": "nMReJ",
+          "title": "Disegno e Rappresentazione",
+          "color": "#ffcccc42",
+          "index": null,
+          "children": {
+            "qFf3E": {
+              "id": "qFf3E",
+              "title": "Disegno",
+              "color": "#ffcccc42",
+              "index": null,
+              "children": {}
+            },
+            "0NVWb": {
+              "id": "0NVWb",
+              "title": "Rappresentazione",
+              "color": "#ffcccc42",
+              "index": null,
+              "children": {}
+            }
+          }
+        }
+      }
+    },
+    "biology": {
+      "id": "biology",
+      "title": "Biologia",
+      "color": "#ffb5b240",
+      "index": 3,
+      "children": {
+        "biolg": {
+          "id": "biolg",
+          "title": "Biologia",
+          "color": "#ffb5b240",
+          "index": null,
+          "children": {
+            "iWHzy": {
+              "id": "iWHzy",
+              "title": "Apparato cardiovascolare",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "FUyz3": {
+              "id": "FUyz3",
+              "title": "Apparato digerente",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "g8Wvt": {
+              "id": "g8Wvt",
+              "title": "Apparato escretore",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "rr7Va": {
+              "id": "rr7Va",
+              "title": "Apparato respiratorio",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "uZwVG": {
+              "id": "uZwVG",
+              "title": "Apparato riproduttore",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "W4Rau": {
+              "id": "W4Rau",
+              "title": "Apparato tegumentario",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "RD4aa": {
+              "id": "RD4aa",
+              "title": "Biodiversità, classificazione, evoluzione",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "eYiYU": {
+              "id": "eYiYU",
+              "title": "Elementi di bioenergetica",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "eveCX": {
+              "id": "eveCX",
+              "title": "Elementi di biotecnologie",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "LIM3c": {
+              "id": "LIM3c",
+              "title": "Elementi di ecologia",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "3cznQ": {
+              "id": "3cznQ",
+              "title": "Fondamenti di genetica",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "3VnxN": {
+              "id": "3VnxN",
+              "title": "Gametogenesi, fecondazione e prime fasi dello sviluppo",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "LpSmX": {
+              "id": "LpSmX",
+              "title": "Mitosi e meiosi",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "purHd": {
+              "id": "purHd",
+              "title": "Molecole biologiche",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "JPchr": {
+              "id": "JPchr",
+              "title": "Organi di senso",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "W5FyN": {
+              "id": "W5FyN",
+              "title": "Organizzazione della cellula",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "VopyH": {
+              "id": "VopyH",
+              "title": "Sistema endocrino",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "tKgJ4": {
+              "id": "tKgJ4",
+              "title": "Sistema immunitario",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "8PE66": {
+              "id": "8PE66",
+              "title": "Sistema linfatico",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "AJ3pV": {
+              "id": "AJ3pV",
+              "title": "Sistema muscolare",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "BBLqE": {
+              "id": "BBLqE",
+              "title": "Sistema nervoso",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "JSe3R": {
+              "id": "JSe3R",
+              "title": "Sistema scheletrico",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "LDEGn": {
+              "id": "LDEGn",
+              "title": "Tessuti animali",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            }
+          }
+        }
+      }
+    },
+    "chemistry": {
+      "id": "chemistry",
+      "title": "Chimica e Propedeutica Biochimica",
+      "color": "#ffd54f8a",
+      "index": 4,
+      "children": {
+        "cto4R": {
+          "id": "cto4R",
+          "title": "Chimica",
+          "color": "#ffd54f8a",
+          "index": null,
+          "children": {
+            "5KHZK": {
+              "id": "5KHZK",
+              "title": "Acidi e basi",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "Y-gFv": {
+              "id": "Y-gFv",
+              "title": "Andamenti periodici e struttura atomica​​​​​​",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "yikTa": {
+              "id": "yikTa",
+              "title": "Chimica applicata",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "_zVgW": {
+              "id": "_zVgW",
+              "title": "Chimica organica",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "wBzMv": {
+              "id": "wBzMv",
+              "title": "Composti, proprietà e nomenclatura dei composti",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "jWCTB": {
+              "id": "jWCTB",
+              "title": "Legami chimici e forze intermolecolari",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "cP3wo": {
+              "id": "cP3wo",
+              "title": "Ossidazioni e riduzioni",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "bT6hr": {
+              "id": "bT6hr",
+              "title": "Proprietà macroscopiche della materia",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "veMyd": {
+              "id": "veMyd",
+              "title": "Proprietà microscopiche della materia e composizione delle sostanze",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "Q9Y_3": {
+              "id": "Q9Y_3",
+              "title": "Reazioni chimiche e stechiometria",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "mE7t6": {
+              "id": "mE7t6",
+              "title": "Soluzioni e proprietà delle soluzioni",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "Hxa8L": {
+              "id": "Hxa8L",
+              "title": "Termodinamica e cinetica",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            }
+          }
+        }
+      }
+    },
+    "math": {
+      "id": "math",
+      "title": "Fisica e Matematica",
+      "color": "#ff68bce8",
+      "index": 5,
+      "children": {
+        "oCRa6": {
+          "id": "oCRa6",
+          "title": "Fisica",
+          "color": "#ff68bce8",
+          "index": null,
+          "children": {
+            "ygXKU": {
+              "id": "ygXKU",
+              "title": "Cinematica del punto materiale",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "Wc0an": {
+              "id": "Wc0an",
+              "title": "Dinamica del punto materiale",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "gorZd": {
+              "id": "gorZd",
+              "title": "Elettrostatica e correnti elettriche",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "aoyTy": {
+              "id": "aoyTy",
+              "title": "Fisica moderna",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "0GOPb": {
+              "id": "0GOPb",
+              "title": "Grandezze fisiche e misura",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "QamhZ": {
+              "id": "QamhZ",
+              "title": "Magnetismo",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "ZUeK6": {
+              "id": "ZUeK6",
+              "title": "Meccanica dei fluidi",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "Nbp7U": {
+              "id": "Nbp7U",
+              "title": "Oscillazioni e onde",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "UfFid": {
+              "id": "UfFid",
+              "title": "Statica",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "Xo7HY": {
+              "id": "Xo7HY",
+              "title": "Termologia e termodinamica",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            }
+          }
+        },
+        "03H9y": {
+          "id": "03H9y",
+          "title": "Matematica",
+          "color": "#ff5fcdf9",
+          "index": null,
+          "children": {
+            "Kk9Rw": {
+              "id": "Kk9Rw",
+              "title": "Algebra",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "Ng5Sk": {
+              "id": "Ng5Sk",
+              "title": "Combinatoria e probabilità",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "YGBg0": {
+              "id": "YGBg0",
+              "title": "Funzioni e grafici",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "77Mbr": {
+              "id": "77Mbr",
+              "title": "Geometria",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "zT7JT": {
+              "id": "zT7JT",
+              "title": "Medie e variabilità",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            },
+            "nuuRi": {
+              "id": "nuuRi",
+              "title": "Numeri",
+              "color": "#ff2196f3",
+              "index": null,
+              "children": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  "_note": "This file shows the mapping between IDs (keys) and human-readable names (values)",
+  "_generated": "2026-01-13T15:25:40.386Z"
+}

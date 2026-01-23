@@ -1875,6 +1875,7 @@ export const simulationsRouter = router({
           difficultyDistribution: simulationData.difficultyDistribution ?? undefined,
           isPaperBased: simulationData.isPaperBased ?? false,
           paperInstructions: simulationData.paperInstructions,
+          showSectionsInPaper: simulationData.showSectionsInPaper ?? true,
           trackAttendance: simulationData.trackAttendance ?? false,
           locationType: simulationData.locationType,
           locationDetails: simulationData.locationDetails,
@@ -1988,6 +1989,7 @@ export const simulationsRouter = router({
           // New fields for paper-based, attendance, sections, and anti-cheat
           isPaperBased: simulationData.isPaperBased ?? false,
           paperInstructions: simulationData.paperInstructions,
+          showSectionsInPaper: simulationData.showSectionsInPaper ?? true,
           trackAttendance: simulationData.trackAttendance ?? false,
           locationType: simulationData.locationType,
           locationDetails: simulationData.locationDetails,

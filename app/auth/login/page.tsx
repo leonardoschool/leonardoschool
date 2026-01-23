@@ -176,6 +176,16 @@ export default function LoginPage() {
       
       if (!response.ok) {
         const errorData = await response.json();
+        
+        // If account is deactivated (403), logout from Firebase and show error
+        if (response.status === 403) {
+          await firebaseAuth.logout();
+          setError(errorData.error || 'Il tuo account è stato disattivato');
+          showError('Account disattivato', errorData.error || 'Il tuo account è stato disattivato. Contatta l\'amministrazione.');
+          setLoading(false);
+          return;
+        }
+        
         throw new Error(errorData.error || 'Errore nel recupero dati utente');
       }
       
@@ -382,6 +392,36 @@ export default function LoginPage() {
                 Registrati
               </Link>
             </p>
+          </div>
+
+          {/* Link to old platform */}
+          <div className={`mt-6 pt-6 border-t ${colors.border.primary}`}>
+            <div className="text-center space-y-2">
+              <p className={`text-xs ${colors.text.muted}`}>
+                Stai cercando la vecchia piattaforma?
+              </p>
+              <a
+                href="https://leonardo-school.web.app/#/login"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`inline-flex items-center gap-2 text-sm ${colors.text.secondary} hover:${colors.text.primary} transition-colors group`}
+              >
+                <span>Accedi al vecchio applicativo</span>
+                <svg 
+                  className="w-4 h-4 transition-transform group-hover:translate-x-1" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" 
+                  />
+                </svg>
+              </a>
+            </div>
           </div>
         </div>
         </div>

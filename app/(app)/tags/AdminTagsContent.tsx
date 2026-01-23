@@ -452,7 +452,8 @@ export default function AdminTagsContent() {
                   <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={() => toggleCategoryActiveMutation.mutate({ id: category.id, isActive: !category.isActive })}
-                      className={`p-2 rounded-lg transition-colors ${
+                      disabled={toggleCategoryActiveMutation.isPending}
+                      className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${
                         category.isActive 
                           ? 'hover:bg-amber-100 dark:hover:bg-amber-900/30 text-amber-600 dark:text-amber-400' 
                           : 'hover:bg-green-100 dark:hover:bg-green-900/30 text-green-600 dark:text-green-400'
@@ -525,7 +526,8 @@ export default function AdminTagsContent() {
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => toggleTagActiveMutation.mutate({ id: tag.id, isActive: !tag.isActive })}
-                            className={`p-1.5 rounded transition-colors ${
+                            disabled={toggleTagActiveMutation.isPending}
+                            className={`p-1.5 rounded transition-colors disabled:opacity-50 ${
                               tag.isActive 
                                 ? 'hover:bg-amber-100 dark:hover:bg-amber-900/30 text-amber-600 dark:text-amber-400' 
                                 : 'hover:bg-green-100 dark:hover:bg-green-900/30 text-green-600 dark:text-green-400'
@@ -622,7 +624,8 @@ export default function AdminTagsContent() {
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => toggleTagActiveMutation.mutate({ id: tag.id!, isActive: !tag.isActive })}
-                          className={`p-1.5 rounded transition-colors ${
+                          disabled={toggleTagActiveMutation.isPending}
+                          className={`p-1.5 rounded transition-colors disabled:opacity-50 ${
                             tag.isActive 
                               ? 'hover:bg-amber-100 dark:hover:bg-amber-900/30 text-amber-600 dark:text-amber-400' 
                               : 'hover:bg-green-100 dark:hover:bg-green-900/30 text-green-600 dark:text-green-400'

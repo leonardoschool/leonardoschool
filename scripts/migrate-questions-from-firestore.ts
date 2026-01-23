@@ -52,6 +52,9 @@ const VERBOSE = process.argv.includes('--verbose');
 // Flag per inspect
 const INSPECT_ONLY = process.argv.includes('--inspect');
 
+// Flag per preview (mostra mappatura senza connessione al database)
+const PREVIEW_ONLY = process.argv.includes('--preview');
+
 // School ID (verrà trovato automaticamente)
 let FIRESTORE_SCHOOL_ID = '';
 
@@ -131,35 +134,235 @@ interface FirestoreQuestion {
 
 interface MigrationStats {
   total: number;
-  migrated: number;
+  created: number;
+  updated: number;
   skipped: number;
   errors: number;
   subjects: Map<string, number>;
   topics: Map<string, number>;
+  subTopics: Map<string, number>;
   databases: Map<string, number>;
   difficulties: Map<string, number>;
 }
 
-// ===================== MAPPING FUNCTIONS =====================
+// Interfaccia per la configurazione di simulazione
+interface SectionConfig {
+  id: string;
+  title: string;
+  color?: string;
+  index?: number | null;
+  children?: Record<string, SectionConfig>;
+}
+
+interface SimulationConfigData {
+  databases?: Record<string, string>;
+  severities?: Record<string, string>;
+  sections?: Record<string, SectionConfig>;
+}
+
+// ===================== INTELLIGENT MAPPING FUNCTIONS =====================
 
 /**
- * Mappa il campo severity del vecchio sistema al nuovo DifficultyLevel
+ * Verifica se un valore è "vuoto" (null, undefined, "*", stringa vuota)
  */
-function mapSeverityToDifficulty(severity?: string): DifficultyLevel {
-  if (!severity) return DifficultyLevel.MEDIUM;
+function isEmpty(value?: string | null): boolean {
+  if (!value) return true;
+  const trimmed = value.trim();
+  return trimmed === '' || trimmed === '*';
+}
+
+/**
+ * Risolve un nome in chiaro, restituendo null se vuoto o "*"
+ */
+function resolveToReadable(value?: string | null): string | null {
+  if (isEmpty(value)) return null;
+  return value!.trim();
+}
+
+/**
+ * Cerca ricorsivamente nella struttura sections per trovare il titolo di un ID
+ * La struttura è: section → subject → argument (3 livelli)
+ * 
+ * @param sections - L'oggetto sections dalla configurazione
+ * @param id - L'ID da cercare
+ * @returns { title, level, parentId } o null se non trovato
+ */
+function findInSections(
+  sections: Record<string, SectionConfig> | undefined,
+  id: string
+): { title: string; level: 'section' | 'subject' | 'argument'; parentId: string | null; parentTitle: string | null } | null {
+  if (!sections || isEmpty(id)) return null;
   
-  const severityLower = severity.toLowerCase();
-  
-  // Mappatura basata su valori comuni
-  if (severityLower.includes('facile') || severityLower.includes('easy') || severity === '1') {
-    return DifficultyLevel.EASY;
+  // Livello 1: Sections (es. "biology", "chemistry", "math")
+  if (sections[id]) {
+    return { 
+      title: sections[id].title, 
+      level: 'section',
+      parentId: null,
+      parentTitle: null
+    };
   }
-  if (severityLower.includes('difficile') || severityLower.includes('hard') || severity === '3') {
-    return DifficultyLevel.HARD;
+  
+  // Livello 2 e 3: Cerca ricorsivamente
+  for (const [sectionId, section] of Object.entries(sections)) {
+    if (!section.children) continue;
+    
+    // Livello 2: Subjects (es. "biolg", "cto4R")
+    if (section.children[id]) {
+      return { 
+        title: section.children[id].title, 
+        level: 'subject',
+        parentId: sectionId,
+        parentTitle: section.title
+      };
+    }
+    
+    // Livello 3: Arguments (es. "3cznQ", "iWHzy")
+    for (const [subjectId, subject] of Object.entries(section.children)) {
+      if (subject.children && subject.children[id]) {
+        return { 
+          title: subject.children[id].title, 
+          level: 'argument',
+          parentId: subjectId,
+          parentTitle: subject.title
+        };
+      }
+    }
   }
   
-  // Default: medio
-  return DifficultyLevel.MEDIUM;
+  return null;
+}
+
+/**
+ * Risolve la gerarchia completa di una domanda
+ * Firestore: section → subject → argument
+ * PostgreSQL: subject → topic → subTopic
+ */
+function resolveQuestionHierarchy(
+  config: SimulationConfigData | null,
+  rawSection?: string,
+  rawSubject?: string,
+  rawArgument?: string
+): {
+  subjectName: string | null;
+  topicName: string | null;
+  subTopicName: string | null;
+  rawValues: { section: string | null; subject: string | null; argument: string | null };
+} {
+  const result = {
+    subjectName: null as string | null,
+    topicName: null as string | null,
+    subTopicName: null as string | null,
+    rawValues: {
+      section: resolveToReadable(rawSection),
+      subject: resolveToReadable(rawSubject),
+      argument: resolveToReadable(rawArgument)
+    }
+  };
+  
+  if (!config?.sections) {
+    // Fallback: usa i valori grezzi se non c'è configurazione
+    result.subjectName = result.rawValues.section;
+    result.topicName = result.rawValues.subject;
+    result.subTopicName = result.rawValues.argument;
+    return result;
+  }
+  
+  // 1. Risolvi Section → Subject (materia)
+  if (!isEmpty(rawSection)) {
+    const sectionInfo = findInSections(config.sections, rawSection!);
+    if (sectionInfo) {
+      result.subjectName = sectionInfo.title;
+    } else {
+      // ID non trovato nella config, usa come fallback se non è una sigla e non è "*"
+      const cleaned = rawSection!.trim();
+      if (cleaned.length > 5 && cleaned !== '*') {
+        result.subjectName = cleaned;
+      }
+    }
+  }
+  
+  // 2. Risolvi Subject → Topic (argomento)
+  if (!isEmpty(rawSubject)) {
+    const subjectInfo = findInSections(config.sections, rawSubject!);
+    if (subjectInfo) {
+      result.topicName = subjectInfo.title;
+    } else {
+      // ID non trovato, usa come fallback se non è una sigla e non è "*"
+      const cleaned = rawSubject!.trim();
+      if (cleaned.length > 5 && cleaned !== '*') {
+        result.topicName = cleaned;
+      }
+    }
+  }
+  
+  // 3. Risolvi Argument → SubTopic (sotto-argomento)
+  if (!isEmpty(rawArgument)) {
+    const argumentInfo = findInSections(config.sections, rawArgument!);
+    if (argumentInfo) {
+      result.subTopicName = argumentInfo.title;
+    } else {
+      // ID non trovato, usa come fallback se non è una sigla e non è "*"
+      const cleaned = rawArgument!.trim();
+      if (cleaned.length > 5 && cleaned !== '*') {
+        result.subTopicName = cleaned;
+      }
+    }
+  }
+  
+  return result;
+}
+
+/**
+ * Risolve il nome del database dalla configurazione
+ */
+function resolveDatabaseName(config: SimulationConfigData | null, rawDatabase?: string): string | null {
+  if (isEmpty(rawDatabase)) return null;
+  
+  // Prova a cercare nella configurazione
+  if (config?.databases && config.databases[rawDatabase!]) {
+    return config.databases[rawDatabase!];
+  }
+  
+  // Se non trovato e non è una sigla corta, usa il valore grezzo
+  if (rawDatabase!.length > 5) {
+    return rawDatabase!;
+  }
+  
+  // Sigla non risolta - meglio null che una sigla incomprensibile
+  console.warn(`   ⚠️ Database ID non risolto: "${rawDatabase}"`);
+  return null;
+}
+
+/**
+ * Risolve il nome della severity dalla configurazione e mappa a DifficultyLevel
+ */
+function resolveSeverity(config: SimulationConfigData | null, rawSeverity?: string): { name: string | null; level: DifficultyLevel } {
+  if (isEmpty(rawSeverity)) {
+    return { name: null, level: DifficultyLevel.MEDIUM };
+  }
+  
+  // Prova a cercare nella configurazione
+  let severityName: string | null = null;
+  if (config?.severities && config.severities[rawSeverity!]) {
+    severityName = config.severities[rawSeverity!];
+  } else {
+    severityName = rawSeverity!;
+  }
+  
+  // Mappa il nome italiano al DifficultyLevel
+  const nameLower = severityName.toLowerCase();
+  let level: DifficultyLevel;
+  
+  if (nameLower.includes('facile') || nameLower.includes('easy') || rawSeverity === '0') {
+    level = DifficultyLevel.EASY;
+  } else if (nameLower.includes('difficile') || nameLower.includes('hard') || rawSeverity === '2') {
+    level = DifficultyLevel.HARD;
+  } else {
+    level = DifficultyLevel.MEDIUM;
+  }
+  
+  return { name: severityName, level };
 }
 
 /**
@@ -217,46 +420,51 @@ function determineQuestionType(answers?: string[], options?: FirestoreOption[]):
 // ===================== DATABASE HELPERS =====================
 
 /**
- * Ottiene o crea una materia (CustomSubject) basata sul nome
+ * Ottiene o crea una materia (CustomSubject) basata sul nome leggibile
  */
-async function getOrCreateSubject(sectionName: string, subjectsCache: Map<string, string>): Promise<string | null> {
-  if (!sectionName) return null;
-  
-  // Check cache
-  if (subjectsCache.has(sectionName)) {
-    return subjectsCache.get(sectionName)!;
-  }
+async function getOrCreateSubject(subjectName: string | null, subjectsCache: Map<string, string>): Promise<string | null> {
+  if (!subjectName) return null;
   
   // Normalizza il nome
-  const normalizedName = sectionName.trim();
+  const normalizedName = subjectName.trim();
   
-  // Cerca nel database
+  // Check cache
+  if (subjectsCache.has(normalizedName)) {
+    return subjectsCache.get(normalizedName)!;
+  }
+  
+  // Cerca nel database per nome esatto o simile
   let subject = await prisma.customSubject.findFirst({
     where: {
       OR: [
-        { name: { contains: normalizedName, mode: 'insensitive' } },
-        { code: { contains: normalizedName.substring(0, 3).toUpperCase(), mode: 'insensitive' } }
+        { name: { equals: normalizedName, mode: 'insensitive' } },
+        { name: { contains: normalizedName, mode: 'insensitive' } }
       ]
     }
   });
   
   if (!subject && !DRY_RUN) {
-    // Crea una nuova materia
-    const code = normalizedName.substring(0, 3).toUpperCase();
+    // Genera un codice dal nome
+    const code = normalizedName
+      .split(' ')
+      .map(w => w[0]?.toUpperCase() || '')
+      .join('')
+      .substring(0, 4) || normalizedName.substring(0, 3).toUpperCase();
+    
     subject = await prisma.customSubject.create({
       data: {
         name: normalizedName,
         code: code,
         description: `Materia importata da Firestore: ${normalizedName}`,
         isActive: true,
-        order: 99 // Metti in fondo
+        order: 99
       }
     });
     console.log(`   📚 Created new subject: ${subject.name} (${subject.code})`);
   }
   
   if (subject) {
-    subjectsCache.set(sectionName, subject.id);
+    subjectsCache.set(normalizedName, subject.id);
     return subject.id;
   }
   
@@ -264,27 +472,29 @@ async function getOrCreateSubject(sectionName: string, subjectsCache: Map<string
 }
 
 /**
- * Ottiene o crea un topic basato sul nome e subjectId
+ * Ottiene o crea un topic basato sul nome leggibile e subjectId
  */
 async function getOrCreateTopic(
-  topicName: string, 
+  topicName: string | null, 
   subjectId: string | null, 
   topicsCache: Map<string, string>
 ): Promise<string | null> {
   if (!topicName || !subjectId) return null;
   
-  const cacheKey = `${subjectId}:${topicName}`;
+  const normalizedName = topicName.trim();
+  const cacheKey = `${subjectId}:${normalizedName}`;
   
   if (topicsCache.has(cacheKey)) {
     return topicsCache.get(cacheKey)!;
   }
   
-  const normalizedName = topicName.trim();
-  
   let topic = await prisma.topic.findFirst({
     where: {
       subjectId: subjectId,
-      name: { contains: normalizedName, mode: 'insensitive' }
+      OR: [
+        { name: { equals: normalizedName, mode: 'insensitive' } },
+        { name: { contains: normalizedName, mode: 'insensitive' } }
+      ]
     }
   });
   
@@ -310,25 +520,76 @@ async function getOrCreateTopic(
 }
 
 /**
- * Ottiene o crea un tag per il database
+ * Ottiene o crea un subtopic basato sul nome leggibile e topicId
+ */
+async function getOrCreateSubTopic(
+  subTopicName: string | null, 
+  topicId: string | null, 
+  subTopicsCache: Map<string, string>
+): Promise<string | null> {
+  if (!subTopicName || !topicId) return null;
+  
+  const normalizedName = subTopicName.trim();
+  const cacheKey = `${topicId}:${normalizedName}`;
+  
+  if (subTopicsCache.has(cacheKey)) {
+    return subTopicsCache.get(cacheKey)!;
+  }
+  
+  let subTopic = await prisma.subTopic.findFirst({
+    where: {
+      topicId: topicId,
+      OR: [
+        { name: { equals: normalizedName, mode: 'insensitive' } },
+        { name: { contains: normalizedName, mode: 'insensitive' } }
+      ]
+    }
+  });
+  
+  if (!subTopic && !DRY_RUN) {
+    subTopic = await prisma.subTopic.create({
+      data: {
+        name: normalizedName,
+        topicId: topicId,
+        description: `Sotto-argomento importato da Firestore`,
+        isActive: true,
+        order: 99
+      }
+    });
+    console.log(`   📑 Created new subTopic: ${subTopic.name}`);
+  }
+  
+  if (subTopic) {
+    subTopicsCache.set(cacheKey, subTopic.id);
+    return subTopic.id;
+  }
+  
+  return null;
+}
+
+/**
+ * Ottiene o crea un tag per il database (già con nome leggibile)
  */
 async function getOrCreateDatabaseTag(
-  database: string, 
+  databaseName: string | null, 
   categoryId: string,
   tagsCache: Map<string, string>
 ): Promise<string | null> {
-  if (!database) return null;
+  if (!databaseName) return null;
   
-  if (tagsCache.has(database)) {
-    return tagsCache.get(database)!;
+  const normalizedName = databaseName.trim();
+  
+  if (tagsCache.has(normalizedName)) {
+    return tagsCache.get(normalizedName)!;
   }
-  
-  const normalizedName = database.trim();
   
   let tag = await prisma.questionTag.findFirst({
     where: {
-      name: { contains: normalizedName, mode: 'insensitive' },
-      categoryId: categoryId
+      categoryId: categoryId,
+      OR: [
+        { name: { equals: normalizedName, mode: 'insensitive' } },
+        { name: { contains: normalizedName, mode: 'insensitive' } }
+      ]
     }
   });
   
@@ -345,7 +606,7 @@ async function getOrCreateDatabaseTag(
   }
   
   if (tag) {
-    tagsCache.set(database, tag.id);
+    tagsCache.set(normalizedName, tag.id);
     return tag.id;
   }
   
@@ -416,16 +677,19 @@ async function migrateQuestions(): Promise<void> {
   // Stats
   const stats: MigrationStats = {
     total: 0,
-    migrated: 0,
+    created: 0,
+    updated: 0,
     skipped: 0,
     errors: 0,
     subjects: new Map(),
     topics: new Map(),
+    subTopics: new Map(),
     databases: new Map(),
     difficulties: new Map()
   };
   const subjectsCache = new Map<string, string>();
   const topicsCache = new Map<string, string>();
+  const subTopicsCache = new Map<string, string>();
   const tagsCache = new Map<string, string>();
   
   try {
@@ -433,13 +697,16 @@ async function migrateQuestions(): Promise<void> {
     console.log('📂 Reading simulation config from Firestore...');
     const configRef = firestore.collection('schools').doc(FIRESTORE_SCHOOL_ID).collection('config').doc('simulations');
     const configDoc = await configRef.get();
-    const simulationConfig = configDoc.exists ? configDoc.data() : null;
+    const simulationConfig: SimulationConfigData | null = configDoc.exists ? configDoc.data() as SimulationConfigData : null;
     
     if (simulationConfig) {
       console.log('   ✅ Found simulation config');
+      console.log(`      📊 Databases: ${Object.keys(simulationConfig.databases || {}).length} mappings`);
+      console.log(`      📊 Severities: ${Object.keys(simulationConfig.severities || {}).length} mappings`);
+      console.log(`      📊 Sections: ${Object.keys(simulationConfig.sections || {}).length} top-level`);
       if (VERBOSE) {
-        console.log('   Databases:', Object.keys(simulationConfig.databases || {}));
-        console.log('   Severities:', Object.keys(simulationConfig.severities || {}));
+        console.log('   Databases:', simulationConfig.databases);
+        console.log('   Severities:', simulationConfig.severities);
         console.log('   Sections:', Object.keys(simulationConfig.sections || {}));
       }
     } else {
@@ -488,125 +755,205 @@ async function migrateQuestions(): Promise<void> {
         
         // Verifica se la domanda esiste già (per externalId)
         const existingQuestion = await prisma.question.findFirst({
-          where: { externalId: firestoreQuestion.id }
+          where: { externalId: firestoreQuestion.id },
+          include: { answers: true, questionTags: true }
         });
         
-        if (existingQuestion) {
-          stats.skipped++;
-          if (VERBOSE) console.log(`   ⏭️ Skipped (already exists)`);
-          continue;
-        }
+        const isUpdate = !!existingQuestion;
         
-        // Mappa i campi
-        const subjectId = await getOrCreateSubject(
-          simulationConfig?.sections?.[firestoreQuestion.section || '']?.title || firestoreQuestion.section || '',
-          subjectsCache
+        // === RISOLUZIONE INTELLIGENTE DEI CAMPI ===
+        
+        // 1. Risolvi la gerarchia section → subject → argument
+        const hierarchy = resolveQuestionHierarchy(
+          simulationConfig,
+          firestoreQuestion.section,
+          firestoreQuestion.subject,
+          firestoreQuestion.argument
         );
         
-        // Aggiorna stats
-        if (firestoreQuestion.section) {
-          stats.subjects.set(firestoreQuestion.section, (stats.subjects.get(firestoreQuestion.section) || 0) + 1);
+        if (VERBOSE) {
+          console.log(`   📚 Hierarchy resolved:`);
+          console.log(`      Section "${firestoreQuestion.section}" → Subject: "${hierarchy.subjectName || '(vuoto)'}"`);
+          console.log(`      Subject "${firestoreQuestion.subject}" → Topic: "${hierarchy.topicName || '(vuoto)'}"`);
+          console.log(`      Argument "${firestoreQuestion.argument}" → SubTopic: "${hierarchy.subTopicName || '(vuoto)'}"`);
         }
         
-        const topicId = await getOrCreateTopic(
-          simulationConfig?.sections?.[firestoreQuestion.section || '']?.children?.[firestoreQuestion.subject || '']?.title 
-            || firestoreQuestion.subject || '',
-          subjectId,
-          topicsCache
-        );
+        // 2. Crea/trova Subject, Topic, SubTopic nel database PostgreSQL
+        const subjectId = await getOrCreateSubject(hierarchy.subjectName, subjectsCache);
+        const topicId = await getOrCreateTopic(hierarchy.topicName, subjectId, topicsCache);
+        const subTopicId = await getOrCreateSubTopic(hierarchy.subTopicName, topicId, subTopicsCache);
         
-        if (firestoreQuestion.subject) {
-          stats.topics.set(firestoreQuestion.subject, (stats.topics.get(firestoreQuestion.subject) || 0) + 1);
+        // 3. Aggiorna stats con i nomi leggibili
+        if (hierarchy.subjectName) {
+          stats.subjects.set(hierarchy.subjectName, (stats.subjects.get(hierarchy.subjectName) || 0) + 1);
+        }
+        if (hierarchy.topicName) {
+          stats.topics.set(hierarchy.topicName, (stats.topics.get(hierarchy.topicName) || 0) + 1);
+        }
+        if (hierarchy.subTopicName) {
+          stats.subTopics.set(hierarchy.subTopicName, (stats.subTopics.get(hierarchy.subTopicName) || 0) + 1);
         }
         
-        const difficulty = mapSeverityToDifficulty(
-          simulationConfig?.severities?.[firestoreQuestion.severity || ''] || firestoreQuestion.severity
-        );
-        stats.difficulties.set(difficulty, (stats.difficulties.get(difficulty) || 0) + 1);
+        // 4. Risolvi la difficoltà
+        const severityInfo = resolveSeverity(simulationConfig, firestoreQuestion.severity);
+        const difficulty = severityInfo.level;
+        if (severityInfo.name) {
+          stats.difficulties.set(severityInfo.name, (stats.difficulties.get(severityInfo.name) || 0) + 1);
+        }
         
-        const databaseName = simulationConfig?.databases?.[firestoreQuestion.database || ''] || firestoreQuestion.database;
+        if (VERBOSE && severityInfo.name) {
+          console.log(`   📈 Severity "${firestoreQuestion.severity}" → "${severityInfo.name}" (${difficulty})`);
+        }
+        
+        // 5. Risolvi il database
+        const databaseName = resolveDatabaseName(simulationConfig, firestoreQuestion.database);
         if (databaseName) {
           stats.databases.set(databaseName, (stats.databases.get(databaseName) || 0) + 1);
         }
         
+        if (VERBOSE && firestoreQuestion.database) {
+          console.log(`   🗄️ Database "${firestoreQuestion.database}" → "${databaseName || '(non risolto)'}"`);
+        }
+        
+        // 6. Risolvi autore/fonte (gestisce "*" come vuoto)
+        const source = resolveToReadable(firestoreQuestion.author);
+        
+        if (VERBOSE && firestoreQuestion.author) {
+          console.log(`   👤 Author "${firestoreQuestion.author}" → "${source || '(vuoto)'}"`);
+        }
+        
+        // 7. Status e tipo domanda
         const status = mapStatus(firestoreQuestion.status);
         const questionType = determineQuestionType(firestoreQuestion.answers, firestoreQuestion.options);
         
         if (DRY_RUN) {
-          stats.migrated++;
+          if (isUpdate) {
+            stats.updated++;
+            if (VERBOSE) console.log(`   🔄 Would UPDATE existing question`);
+          } else {
+            stats.created++;
+            if (VERBOSE) console.log(`   ➕ Would CREATE new question`);
+          }
           continue;
         }
         
-        // Crea la domanda nel database
-        const newQuestion = await prisma.question.create({
-          data: {
-            // Content
-            text: cleanText(firestoreQuestion.text) || 'Domanda senza testo',
-            type: questionType,
-            status: status,
-            
-            // Categorization
-            subjectId: subjectId,
-            topicId: topicId,
-            // subTopicId non utilizzato - nel vecchio sistema si usavano solo gli argomenti
-            difficulty: difficulty,
-            
-            // Images (prendi la prima se presente)
-            imageUrl: firestoreQuestion.images?.[0] || null,
-            
-            // Explanations
-            generalExplanation: cleanText(firestoreQuestion.comment) || null,
-            
-            // Metadata
-            source: firestoreQuestion.author || null,
-            externalId: firestoreQuestion.id,
-            legacyTags: [
-              firestoreQuestion.database,
-              firestoreQuestion.author
-            ].filter(Boolean) as string[],
-            
-            // Scoring defaults
-            points: 1.0,
-            negativePoints: 0.0,
-            blankPoints: 0.0,
-            
-            // Display
-            shuffleAnswers: false,
-            showExplanation: true,
-            
-            // Timestamp
-            publishedAt: status === QuestionStatus.PUBLISHED ? new Date() : null,
-            
-            // Create answers
-            answers: {
-              create: (firestoreQuestion.options || []).map((opt, index) => ({
-                text: cleanText(opt.text) || `Opzione ${index + 1}`,
-                imageUrl: opt.image || null,
-                isCorrect: (firestoreQuestion.answers || []).includes(opt.id || ''),
-                order: index,
-                label: String.fromCharCode(65 + index) // A, B, C, D...
-              }))
-            }
-          }
-        });
+        // Dati comuni per create/update
+        const questionData = {
+          // Content
+          text: cleanText(firestoreQuestion.text) || 'Domanda senza testo',
+          type: questionType,
+          status: status,
+          
+          // Categorization - ora con tutti e 3 i livelli
+          subjectId: subjectId,
+          topicId: topicId,
+          subTopicId: subTopicId,
+          difficulty: difficulty,
+          
+          // Images (prendi la prima se presente)
+          imageUrl: firestoreQuestion.images?.[0] || null,
+          
+          // Explanations
+          generalExplanation: cleanText(firestoreQuestion.comment) || null,
+          
+          // Metadata - ora con valori leggibili
+          source: source,
+          externalId: firestoreQuestion.id,
+          // Legacy tags con nomi leggibili invece di sigle
+          legacyTags: [
+            databaseName,
+            source
+          ].filter(Boolean) as string[],
+          
+          // Scoring defaults
+          points: 1.0,
+          negativePoints: 0.0,
+          blankPoints: 0.0,
+          
+          // Display
+          shuffleAnswers: false,
+          showExplanation: true,
+        };
         
-        // Crea tag per il database se presente
+        let questionId: string;
+        
+        if (isUpdate && existingQuestion) {
+          // === UPDATE: Aggiorna domanda esistente ===
+          
+          // 1. Elimina le vecchie risposte
+          await prisma.questionAnswer.deleteMany({
+            where: { questionId: existingQuestion.id }
+          });
+          
+          // 2. Elimina i vecchi tag assignments
+          await prisma.questionTagAssignment.deleteMany({
+            where: { questionId: existingQuestion.id }
+          });
+          
+          // 3. Aggiorna la domanda
+          const updatedQuestion = await prisma.question.update({
+            where: { id: existingQuestion.id },
+            data: {
+              ...questionData,
+              updatedAt: new Date(),
+              // Ricrea le risposte
+              answers: {
+                create: (firestoreQuestion.options || []).map((opt, index) => ({
+                  text: cleanText(opt.text) || `Opzione ${index + 1}`,
+                  imageUrl: opt.image || null,
+                  isCorrect: (firestoreQuestion.answers || []).includes(opt.id || ''),
+                  order: index,
+                  label: String.fromCharCode(65 + index) // A, B, C, D...
+                }))
+              }
+            }
+          });
+          
+          questionId = updatedQuestion.id;
+          stats.updated++;
+          
+          if (VERBOSE) {
+            console.log(`   🔄 Updated: ${questionId}`);
+          }
+        } else {
+          // === CREATE: Crea nuova domanda ===
+          const newQuestion = await prisma.question.create({
+            data: {
+              ...questionData,
+              // Timestamp
+              publishedAt: status === QuestionStatus.PUBLISHED ? new Date() : null,
+              // Create answers
+              answers: {
+                create: (firestoreQuestion.options || []).map((opt, index) => ({
+                  text: cleanText(opt.text) || `Opzione ${index + 1}`,
+                  imageUrl: opt.image || null,
+                  isCorrect: (firestoreQuestion.answers || []).includes(opt.id || ''),
+                  order: index,
+                  label: String.fromCharCode(65 + index) // A, B, C, D...
+                }))
+              }
+            }
+          });
+          
+          questionId = newQuestion.id;
+          stats.created++;
+          
+          if (VERBOSE) {
+            console.log(`   ✅ Created: ${questionId}`);
+          }
+        }
+        
+        // Crea tag per il database se presente (nome leggibile)
         if (databaseName) {
           const tagId = await getOrCreateDatabaseTag(databaseName, databaseCategoryId, tagsCache);
           if (tagId) {
             await prisma.questionTagAssignment.create({
               data: {
-                questionId: newQuestion.id,
+                questionId: questionId,
                 tagId: tagId
               }
             });
           }
-        }
-        
-        stats.migrated++;
-        
-        if (VERBOSE) {
-          console.log(`   ✅ Migrated: ${newQuestion.id}`);
         }
         
       } catch (error) {
@@ -626,21 +973,47 @@ async function migrateQuestions(): Promise<void> {
     console.log('\n\n' + '═'.repeat(60));
     console.log('📊 MIGRATION SUMMARY');
     console.log('═'.repeat(60));
-    console.log(`   Total questions found:    ${stats.total}`);
-    console.log(`   Successfully migrated:    ${stats.migrated}`);
-    console.log(`   Skipped (already exist):  ${stats.skipped}`);
-    console.log(`   Errors:                   ${stats.errors}`);
+    console.log(`   Total questions processed: ${stats.total}`);
+    console.log(`   ➕ Created (new):          ${stats.created}`);
+    console.log(`   🔄 Updated (existing):     ${stats.updated}`);
+    console.log(`   ❌ Errors:                 ${stats.errors}`);
     console.log('');
     
-    console.log('📚 Subjects distribution:');
-    Array.from(stats.subjects.entries()).forEach(([subject, count]) => {
-      console.log(`   - ${subject}: ${count} questions`);
-    });
+    console.log('📚 Subjects (Materie) distribution:');
+    Array.from(stats.subjects.entries())
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([subject, count]) => {
+        console.log(`   - ${subject}: ${count} questions`);
+      });
+    
+    console.log('\n📖 Topics (Argomenti) distribution (top 10):');
+    Array.from(stats.topics.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .forEach(([topic, count]) => {
+        console.log(`   - ${topic}: ${count} questions`);
+      });
+    if (stats.topics.size > 10) {
+      console.log(`   ... and ${stats.topics.size - 10} more topics`);
+    }
+    
+    console.log('\n📑 SubTopics (Sotto-argomenti) distribution (top 10):');
+    Array.from(stats.subTopics.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .forEach(([subTopic, count]) => {
+        console.log(`   - ${subTopic}: ${count} questions`);
+      });
+    if (stats.subTopics.size > 10) {
+      console.log(`   ... and ${stats.subTopics.size - 10} more sub-topics`);
+    }
     
     console.log('\n🏷️ Databases distribution:');
-    Array.from(stats.databases.entries()).forEach(([db, count]) => {
-      console.log(`   - ${db}: ${count} questions`);
-    });
+    Array.from(stats.databases.entries())
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([db, count]) => {
+        console.log(`   - ${db}: ${count} questions`);
+      });
     
     console.log('\n📈 Difficulty distribution:');
     Array.from(stats.difficulties.entries()).forEach(([diff, count]) => {
@@ -668,6 +1041,206 @@ async function migrateQuestions(): Promise<void> {
     console.error('\n❌ Migration failed:', error);
     throw error;
   }
+}
+
+// ===================== PREVIEW FUNCTION =====================
+
+/**
+ * Mostra un'anteprima di come verrebbero mappati i dati
+ * senza richiedere connessione al database PostgreSQL
+ */
+async function previewMapping(): Promise<void> {
+  console.log('\n🔮 PREVIEW MODE - Showing how data would be mapped\n');
+  console.log('   (No database connection required)\n');
+  
+  // Trova automaticamente la scuola
+  if (!FIRESTORE_SCHOOL_ID) {
+    console.log('🔍 Finding schools in Firestore...');
+    const schoolsSnapshot = await firestore.collection('schools').get();
+    
+    if (schoolsSnapshot.empty) {
+      console.error('❌ No schools found in Firestore!');
+      return;
+    }
+    
+    FIRESTORE_SCHOOL_ID = schoolsSnapshot.docs[0].id;
+    console.log(`✅ Using school: ${FIRESTORE_SCHOOL_ID}\n`);
+  }
+  
+  // 1. Leggi la configurazione dal vecchio Firestore
+  console.log('📂 Reading simulation config from Firestore...');
+  const configRef = firestore.collection('schools').doc(FIRESTORE_SCHOOL_ID).collection('config').doc('simulations');
+  const configDoc = await configRef.get();
+  const simulationConfig: SimulationConfigData | null = configDoc.exists ? configDoc.data() as SimulationConfigData : null;
+  
+  if (!simulationConfig) {
+    console.error('❌ No simulation config found! Cannot preview mapping.');
+    return;
+  }
+  
+  console.log('   ✅ Found simulation config\n');
+  
+  // 2. Leggi alcune domande esempio
+  console.log('📖 Reading sample questions...');
+  const questionsRef = firestore.collection('schools').doc(FIRESTORE_SCHOOL_ID).collection('questions');
+  const limit = LIMIT > 0 ? LIMIT : 10;
+  const questionsSnapshot = await questionsRef.limit(limit).get();
+  
+  console.log(`   Found ${questionsSnapshot.size} questions to preview\n`);
+  
+  // Stats per il riepilogo
+  const stats = {
+    subjects: new Map<string, number>(),
+    topics: new Map<string, number>(),
+    subTopics: new Map<string, number>(),
+    databases: new Map<string, number>(),
+    difficulties: new Map<string, number>(),
+    unresolvedSections: new Set<string>(),
+    unresolvedSubjects: new Set<string>(),
+    unresolvedArguments: new Set<string>(),
+    unresolvedDatabases: new Set<string>(),
+  };
+  
+  console.log('═'.repeat(80));
+  console.log('🔄 MAPPING PREVIEW');
+  console.log('═'.repeat(80));
+  
+  for (const doc of questionsSnapshot.docs) {
+    const q = doc.data() as FirestoreQuestion;
+    
+    console.log(`\n📝 Question: ${doc.id}`);
+    console.log(`   Text: "${(q.text || '').substring(0, 60)}..."`);
+    console.log('');
+    
+    // Hierarchy mapping
+    const hierarchy = resolveQuestionHierarchy(
+      simulationConfig,
+      q.section,
+      q.subject,
+      q.argument
+    );
+    
+    console.log('   📊 HIERARCHY MAPPING:');
+    console.log(`      section: "${q.section || '(vuoto)'}" → Subject: "${hierarchy.subjectName || '⚠️ NON RISOLTO'}"`);
+    console.log(`      subject: "${q.subject || '(vuoto)'}" → Topic: "${hierarchy.topicName || '⚠️ NON RISOLTO'}"`);
+    console.log(`      argument: "${q.argument || '(vuoto)'}" → SubTopic: "${hierarchy.subTopicName || '⚠️ NON RISOLTO'}"`);
+    
+    // Track stats
+    if (hierarchy.subjectName) {
+      stats.subjects.set(hierarchy.subjectName, (stats.subjects.get(hierarchy.subjectName) || 0) + 1);
+    } else if (q.section && !isEmpty(q.section)) {
+      stats.unresolvedSections.add(q.section);
+    }
+    
+    if (hierarchy.topicName) {
+      stats.topics.set(hierarchy.topicName, (stats.topics.get(hierarchy.topicName) || 0) + 1);
+    } else if (q.subject && !isEmpty(q.subject)) {
+      stats.unresolvedSubjects.add(q.subject);
+    }
+    
+    if (hierarchy.subTopicName) {
+      stats.subTopics.set(hierarchy.subTopicName, (stats.subTopics.get(hierarchy.subTopicName) || 0) + 1);
+    } else if (q.argument && !isEmpty(q.argument)) {
+      stats.unresolvedArguments.add(q.argument);
+    }
+    
+    // Database mapping
+    const databaseName = resolveDatabaseName(simulationConfig, q.database);
+    console.log(`      database: "${q.database || '(vuoto)'}" → Tag: "${databaseName || '⚠️ NON RISOLTO'}"`);
+    
+    if (databaseName) {
+      stats.databases.set(databaseName, (stats.databases.get(databaseName) || 0) + 1);
+    } else if (q.database && !isEmpty(q.database)) {
+      stats.unresolvedDatabases.add(q.database);
+    }
+    
+    // Severity mapping
+    const severityInfo = resolveSeverity(simulationConfig, q.severity);
+    console.log(`      severity: "${q.severity || '(vuoto)'}" → Difficulty: "${severityInfo.name}" (${severityInfo.level})`);
+    
+    if (severityInfo.name) {
+      stats.difficulties.set(severityInfo.name, (stats.difficulties.get(severityInfo.name) || 0) + 1);
+    }
+    
+    // Author/Source mapping
+    const source = resolveToReadable(q.author);
+    console.log(`      author: "${q.author || '(vuoto)'}" → Source: "${source || '(vuoto)'}"`);
+    
+    // Status mapping
+    const status = mapStatus(q.status);
+    console.log(`      status: "${q.status || '(vuoto)'}" → Status: "${status}"`);
+    
+    // Answers
+    if (q.options && q.options.length > 0) {
+      console.log(`      options: ${q.options.length} answers`);
+      const correctCount = (q.answers || []).length;
+      const type = determineQuestionType(q.answers, q.options);
+      console.log(`      correct answers: ${correctCount} → Type: ${type}`);
+    }
+  }
+  
+  // Final summary
+  console.log('\n' + '═'.repeat(80));
+  console.log('📊 PREVIEW SUMMARY');
+  console.log('═'.repeat(80));
+  
+  console.log('\n📚 Subjects (Materie) that would be created:');
+  Array.from(stats.subjects.entries())
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([subject, count]) => {
+      console.log(`   ✅ ${subject}: ${count} questions`);
+    });
+  
+  console.log('\n📖 Topics (Argomenti) that would be created:');
+  Array.from(stats.topics.entries())
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([topic, count]) => {
+      console.log(`   ✅ ${topic}: ${count} questions`);
+    });
+  
+  console.log('\n📑 SubTopics (Sotto-argomenti) that would be created:');
+  Array.from(stats.subTopics.entries())
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([subTopic, count]) => {
+      console.log(`   ✅ ${subTopic}: ${count} questions`);
+    });
+  
+  console.log('\n🏷️ Database Tags that would be created:');
+  Array.from(stats.databases.entries())
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([db, count]) => {
+      console.log(`   ✅ ${db}: ${count} questions`);
+    });
+  
+  console.log('\n📈 Difficulty distribution:');
+  Array.from(stats.difficulties.entries()).forEach(([diff, count]) => {
+    console.log(`   ${diff}: ${count} questions`);
+  });
+  
+  // Warnings for unresolved values
+  if (stats.unresolvedSections.size > 0) {
+    console.log('\n⚠️ UNRESOLVED SECTIONS (will be left empty):');
+    stats.unresolvedSections.forEach(s => console.log(`   - "${s}"`));
+  }
+  
+  if (stats.unresolvedSubjects.size > 0) {
+    console.log('\n⚠️ UNRESOLVED SUBJECTS (will be left empty):');
+    stats.unresolvedSubjects.forEach(s => console.log(`   - "${s}"`));
+  }
+  
+  if (stats.unresolvedArguments.size > 0) {
+    console.log('\n⚠️ UNRESOLVED ARGUMENTS (will be left empty):');
+    stats.unresolvedArguments.forEach(s => console.log(`   - "${s}"`));
+  }
+  
+  if (stats.unresolvedDatabases.size > 0) {
+    console.log('\n⚠️ UNRESOLVED DATABASES (will be left empty):');
+    stats.unresolvedDatabases.forEach(s => console.log(`   - "${s}"`));
+  }
+  
+  console.log('\n' + '═'.repeat(80));
+  console.log('💡 Run without --preview to actually migrate the data.');
+  console.log('═'.repeat(80));
 }
 
 // ===================== INSPECT FUNCTION =====================
@@ -783,19 +1356,31 @@ Usage:
 Lo script funziona automaticamente:
 - Cerca leonardo-school-service-account.json nella root
 - Trova automaticamente l'unica scuola presente
-- Migra tutte le domande
+- Usa la configurazione Firestore per risolvere tutte le sigle in nomi leggibili
+- Migra tutte le domande con la gerarchia corretta
+
+Il mapping intelligente converte:
+- section (es. "biology") → Subject (es. "Biologia")
+- subject (es. "biolg") → Topic (es. "Biologia")
+- argument (es. "3cznQ") → SubTopic (es. "Fondamenti di genetica")
+- database (es. "k7JL") → Tag (es. "CISIA")
+- severity (es. "0") → Difficulty (es. "Facile" → EASY)
+- Valori "*" vengono trattati come vuoti
 
 Options:
   --limit=N     Migra solo N domande (per test)
-  --dry-run     Test senza scrivere nel database
+  --dry-run     Test senza scrivere nel database (richiede connessione DB)
+  --preview     Mostra anteprima mappatura SENZA connessione DB
   --verbose     Output dettagliato
-  --inspect     Solo ispeziona, non migrare
+  --inspect     Solo ispeziona struttura Firestore
   --help        Mostra questo help
 
 Examples:
   pnpm migrate:questions                    # Migra tutto
   pnpm migrate:questions --limit=100        # Test con 100 domande
   pnpm migrate:questions --dry-run          # Test senza scrivere
+  pnpm migrate:questions --preview          # Anteprima mappatura (no DB)
+  pnpm migrate:questions --preview --limit=20   # Anteprima con 20 domande
   pnpm migrate:questions:inspect            # Solo ispeziona
 `);
 }
@@ -809,6 +1394,11 @@ async function main() {
   
   if (INSPECT_ONLY) {
     await inspectFirestore();
+    return;
+  }
+  
+  if (PREVIEW_ONLY) {
+    await previewMapping();
     return;
   }
   

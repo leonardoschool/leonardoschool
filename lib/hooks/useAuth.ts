@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { onIdTokenChanged, User as FirebaseUser } from 'firebase/auth';
 import { auth } from '@/lib/firebase/config';
 import { trpc } from '@/lib/trpc/client';
+import { getIsLoggingOut } from '@/lib/firebase/auth';
 
 /**
  * Hook for Firebase auth state with cookie synchronization.
@@ -50,10 +51,11 @@ export function useAuth() {
               lastSyncedUid.current = user.uid;
             }
           } else {
-            if (lastSyncedUid.current !== null) {
+            // Only call logout API if not already being handled by firebaseAuth.logout()
+            if (lastSyncedUid.current !== null && !getIsLoggingOut()) {
               await fetch('/api/auth/logout', { method: 'POST' });
-              lastSyncedUid.current = null;
             }
+            lastSyncedUid.current = null;
           }
         } catch (error) {
           console.error('[useAuth] Failed to synchronize auth session:', error);

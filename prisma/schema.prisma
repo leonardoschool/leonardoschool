@@ -870,8 +870,9 @@ model Simulation {
   maxAttempts  Int? // Max attempts allowed (null = unlimited if repeatable)
 
   // Paper-based mode (for in-person exams without computer)
-  isPaperBased      Boolean @default(false) // If true, exam is printed and answers entered manually
-  paperInstructions String? @db.Text // Special instructions for paper-based exams
+  isPaperBased         Boolean @default(false) // If true, exam is printed and answers entered manually
+  paperInstructions    String? @db.Text // Special instructions for paper-based exams
+  showSectionsInPaper  Boolean @default(true) // If true, show section dividers in PDF output
 
   // Attendance tracking
   trackAttendance Boolean @default(false) // If true, attendance is recorded for this simulation

@@ -58,12 +58,13 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
   }
 
   const questions = simulation?.questions || [];
-  const date = new Date().toLocaleDateString('it-IT', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-  const academicYear = `Anno Accademico ${new Date().getFullYear()}/${new Date().getFullYear() + 1}`;
+  
+  // Calculate academic year (starts in September)
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth();
+  const academicYearStart = currentMonth >= 8 ? currentYear : currentYear - 1;
+  const academicYearEnd = academicYearStart + 1;
+  const academicYearText = `Anno accademico ${academicYearStart}/${academicYearEnd}`;
 
   return (
     <>
@@ -103,7 +104,7 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
           @media print {
             @page {
               size: A4;
-              margin: 15mm 20mm;
+              margin: 25mm 25mm 20mm 25mm;
             }
             
             body {
@@ -126,187 +127,167 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
               width: 100% !important;
             }
             
-            .page-break {
-              page-break-before: always;
-            }
-            
             .no-break {
               page-break-inside: avoid;
             }
+            
+            /* Fixed header with logo on every page */
+            .print-header-logo {
+              position: fixed;
+              top: 0;
+              left: 0;
+              width: 40px;
+              height: auto;
+              z-index: 1000;
+            }
+            
+            .print-header-title {
+              position: fixed;
+              top: 5px;
+              left: 50%;
+              transform: translateX(-50%);
+              font-family: 'Times New Roman', Times, serif;
+              font-size: 12pt;
+              font-weight: bold;
+              z-index: 1000;
+              text-align: center;
+            }
+            
+            /* Watermark on every page */
+            .watermark {
+              position: fixed !important;
+              top: 50% !important;
+              left: 50% !important;
+              transform: translate(-50%, -50%) !important;
+              opacity: 0.06 !important;
+              z-index: -1 !important;
+              width: 60% !important;
+              max-width: 400px !important;
+              pointer-events: none !important;
+            }
+            
+            /* Content starts below fixed header */
+            .print-body {
+              margin-top: 30px;
+            }
+          }
+          
+          /* Screen preview styles */
+          .watermark {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            opacity: 0.06;
+            z-index: -1;
+            width: 60%;
+            max-width: 400px;
+            pointer-events: none;
           }
           
           /* KaTeX styling */
           .katex {
-            font-size: 1.1em !important;
+            font-size: 1em !important;
           }
           
           .katex-display {
             margin: 0.5em 0 !important;
             overflow-x: visible !important;
           }
-          
-          /* Preserve KaTeX inline structure */
-          .katex-html {
-            white-space: nowrap !important;
-          }
-          
-          .katex .base {
-            display: inline-block !important;
-          }
-          
-          .katex .strut {
-            display: inline-block !important;
-          }
-          
-          .katex .mord,
-          .katex .mbin,
-          .katex .mrel,
-          .katex .mopen,
-          .katex .mclose,
-          .katex .mpunct,
-          .katex .minner {
-            display: inline !important;
-          }
         `}</style>
 
-        <div className="max-w-4xl mx-auto px-8 py-6 bg-white text-black print:px-0 print:py-0">
-          {/* Header */}
-          <div className="text-center mb-6 border-b-2 border-[#a8012b] pb-4">
-            <h1 className="text-lg font-bold text-[#a8012b] mb-1">
-              LEONARDO SCHOOL
-            </h1>
-            <h2 className="text-2xl font-bold uppercase mb-2">
-              {simulation.title}
-            </h2>
-            <p className="text-sm text-gray-600">
-              {academicYear} - {date}
-            </p>
-          </div>
+        {/* Fixed header elements - appear on every page */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img 
+          src="/images/Emblem_of_Italy_(black_and_white).svg" 
+          alt="Emblema Italia" 
+          className="print-header-logo fixed top-0 left-8 w-10 h-auto z-50 print:left-0"
+        />
+        <div className="print-header-title fixed top-1 left-1/2 -translate-x-1/2 font-['Times_New_Roman',Times,serif] text-sm font-bold z-50">
+          {simulation.title}
+        </div>
 
-          {/* Student Info Box */}
-          <div className="border border-gray-400 rounded-lg p-4 mb-6 no-break">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm">
-                  Cognome e Nome: <span className="border-b border-gray-400 inline-block w-64">&nbsp;</span>
-                </p>
-                <p className="text-sm mt-2">
-                  Matricola: <span className="border-b border-gray-400 inline-block w-40">&nbsp;</span>
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm">Data: {date}</p>
-              </div>
+        {/* Watermark logo - appears on every page */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img 
+          src="/images/logo.png" 
+          alt="" 
+          className="watermark"
+        />
+
+        <div className="max-w-4xl mx-auto px-8 py-6 bg-white text-black print:px-0 print:py-0 font-['Arial',Helvetica,sans-serif]">
+          {/* Space for fixed header */}
+          <div className="h-12 print:h-6"></div>
+          
+          {/* Description (centered, bold, underlined) */}
+          {simulation.description && (
+            <div className="text-center font-['Times_New_Roman',Times,serif] text-base font-bold underline mb-2">
+              {simulation.description}
             </div>
+          )}
+          
+          {/* Academic year */}
+          <div className="text-center font-['Times_New_Roman',Times,serif] text-sm mb-6">
+            {academicYearText}
+          </div>
+          
+          {/* Questions title - only once at the beginning */}
+          <div className="text-center font-['Times_New_Roman',Times,serif] text-sm font-bold uppercase underline mb-5">
+            DOMANDE A RISPOSTA MULTIPLA
           </div>
 
-          {/* Instructions */}
-          <div className="bg-gray-100 border border-gray-300 rounded-lg p-4 mb-6 no-break">
-            <h3 className="font-bold text-sm mb-2">ISTRUZIONI</h3>
-            <ul className="text-sm space-y-1">
-              <li>• Tempo a disposizione: {simulation.durationMinutes} minuti</li>
-              <li>
-                • Punteggio: Risposta corretta +{simulation.correctPoints}, 
-                Risposta errata {simulation.wrongPoints}, 
-                Non risposta {simulation.blankPoints}
-              </li>
-              <li>• Numero domande: {questions.length}</li>
-              {simulation.paperInstructions && (
-                <li>• {simulation.paperInstructions}</li>
-              )}
-            </ul>
-          </div>
-
-          {/* Questions Section */}
-          <div className="mb-4">
-            <h3 className="text-center font-bold uppercase mb-6">
-              DOMANDE A RISPOSTA MULTIPLA
-            </h3>
-
-            <div className="space-y-6">
-              {questions.map((sq, index) => (
-                <div key={sq.id} className="no-break">
-                  {/* Question */}
-                  <div className="mb-2">
-                    <span className="font-bold">{index + 1}. </span>
-                    <span className="font-bold">
-                      <RichTextRenderer text={sq.question.text} className="inline" />
-                    </span>
-                  </div>
-
-                  {/* Image if present */}
-                  {sq.question.imageUrl && (
-                    <div className="my-3 text-center">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={sq.question.imageUrl}
-                        alt={`Immagine domanda ${index + 1}`}
-                        className="max-w-md max-h-48 mx-auto"
-                      />
-                    </div>
-                  )}
-
-                  {/* Answers */}
-                  {sq.question.type !== 'OPEN_TEXT' && sq.question.answers && (
-                    <div className="ml-6 space-y-1">
-                      {[...sq.question.answers]
-                        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-                        .map((answer, ansIndex) => (
-                          <div key={answer.id} className="flex items-start gap-2">
-                            <span className="font-medium w-6">
-                              {String.fromCodePoint(65 + ansIndex)})
-                            </span>
-                            <div className="flex-1">
-                              <RichTextRenderer text={answer.text} />
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  )}
-
-                  {/* Open text placeholder */}
-                  {sq.question.type === 'OPEN_TEXT' && (
-                    <div className="ml-6 mt-2">
-                      <div className="border border-gray-300 rounded p-4 min-h-[100px]">
-                        <p className="text-gray-400 text-sm italic">Spazio per la risposta</p>
-                      </div>
-                    </div>
-                  )}
+          {/* All questions without section headers */}
+          <div className="space-y-1.5 print-body">
+            {questions.map((sq, index) => (
+              <div key={sq.id} className="no-break">
+                {/* Question */}
+                <div className="mb-1">
+                  <span className="font-bold">{index + 1}. </span>
+                  <span className="font-bold">
+                    <RichTextRenderer text={sq.question.text} className="inline" />
+                  </span>
                 </div>
-              ))}
-            </div>
-          </div>
 
-          {/* Answer Grid (optional, for quick grading) */}
-          <div className="page-break"></div>
-          <div className="mt-8 no-break">
-            <h3 className="font-bold text-center mb-4">GRIGLIA RISPOSTE</h3>
-            <div className="border border-gray-400 rounded-lg p-4">
-              <div className="grid grid-cols-10 gap-2 text-center text-sm">
-                {questions.map((q, index) => (
-                  <div key={q.id || `answer-grid-${index}`} className="border border-gray-300 rounded p-2">
-                    <p className="font-bold">{index + 1}</p>
-                    <div className="flex justify-center gap-1 mt-1 text-xs">
-                      <span>A</span>
-                      <span>B</span>
-                      <span>C</span>
-                      <span>D</span>
-                    </div>
-                    <div className="flex justify-center gap-1 mt-1">
-                      <span className="w-3 h-3 border border-gray-400 rounded-sm"></span>
-                      <span className="w-3 h-3 border border-gray-400 rounded-sm"></span>
-                      <span className="w-3 h-3 border border-gray-400 rounded-sm"></span>
-                      <span className="w-3 h-3 border border-gray-400 rounded-sm"></span>
+                {/* Image if present */}
+                {sq.question.imageUrl && (
+                  <div className="my-2 text-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={sq.question.imageUrl}
+                      alt={`Immagine domanda ${index + 1}`}
+                      className="max-w-md max-h-48 mx-auto"
+                    />
+                  </div>
+                )}
+
+                {/* Answers */}
+                {sq.question.type !== 'OPEN_TEXT' && sq.question.answers && (
+                  <div className="ml-8 space-y-0.5">
+                    {[...sq.question.answers]
+                      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                      .map((answer, ansIndex) => (
+                        <div key={answer.id} className="flex items-start gap-2">
+                          <span className="font-bold w-5">
+                            {String.fromCodePoint(65 + ansIndex)})
+                          </span>
+                          <div className="flex-1">
+                            <RichTextRenderer text={answer.text} />
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+
+                {/* Open text placeholder */}
+                {sq.question.type === 'OPEN_TEXT' && (
+                  <div className="ml-8 mt-2">
+                    <div className="border border-gray-300 rounded p-4 min-h-[100px]">
+                      <p className="text-gray-400 text-sm italic">Spazio per la risposta</p>
                     </div>
                   </div>
-                ))}
+                )}
               </div>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="mt-8 pt-4 border-t border-gray-300 text-center text-xs text-gray-500">
-            <p>Leonardo School - {simulation.title} - {date}</p>
+            ))}
           </div>
         </div>
       </div>
