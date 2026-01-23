@@ -8,7 +8,6 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { PageLoader, Spinner } from '@/components/ui/loaders';
 import ConfirmModal from '@/components/ui/ConfirmModal';
-import { downloadSimulationPdf } from '@/lib/utils/simulationPdfGenerator';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -24,7 +23,6 @@ import {
   XCircle,
   AlertCircle,
   Clock,
-  FileDown,
   Printer,
 } from 'lucide-react';
 import type { SimulationType, SimulationStatus } from '@/lib/validations/simulationValidation';
@@ -129,46 +127,6 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
     return mins > 0 ? `${hours}h ${mins}m` : `${hours} ore`;
-  };
-
-  // Download PDF handler
-  const handleDownloadPdf = () => {
-    if (!simulation) return;
-    
-    const pdfData = {
-      title: simulation.title,
-      description: simulation.description || undefined,
-      durationMinutes: simulation.durationMinutes || 0,
-      correctPoints: simulation.correctPoints || 1.5,
-      wrongPoints: simulation.wrongPoints || -0.4,
-      blankPoints: simulation.blankPoints || 0,
-      paperInstructions: simulation.paperInstructions || undefined,
-      schoolName: 'Leonardo School',
-      date: simulation.startDate 
-        ? new Date(simulation.startDate).toLocaleDateString('it-IT', { 
-            day: 'numeric', 
-            month: 'long', 
-            year: 'numeric' 
-          })
-        : undefined,
-      questions: simulation.questions.map(sq => ({
-        id: sq.question.id,
-        text: sq.question.text,
-        type: sq.question.type,
-        difficulty: sq.question.difficulty,
-        subject: sq.question.subject,
-        topic: sq.question.topic,
-        answers: sq.question.answers.map(a => ({
-          id: a.id,
-          text: a.text,
-          isCorrect: a.isCorrect,
-          order: a.order,
-        })),
-      })),
-    };
-    
-    downloadSimulationPdf(pdfData, `${simulation.title.replace(/\s+/g, '_')}.pdf`);
-    showSuccess('PDF Scaricato', 'Il PDF della simulazione è stato scaricato');
   };
 
   // Print handler - opens print dialog directly
@@ -617,18 +575,10 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
             <button
               onClick={handlePrint}
               className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg border border-blue-300 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20`}
-              title="Stampa con formule LaTeX"
+              title="Stampa simulazione"
             >
               <Printer className="w-4 h-4" />
               <span className="hidden xl:inline">Stampa</span>
-            </button>
-            <button
-              onClick={handleDownloadPdf}
-              className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg border border-purple-300 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20`}
-              title="PDF semplice (senza formule LaTeX grafiche)"
-            >
-              <FileDown className="w-4 h-4" />
-              <span className="hidden xl:inline">PDF</span>
             </button>
             {isAdmin && (
               <button

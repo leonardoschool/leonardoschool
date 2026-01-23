@@ -42,7 +42,7 @@ console.log(`   Database: ${process.env.DATABASE_URL?.split('@')[1]?.split('/')[
 let serviceAccount: Record<string, unknown>;
 
 // Prova file locale appropriato per ambiente
-const testServiceAccountPath = join(process.cwd(), 'leonardo-school-1cd72-firebase-adminsdk-fbsvc-6c031d9728.json');
+const testServiceAccountPath = join(process.cwd(), 'leonardo-school-1cd72-firebase-adminsdk-fbsvc-f8ed10561d.json');
 const prodServiceAccountPath = join(process.cwd(), 'leonardo-school-service-account.json');
 const serviceAccountPath = isProduction ? prodServiceAccountPath : testServiceAccountPath;
 
@@ -264,11 +264,13 @@ async function main() {
 }
 
 // Execute seed with proper cleanup
-try {
-  await main();
-} catch (e) {
-  console.error('❌ Seed failed:', e);
-  process.exit(1);
-} finally {
-  await prisma.$disconnect();
-}
+(async () => {
+  try {
+    await main();
+  } catch (e) {
+    console.error('❌ Seed failed:', e);
+    process.exit(1);
+  } finally {
+    await prisma.$disconnect();
+  }
+})();

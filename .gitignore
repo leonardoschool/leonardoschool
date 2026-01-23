@@ -46,6 +46,9 @@ env/.env.*
 firebase-uids.json
 leonardo-school-*.json
 
+# Test users credentials (SECURITY - do not commit!)
+TEST_USERS.md
+
 # vercel
 .vercel
 
