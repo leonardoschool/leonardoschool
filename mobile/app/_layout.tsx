@@ -96,6 +96,16 @@ function RootLayoutNav() {
           }}
         />
         
+        {/* New message screen */}
+        <Stack.Screen
+          name="new-message"
+          options={{
+            headerShown: false,
+            presentation: 'modal',
+            animation: 'slide_from_bottom',
+          }}
+        />
+        
         {/* Conversation detail */}
         <Stack.Screen
           name="conversation/[id]"

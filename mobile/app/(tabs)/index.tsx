@@ -27,16 +27,7 @@ import { trpc } from '../../lib/trpc';
 import { colors } from '../../lib/theme/colors';
 import { spacing, layout } from '../../lib/theme/spacing';
 import { DrawerMenu, AppHeader } from '../../components/navigation';
-
-// Quick links configuration matching webapp
-const quickLinks = [
-  { route: '/(tabs)/simulations', icon: 'book-outline' as const, label: 'Simulazioni', color: '#3B82F6' },
-  { route: '/(tabs)/materiali', icon: 'folder-outline' as const, label: 'Materiali', color: '#14B8A6' },
-  { route: '/(tabs)/statistics', icon: 'bar-chart-outline' as const, label: 'Statistiche', color: '#8B5CF6' },
-  { route: '/(tabs)/calendario', icon: 'calendar-outline' as const, label: 'Calendario', color: '#F59E0B' },
-  { route: '/(tabs)/messaggi', icon: 'chatbubble-outline' as const, label: 'Messaggi', color: '#22C55E' },
-  { route: '/(tabs)/gruppo', icon: 'people-outline' as const, label: 'Gruppo', color: '#EC4899' },
-];
+import { MiniCalendar, MiniCalendarEvent } from '../../components/calendar';
 
 export default function DashboardScreen() {
   const themedColors = useThemedColors();
@@ -73,11 +64,56 @@ export default function DashboardScreen() {
     { enabled: !!user?.isActive }
   );
 
-  const isLoading = statsLoading || simulationsLoading || contractLoading;
-  const isRefetching = statsRefetching || simulationsRefetching;
+  // Calculate date range for calendar events (current month + 30 days ahead)
+  const calendarDateRange = useMemo(() => {
+    const start = new Date();
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    
+    const end = new Date();
+    end.setDate(end.getDate() + 60);
+    end.setHours(23, 59, 59, 999);
+    
+    return { start, end };
+  }, []);
+
+  // Fetch calendar events
+  const {
+    data: eventsData,
+    isLoading: eventsLoading,
+    refetch: refetchEvents,
+    isRefetching: eventsRefetching,
+  } = trpc.calendar.getEvents.useQuery(
+    {
+      startDate: calendarDateRange.start,
+      endDate: calendarDateRange.end,
+      onlyMyEvents: true,
+      includeInvitations: true,
+      includeCancelled: false,
+    },
+    { enabled: !!user?.isActive }
+  );
+
+  // Transform events for MiniCalendar
+  const calendarEvents: MiniCalendarEvent[] = useMemo(() => {
+    return (eventsData?.events || []).map((e) => ({
+      id: e.id,
+      title: e.title,
+      type: e.type || 'OTHER',
+      startDate: new Date(e.startDate),
+      endDate: new Date(e.endDate),
+      isAllDay: e.isAllDay || false,
+      locationType: e.locationType || 'IN_PERSON',
+      locationDetails: e.locationDetails,
+      onlineLink: e.onlineLink,
+    }));
+  }, [eventsData]);
+
+  const isLoading = statsLoading || simulationsLoading || contractLoading || eventsLoading;
+  const isRefetching = statsRefetching || simulationsRefetching || eventsRefetching;
 
   const onRefresh = async () => {
-    await Promise.all([refetchStats(), refetchSimulations()]);
+    await Promise.all([refetchStats(), refetchSimulations(), refetchEvents()]);
   };
 
   const getGreeting = () => {
@@ -126,18 +162,6 @@ export default function DashboardScreen() {
     return null;
   }, [contract, contractLoading, user?.isActive]);
 
-  // Define type for recent results
-  interface RecentResult {
-    id: string;
-    simulationId: string;
-    simulationTitle: string;
-    simulationType: string;
-    totalScore: number | null;
-    percentageScore: number | null;
-    startedAt: Date;
-    completedAt: Date | null;
-  }
-
   // Calculate stats from API data (matching webapp getDetailedStats response)
   const stats = useMemo(() => ({
     totalSimulations: statsData?.overview?.totalSimulations || 0,
@@ -148,8 +172,6 @@ export default function DashboardScreen() {
     pendingSimulations: simulationsData?.pagination?.total || 0,
     improvement: statsData?.overview?.improvement || 0,
   }), [statsData, simulationsData]);
-
-  const recentResults: RecentResult[] = statsData?.recentResults || [];
 
   // Get subject progress from subjectBreakdown (getDetailedStats response)
   interface SubjectProgressItem {
@@ -292,53 +314,13 @@ export default function DashboardScreen() {
               </TouchableOpacity>
             )}
 
-            {/* Quick Links Grid (matching webapp) */}
+            {/* Mini Calendar */}
             <View style={styles.section}>
-              <Heading3 style={styles.sectionTitle}>Accesso Rapido</Heading3>
-              <View style={styles.quickLinksGrid}>
-                {quickLinks.map((link) => (
-                  <TouchableOpacity
-                    key={link.route}
-                    style={styles.quickLinkCard}
-                    onPress={() => router.push(link.route as never)}
-                  >
-                    <Card variant="outlined" style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
-                      <View style={[styles.quickLinkIcon, { backgroundColor: link.color }]}>
-                        <Ionicons name={link.icon} size={24} color="#FFFFFF" />
-                      </View>
-                      <Text variant="bodySmall" style={{ fontWeight: '600', textAlign: 'center' }}>
-                        {link.label}
-                      </Text>
-                    </Card>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* Quick Actions */}
-            <View style={styles.section}>
-              <Heading3 style={styles.sectionTitle}>Azioni Rapide</Heading3>
-              <View style={styles.actionsRow}>
-                <TouchableOpacity
-                  style={[styles.actionButton, { backgroundColor: colors.primary.main }]}
-                  onPress={() => router.push('/(tabs)/simulations')}
-                >
-                  <Ionicons name="play-circle" size={28} color="#FFFFFF" />
-                  <Text variant="buttonSmall" style={styles.actionButtonText}>
-                    Nuova Simulazione
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.actionButton, { backgroundColor: themedColors.backgroundSecondary }]}
-                  onPress={() => router.push('/(tabs)/statistics')}
-                >
-                  <Ionicons name="analytics" size={28} color={colors.primary.main} />
-                  <Text variant="buttonSmall" color="primary">
-                    Vedi Statistiche
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              <MiniCalendar 
+                events={calendarEvents} 
+                isLoading={eventsLoading}
+                showViewAllButton={true}
+              />
             </View>
 
             {/* Subject Progress */}
@@ -366,55 +348,6 @@ export default function DashboardScreen() {
                     </View>
                   ))}
                 </Card>
-              </View>
-            )}
-
-            {/* Recent Simulations */}
-            {recentResults.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Heading3 style={styles.sectionTitle}>Simulazioni Recenti</Heading3>
-                  <TouchableOpacity onPress={() => router.push('/(tabs)/statistics')}>
-                    <Text variant="bodySmall" style={{ color: colors.primary.main }}>
-                      Vedi tutte
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {recentResults.slice(0, 3).map((result) => (
-                  <Card
-                    key={result.id}
-                    variant="outlined"
-                    padding="md"
-                    style={styles.simulationCard}
-                    onPress={() => router.push(`/simulation/result/${result.simulationId}`)}
-                  >
-                    <View style={styles.simulationHeader}>
-                      <View style={styles.simulationInfo}>
-                        <Text variant="body" numberOfLines={1}>{result.simulationTitle}</Text>
-                        <Caption>
-                          {result.completedAt 
-                            ? new Date(result.completedAt).toLocaleDateString('it-IT')
-                            : 'In corso'}
-                        </Caption>
-                      </View>
-                      <View style={styles.simulationScore}>
-                        <Text
-                          variant="h4"
-                          style={{
-                            color: (result.percentageScore || 0) >= 70
-                              ? colors.status.success.main
-                              : (result.percentageScore || 0) >= 50
-                              ? colors.status.warning.main
-                              : colors.status.error.main,
-                          }}
-                        >
-                          {Math.round(result.percentageScore || 0)}%
-                        </Text>
-                      </View>
-                    </View>
-                  </Card>
-                ))}
               </View>
             )}
 
@@ -534,29 +467,8 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: spacing[6],
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
   sectionTitle: {
     marginBottom: spacing[3],
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: spacing[3],
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing[2],
-    paddingVertical: spacing[4],
-    borderRadius: layout.borderRadius.xl,
-  },
-  actionButtonText: {
-    color: '#FFFFFF',
   },
   progressItem: {
     paddingVertical: spacing[3],
@@ -579,21 +491,6 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
     borderRadius: 3,
-  },
-  simulationCard: {
-    marginBottom: spacing[2],
-  },
-  simulationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  simulationInfo: {
-    flex: 1,
-    marginRight: spacing[3],
-  },
-  simulationScore: {
-    alignItems: 'flex-end',
   },
   bottomSpacer: {
     height: spacing[8],
@@ -650,27 +547,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[1],
     borderRadius: layout.borderRadius.full,
-  },
-  // Quick links grid
-  quickLinksGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing[3],
-  },
-  quickLinkCard: {
-    width: '31%',
-    aspectRatio: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing[3],
-  },
-  quickLinkIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: layout.borderRadius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing[2],
   },
   // Self practice button
   selfPracticeButton: {

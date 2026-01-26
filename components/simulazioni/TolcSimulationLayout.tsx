@@ -55,7 +55,10 @@ interface TolcSimulationLayoutProps {
   readonly onGoNext: () => void;
   readonly onGoPrev: () => void;
   readonly onCompleteSection: () => void;
+  readonly onSubmit: () => void;
   readonly onReportQuestion: () => void;
+  readonly answeredCount: number;
+  readonly totalQuestions: number;
 }
 
 export default function TolcSimulationLayout({
@@ -345,12 +348,7 @@ export default function TolcSimulationLayout({
             {/* Question Text */}
             <div className="mb-8">
               {/* Question Image */}
-              {currentQuestion.question?.imageUrl && 
-               typeof currentQuestion.question.imageUrl === 'string' &&
-               currentQuestion.question.imageUrl.trim() !== '' &&
-               (currentQuestion.question.imageUrl.startsWith('http://') || 
-                currentQuestion.question.imageUrl.startsWith('https://') ||
-                currentQuestion.question.imageUrl.startsWith('/')) && (
+              {currentQuestion.question?.imageUrl && currentQuestion.question.imageUrl.trim() !== '' && (
                 <div className="mb-4 flex justify-center">
                   <Image
                     src={currentQuestion.question.imageUrl}

@@ -5,7 +5,7 @@
  * Matches webapp MessagesPageContent chat functionality.
  */
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -16,9 +16,10 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { Stack, router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Text, Caption } from '../../components/ui/Text';
@@ -58,6 +59,9 @@ export default function ConversationDetailScreen() {
     { 
       enabled: !!id && !!user,
       refetchInterval: 10000, // Poll every 10 seconds
+      staleTime: 0, // Always consider data stale
+      refetchOnMount: 'always', // Always refetch when component mounts
+      refetchOnWindowFocus: true, // Refetch when app comes to foreground
     }
   );
 
@@ -92,6 +96,39 @@ export default function ConversationDetailScreen() {
       Alert.alert('Errore', error.message || 'Impossibile archiviare la conversazione');
     },
   });
+
+  // Mark conversation as read mutation
+  const markAsReadMutation = trpc.messages.markAsRead.useMutation({
+    onSuccess: () => {
+      // Refresh conversations list to update unread count
+      utils.messages.getConversations.invalidate();
+    },
+  });
+
+  // Refetch messages when screen is focused (coming back from navigation or app foreground)
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
+
+  // Also refetch when app comes back from background
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        refetch();
+      }
+    });
+    return () => subscription.remove();
+  }, [refetch]);
+
+  // Mark conversation as read when opening
+  useEffect(() => {
+    if (id && messagesData?.messages && messagesData.messages.length > 0) {
+      markAsReadMutation.mutate({ conversationId: id });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, messagesData?.messages?.length]);
 
   // Scroll to bottom when messages load or new message arrives
   useEffect(() => {
@@ -151,10 +188,11 @@ export default function ConversationDetailScreen() {
     } else if (diffDays === 1) {
       return 'Ieri';
     } else {
+      const isSameYear = d.getFullYear() === now.getFullYear();
       return d.toLocaleDateString('it-IT', { 
         day: 'numeric', 
         month: 'long',
-        year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+        year: isSameYear ? undefined : 'numeric',
       });
     }
   };
@@ -184,11 +222,14 @@ export default function ConversationDetailScreen() {
 
     messages.forEach((msg: Message) => {
       const msgDate = formatMessageDate(msg.createdAt);
-      if (msgDate !== currentDate) {
+      if (msgDate === currentDate) {
+        const lastGroup = groups.at(-1);
+        if (lastGroup) {
+          lastGroup.messages.push(msg);
+        }
+      } else {
         currentDate = msgDate;
         groups.push({ date: msgDate, messages: [msg] });
-      } else {
-        groups[groups.length - 1].messages.push(msg);
       }
     });
 
@@ -279,19 +320,20 @@ export default function ConversationDetailScreen() {
       >
         <KeyboardAvoidingView
           style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={90}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
         >
-          {isLoading ? (
+          {isLoading && (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={colors.primary.main} />
               <Text style={{ marginTop: 12, color: themedColors.textMuted }}>
                 Caricamento messaggi...
               </Text>
             </View>
-          ) : messages.length === 0 ? (
+          )}
+          {!isLoading && messages.length === 0 && (
             <View style={styles.emptyContainer}>
-              <Card variant="outlined" style={styles.emptyCard}>
+              <Card style={styles.emptyCard}>
                 <View style={styles.emptyContent}>
                   <Ionicons name="chatbubble-outline" size={48} color={themedColors.textMuted} />
                   <Text style={{ marginTop: 16, textAlign: 'center', color: themedColors.textMuted }}>
@@ -300,7 +342,8 @@ export default function ConversationDetailScreen() {
                 </View>
               </Card>
             </View>
-          ) : (
+          )}
+          {!isLoading && messages.length > 0 && (
             <FlatList
               ref={flatListRef}
               data={groupedMessages}
@@ -318,13 +361,14 @@ export default function ConversationDetailScreen() {
           )}
 
           {/* Input Area */}
-          <View style={[styles.inputContainer, { backgroundColor: themedColors.card }]}>
+          <View style={[styles.inputContainer, { backgroundColor: themedColors.card, borderTopColor: themedColors.border }]}>
             <TextInput
               style={[
                 styles.textInput,
                 { 
                   backgroundColor: themedColors.input,
                   color: themedColors.text,
+                  minHeight: 44,
                 },
               ]}
               placeholder="Scrivi un messaggio..."
@@ -333,6 +377,8 @@ export default function ConversationDetailScreen() {
               onChangeText={setNewMessage}
               multiline
               maxLength={5000}
+              scrollEnabled
+              textAlignVertical="center"
             />
             <TouchableOpacity
               style={[
@@ -440,18 +486,20 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingBottom: Platform.OS === 'ios' ? 10 : 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.05)',
   },
   textInput: {
     flex: 1,
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    paddingTop: 10,
+    paddingVertical: 12,
+    paddingTop: 12,
     fontSize: 16,
-    maxHeight: 100,
+    maxHeight: 120,
+    minHeight: 44,
   },
   sendButton: {
     width: 44,

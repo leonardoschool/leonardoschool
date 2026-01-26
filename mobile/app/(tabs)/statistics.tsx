@@ -132,11 +132,8 @@ export default function StatisticsScreen() {
     recentResults 
   } = stats;
 
-  // Simple bar chart for trend
-  const chartHeight = 100;
-  const maxScore = trendData.length > 0 
-    ? Math.max(...trendData.map((d: { score: number }) => d.score), 100) 
-    : 100;
+  // Chart height for trend visualization
+  const chartHeight = 120;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={[]}>
@@ -286,29 +283,86 @@ export default function StatisticsScreen() {
               <Text variant="body" style={{ fontWeight: '600', marginLeft: spacing[2] }}>
                 Andamento Punteggio
               </Text>
+              <View style={{ marginLeft: 'auto', flexDirection: 'row', alignItems: 'center' }}>
+                <Caption style={{ color: colors.primary.main }}>
+                  Media: {overview.averageScore?.toFixed(1) || 0}%
+                </Caption>
+              </View>
             </View>
-            <View style={[styles.chart, { height: chartHeight }]}>
-              {trendData.slice(-6).map((point: { score: number; date: string }, index: number) => {
-                const barHeight = (point.score / maxScore) * chartHeight * 0.8;
-                const dateLabel = point.date 
-                  ? new Date(point.date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })
-                  : '';
-                return (
-                  <View key={index} style={styles.chartBar}>
-                    <Caption style={styles.barValue}>{Math.round(point.score)}%</Caption>
-                    <View
-                      style={[
-                        styles.bar,
-                        {
-                          height: Math.max(barHeight, 4),
-                          backgroundColor: colors.primary.main,
-                        },
-                      ]}
-                    />
-                    <Caption style={styles.barLabel}>{dateLabel}</Caption>
-                  </View>
-                );
-              })}
+            
+            {/* Chart with baseline */}
+            <View style={styles.chartContainer}>
+              {/* Y-axis labels */}
+              <View style={styles.yAxisLabels}>
+                <Caption style={styles.yAxisLabel}>100%</Caption>
+                <Caption style={styles.yAxisLabel}>50%</Caption>
+                <Caption style={styles.yAxisLabel}>0%</Caption>
+              </View>
+              
+              {/* Bars */}
+              <View style={styles.chartBarsContainer}>
+                {/* Average line */}
+                <View 
+                  style={[
+                    styles.averageLine, 
+                    { 
+                      bottom: `${Math.min(overview.averageScore || 0, 100) * 0.8}%`,
+                      backgroundColor: colors.primary.main,
+                    }
+                  ]} 
+                />
+                
+                <View style={[styles.chart, { height: chartHeight }]}>
+                  {trendData.slice(-6).map((point: { score: number; date: string }, index: number) => {
+                    const score = Math.max(0, point.score || 0);
+                    const barHeight = (score / 100) * chartHeight * 0.8;
+                    const dateLabel = point.date 
+                      ? new Date(point.date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })
+                      : '';
+                    
+                    // Color based on score
+                    const barColor = score >= 70 
+                      ? colors.status.success.main 
+                      : score >= 50 
+                        ? colors.status.warning.main 
+                        : colors.status.error.main;
+                    
+                    return (
+                      <View key={`trend-${point.date || index}`} style={styles.chartBar}>
+                        <Caption style={[styles.barValue, { color: barColor }]}>
+                          {Math.round(score)}%
+                        </Caption>
+                        <View
+                          style={[
+                            styles.bar,
+                            {
+                              height: Math.max(barHeight, 8),
+                              backgroundColor: barColor,
+                            },
+                          ]}
+                        />
+                        <Caption style={styles.barLabel}>{dateLabel}</Caption>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+            
+            {/* Legend */}
+            <View style={styles.chartLegend}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: colors.status.success.main }]} />
+                <Caption>≥70%</Caption>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: colors.status.warning.main }]} />
+                <Caption>50-69%</Caption>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: colors.status.error.main }]} />
+                <Caption>&lt;50%</Caption>
+              </View>
             </View>
           </Card>
         )}
@@ -383,22 +437,23 @@ export default function StatisticsScreen() {
               </Text>
             </View>
             {subjectStats.map((stat: {
-              subjectId: string;
-              subjectName: string;
-              subjectColor: string;
-              total: number;
-              correct: number;
-              wrong: number;
-              avgScore: number;
+              subject: string;
+              totalQuestions: number;
+              correctAnswers: number;
+              wrongAnswers: number;
+              blankAnswers: number;
+              accuracy: number;
             }) => (
-              <Card key={stat.subjectId} variant="outlined" padding="sm" style={styles.subjectCard}>
+              <Card key={`subject-${stat.subject}`} variant="outlined" padding="sm" style={styles.subjectCard}>
                 <View style={styles.subjectRow}>
                   <View style={styles.subjectInfo}>
-                    <View style={[styles.subjectDot, { backgroundColor: stat.subjectColor || colors.primary.main }]} />
-                    <Text variant="body" style={{ fontWeight: '500' }}>{stat.subjectName}</Text>
+                    <View style={[styles.subjectDot, { backgroundColor: colors.primary.main }]} />
+                    <Text variant="body" style={{ fontWeight: '500' }}>
+                      {SUBJECT_LABELS[stat.subject] || stat.subject}
+                    </Text>
                   </View>
-                  <Text variant="body" style={{ fontWeight: '700', color: stat.subjectColor || colors.primary.main }}>
-                    {Math.round(stat.avgScore)}%
+                  <Text variant="body" style={{ fontWeight: '700', color: colors.primary.main }}>
+                    {Math.round(stat.accuracy || 0)}%
                   </Text>
                 </View>
                 <View style={[styles.progressBar, { backgroundColor: themedColors.border }]}>
@@ -406,16 +461,16 @@ export default function StatisticsScreen() {
                     style={[
                       styles.progressFill,
                       {
-                        width: `${Math.min(stat.avgScore, 100)}%`,
-                        backgroundColor: stat.subjectColor || colors.primary.main,
+                        width: `${Math.min(stat.accuracy || 0, 100)}%`,
+                        backgroundColor: colors.primary.main,
                       },
                     ]}
                   />
                 </View>
                 <View style={styles.subjectMeta}>
-                  <Caption>{stat.total} domande</Caption>
-                  <Caption style={{ color: colors.status.success.main }}>{stat.correct} corrette</Caption>
-                  <Caption style={{ color: colors.status.error.main }}>{stat.wrong} errate</Caption>
+                  <Caption>{stat.totalQuestions} domande</Caption>
+                  <Caption style={{ color: colors.status.success.main }}>{stat.correctAnswers} corrette</Caption>
+                  <Caption style={{ color: colors.status.error.main }}>{stat.wrongAnswers} errate</Caption>
                 </View>
               </Card>
             ))}
@@ -441,23 +496,69 @@ export default function StatisticsScreen() {
                 title: string;
                 description: string;
                 unlocked: boolean;
-              }, index: number) => (
+              }) => (
                 <View 
-                  key={index} 
+                  key={`achievement-${achievement.title}`} 
                   style={[
                     styles.achievementCard, 
                     { 
                       backgroundColor: achievement.unlocked 
                         ? `${colors.status.warning.main}15` 
                         : themedColors.backgroundSecondary,
-                      opacity: achievement.unlocked ? 1 : 0.5,
+                      borderWidth: 2,
+                      borderColor: achievement.unlocked 
+                        ? colors.status.warning.main 
+                        : 'transparent',
                     }
                   ]}
                 >
-                  <Text style={styles.achievementIcon}>{achievement.icon}</Text>
-                  <Text variant="caption" style={{ fontWeight: '600', textAlign: 'center' }}>
+                  {/* Icon with background circle */}
+                  <View style={[
+                    styles.achievementIconContainer,
+                    {
+                      backgroundColor: achievement.unlocked 
+                        ? `${colors.status.warning.main}25` 
+                        : themedColors.border,
+                    }
+                  ]}>
+                    <Text style={styles.achievementIcon}>{achievement.icon}</Text>
+                  </View>
+                  
+                  {/* Title */}
+                  <Text 
+                    variant="caption" 
+                    style={{ 
+                      fontWeight: '700', 
+                      textAlign: 'center',
+                      marginTop: spacing[2],
+                      marginBottom: spacing[1],
+                    }}
+                  >
                     {achievement.title}
                   </Text>
+                  
+                  {/* Description */}
+                  <Caption 
+                    style={{ 
+                      textAlign: 'center', 
+                      fontSize: 10,
+                      lineHeight: 14,
+                      opacity: 0.8,
+                    }}
+                    numberOfLines={2}
+                  >
+                    {achievement.description}
+                  </Caption>
+                  
+                  {/* Locked/Unlocked badge */}
+                  {achievement.unlocked && (
+                    <View style={styles.achievementBadge}>
+                      <Ionicons name="checkmark-circle" size={12} color={colors.status.success.main} />
+                      <Caption style={{ fontSize: 9, color: colors.status.success.main, marginLeft: 2 }}>
+                        Sbloccato
+                      </Caption>
+                    </View>
+                  )}
                 </View>
               ))}
             </ScrollView>
@@ -481,15 +582,16 @@ export default function StatisticsScreen() {
               </TouchableOpacity>
             </View>
             {recentResults.slice(0, 5).map((result: {
+              id?: string;
               type: string;
               title: string;
               date: string;
               score: number;
               correct: number;
               total: number;
-            }, index: number) => (
+            }) => (
               <View 
-                key={index} 
+                key={`result-${result.id || result.date}-${result.type}`} 
                 style={[styles.resultItem, { backgroundColor: themedColors.backgroundSecondary }]}
               >
                 <View style={[styles.resultDot, { backgroundColor: TYPE_COLORS[result.type] || colors.primary.main }]} />
@@ -536,9 +638,9 @@ export default function StatisticsScreen() {
                 type: string;
                 count: number;
                 averageScore: number;
-              }, index: number) => (
+              }) => (
                 <View 
-                  key={index} 
+                  key={`type-${type.type}`} 
                   style={[styles.typeCard, { backgroundColor: themedColors.backgroundSecondary }]}
                 >
                   <View style={styles.typeHeader}>
@@ -693,6 +795,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing[4],
   },
+  chartContainer: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  yAxisLabels: {
+    width: 35,
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    paddingRight: spacing[1],
+    paddingBottom: spacing[4],
+  },
+  yAxisLabel: {
+    fontSize: 9,
+    color: '#9CA3AF',
+  },
+  chartBarsContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  averageLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 2,
+    opacity: 0.5,
+    zIndex: 1,
+  },
   chart: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -703,17 +832,37 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   bar: {
-    width: 28,
+    width: 32,
     borderRadius: layout.borderRadius.sm,
+    minHeight: 8,
   },
   barLabel: {
     fontSize: 9,
     marginTop: spacing[1],
   },
   barValue: {
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     marginBottom: spacing[1],
+  },
+  chartLegend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing[4],
+    marginTop: spacing[3],
+    paddingTop: spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   subjectHighlights: {
     gap: spacing[3],
@@ -790,19 +939,39 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   achievementsContainer: {
-    gap: spacing[2],
+    gap: spacing[3],
     paddingBottom: spacing[2],
+    paddingRight: spacing[4],
   },
   achievementCard: {
-    width: 90,
-    paddingVertical: spacing[3],
-    paddingHorizontal: spacing[2],
-    borderRadius: layout.borderRadius.lg,
+    width: 130,
+    paddingVertical: spacing[4],
+    paddingHorizontal: spacing[3],
+    borderRadius: layout.borderRadius.xl,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  achievementIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
   },
   achievementIcon: {
-    fontSize: 28,
-    marginBottom: spacing[1],
+    fontSize: 36,
+    textAlign: 'center',
+    lineHeight: 40,
+  },
+  achievementBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing[2],
+    paddingVertical: spacing[0.5],
+    paddingHorizontal: spacing[2],
+    borderRadius: layout.borderRadius.full,
+    backgroundColor: `${colors.status.success.main}15`,
   },
   resultItem: {
     flexDirection: 'row',

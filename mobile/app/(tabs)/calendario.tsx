@@ -25,6 +25,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { colors } from '../../lib/theme/colors';
 import { spacing, layout } from '../../lib/theme/spacing';
 import { DrawerMenu, AppHeader } from '../../components/navigation';
+import { MiniCalendar, MiniCalendarEvent } from '../../components/calendar';
 import { trpc } from '../../lib/trpc';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -126,6 +127,21 @@ export default function CalendarioScreen() {
   const events: CalendarEvent[] = useMemo(() => {
     return (eventsData?.events || []) as CalendarEvent[];
   }, [eventsData?.events]);
+
+  // Transform events for MiniCalendar component
+  const miniCalendarEvents: MiniCalendarEvent[] = useMemo(() => {
+    return events.map((e) => ({
+      id: e.id,
+      title: e.title,
+      type: e.type || 'OTHER',
+      startDate: new Date(e.startDate),
+      endDate: new Date(e.endDate),
+      isAllDay: e.isAllDay || false,
+      locationType: e.locationType || 'IN_PERSON',
+      locationDetails: e.locationDetails,
+      onlineLink: e.onlineLink,
+    }));
+  }, [events]);
 
   // Group events by date
   const groupedEvents = useMemo(() => {
@@ -259,6 +275,15 @@ export default function CalendarioScreen() {
             </Card>
           </View>
         )}
+
+        {/* Mini Calendar */}
+        <View style={styles.miniCalendarContainer}>
+          <MiniCalendar 
+            events={miniCalendarEvents} 
+            isLoading={isLoading}
+            showViewAllButton={false}
+          />
+        </View>
 
         {/* Filter Button */}
         <TouchableOpacity
@@ -546,6 +571,9 @@ const styles = StyleSheet.create({
   },
   statValue: {
     marginBottom: spacing[1],
+  },
+  miniCalendarContainer: {
+    marginBottom: spacing[4],
   },
   filterButton: {
     flexDirection: 'row',
