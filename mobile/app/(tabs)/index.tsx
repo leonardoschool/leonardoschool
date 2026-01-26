@@ -64,18 +64,15 @@ export default function DashboardScreen() {
     { enabled: !!user?.isActive }
   );
 
-  // Calculate date range for calendar events (current month + 30 days ahead)
-  const calendarDateRange = useMemo(() => {
-    const start = new Date();
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-    
-    const end = new Date();
-    end.setDate(end.getDate() + 60);
-    end.setHours(23, 59, 59, 999);
-    
-    return { start, end };
-  }, []);
+  // Calculate date range for calendar events (current month + 60 days ahead)
+  // No useMemo since we want fresh dates on each render
+  const calendarStart = new Date();
+  calendarStart.setDate(1);
+  calendarStart.setHours(0, 0, 0, 0);
+  
+  const calendarEnd = new Date();
+  calendarEnd.setDate(calendarEnd.getDate() + 60);
+  calendarEnd.setHours(23, 59, 59, 999);
 
   // Fetch calendar events
   const {
@@ -85,8 +82,8 @@ export default function DashboardScreen() {
     isRefetching: eventsRefetching,
   } = trpc.calendar.getEvents.useQuery(
     {
-      startDate: calendarDateRange.start,
-      endDate: calendarDateRange.end,
+      startDate: calendarStart,
+      endDate: calendarEnd,
       onlyMyEvents: true,
       includeInvitations: true,
       includeCancelled: false,

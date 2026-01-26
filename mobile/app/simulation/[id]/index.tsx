@@ -17,6 +17,7 @@ import {
   Dimensions,
   BackHandler,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
@@ -255,7 +256,6 @@ export default function SimulationExecutionScreen() {
         if (data.savedCurrentSectionIndex !== undefined) {
           setCurrentSectionIndex(data.savedCurrentSectionIndex);
         }
-        Alert.alert('Ripreso', 'Hai ripreso il tuo tentativo precedente');
       }
       
       setHasStarted(true);
@@ -841,7 +841,7 @@ export default function SimulationExecutionScreen() {
         }}
       />
 
-      <View style={[styles.container, dynamicStyles.container]}>
+      <SafeAreaView style={[styles.container, dynamicStyles.container]} edges={['top']}>
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: dynamicStyles.border }]}>
           <TouchableOpacity
@@ -979,7 +979,7 @@ export default function SimulationExecutionScreen() {
                       style={[
                         styles.optionButton,
                         {
-                          backgroundColor: isSelected ? colors.primary.light : dynamicStyles.cardBg,
+                          backgroundColor: isSelected ? `${colors.primary.main}15` : dynamicStyles.cardBg,
                           borderColor: isSelected ? colors.primary.main : dynamicStyles.border,
                         },
                       ]}
@@ -1118,7 +1118,7 @@ export default function SimulationExecutionScreen() {
                             backgroundColor: isCurrent
                               ? colors.primary.main
                               : isAnswered
-                                ? colors.primary.light
+                                ? `${colors.primary.main}40`
                                 : dynamicStyles.border,
                             borderColor: isMarked ? colors.status.warning.main : 'transparent',
                             borderWidth: isMarked ? 2 : 0,
@@ -1160,7 +1160,7 @@ export default function SimulationExecutionScreen() {
                 </View>
                 <View style={styles.legendItem}>
                   <View
-                    style={[styles.legendDot, { backgroundColor: colors.primary.light }]}
+                    style={[styles.legendDot, { backgroundColor: `${colors.primary.main}40` }]}
                   />
                   <Text style={[styles.legendText, { color: dynamicStyles.textSecondary }]}>
                     Risposta
@@ -1193,7 +1193,7 @@ export default function SimulationExecutionScreen() {
           questionText={currentQuestion?.text}
           onClose={() => setShowFeedbackModal(false)}
         />
-      </View>
+      </SafeAreaView>
     </>
   );
 }

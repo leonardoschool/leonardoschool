@@ -13,6 +13,7 @@ import {
   Modal,
   Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Text, Button, Card } from '../ui';
@@ -165,23 +166,26 @@ function QuestionNavigator({
   }).length;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View
+    <Modal visible={visible} animationType="none" transparent onRequestClose={onClose}>
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={onClose}
         style={{
           flex: 1,
           backgroundColor: 'rgba(0, 0, 0, 0.5)',
           justifyContent: 'flex-end',
         }}
       >
-        <View
-          style={{
-            backgroundColor: themed(colors.background.card),
-            borderTopLeftRadius: 20,
-            borderTopRightRadius: 20,
-            maxHeight: '80%',
-            padding: spacing[4],
-          }}
-        >
+        <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
+          <View
+            style={{
+              backgroundColor: themed(colors.background.card),
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              maxHeight: '80%',
+              padding: spacing[4],
+            }}
+          >
           {/* Header */}
           <View
             style={{
@@ -231,6 +235,8 @@ function QuestionNavigator({
                       backgroundColor: getStatusBackgroundColor(status, isActive, themed),
                       borderWidth: status === 'flagged' || status === 'unanswered' ? 2 : 0,
                       borderColor: getStatusBorderColor(status),
+                      marginRight: spacing[1],
+                      marginBottom: spacing[1],
                     }}
                   >
                     <Text
@@ -247,11 +253,11 @@ function QuestionNavigator({
                       <View
                         style={{
                           position: 'absolute',
-                          top: -4,
-                          right: -4,
-                          width: 8,
-                          height: 8,
-                          borderRadius: 4,
+                          top: 2,
+                          right: 2,
+                          width: 6,
+                          height: 6,
+                          borderRadius: 3,
                           backgroundColor: colors.status.error.main,
                         }}
                       />
@@ -327,7 +333,8 @@ function QuestionNavigator({
             Concludi Sezione
           </Button>
         </View>
-      </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 }
@@ -419,7 +426,7 @@ export default function TolcSimulationLayout({
   if (!currentQuestion) return null;
 
   return (
-    <View style={{ flex: 1, backgroundColor: themed(colors.background.primary) }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: themed(colors.background.primary) }} edges={['top']}>
       {/* Header */}
       <View
         style={{
@@ -598,7 +605,7 @@ export default function TolcSimulationLayout({
                   padding: spacing[4],
                   borderRadius: 12,
                   backgroundColor: isSelected
-                    ? colors.primary.light
+                    ? `${colors.primary.main}15`
                     : themed(colors.background.card),
                   borderWidth: 2,
                   borderColor: isSelected
@@ -694,29 +701,48 @@ export default function TolcSimulationLayout({
           {sectionQuestionIndex + 1} / {currentSectionQuestions.length}
         </Text>
 
-        <TouchableOpacity
-          onPress={onGoNext}
-          disabled={!canGoNext}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: spacing[2],
-            paddingHorizontal: spacing[4],
-            paddingVertical: spacing[3],
-            borderRadius: 12,
-            backgroundColor: canGoNext
-              ? themed(colors.background.secondary)
-              : themed(colors.background.primary),
-            opacity: canGoNext ? 1 : 0.5,
-          }}
-        >
-          <Text variant="body">Succ</Text>
-          <Ionicons
-            name="chevron-forward"
-            size={20}
-            color={themed(colors.text.primary)}
-          />
-        </TouchableOpacity>
+        {/* Show "Concludi Sezione" when at last question, otherwise show "Succ" */}
+        {canGoNext ? (
+          <TouchableOpacity
+            onPress={onGoNext}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing[2],
+              paddingHorizontal: spacing[4],
+              paddingVertical: spacing[3],
+              borderRadius: 12,
+              backgroundColor: themed(colors.background.secondary),
+            }}
+          >
+            <Text variant="body">Succ</Text>
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={themed(colors.text.primary)}
+            />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            onPress={onCompleteSection}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing[2],
+              paddingHorizontal: spacing[4],
+              paddingVertical: spacing[3],
+              borderRadius: 12,
+              backgroundColor: colors.primary.main,
+            }}
+          >
+            <Text variant="body" style={{ color: '#fff' }}>Concludi</Text>
+            <Ionicons
+              name="checkmark-circle"
+              size={20}
+              color="#fff"
+            />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Question Navigator Modal */}
@@ -741,6 +767,6 @@ export default function TolcSimulationLayout({
         onCompleteSection={onCompleteSection}
         sectionName={currentSection?.name || 'Sezione'}
       />
-    </View>
+    </SafeAreaView>
   );
 }

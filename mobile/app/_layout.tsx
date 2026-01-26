@@ -106,6 +106,16 @@ function RootLayoutNav() {
           }}
         />
         
+        {/* Self practice screen */}
+        <Stack.Screen
+          name="self-practice"
+          options={{
+            headerShown: false,
+            presentation: 'modal',
+            animation: 'slide_from_bottom',
+          }}
+        />
+        
         {/* Conversation detail */}
         <Stack.Screen
           name="conversation/[id]"

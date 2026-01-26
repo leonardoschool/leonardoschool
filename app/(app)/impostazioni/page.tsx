@@ -626,10 +626,12 @@ function NotificationCategoryRow({
 
   return (
     <div className={`rounded-lg border ${colors.border.primary} overflow-hidden`}>
-      <button 
-        type="button"
+      <div 
+        role="button"
+        tabIndex={0}
         className={`w-full flex items-center justify-between p-3 cursor-pointer ${colors.effects.hover.bgSubtle} text-left`}
         onClick={() => setExpanded(!expanded)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(!expanded); } }}
       >
         <div className="flex items-center gap-3 min-w-0">
           <Icon className={`w-5 h-5 ${colors.icon.secondary} flex-shrink-0`} />
@@ -638,6 +640,7 @@ function NotificationCategoryRow({
         <div className="flex items-center gap-3">
           {/* In-App Toggle */}
           <button
+            type="button"
             onClick={(e) => { e.stopPropagation(); handleCategoryToggle('inAppEnabled'); }}
             disabled={isUpdating}
             className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
@@ -655,6 +658,7 @@ function NotificationCategoryRow({
           
           {/* Email Toggle */}
           <button
+            type="button"
             onClick={(e) => { e.stopPropagation(); handleCategoryToggle('emailEnabled'); }}
             disabled={isUpdating}
             className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
@@ -672,7 +676,7 @@ function NotificationCategoryRow({
           
           <ChevronRight className={`w-4 h-4 ${colors.icon.secondary} transition-transform ${expanded ? 'rotate-90' : ''}`} />
         </div>
-      </button>
+      </div>
       
       {expanded && (
         <div className={`border-t ${colors.border.primary} p-3 space-y-2 ${colors.background.secondary}`}>

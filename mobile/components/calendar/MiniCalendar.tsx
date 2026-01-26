@@ -151,19 +151,44 @@ export function MiniCalendar({ events, isLoading, showViewAllButton = true }: Mi
     return days;
   }, [currentDate, events]);
 
-  // Get upcoming events (next 7 days)
-  const upcomingEvents = useMemo(() => {
+  // Get today's events and upcoming events (max 5 total)
+  const { todaysEvents, upcomingEvents, hasMoreEvents, totalEventsCount } = useMemo(() => {
     const now = new Date();
-    const weekFromNow = new Date();
-    weekFromNow.setDate(weekFromNow.getDate() + 7);
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
-    return events
+    // Today's events
+    const todayEvts = events
       .filter((e) => {
         const eventDate = new Date(e.startDate);
-        return eventDate >= now && eventDate <= weekFromNow;
+        return eventDate >= startOfToday && eventDate <= endOfToday;
       })
-      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
-      .slice(0, 4);
+      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+
+    // Upcoming events (after today)
+    const upcomingEvts = events
+      .filter((e) => {
+        const eventDate = new Date(e.startDate);
+        return eventDate > endOfToday;
+      })
+      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+
+    const totalCount = todayEvts.length + upcomingEvts.length;
+    const maxToShow = 5;
+    
+    // Distribute slots: prioritize today's events
+    let todaySlots = Math.min(todayEvts.length, maxToShow);
+    let upcomingSlots = maxToShow - todaySlots;
+    
+    // If we have room for upcoming, take them
+    upcomingSlots = Math.min(upcomingSlots, upcomingEvts.length);
+
+    return {
+      todaysEvents: todayEvts.slice(0, todaySlots),
+      upcomingEvents: upcomingEvts.slice(0, upcomingSlots),
+      hasMoreEvents: totalCount > maxToShow,
+      totalEventsCount: totalCount,
+    };
   }, [events]);
 
   const goToPrevMonth = () => {
@@ -183,13 +208,11 @@ export function MiniCalendar({ events, isLoading, showViewAllButton = true }: Mi
 
   const formatEventDay = (date: Date | string) => {
     const d = new Date(date);
-    const today = new Date();
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    if (d.toDateString() === today.toDateString()) return 'Oggi';
     if (d.toDateString() === tomorrow.toDateString()) return 'Domani';
-    return d.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric' });
+    return d.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' });
   };
 
   if (isLoading) {
@@ -287,50 +310,108 @@ export function MiniCalendar({ events, isLoading, showViewAllButton = true }: Mi
         ))}
       </View>
 
-      {/* Upcoming Events */}
+      {/* Today's Events */}
       <View style={[styles.upcomingSection, { borderTopColor: themedColors.border }]}>
-        <Text variant="caption" style={{ fontWeight: '600', marginBottom: spacing[2], color: themedColors.textMuted }}>
-          Prossimi appuntamenti
-        </Text>
-
-        {upcomingEvents.length === 0 ? (
-          <View style={styles.emptyEvents}>
-            <Caption style={{ textAlign: 'center' }}>Nessun evento in programma</Caption>
-          </View>
-        ) : (
-          <View style={styles.eventsList}>
-            {upcomingEvents.map((event) => (
-              <TouchableOpacity
-                key={event.id}
-                style={[
-                  styles.eventItem,
-                  { backgroundColor: eventTypeColors[event.type]?.bg || 'rgba(107, 114, 128, 0.15)' },
-                ]}
-                activeOpacity={0.7}
-                onPress={() => router.push('/(tabs)/calendario')}
-              >
-                <View style={styles.eventItemContent}>
-                  <View style={styles.eventItemMain}>
-                    <Text variant="caption" style={{ fontWeight: '600' }} numberOfLines={1}>
-                      {event.title}
-                    </Text>
-                    <View style={styles.eventItemMeta}>
+        {todaysEvents.length > 0 && (
+          <>
+            <Text variant="caption" style={{ fontWeight: '600', marginBottom: spacing[2], color: themedColors.textMuted }}>
+              Oggi
+            </Text>
+            <View style={styles.eventsList}>
+              {todaysEvents.map((event) => (
+                <TouchableOpacity
+                  key={event.id}
+                  style={[
+                    styles.eventItem,
+                    { backgroundColor: eventTypeColors[event.type]?.bg || 'rgba(107, 114, 128, 0.15)' },
+                  ]}
+                  activeOpacity={0.7}
+                  onPress={() => router.push('/(tabs)/calendario')}
+                >
+                  <View style={styles.eventItemContent}>
+                    <View style={styles.eventItemMain}>
+                      <Text variant="caption" style={{ fontWeight: '600' }} numberOfLines={1}>
+                        {event.title}
+                      </Text>
                       <Caption style={{ fontSize: 10 }}>
                         {eventTypeLabels[event.type] || event.type}
                       </Caption>
-                      <Caption style={{ fontSize: 10, marginHorizontal: 4 }}>•</Caption>
-                      <Caption style={{ fontSize: 10 }}>{formatEventDay(event.startDate)}</Caption>
+                    </View>
+                    <View style={styles.eventItemTime}>
+                      <Ionicons name="time-outline" size={12} color={themedColors.textMuted} />
+                      <Caption style={{ fontSize: 10, marginLeft: 2 }}>
+                        {event.isAllDay ? 'Tutto il giorno' : formatEventTime(event.startDate)}
+                      </Caption>
                     </View>
                   </View>
-                  <View style={styles.eventItemTime}>
-                    <Ionicons name="time-outline" size={12} color={themedColors.textMuted} />
-                    <Caption style={{ fontSize: 10, marginLeft: 2 }}>
-                      {event.isAllDay ? 'Tutto il giorno' : formatEventTime(event.startDate)}
-                    </Caption>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
+
+        {/* Upcoming Events */}
+        {upcomingEvents.length > 0 && (
+          <>
+            <Text variant="caption" style={{ fontWeight: '600', marginBottom: spacing[2], marginTop: todaysEvents.length > 0 ? spacing[3] : 0, color: themedColors.textMuted }}>
+              Prossimi
+            </Text>
+            <View style={styles.eventsList}>
+              {upcomingEvents.map((event) => (
+                <TouchableOpacity
+                  key={event.id}
+                  style={[
+                    styles.eventItem,
+                    { backgroundColor: eventTypeColors[event.type]?.bg || 'rgba(107, 114, 128, 0.15)' },
+                  ]}
+                  activeOpacity={0.7}
+                  onPress={() => router.push('/(tabs)/calendario')}
+                >
+                  <View style={styles.eventItemContent}>
+                    <View style={styles.eventItemMain}>
+                      <Text variant="caption" style={{ fontWeight: '600' }} numberOfLines={1}>
+                        {event.title}
+                      </Text>
+                      <View style={styles.eventItemMeta}>
+                        <Caption style={{ fontSize: 10 }}>
+                          {eventTypeLabels[event.type] || event.type}
+                        </Caption>
+                        <Caption style={{ fontSize: 10, marginHorizontal: 4 }}>•</Caption>
+                        <Caption style={{ fontSize: 10 }}>
+                          {formatEventDay(event.startDate)}
+                        </Caption>
+                      </View>
+                    </View>
+                    <View style={styles.eventItemTime}>
+                      <Ionicons name="time-outline" size={12} color={themedColors.textMuted} />
+                      <Caption style={{ fontSize: 10, marginLeft: 2 }}>
+                        {event.isAllDay ? 'Tutto il giorno' : formatEventTime(event.startDate)}
+                      </Caption>
+                    </View>
                   </View>
-                </View>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
+
+        {/* Show "more events" indicator */}
+        {hasMoreEvents && (
+          <TouchableOpacity 
+            style={styles.moreEventsButton}
+            onPress={() => router.push('/(tabs)/calendario')}
+          >
+            <Caption style={{ color: colors.primary.main, fontWeight: '600' }}>
+              +{totalEventsCount - 5} altri eventi
+            </Caption>
+            <Ionicons name="chevron-forward" size={14} color={colors.primary.main} />
+          </TouchableOpacity>
+        )}
+
+        {/* Empty state */}
+        {todaysEvents.length === 0 && upcomingEvents.length === 0 && (
+          <View style={styles.emptyEvents}>
+            <Caption style={{ textAlign: 'center' }}>Nessun evento in programma</Caption>
           </View>
         )}
       </View>
@@ -443,6 +524,14 @@ const styles = StyleSheet.create({
   eventItemTime: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  moreEventsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing[3],
+    marginTop: spacing[2],
+    gap: 4,
   },
 });
 

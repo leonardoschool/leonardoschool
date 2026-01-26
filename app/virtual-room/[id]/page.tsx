@@ -434,8 +434,12 @@ export default function VirtualRoomPage() {
   });
 
   // Messages come from SSE data now - no need for separate polling
+  // Sort by createdAt ascending so newest messages appear at the bottom
   const messagesFromSSE = useMemo(() => {
-    return sseData?.messages || [];
+    const messages = sseData?.messages || [];
+    return [...messages].sort((a, b) => 
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
   }, [sseData?.messages]);
 
   // Mark messages as read

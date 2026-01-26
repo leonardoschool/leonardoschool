@@ -202,7 +202,6 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     onSuccess: (data) => {
       console.log('[VirtualRoom] startAttemptMutation onSuccess, resumed:', data.resumed);
       if (data.resumed) {
-        showSuccess('Ripreso', 'Hai ripreso il tuo tentativo precedente');
         // Extract saved data with type narrowing
         const savedData = {
           savedTimeSpent: 'savedTimeSpent' in data ? data.savedTimeSpent : undefined,

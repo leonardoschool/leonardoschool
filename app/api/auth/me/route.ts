@@ -112,6 +112,7 @@ export async function POST(request: NextRequest) {
       emailVerified: user.emailVerified,
       parentDataRequired: parentDataRequired || false,
       pendingContractToken: pendingContractToken,
+      createdAt: user.createdAt.toISOString(),
     });
 
     // Cookie duration: 7 days (refresh happens on each /api/auth/me call)
