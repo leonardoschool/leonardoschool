@@ -26,7 +26,7 @@ export function NotificationsDropdown({
   onToggle,
   onMarkAsRead,
   onNotificationClick,
-}: NotificationsDropdownProps) {
+}: Readonly<NotificationsDropdownProps>) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -74,13 +74,15 @@ export function NotificationsDropdown({
                 const NotificationIcon = config.icon;
                 
                 return (
-                  <button
-                    type="button"
+                  <div
                     key={notification.id}
-                    onClick={() => onNotificationClick(notification)}
-                    className={`w-full text-left px-4 py-3 border-b ${colors.border.primary} ${colors.effects.hover.bg} transition-colors cursor-pointer`}
+                    className={`flex items-start gap-2 px-4 py-3 border-b ${colors.border.primary} ${colors.effects.hover.bg} transition-colors`}
                   >
-                    <div className="flex items-start gap-3">
+                    <button
+                      type="button"
+                      onClick={() => onNotificationClick(notification)}
+                      className="flex items-start gap-3 flex-1 min-w-0 text-left"
+                    >
                       <div className={`w-9 h-9 rounded-lg ${config.bgClass} flex items-center justify-center flex-shrink-0`}>
                         {notification.isUrgent ? (
                           <AlertTriangle className={`w-5 h-5 ${colors.status.warning.text}`} />
@@ -97,18 +99,17 @@ export function NotificationsDropdown({
                           {formatNotificationTime(notification.createdAt)}
                         </p>
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onMarkAsRead(notification.id);
-                        }}
-                        className={`p-1 rounded ${colors.effects.hover.bgMuted} transition-colors text-gray-500 dark:text-gray-400`}
-                        title="Segna come letta"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </button>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onMarkAsRead(notification.id)}
+                      className={`p-1 rounded ${colors.effects.hover.bgMuted} transition-colors text-gray-500 dark:text-gray-400 flex-shrink-0`}
+                      aria-label="Segna come letta"
+                      title="Segna come letta"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 );
               })
             ) : (

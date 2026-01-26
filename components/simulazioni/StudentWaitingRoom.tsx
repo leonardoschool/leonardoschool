@@ -466,7 +466,7 @@ export default function StudentWaitingRoom({
             </div>
 
             <h2 className={`text-2xl font-bold ${colors.text.primary} mb-3`}>
-              Stanza Virtuale Non Ancora Attiva
+              Stanza virtuale non ancora attiva
             </h2>
             <p className={`${colors.text.secondary} mb-8`}>
               La sessione per <span className={`font-semibold ${colors.text.primary}`}>{simulationTitle}</span> non è ancora stata avviata.

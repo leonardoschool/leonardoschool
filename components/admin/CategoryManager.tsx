@@ -40,7 +40,7 @@ interface CategoryData {
   visibility: MaterialVisibility;
   _count?: { materials: number };
   groupAccess?: Array<{ group: { id: string; name: string } }>;
-  studentAccess?: Array<{ student: { user: { id: string; name: string } } }>;
+  studentAccess?: Array<{ student: { id: string; user: { id: string; name: string } } }>;
 }
 
 interface MaterialData {
@@ -251,7 +251,7 @@ export default function CategoryManager({ onClose: _onClose, role = 'ADMIN' }: C
     setAssignmentData({
       visibility: category.visibility,
       groupIds: category.groupAccess?.map(ga => ga.group.id) || [],
-      studentIds: category.studentAccess?.map(sa => sa.student.user.id) || [],
+      studentIds: category.studentAccess?.map(sa => sa.student.id) || [],
     });
     setGroupSearchTerm('');
     setUserSearchTerm('');
@@ -271,7 +271,7 @@ export default function CategoryManager({ onClose: _onClose, role = 'ADMIN' }: C
         icon: categoryFormData.icon || null,
         visibility: currentCategory?.visibility || 'NONE',
         groupIds: currentCategory?.groupAccess?.map(ga => ga.group.id) || [],
-        studentIds: currentCategory?.studentAccess?.map(sa => sa.student.user.id) || [],
+        studentIds: currentCategory?.studentAccess?.map(sa => sa.student.id) || [],
       });
     } else {
       createCategoryMutation.mutate({

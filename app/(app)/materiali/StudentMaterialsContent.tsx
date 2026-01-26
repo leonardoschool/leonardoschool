@@ -195,9 +195,13 @@ export default function StudentMaterialsContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
-  // Query per materiali studente
-  const { data: materials, isLoading: loadingMaterials } = trpc.materials.getMyMaterials.useQuery();
+  // Query per categorie (cartelle) e materiali studente
+  const { data: categories, isLoading: loadingCategories } = trpc.materials.getCategories.useQuery();
+  const { data: materials, isLoading: loadingMaterials } = trpc.materials.getMyMaterials.useQuery(
+    selectedCategoryId ? { categoryId: selectedCategoryId } : undefined
+  );
 
   // Costruisci gerarchia dai materiali (aggiornata per nuovo schema)
   const hierarchy = useMemo<HierarchyNode[]>(() => {
@@ -351,8 +355,9 @@ export default function StudentMaterialsContent() {
 
   // Conta totale materiali
   const totalMaterials = materials?.length || 0;
+  const totalCategories = categories?.length || 0;
 
-  if (loadingMaterials) {
+  if (loadingMaterials || loadingCategories) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Spinner size="lg" />
@@ -367,7 +372,8 @@ export default function StudentMaterialsContent() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">I Miei Materiali</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            {totalMaterials} materiali disponibili
+            {totalCategories > 0 && `${totalCategories} ${totalCategories === 1 ? 'cartella' : 'cartelle'} • `}
+            {totalMaterials} {totalMaterials === 1 ? 'materiale' : 'materiali'}
           </p>
         </div>
 
@@ -384,6 +390,72 @@ export default function StudentMaterialsContent() {
           </button>
         </div>
       </div>
+
+      {/* Cartelle */}
+      {categories && categories.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+            <Folder className="w-5 h-5" />
+            Cartelle
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+            {categories.map((category) => {
+              const isSelected = selectedCategoryId === category.id;
+              const materialCount = category._count?.materials || 0;
+              return (
+                <button
+                  key={category.id}
+                  onClick={() => setSelectedCategoryId(isSelected ? null : category.id)}
+                  className={`p-4 rounded-lg border-2 text-left transition-all ${
+                    isSelected
+                      ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-500 bg-white dark:bg-gray-800'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    {isSelected ? (
+                      <FolderOpen className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                    ) : (
+                      <Folder className="w-6 h-6 text-gray-400" />
+                    )}
+                    <h3 className={`font-semibold ${
+                      isSelected
+                        ? 'text-indigo-600 dark:text-indigo-400'
+                        : 'text-gray-900 dark:text-white'
+                    }`}>
+                      {category.name}
+                    </h3>
+                  </div>
+                  {category.description && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-2 line-clamp-2">
+                      {category.description}
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-400">
+                    {materialCount} {materialCount === 1 ? 'materiale' : 'materiali'}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+          {selectedCategoryId && (
+            <div className="mb-4 p-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span className="text-sm text-indigo-900 dark:text-indigo-300">
+                  Filtrando per: <strong>{categories.find(c => c.id === selectedCategoryId)?.name}</strong>
+                </span>
+              </div>
+              <button
+                onClick={() => setSelectedCategoryId(null)}
+                className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Search & Filters */}
       <div className="space-y-3">
@@ -427,7 +499,7 @@ export default function StudentMaterialsContent() {
       </div>
 
       {/* Empty State */}
-      {filteredHierarchy.length === 0 && (
+      {filteredHierarchy.length === 0 && (!categories || categories.length === 0) && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
             <Book className="w-8 h-8 text-gray-400" />
@@ -439,6 +511,21 @@ export default function StudentMaterialsContent() {
             {searchQuery || difficultyFilter
               ? 'Prova a modificare i filtri di ricerca'
               : 'I materiali assegnati appariranno qui'}
+          </p>
+        </div>
+      )}
+
+      {/* Empty State when filtering by category */}
+      {selectedCategoryId && filteredHierarchy.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+            <FolderOpen className="w-8 h-8 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+            Cartella vuota
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400 max-w-md">
+            Questa cartella non contiene ancora materiali
           </p>
         </div>
       )}

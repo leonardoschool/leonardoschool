@@ -465,10 +465,8 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
 
       // Show confirmation dialog
       e.preventDefault();
-      // returnValue is deprecated but still needed for cross-browser compatibility
-      const message = 'Hai una simulazione in corso. Sei sicuro di voler lasciare la pagina?';
-      e.returnValue = message;
-      return message;
+      // Modern browsers show a generic message; custom messages are ignored.
+      return 'Hai una simulazione in corso. Sei sicuro di voler lasciare la pagina?';
     };
 
     globalThis.addEventListener('beforeunload', handleBeforeUnload);
@@ -619,12 +617,10 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   // Parse sections from simulation (if TOLC-style)
   const sections: SimulationSection[] = useMemo(() => {
     if (!simulation?.hasSections || !simulation.sections) {
-      console.log('[TOLC] No sections mode - hasSections:', simulation?.hasSections, 'sections:', simulation?.sections);
       return [];
     }
     try {
       const parsed = simulation.sections as unknown as SimulationSection[];
-      console.log('[TOLC] Parsed sections:', parsed);
       return Array.isArray(parsed) ? parsed : [];
     } catch {
       return [];
@@ -632,9 +628,6 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   }, [simulation?.hasSections, simulation?.sections]);
 
   const hasSectionsMode = sections.length > 0;
-  
-  // Debug log for TOLC mode
-  console.log('[TOLC] hasSectionsMode:', hasSectionsMode, 'isVirtualRoom:', isVirtualRoom, 'hasReadInstructions:', hasReadInstructions);
 
   // Get current section info
   const currentSection = hasSectionsMode ? sections[currentSectionIndex] : null;
