@@ -2,9 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, test]
+    branches: 
+      - main
+      - test
+      - develop
   pull_request:
-    branches: [main, develop, test]
+    branches: 
+      - main
+      - test
 
 env:
   NODE_VERSION: '20'
@@ -15,9 +20,9 @@ jobs:
     name: GitGuardian
     runs-on: ubuntu-latest
     if: |
-      github.ref != 'refs/heads/develop' ||
-      contains(github.event.head_commit.message, '[RELEASE]') ||
-      contains(github.event.head_commit.message, '[DEPLOY]')
+      (github.event_name == 'pull_request' && github.base_ref != 'develop') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/develop' && (contains(github.event.head_commit.message, '[RELEASE]') || contains(github.event.head_commit.message, '[DEPLOY]'))) ||
+      (github.event_name == 'push' && github.ref != 'refs/heads/develop')
 
     steps:
       - name: Checkout repository
@@ -34,9 +39,9 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
     if: |
-      github.ref != 'refs/heads/develop' ||
-      contains(github.event.head_commit.message, '[RELEASE]') ||
-      contains(github.event.head_commit.message, '[DEPLOY]')
+      (github.event_name == 'pull_request' && github.base_ref != 'develop') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/develop' && (contains(github.event.head_commit.message, '[RELEASE]') || contains(github.event.head_commit.message, '[DEPLOY]'))) ||
+      (github.event_name == 'push' && github.ref != 'refs/heads/develop')
 
     steps:
       - uses: actions/checkout@v4
@@ -55,9 +60,9 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     if: |
-      github.ref != 'refs/heads/develop' ||
-      contains(github.event.head_commit.message, '[RELEASE]') ||
-      contains(github.event.head_commit.message, '[DEPLOY]')
+      (github.event_name == 'pull_request' && github.base_ref != 'develop') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/develop' && (contains(github.event.head_commit.message, '[RELEASE]') || contains(github.event.head_commit.message, '[DEPLOY]'))) ||
+      (github.event_name == 'push' && github.ref != 'refs/heads/develop')
 
     steps:
       - uses: actions/checkout@v4
@@ -75,9 +80,9 @@ jobs:
     name: Type Check
     runs-on: ubuntu-latest
     if: |
-      github.ref != 'refs/heads/develop' ||
-      contains(github.event.head_commit.message, '[RELEASE]') ||
-      contains(github.event.head_commit.message, '[DEPLOY]')
+      (github.event_name == 'pull_request' && github.base_ref != 'develop') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/develop' && (contains(github.event.head_commit.message, '[RELEASE]') || contains(github.event.head_commit.message, '[DEPLOY]'))) ||
+      (github.event_name == 'push' && github.ref != 'refs/heads/develop')
 
     steps:
       - uses: actions/checkout@v4
