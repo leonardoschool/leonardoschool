@@ -101,8 +101,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v4
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v3
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
