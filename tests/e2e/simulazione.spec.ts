@@ -48,8 +48,6 @@ test.describe('Simulazione Features', () => {
     await dismissCookieBanner(page);
     
     // May have login button for accessing full simulations (check visible links only)
-    const loginLink = page.locator('a[href*="login"]:visible, a[href*="registr"]:visible');
-    
     // This is optional - page may or may not show visible login prompts
     // The test passes either way - we just verify the page loads
     const content = await page.textContent('body');

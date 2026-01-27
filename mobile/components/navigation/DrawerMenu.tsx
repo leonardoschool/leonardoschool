@@ -97,7 +97,8 @@ export function DrawerMenu({ visible, onClose, currentRoute }: DrawerMenuProps) 
         setModalVisible(false);
       });
     }
-  }, [visible, modalVisible, slideAnim, backdropAnim]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- slideAnim and backdropAnim are stable refs
+  }, [visible, modalVisible]);
 
   // Fetch unread messages count
   const { data: unreadMessagesData } = trpc.messages.getUnreadCount.useQuery(undefined, {

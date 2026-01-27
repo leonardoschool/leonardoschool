@@ -177,7 +177,7 @@ export function MiniCalendar({ events, isLoading, showViewAllButton = true }: Mi
     const maxToShow = 5;
     
     // Distribute slots: prioritize today's events
-    let todaySlots = Math.min(todayEvts.length, maxToShow);
+    const todaySlots = Math.min(todayEvts.length, maxToShow);
     let upcomingSlots = maxToShow - todaySlots;
     
     // If we have room for upcoming, take them

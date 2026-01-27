@@ -116,7 +116,7 @@ test.describe('SEO Robots', () => {
 });
 
 test.describe('SEO Sitemap', () => {
-  test('sitemap should be accessible', async ({ page, request }) => {
+  test('sitemap should be accessible', async ({ request }) => {
     // Use request API for XML content to avoid browser rendering issues
     const response = await request.get('/sitemap.xml');
     

@@ -5,7 +5,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { dismissCookieBanner, openMobileMenuIfNeeded } from './helpers';
+import { dismissCookieBanner } from './helpers';
 
 test.describe('Termini e Condizioni Page', () => {
   test.beforeEach(async ({ page }) => {

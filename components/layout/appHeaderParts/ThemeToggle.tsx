@@ -44,7 +44,7 @@ export function ThemeToggle({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [onClose]);
 
-  const CurrentIcon = getThemeIcon(currentTheme);
+  const Icon = currentTheme === 'dark' ? Moon : currentTheme === 'light' ? Sun : Monitor;
 
   return (
     <div ref={ref} className="relative">
@@ -53,7 +53,7 @@ export function ThemeToggle({
         className={`p-1.5 sm:p-2 rounded-lg ${colors.effects.hover.bgSubtle} ${colors.icon.interactive} transition-colors`}
         title="Cambia tema"
       >
-        <CurrentIcon className="w-5 h-5" />
+        <Icon className="w-5 h-5" />
       </button>
 
       {isOpen && (

@@ -111,6 +111,7 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
   const [topicId, setTopicId] = useState(initialData?.topicId ?? '');
   const [subTopicId, setSubTopicId] = useState(initialData?.subTopicId ?? '');
   const [difficulty, setDifficulty] = useState<DifficultyLevel>(initialData?.difficulty ?? 'MEDIUM');
+  // eslint-disable-next-line sonarjs/no-unused-vars, sonarjs/no-dead-store -- setter is used in form input
   const [timeLimitSeconds, setTimeLimitSeconds] = useState<number | ''>(
     initialData?.timeLimitSeconds ?? ''
   );

@@ -227,8 +227,7 @@ export default function NewSimulationPage() {
 
   // Loading states
   const [isSaving, setIsSaving] = useState(false);
-  // eslint-disable-next-line sonarjs/no-unused-vars -- state reserved for PDF loading indicator
-  const [_isPdfLoading, setIsPdfLoading] = useState(false);
+  const [isPdfLoading, setIsPdfLoading] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   // Fetch data
@@ -772,7 +771,7 @@ export default function NewSimulationPage() {
         questionsHtml += `<div class="section-header">ALTRE DOMANDE</div>`;
         const result = renderQuestionsByType(unassignedQuestions, globalQuestionNumber);
         questionsHtml += result.html;
-        globalQuestionNumber = result.nextNumber;
+        // globalQuestionNumber updated but not used after this point
       }
     } else {
       // Render without sections - just group by type

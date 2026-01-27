@@ -5,7 +5,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { dismissCookieBanner, getLoginLink, openMobileMenuIfNeeded, getFocusedElement, isMobileViewport, findNavigationLink } from './helpers';
+import { dismissCookieBanner, openMobileMenuIfNeeded, isMobileViewport } from './helpers';
 
 test.describe('Homepage', () => {
   test('should load the homepage', async ({ page }) => {
