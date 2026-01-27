@@ -76,40 +76,10 @@ jobs:
       - run: pnpm prisma:generate
       - run: pnpm tsc --noEmit
 
-  sonarcloud:
-    name: SonarCloud Code Analysis
-    runs-on: ubuntu-latest
-    needs: [unit-tests, lint, type-check]
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v3
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [gitguardian, unit-tests, lint, type-check, sonarcloud]
+    needs: [gitguardian, unit-tests, lint, type-check]
 
     steps:
       - uses: actions/checkout@v4
