@@ -43,19 +43,20 @@ export function useRequestTracking(options: RequestTrackingOptions = {}) {
 
   useEffect(() => {
     // Salva il fetch originale
-    const originalFetch = window.fetch;
+    const originalFetch = globalThis.fetch;
 
     // Wrap fetch per intercettare response headers
-    window.fetch = async (...args) => {
-      const response = await originalFetch(...args);
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const response = await originalFetch(input, init);
       
       // Estrai request ID dall'header
       const requestId = response.headers.get('x-request-id');
-      const url = typeof args[0] === 'string' 
-        ? args[0] 
-        : args[0] instanceof Request 
-          ? args[0].url 
-          : args[0].toString();
+      const getUrlFromArgs = (): string => {
+        if (typeof input === 'string') return input;
+        if (input instanceof Request) return input.url;
+        return input.toString();
+      };
+      const url = getUrlFromArgs();
       
       if (requestId) {
         // Log in console (solo in development)
@@ -80,7 +81,7 @@ export function useRequestTracking(options: RequestTrackingOptions = {}) {
 
     // Cleanup: ripristina fetch originale
     return () => {
-      window.fetch = originalFetch;
+      globalThis.fetch = originalFetch;
     };
   }, [enableLogging, onRequestId]);
 }

@@ -37,22 +37,26 @@ Register new routers in [server/trpc/routers/index.ts](server/trpc/routers/index
 ## Database (Prisma)
 Schema: [prisma/schema.prisma](prisma/schema.prisma)
 - **UserRole**: `ADMIN`, `COLLABORATOR`, `STUDENT`
-- **Subject**: `BIOLOGIA`, `CHIMICA`, `FISICA`, `MATEMATICA`, `LOGICA`, `CULTURA_GENERALE`
+- **Subject**: Custom subjects from database (`CustomSubject` model with dynamic colors)
 - Use `ctx.prisma.$transaction()` for atomic operations
 
 ## Color System (MANDATORY)
 **NEVER hardcode hex values.** Use [lib/theme/colors.ts](lib/theme/colors.ts):
 ```typescript
-import { colors, getSubjectColor } from '@/lib/theme/colors';
+import { colors, generateDynamicSubjectColor } from '@/lib/theme/colors';
 
-// ✅ Correct
+// ✅ Correct - Brand colors
 <div className={colors.primary.gradient} />
-<div className={getSubjectColor('BIOLOGIA', 'bg')} />
 
-// ❌ Wrong - never do this
+// ✅ Correct - Dynamic subject colors from database
+const subjectColors = generateDynamicSubjectColor(subject.color);
+<div style={{ backgroundColor: subjectColors.main }} />
+
+// ❌ Wrong - never hardcode subject colors
 <div className="bg-[#D54F8A]" />
 ```
-Categories: `colors.primary.*`, `colors.subjects.*`, `colors.background.*`, `colors.status.*`
+Categories: `colors.primary.*`, `colors.background.*`, `colors.status.*`
+Subject colors: Use `generateDynamicSubjectColor(hexColor)` with color from database
 
 ## UI/UX Requirements
 - **Responsive first**: Use Tailwind breakpoints (`sm:`, `md:`, `lg:`, `xl:`)
@@ -96,6 +100,11 @@ Required in `.env`:
 - Pay attention to eslint and prettier rules
 - If you use a color check in the file if the color exists in 'lib/theme/colors' if not add it there following the existing patterns
 - Pay attention to the colors in both light and dark mode
+- Write test cases where applicable, follow existing testing patterns in the codebase, for more information check the TESTING.md file in the docs folder
+- Pay attention to sonarcloud rules if applicable
+- Pay attention to the folder structure and file naming conventions
+- When create new file, if possible, the file will be small and focused on a single responsibility, if the file is too big consider splitting it into smaller files
+- When creating or editing components, ensure they are reusable and follow existing component patterns
 
 ### Loader Components
 - Use loader components from `components/ui/loaders` - never use generic "Loading..." texts or custom spinners

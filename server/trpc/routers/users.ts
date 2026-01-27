@@ -5,7 +5,7 @@
 import { router, adminProcedure, protectedProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { adminAuth } from '@/lib/firebase/admin';
+import { getAdminAuth } from '@/lib/firebase/admin';
 import { Prisma } from '@prisma/client';
 import { generateMatricola } from '@/lib/utils/matricolaUtils';
 import { createCachedQuery, CACHE_TIMES, CACHE_TAGS } from '@/lib/cache/serverCache';
@@ -708,26 +708,26 @@ export const usersRouter = router({
       );
 
       // Transaction to update role and create/delete related records
-      return ctx.prisma.$transaction(async (tx) => {
+      return ctx.prisma.$transaction(async () => {
         // 1. Delete OLD profile records (keep contracts and stats separate)
         if (oldStudent) {
           // Don't delete contracts, they're linked to student
           // Delete stats as they're student-specific
-          await tx.studentStats.deleteMany({ where: { studentId: oldStudent.id } });
-          await tx.student.delete({ where: { id: oldStudent.id } });
+          await ctx.prisma.studentStats.deleteMany({ where: { studentId: oldStudent.id } });
+          await ctx.prisma.student.delete({ where: { id: oldStudent.id } });
         }
         if (oldCollaborator) {
-          await (tx as any).collaborator.delete({ where: { id: oldCollaborator.id } });
+          await (ctx.prisma as any).collaborator.delete({ where: { id: oldCollaborator.id } });
         }
         if (oldAdmin) {
-          await tx.admin.delete({ where: { id: oldAdmin.id } });
+          await ctx.prisma.admin.delete({ where: { id: oldAdmin.id } });
         }
 
         // 2. Create NEW profile record with common data
         if (newRole === 'STUDENT') {
           // Generate new matricola for the student
           const matricola = await generateMatricola(ctx.prisma);
-          const newStudent = await tx.student.create({
+          const newStudent = await ctx.prisma.student.create({
             data: {
               userId,
               matricola,
@@ -741,11 +741,11 @@ export const usersRouter = router({
             },
           });
           // Create stats for student
-          await tx.studentStats.create({
+          await ctx.prisma.studentStats.create({
             data: { studentId: newStudent.id },
           });
         } else if (newRole === 'COLLABORATOR') {
-          await (tx as any).collaborator.create({
+          await (ctx.prisma as any).collaborator.create({
             data: {
               userId,
               fiscalCode: commonData.fiscalCode,
@@ -758,7 +758,7 @@ export const usersRouter = router({
             },
           });
         } else if (newRole === 'ADMIN') {
-          await tx.admin.create({
+          await ctx.prisma.admin.create({
             data: {
               userId,
               phone: commonData.phone,
@@ -768,7 +768,7 @@ export const usersRouter = router({
 
         // 3. Update user role and reset profileCompleted if data is missing
         // Also reset isActive since they need to complete profile and sign new contract
-        return tx.user.update({
+        return ctx.prisma.user.update({
           where: { id: userId },
           data: {
             role: newRole as any,
@@ -849,7 +849,7 @@ export const usersRouter = router({
 
       // Delete from Firebase
       try {
-        await adminAuth.deleteUser(user.firebaseUid);
+        await getAdminAuth().deleteUser(user.firebaseUid);
       } catch (firebaseError: any) {
         // If user doesn't exist in Firebase, continue with DB deletion
         if (firebaseError.code !== 'auth/user-not-found') {
@@ -862,20 +862,20 @@ export const usersRouter = router({
       }
 
       // Delete from database (cascade will handle related records)
-      await ctx.prisma.$transaction(async (tx) => {
+      await ctx.prisma.$transaction(async () => {
         // Delete student-related data if exists
         if ((user as any).student) {
           const studentId = (user as any).student.id;
           // Delete stats
-          await tx.studentStats.deleteMany({ where: { studentId } });
+          await ctx.prisma.studentStats.deleteMany({ where: { studentId } });
           // Delete contracts
-          await tx.contract.deleteMany({ where: { studentId } });
+          await ctx.prisma.contract.deleteMany({ where: { studentId } });
           // Delete simulation results
-          await tx.simulationResult.deleteMany({ where: { studentId } });
+          await ctx.prisma.simulationResult.deleteMany({ where: { studentId } });
           
           // Delete quick quiz simulations created by this user (QUICK_QUIZ type)
           // First get the IDs to delete related records
-          const quickQuizzes = await tx.simulation.findMany({
+          const quickQuizzes = await ctx.prisma.simulation.findMany({
             where: { 
               createdById: userId,
               type: 'QUICK_QUIZ',
@@ -886,35 +886,35 @@ export const usersRouter = router({
           if (quickQuizzes.length > 0) {
             const quizIds = quickQuizzes.map(q => q.id);
             // Delete related simulation questions
-            await tx.simulationQuestion.deleteMany({ where: { simulationId: { in: quizIds } } });
+            await ctx.prisma.simulationQuestion.deleteMany({ where: { simulationId: { in: quizIds } } });
             // Delete related assignments
-            await tx.simulationAssignment.deleteMany({ where: { simulationId: { in: quizIds } } });
+            await ctx.prisma.simulationAssignment.deleteMany({ where: { simulationId: { in: quizIds } } });
             // Delete related results
-            await tx.simulationResult.deleteMany({ where: { simulationId: { in: quizIds } } });
+            await ctx.prisma.simulationResult.deleteMany({ where: { simulationId: { in: quizIds } } });
             // Delete the quick quizzes themselves
-            await tx.simulation.deleteMany({ where: { id: { in: quizIds } } });
+            await ctx.prisma.simulation.deleteMany({ where: { id: { in: quizIds } } });
           }
           
           // Delete student
-          await tx.student.delete({ where: { id: studentId } });
+          await ctx.prisma.student.delete({ where: { id: studentId } });
         }
 
         // Delete collaborator-related data if exists
         if ((user as any).collaborator) {
           const collaboratorId = (user as any).collaborator.id;
           // Delete collaborator contracts from unified table
-          await tx.contract.deleteMany({ where: { collaboratorId } });
+          await ctx.prisma.contract.deleteMany({ where: { collaboratorId } });
           // Delete collaborator
-          await (tx as any).collaborator.delete({ where: { id: collaboratorId } });
+          await (ctx.prisma as any).collaborator.delete({ where: { id: collaboratorId } });
         }
 
         // Delete admin if exists
         if ((user as any).admin) {
-          await tx.admin.delete({ where: { id: (user as any).admin.id } });
+          await ctx.prisma.admin.delete({ where: { id: (user as any).admin.id } });
         }
 
         // Finally delete user
-        await tx.user.delete({ where: { id: userId } });
+        await ctx.prisma.user.delete({ where: { id: userId } });
       });
 
       return { success: true, message: 'Utente eliminato con successo' };
@@ -992,15 +992,15 @@ export const usersRouter = router({
       }
 
       // Remove existing assignments and add new ones in a transaction
-      await ctx.prisma.$transaction(async (tx) => {
+      await ctx.prisma.$transaction(async () => {
         // Remove all current assignments
-        await tx.collaboratorSubject.deleteMany({
+        await ctx.prisma.collaboratorSubject.deleteMany({
           where: { collaboratorId },
         });
 
         // Add new assignments
         if (subjectIds.length > 0) {
-          await tx.collaboratorSubject.createMany({
+          await ctx.prisma.collaboratorSubject.createMany({
             data: subjectIds.map(subjectId => ({
               collaboratorId,
               subjectId,

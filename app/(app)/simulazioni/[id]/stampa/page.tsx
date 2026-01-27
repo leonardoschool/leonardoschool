@@ -12,7 +12,7 @@ import { colors } from '@/lib/theme/colors';
 import 'katex/dist/katex.min.css';
 
 interface PrintPageProps {
-  params: Promise<{ id: string }>;
+  readonly params: Promise<{ id: string }>;
 }
 
 export default function SimulationPrintPage({ params }: PrintPageProps) {
@@ -28,7 +28,7 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
   const handlePrint = () => {
     setIsPrinting(true);
     setTimeout(() => {
-      window.print();
+      globalThis.print();
       setIsPrinting(false);
     }, 100);
   };
@@ -41,8 +41,8 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
         handlePrint();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    globalThis.addEventListener('keydown', handleKeyDown);
+    return () => globalThis.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   if (isLoading) {
@@ -268,7 +268,7 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
                       .map((answer, ansIndex) => (
                         <div key={answer.id} className="flex items-start gap-2">
                           <span className="font-bold w-5">
-                            {String.fromCharCode(65 + ansIndex)})
+                            {String.fromCodePoint(65 + ansIndex)})
                           </span>
                           <div className="flex-1">
                             <RichTextRenderer text={answer.text} />

@@ -51,7 +51,7 @@ type Theme = 'light' | 'dark' | 'system';
 const applyTheme = (theme: Theme) => {
   const root = document.documentElement;
   if (theme === 'system') {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const prefersDark = globalThis.matchMedia('(prefers-color-scheme: dark)').matches;
     root.classList.toggle('dark', prefersDark);
   } else {
     root.classList.toggle('dark', theme === 'dark');
@@ -158,7 +158,13 @@ export default function ImpostazioniPage() {
     setCurrentTheme(theme);
     localStorage.setItem('theme', theme);
     applyTheme(theme);
-    showSuccess('Tema aggiornato', `Tema impostato su "${theme === 'light' ? 'Chiaro' : theme === 'dark' ? 'Scuro' : 'Sistema'}".`);
+    
+    const themeLabel = (() => {
+      if (theme === 'light') return 'Chiaro';
+      if (theme === 'dark') return 'Scuro';
+      return 'Sistema';
+    })();
+    showSuccess('Tema aggiornato', `Tema impostato su "${themeLabel}".`);
   }, [showSuccess]);
 
   const handleSoundsChange = useCallback((enabled: boolean) => {
@@ -189,7 +195,8 @@ export default function ImpostazioniPage() {
       // tramite il listener onIdTokenChanged
       await auth.signOut();
       router.push('/auth/login');
-    } catch (_error) {
+    } catch (error) {
+      console.error('Logout error:', error);
       showError('Errore', 'Impossibile effettuare il logout.');
     }
   }, [router, showError]);
@@ -230,21 +237,18 @@ export default function ImpostazioniPage() {
             <p className={`text-sm font-medium ${colors.text.primary}`}>Tema</p>
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
               <ThemeOption
-                value="light"
                 label="Chiaro"
                 icon={Sun}
                 selected={currentTheme === 'light'}
                 onSelect={() => handleThemeChange('light')}
               />
               <ThemeOption
-                value="dark"
                 label="Scuro"
                 icon={Moon}
                 selected={currentTheme === 'dark'}
                 onSelect={() => handleThemeChange('dark')}
               />
               <ThemeOption
-                value="system"
                 label="Sistema"
                 icon={Monitor}
                 selected={currentTheme === 'system'}
@@ -370,6 +374,45 @@ export default function ImpostazioniPage() {
           </div>
         </SettingsSection>
 
+        {/* Language Settings */}
+        <SettingsSection 
+          icon={Globe} 
+          title="Lingua e Regione" 
+          description="Imposta lingua e formato regionale"
+        >
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="language-select" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>Lingua</label>
+              <select 
+                id="language-select"
+                className={`w-full px-3 sm:px-4 py-2 rounded-lg border ${colors.border.primary} ${colors.background.card} ${colors.text.primary} focus:ring-2 focus:ring-[#a8012b] focus:border-transparent text-sm sm:text-base`}
+                defaultValue="it"
+                onChange={(e) => {
+                  if (e.target.value === 'en') {
+                    showSuccess('Prossimamente', 'Il supporto per l\'inglese sarà disponibile a breve.');
+                    e.target.value = 'it';
+                  }
+                }}
+              >
+                <option value="it">🇮🇹 Italiano</option>
+                <option value="en">🇬🇧 English (Coming soon)</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="date-format-select" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>Formato data</label>
+              <select 
+                id="date-format-select"
+                className={`w-full px-3 sm:px-4 py-2 rounded-lg border ${colors.border.primary} ${colors.background.card} ${colors.text.primary} focus:ring-2 focus:ring-[#a8012b] focus:border-transparent text-sm sm:text-base`}
+                defaultValue="dd/mm/yyyy"
+              >
+                <option value="dd/mm/yyyy">DD/MM/YYYY (31/12/2025)</option>
+                <option value="dd-mm-yyyy">DD-MM-YYYY (31-12-2025)</option>
+                <option value="yyyy-mm-dd">YYYY-MM-DD (2025-12-31)</option>
+              </select>
+            </div>
+          </div>
+        </SettingsSection>
+
         {/* Account Actions */}
         <SettingsSection 
           icon={AlertCircle} 
@@ -423,10 +466,10 @@ function SettingsSection({
   description, 
   children 
 }: { 
-  icon: React.ComponentType<{ className?: string }>; 
-  title: string; 
-  description: string;
-  children: React.ReactNode;
+  readonly icon: React.ComponentType<{ className?: string }>; 
+  readonly title: string; 
+  readonly description: string;
+  readonly children: React.ReactNode;
 }) {
   return (
     <div className={`${colors.background.card} rounded-xl shadow border ${colors.border.primary} p-4 sm:p-6`}>
@@ -450,11 +493,10 @@ function ThemeOption({
   selected, 
   onSelect 
 }: { 
-  value: string; 
-  label: string; 
-  icon: React.ComponentType<{ className?: string }>;
-  selected: boolean;
-  onSelect: () => void;
+  readonly label: string; 
+  readonly icon: React.ComponentType<{ className?: string }>;
+  readonly selected: boolean;
+  readonly onSelect: () => void;
 }) {
   return (
     <button
@@ -521,11 +563,11 @@ function SettingsLink({
   onClick,
   badge
 }: { 
-  icon: React.ComponentType<{ className?: string }>; 
-  label: string; 
-  description: string;
-  onClick: () => void;
-  badge?: string;
+  readonly icon: React.ComponentType<{ className?: string }>; 
+  readonly label: string; 
+  readonly description: string;
+  readonly onClick: () => void;
+  readonly badge?: React.ReactNode;
 }) {
   return (
     <button
@@ -559,12 +601,12 @@ function NotificationCategoryRow({
   onToggle,
   isUpdating
 }: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  types: readonly string[];
-  getPref: (type: string) => { notificationType: string; inAppEnabled: boolean; emailEnabled: boolean };
-  onToggle: (type: string, field: 'inAppEnabled' | 'emailEnabled', value: boolean) => void;
-  isUpdating: boolean;
+  readonly icon: React.ComponentType<{ className?: string }>;
+  readonly label: string;
+  readonly types: readonly string[];
+  readonly getPref: (type: string) => { notificationType: string; inAppEnabled: boolean; emailEnabled: boolean };
+  readonly onToggle: (type: string, field: 'inAppEnabled' | 'emailEnabled', value: boolean) => void;
+  readonly isUpdating: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   
@@ -585,8 +627,11 @@ function NotificationCategoryRow({
   return (
     <div className={`rounded-lg border ${colors.border.primary} overflow-hidden`}>
       <div 
-        className={`flex items-center justify-between p-3 cursor-pointer ${colors.effects.hover.bgSubtle}`}
+        role="button"
+        tabIndex={0}
+        className={`w-full flex items-center justify-between p-3 cursor-pointer ${colors.effects.hover.bgSubtle} text-left`}
         onClick={() => setExpanded(!expanded)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(!expanded); } }}
       >
         <div className="flex items-center gap-3 min-w-0">
           <Icon className={`w-5 h-5 ${colors.icon.secondary} flex-shrink-0`} />
@@ -595,14 +640,15 @@ function NotificationCategoryRow({
         <div className="flex items-center gap-3">
           {/* In-App Toggle */}
           <button
+            type="button"
             onClick={(e) => { e.stopPropagation(); handleCategoryToggle('inAppEnabled'); }}
             disabled={isUpdating}
             className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
-              allInAppEnabled 
-                ? `${colors.status.success.bgLight} ${colors.status.success.text}` 
-                : someInAppEnabled
-                  ? `${colors.status.warning.bgLight} ${colors.status.warning.text}`
-                  : `${colors.background.secondary} ${colors.text.muted}`
+              (() => {
+                if (allInAppEnabled) return `${colors.status.success.bgLight} ${colors.status.success.text}`;
+                if (someInAppEnabled) return `${colors.status.warning.bgLight} ${colors.status.warning.text}`;
+                return `${colors.background.secondary} ${colors.text.muted}`;
+              })()
             }`}
             title="Notifiche in-app"
           >
@@ -612,14 +658,15 @@ function NotificationCategoryRow({
           
           {/* Email Toggle */}
           <button
+            type="button"
             onClick={(e) => { e.stopPropagation(); handleCategoryToggle('emailEnabled'); }}
             disabled={isUpdating}
             className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
-              allEmailEnabled 
-                ? `${colors.status.success.bgLight} ${colors.status.success.text}` 
-                : someEmailEnabled
-                  ? `${colors.status.warning.bgLight} ${colors.status.warning.text}`
-                  : `${colors.background.secondary} ${colors.text.muted}`
+              (() => {
+                if (allEmailEnabled) return `${colors.status.success.bgLight} ${colors.status.success.text}`;
+                if (someEmailEnabled) return `${colors.status.warning.bgLight} ${colors.status.warning.text}`;
+                return `${colors.background.secondary} ${colors.text.muted}`;
+              })()
             }`}
             title="Notifiche email"
           >
@@ -712,7 +759,7 @@ function formatNotificationType(type: string): string {
 }
 
 // Password Change Modal
-function PasswordChangeModal({ onClose }: { onClose: () => void }) {
+function PasswordChangeModal({ onClose }: { readonly onClose: () => void }) {
   const { showSuccess, showError } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -738,7 +785,7 @@ function PasswordChangeModal({ onClose }: { onClose: () => void }) {
     try {
       // Firebase password change requires re-authentication
       const user = auth.currentUser;
-      if (!user || !user.email) {
+      if (!user?.email) {
         throw new Error('Utente non autenticato');
       }
 
@@ -785,11 +832,12 @@ function PasswordChangeModal({ onClose }: { onClose: () => void }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Current Password */}
           <div>
-            <label className={`block text-sm font-medium ${colors.text.primary} mb-1`}>
+            <label htmlFor="current-password" className={`block text-sm font-medium ${colors.text.primary} mb-1`}>
               Password attuale
             </label>
             <div className="relative">
               <input
+                id="current-password"
                 type={showCurrentPassword ? 'text' : 'password'}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
@@ -808,11 +856,12 @@ function PasswordChangeModal({ onClose }: { onClose: () => void }) {
           
           {/* New Password */}
           <div>
-            <label className={`block text-sm font-medium ${colors.text.primary} mb-1`}>
+            <label htmlFor="new-password" className={`block text-sm font-medium ${colors.text.primary} mb-1`}>
               Nuova password
             </label>
             <div className="relative">
               <input
+                id="new-password"
                 type={showNewPassword ? 'text' : 'password'}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
@@ -833,10 +882,11 @@ function PasswordChangeModal({ onClose }: { onClose: () => void }) {
           
           {/* Confirm Password */}
           <div>
-            <label className={`block text-sm font-medium ${colors.text.primary} mb-1`}>
+            <label htmlFor="confirm-password" className={`block text-sm font-medium ${colors.text.primary} mb-1`}>
               Conferma nuova password
             </label>
             <input
+              id="confirm-password"
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}

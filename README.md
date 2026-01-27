@@ -459,24 +459,27 @@ Permissions-Policy: camera=(), microphone=(), geolocation=()
 **⚠️ MAI usare hex hardcoded.** Usa sempre `lib/theme/colors.ts`:
 
 ```typescript
-import { colors, getSubjectColor } from '@/lib/theme/colors';
+import { colors, generateDynamicSubjectColor } from '@/lib/theme/colors';
 
-// ✅ Corretto
+// ✅ Corretto - Colori brand
 <div className={colors.primary.gradient} />
-<div className={getSubjectColor('BIOLOGIA', 'bg')} />
 
-// ❌ Sbagliato
+// ✅ Corretto - Colori materia dinamici dal database
+const subjectColors = generateDynamicSubjectColor(subject.color);
+<div style={{ backgroundColor: subjectColors.main }} />
+
+// ❌ Sbagliato - Mai hardcodare colori materia
 <div className="bg-[#D54F8A]" />
 ```
 
 ### Categorie Colori
 
 - `colors.primary.*` - Rosso brand
-- `colors.subjects.*` - Colori per materia
 - `colors.background.*` - Sfondi (supporta dark mode)
 - `colors.status.*` - Success, warning, error
 - `colors.text.*` - Colori testo
 - `colors.border.*` - Bordi
+- `generateDynamicSubjectColor(hex)` - Colori materia dal database
 
 ---
 
@@ -497,7 +500,7 @@ pnpm seed
 | Collaboratori | 10 | collab1-10@leonardoschool.test |
 | Studenti | 20 | studente1-20@leonardoschool.test |
 
-**Password:** `TestPassword123!` per tutti
+> 📄 **Credenziali complete**: Vedi file `TEST_USERS.md` (non versionato, generato localmente)
 
 ### Note
 

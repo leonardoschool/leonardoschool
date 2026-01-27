@@ -189,7 +189,12 @@ export default function DettaglioDomandaPage() {
 
           {showActionsMenu && (
             <>
-              <div className="fixed inset-0 z-10" onClick={() => setShowActionsMenu(false)} />
+              <button
+                type="button"
+                className="fixed inset-0 z-10 cursor-default"
+                onClick={() => setShowActionsMenu(false)}
+                aria-label="Chiudi menu"
+              />
               <div className={`absolute right-0 mt-2 w-48 rounded-lg ${colors.background.card} ${colors.effects.shadow.lg} border ${colors.border.primary} z-20`}>
                 <div className="py-1">
                   <button
@@ -286,9 +291,9 @@ export default function DettaglioDomandaPage() {
             <div className={`${colors.background.card} rounded-xl p-6 ${colors.effects.shadow.sm}`}>
               <h3 className={`font-semibold ${colors.text.primary} mb-4`}>Risposte</h3>
               <div className="space-y-3">
-                {question.answers.map((answer, idx) => (
+                {question.answers.map((answer) => (
                   <div
-                    key={idx}
+                    key={answer.id}
                     className={`flex items-start gap-3 p-4 rounded-lg border ${
                       answer.isCorrect
                         ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
@@ -331,9 +336,9 @@ export default function DettaglioDomandaPage() {
                 Tipo di validazione: {openValidationTypeLabels[question.openValidationType as keyof typeof openValidationTypeLabels] || 'Manuale'}
               </p>
               <div className="flex flex-wrap gap-2">
-                {question.keywords.map((keyword, idx) => (
+                {question.keywords.map((keyword) => (
                   <span
-                    key={idx}
+                    key={keyword.id}
                     className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm ${
                       keyword.isRequired
                         ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
@@ -414,7 +419,7 @@ export default function DettaglioDomandaPage() {
                 <span className={`text-sm ${colors.text.muted}`}>Punti errati</span>
                 <span className={`font-medium text-red-600`}>{question.negativePoints}</span>
               </div>
-              {question.timeLimitSeconds && (
+              {Boolean(question.timeLimitSeconds) && (
                 <div className="flex items-center justify-between">
                   <span className={`text-sm ${colors.text.muted}`}>Tempo limite</span>
                   <span className={`font-medium ${colors.text.primary}`}>
@@ -469,7 +474,7 @@ export default function DettaglioDomandaPage() {
                       if (!categorized.has(key)) {
                         categorized.set(key, { category: qt.tag.category, tags: [] });
                       }
-                      categorized.get(key)!.tags.push(qt.tag);
+                      categorized.get(key)?.tags.push(qt.tag);
                     } else {
                       uncategorized.push(qt.tag);
                     }
@@ -478,12 +483,12 @@ export default function DettaglioDomandaPage() {
                   return (
                     <>
                       {Array.from(categorized.values()).map(({ category, tags }) => (
-                        <div key={category!.id}>
+                        <div key={category.id}>
                           <p 
                             className="text-xs font-medium mb-1.5"
-                            style={{ color: category!.color }}
+                            style={{ color: category.color }}
                           >
-                            {category!.name}
+                            {category.name}
                           </p>
                           <div className="flex flex-wrap gap-1.5">
                             {tags.map((tag) => (
@@ -491,8 +496,8 @@ export default function DettaglioDomandaPage() {
                                 key={tag.id}
                                 className="px-2.5 py-1 rounded-full text-xs font-medium bg-opacity-30 dark:bg-opacity-40"
                                 style={{
-                                  backgroundColor: `${tag.color || category!.color}33`,
-                                  color: tag.color || category!.color,
+                                  backgroundColor: `${tag.color ?? category.color}33`,
+                                  color: tag.color ?? category.color,
                                   textShadow: 'none',
                                 }}
                               >
@@ -591,7 +596,7 @@ export default function DettaglioDomandaPage() {
                   </p>
                 </div>
               </div>
-              {question.year && (
+              {Boolean(question.year) && (
                 <div className="flex items-start gap-2">
                   <FileText className={`w-4 h-4 mt-0.5 ${colors.text.muted}`} />
                   <div>

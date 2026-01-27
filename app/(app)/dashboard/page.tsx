@@ -21,6 +21,8 @@ export default function DashboardPage() {
           await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
         } catch (e) {
           console.error('Logout error:', e);
+        } finally {
+          globalThis.location.href = '/auth/login';
         }
         window.location.href = '/auth/login';
       };

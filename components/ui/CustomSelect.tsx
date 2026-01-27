@@ -71,7 +71,7 @@ export default function CustomSelect({
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
       const dropdownHeight = 280; // Approximate max height of dropdown (max-h-60 = 240px + search ~40px)
-      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceBelow = globalThis.innerHeight - rect.bottom;
       const spaceAbove = rect.top;
       
       // Open upward if not enough space below but enough above
@@ -91,11 +91,11 @@ export default function CustomSelect({
     if (isOpen) {
       updateDropdownPosition();
       // Also update on scroll/resize
-      window.addEventListener('scroll', updateDropdownPosition, true);
-      window.addEventListener('resize', updateDropdownPosition);
+      globalThis.addEventListener('scroll', updateDropdownPosition, true);
+      globalThis.addEventListener('resize', updateDropdownPosition);
       return () => {
-        window.removeEventListener('scroll', updateDropdownPosition, true);
-        window.removeEventListener('resize', updateDropdownPosition);
+        globalThis.removeEventListener('scroll', updateDropdownPosition, true);
+        globalThis.removeEventListener('resize', updateDropdownPosition);
       };
     }
   }, [isOpen, updateDropdownPosition]);

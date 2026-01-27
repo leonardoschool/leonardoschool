@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
+import { stripHtml } from '@/lib/utils/sanitizeHtml';
 import { PageLoader } from '@/components/ui/loaders';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { isStaff } from '@/lib/permissions';
@@ -21,13 +22,12 @@ import {
   ChevronDown,
   ChevronUp,
   BookOpen,
-  Target,
   ShieldX,
 } from 'lucide-react';
 
 type TabType = 'overview' | 'questions' | 'subjects' | 'students';
 
-export default function SimulationStatsPage({ params }: { params: Promise<{ id: string }> }) {
+export default function SimulationStatsPage({ params }: { readonly params: Promise<{ readonly id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const { user } = useAuth();
@@ -209,9 +209,18 @@ export default function SimulationStatsPage({ params }: { params: Promise<{ id: 
             <div className="p-12 text-center">
               <PageLoader />
             </div>
-          ) : questionAnalysis && questionAnalysis.questionAnalysis.length > 0 ? (
-            <div className="divide-y divide-gray-200 dark:divide-gray-700">
-              {questionAnalysis.questionAnalysis.map((q) => {
+          ) : (() => {
+              if (!questionAnalysis || questionAnalysis.questionAnalysis.length === 0) {
+                return (
+                  <div className="p-12 text-center">
+                    <p className={colors.text.muted}>Nessuna analisi disponibile</p>
+                  </div>
+                );
+              }
+              
+              return (
+                <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {questionAnalysis.questionAnalysis.map((q) => {
                 const isExpanded = expandedQuestions.has(q.questionId);
                 const isProblematic = q.correctRate < 40;
 
@@ -252,19 +261,17 @@ export default function SimulationStatsPage({ params }: { params: Promise<{ id: 
                             )}
                           </div>
                           <p className={`text-sm ${colors.text.primary} line-clamp-2`}>
-                            {q.text.replace(/<[^>]*>/g, '')}
+                            {stripHtml(q.text)}
                           </p>
                         </div>
                         <div className="flex-shrink-0 flex items-center gap-4">
                           <div className="text-right">
                             <p
-                              className={`text-lg font-bold ${
-                                q.correctRate >= 70
-                                  ? 'text-green-600 dark:text-green-400'
-                                  : q.correctRate >= 40
-                                    ? 'text-yellow-600 dark:text-yellow-400'
-                                    : 'text-red-600 dark:text-red-400'
-                              }`}
+                              className={`text-lg font-bold ${(() => {
+                                if (q.correctRate >= 70) return 'text-green-600 dark:text-green-400';
+                                if (q.correctRate >= 40) return 'text-yellow-600 dark:text-yellow-400';
+                                return 'text-red-600 dark:text-red-400';
+                              })()}`}
                             >
                               {q.correctRate.toFixed(0)}%
                             </p>
@@ -375,12 +382,8 @@ export default function SimulationStatsPage({ params }: { params: Promise<{ id: 
                 );
               })}
             </div>
-          ) : (
-            <div className="p-12 text-center">
-              <Target className={`w-12 h-12 mx-auto mb-4 ${colors.text.muted} opacity-50`} />
-              <p className={colors.text.muted}>Nessun dato disponibile</p>
-            </div>
-          )}
+              );
+            })()}
         </div>
       )}
 
@@ -412,13 +415,11 @@ export default function SimulationStatsPage({ params }: { params: Promise<{ id: 
                       </span>
                     </div>
                     <div
-                      className={`text-2xl font-bold ${
-                        subject.correctRate >= 70
-                          ? 'text-green-600 dark:text-green-400'
-                          : subject.correctRate >= 50
-                            ? 'text-yellow-600 dark:text-yellow-400'
-                            : 'text-red-600 dark:text-red-400'
-                      }`}
+                      className={`text-2xl font-bold ${(() => {
+                        if (subject.correctRate >= 70) return 'text-green-600 dark:text-green-400';
+                        if (subject.correctRate >= 50) return 'text-yellow-600 dark:text-yellow-400';
+                        return 'text-red-600 dark:text-red-400';
+                      })()}`}
                     >
                       {subject.correctRate.toFixed(0)}%
                     </div>
@@ -440,17 +441,15 @@ export default function SimulationStatsPage({ params }: { params: Promise<{ id: 
                         <tr key={q.questionId}>
                           <td className={`py-3 ${colors.text.secondary}`}>{q.order}</td>
                           <td className={`py-3 ${colors.text.primary} max-w-md`}>
-                            <p className="line-clamp-1">{q.text.replace(/<[^>]*>/g, '')}</p>
+                            <p className="line-clamp-1">{stripHtml(q.text)}</p>
                           </td>
                           <td className="py-3 text-center">
                             <span
-                              className={`font-medium ${
-                                q.correctRate >= 70
-                                  ? 'text-green-600'
-                                  : q.correctRate >= 40
-                                    ? 'text-yellow-600'
-                                    : 'text-red-600'
-                              }`}
+                              className={`font-medium ${(() => {
+                                if (q.correctRate >= 70) return 'text-green-600';
+                                if (q.correctRate >= 40) return 'text-yellow-600';
+                                return 'text-red-600';
+                              })()}`}
                             >
                               {q.correctRate.toFixed(0)}%
                             </span>
@@ -535,29 +534,30 @@ export default function SimulationStatsPage({ params }: { params: Promise<{ id: 
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        {result.completedAt !== null ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
-                            <CheckCircle className="w-3 h-3" />
-                            Completato
-                          </span>
-                        ) : (
+                        {!result.completedAt ? (
                           <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
                             <Clock className="w-3 h-3" />
                             In corso
                           </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                            <CheckCircle className="w-3 h-3" />
+                            Completato
+                          </span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        {result.completedAt !== null ? (
+                        {!result.completedAt ? (
+                          <span className={colors.text.muted}>-</span>
+                        ) : (
                           <div>
                             <p
-                              className={`font-bold text-lg ${
-                                (result.percentageScore ?? 0) >= 70
-                                  ? 'text-green-600 dark:text-green-400'
-                                  : (result.percentageScore ?? 0) >= 50
-                                    ? 'text-yellow-600 dark:text-yellow-400'
-                                    : 'text-red-600 dark:text-red-400'
-                              }`}
+                              className={`font-bold text-lg ${(() => {
+                                const score = result.percentageScore ?? 0;
+                                if (score >= 70) return 'text-green-600 dark:text-green-400';
+                                if (score >= 50) return 'text-yellow-600 dark:text-yellow-400';
+                                return 'text-red-600 dark:text-red-400';
+                              })()}`}
                             >
                               {result.percentageScore?.toFixed(1)}%
                             </p>
@@ -565,8 +565,6 @@ export default function SimulationStatsPage({ params }: { params: Promise<{ id: 
                               {result.totalScore?.toFixed(1)} punti
                             </p>
                           </div>
-                        ) : (
-                          <span className={colors.text.muted}>-</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-center">

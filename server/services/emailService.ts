@@ -67,7 +67,7 @@ interface ProfileCompletedNotificationData {
 function createTransporter() {
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || '465'),
+    port: Number.parseInt(process.env.SMTP_PORT || '465', 10),
     secure: process.env.SMTP_SECURE === 'true',
     auth: {
       user: process.env.SMTP_USER,
@@ -82,6 +82,13 @@ function createTransporter() {
 
 async function sendEmail(options: EmailOptions): Promise<{ success: boolean; error?: string }> {
   try {
+    // Skip email sending if SMTP is not configured (development)
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER) {
+      console.log('[Email] SMTP not configured, skipping email to:', options.to);
+      console.log('[Email] Subject:', options.subject);
+      return { success: true }; // Return success to not break flows
+    }
+
     const transporter = createTransporter();
 
     await transporter.sendMail({

@@ -123,7 +123,7 @@ export function useVirtualRoomSSE({
     }
 
     // Build URL with query params
-    const url = new URL(`/api/virtual-room/${sessionId}/stream`, window.location.origin);
+    const url = new URL(`/api/virtual-room/${sessionId}/stream`, globalThis.location.origin);
     url.searchParams.set('token', token);
     if (participantId) {
       url.searchParams.set('participantId', participantId);

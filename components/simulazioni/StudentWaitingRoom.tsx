@@ -7,6 +7,7 @@ import Button from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { Spinner } from '@/components/ui/loaders';
+import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import { formatDistanceToNow } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { 
@@ -28,10 +29,10 @@ import { useRouter } from 'next/navigation';
 
 // Student Chat Modal Component
 interface StudentChatModalProps {
-  participantId: string;
-  onClose: () => void;
-  onSendMessage: (message: string) => void;
-  isSending: boolean;
+  readonly participantId: string;
+  readonly onClose: () => void;
+  readonly onSendMessage: (message: string) => void;
+  readonly isSending: boolean;
 }
 
 function StudentChatModal({ participantId, onClose, onSendMessage, isSending }: StudentChatModalProps) {
@@ -97,17 +98,26 @@ function StudentChatModal({ participantId, onClose, onSendMessage, isSending }: 
         
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[200px] max-h-[400px] bg-gray-50 dark:bg-gray-800/50">
-          {messagesQuery.isLoading ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : messagesQuery.data?.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center py-8">
-              <MessageSquare className={`w-10 h-10 ${colors.text.muted} mb-2`} />
-              <p className={`${colors.text.muted} text-sm`}>Nessun messaggio</p>
-              <p className={`${colors.text.muted} text-xs`}>Scrivi un messaggio per contattare l&apos;esaminatore</p>
-            </div>
-          ) : (
+          {(() => {
+            if (messagesQuery.isLoading) {
+              return (
+                <div className="flex items-center justify-center h-full">
+                  <div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              );
+            }
+            
+            if ((messagesQuery.data?.length ?? 0) === 0) {
+              return (
+                <div className="flex flex-col items-center justify-center h-full text-center py-8">
+                  <MessageSquare className={`w-10 h-10 ${colors.text.muted} mb-2`} />
+                  <p className={`${colors.text.muted} text-sm`}>Nessun messaggio</p>
+                  <p className={`${colors.text.muted} text-xs`}>Scrivi un messaggio per contattare l&apos;esaminatore</p>
+                </div>
+              );
+            }
+            
+            return (
             <>
               {messagesQuery.data?.map((msg) => (
                 <div 
@@ -130,7 +140,8 @@ function StudentChatModal({ participantId, onClose, onSendMessage, isSending }: 
               ))}
               <div ref={messagesEndRef} />
             </>
-          )}
+            );
+          })()}
         </div>
         
         {/* Input Area */}
@@ -169,11 +180,11 @@ function StudentChatModal({ participantId, onClose, onSendMessage, isSending }: 
 }
 
 interface StudentWaitingRoomProps {
-  assignmentId: string;
-  simulationTitle: string;
-  durationMinutes: number;
-  onSessionStart: (actualStartAt: Date, participantId: string) => void;
-  instructions?: string | null; // Optional instructions to show in waiting room
+  readonly assignmentId: string;
+  readonly simulationTitle: string;
+  readonly durationMinutes: number;
+  readonly onSessionStart: (actualStartAt: Date, participantId: string) => void;
+  readonly instructions?: string | null; // Optional instructions to show in waiting room
 }
 
 export default function StudentWaitingRoom({ 
@@ -263,8 +274,8 @@ export default function StudentWaitingRoom({
 
       // Update connected count
       if ('connectedCount' in data && 'totalParticipants' in data) {
-        setConnectedCount(data.connectedCount as number);
-        setTotalParticipants(data.totalParticipants as number);
+        setConnectedCount(data.connectedCount);
+        setTotalParticipants(data.totalParticipants);
       }
 
       if (data.unreadMessages && data.unreadMessages.length > 0) {
@@ -287,7 +298,7 @@ export default function StudentWaitingRoom({
             // Fallback: Generate a pleasant notification sound using Web Audio API
             try {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+              const AudioContextClass = globalThis.AudioContext || (globalThis as any).webkitAudioContext;
               const audioContext = new AudioContextClass();
               
               // First beep (higher pitch)
@@ -313,8 +324,9 @@ export default function StudentWaitingRoom({
               gainNode2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
               oscillator2.start(audioContext.currentTime + 0.1);
               oscillator2.stop(audioContext.currentTime + 0.2);
-            } catch (_error) {
-              // Silently fail if Web Audio API is not supported
+            } catch {
+               
+              console.debug('Unable to play notification sound');
             }
           });
         }
@@ -372,10 +384,10 @@ export default function StudentWaitingRoom({
       );
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    globalThis.addEventListener('beforeunload', handleBeforeUnload);
     
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      globalThis.removeEventListener('beforeunload', handleBeforeUnload);
       // Also disconnect on component unmount (navigation away)
       disconnect.mutate({ participantId });
     };
@@ -422,10 +434,7 @@ export default function StudentWaitingRoom({
               {kickedReason ? 'Sei stato espulso' : 'Sessione terminata'}
             </h2>
             <p className={`${colors.text.secondary} mb-8`}>
-              {kickedReason 
-                ? kickedReason 
-                : 'La sessione è stata terminata dall\'esaminatore. Puoi chiudere questa finestra.'
-              }
+              {kickedReason || 'La sessione è stata terminata dall\'esaminatore. Puoi chiudere questa finestra.'}
             </p>
 
             {/* Action button */}
@@ -457,7 +466,7 @@ export default function StudentWaitingRoom({
             </div>
 
             <h2 className={`text-2xl font-bold ${colors.text.primary} mb-3`}>
-              Stanza Virtuale Non Ancora Attiva
+              Stanza virtuale non ancora attiva
             </h2>
             <p className={`${colors.text.secondary} mb-8`}>
               La sessione per <span className={`font-semibold ${colors.text.primary}`}>{simulationTitle}</span> non è ancora stata avviata.
@@ -485,15 +494,15 @@ export default function StudentWaitingRoom({
               </h3>
               <ul className={`text-sm ${colors.text.secondary} space-y-2`}>
                 <li className="flex items-start gap-2">
-                  <span className="w-1.5 h-1.5 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
+                  <span className="w-1.5 h-1.5 bg-purple-500 rounded-full mt-2 flex-shrink-0" />{' '}
                   Attendi che l&apos;admin attivi la stanza virtuale
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="w-1.5 h-1.5 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
+                  <span className="w-1.5 h-1.5 bg-purple-500 rounded-full mt-2 flex-shrink-0" />{' '}
                   Questa pagina si aggiornerà automaticamente
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="w-1.5 h-1.5 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
+                  <span className="w-1.5 h-1.5 bg-purple-500 rounded-full mt-2 flex-shrink-0" />{' '}
                   Non chiudere questa finestra
                 </li>
               </ul>
@@ -624,7 +633,7 @@ export default function StudentWaitingRoom({
                   </div>
                   <div 
                     className={`text-sm ${colors.text.secondary} ml-8 prose prose-sm dark:prose-invert max-w-none`}
-                    dangerouslySetInnerHTML={{ __html: instructions }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(instructions) }}
                   />
                 </div>
               </div>
@@ -641,19 +650,19 @@ export default function StudentWaitingRoom({
                     <h3 className={`text-sm font-semibold ${colors.text.primary} mb-2`}>Suggerimenti</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
                       <p className={`text-sm ${colors.text.secondary} flex items-center gap-2`}>
-                        <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full flex-shrink-0" />
+                        <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full flex-shrink-0" />{' '}
                         Connessione stabile
                       </p>
                       <p className={`text-sm ${colors.text.secondary} flex items-center gap-2`}>
-                        <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full flex-shrink-0" />
+                        <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full flex-shrink-0" />{' '}
                         Non chiudere la finestra
                       </p>
                       <p className={`text-sm ${colors.text.secondary} flex items-center gap-2`}>
-                        <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full flex-shrink-0" />
+                        <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full flex-shrink-0" />{' '}
                         Avvio automatico
                       </p>
                       <p className={`text-sm ${colors.text.secondary} flex items-center gap-2`}>
-                        <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full flex-shrink-0" />
+                        <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full flex-shrink-0" />{' '}
                         Timer sincronizzato
                       </p>
                     </div>

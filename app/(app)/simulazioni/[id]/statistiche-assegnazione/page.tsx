@@ -16,12 +16,16 @@ import {
   Award,
 } from 'lucide-react';
 
+interface AssignmentStatsPageProps {
+  readonly params: Promise<{ id: string }>;
+}
+
 /**
  * Assignment Statistics Page
  * Shows detailed statistics for a specific assignment (group or individual)
  * Query params: assignmentId, groupId
  */
-export default function AssignmentStatsPage({ params }: { params: Promise<{ id: string }> }) {
+export default function AssignmentStatsPage({ params }: AssignmentStatsPageProps) {
   const { id } = use(params);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -101,13 +105,26 @@ export default function AssignmentStatsPage({ params }: { params: Promise<{ id: 
               <BarChart3 className="w-4 h-4" />
               Statistiche Template
             </Link>
-            <Link
-              href={`/simulazioni/${id}/classifica?${assignmentId ? `assignmentId=${assignmentId}` : groupId ? `groupId=${groupId}` : ''}`}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-br from-yellow-400 to-amber-600 text-white font-medium hover:opacity-90 shadow-lg`}
-            >
-              <Award className="w-4 h-4" />
-              Classifica
-            </Link>
+            {(() => {
+              // Build query param based on assignmentId or groupId
+              let queryParam = '';
+              if (assignmentId) {
+                queryParam = `assignmentId=${assignmentId}`;
+              } else if (groupId) {
+                queryParam = `groupId=${groupId}`;
+              }
+              const queryString = queryParam ? `?${queryParam}` : '';
+              const classificaHref = `/simulazioni/${id}/classifica${queryString}`;
+              return (
+                <Link
+                  href={classificaHref}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-br from-yellow-400 to-amber-600 text-white font-medium hover:opacity-90 shadow-lg`}
+                >
+                  <Award className="w-4 h-4" />
+                  Classifica
+                </Link>
+              );
+            })()}
           </div>
         </div>
       </div>

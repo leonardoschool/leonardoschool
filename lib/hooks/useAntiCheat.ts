@@ -259,8 +259,8 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
     // DevTools detection (basic)
     const detectDevTools = () => {
       const threshold = 160;
-      const widthThreshold = window.outerWidth - window.innerWidth > threshold;
-      const heightThreshold = window.outerHeight - window.innerHeight > threshold;
+      const widthThreshold = globalThis.outerWidth - globalThis.innerWidth > threshold;
+      const heightThreshold = globalThis.outerHeight - globalThis.innerHeight > threshold;
       
       if (widthThreshold || heightThreshold) {
         logEvent('devtools_open', 'DevTools may be open');
@@ -269,15 +269,15 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
 
     // Add listeners
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('blur', handleBlur);
-    window.addEventListener('focus', handleFocus);
+    globalThis.addEventListener('blur', handleBlur);
+    globalThis.addEventListener('focus', handleFocus);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
     document.addEventListener('copy', handleCopy);
     document.addEventListener('paste', handlePaste);
     document.addEventListener('contextmenu', handleContextMenu);
     document.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    globalThis.addEventListener('beforeunload', handleBeforeUnload);
     
     // Check devtools periodically
     const devToolsInterval = setInterval(detectDevTools, 1000);
@@ -285,15 +285,15 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
     // Cleanup
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('blur', handleBlur);
-      window.removeEventListener('focus', handleFocus);
+      globalThis.removeEventListener('blur', handleBlur);
+      globalThis.removeEventListener('focus', handleFocus);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
       document.removeEventListener('copy', handleCopy);
       document.removeEventListener('paste', handlePaste);
       document.removeEventListener('contextmenu', handleContextMenu);
       document.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      globalThis.removeEventListener('beforeunload', handleBeforeUnload);
       clearInterval(devToolsInterval);
     };
   }, [mergedConfig, logEvent, requestFullscreen]);

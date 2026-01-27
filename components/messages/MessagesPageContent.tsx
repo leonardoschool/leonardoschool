@@ -157,6 +157,21 @@ export default function MessagesPageContent({ basePath: _basePath, userRole }: M
     },
     onError: handleMutationError,
   });
+
+  // Mark conversation as read mutation
+  const markAsReadMutation = trpc.messages.markAsRead.useMutation({
+    onSuccess: () => {
+      refetchConversations();
+    },
+  });
+
+  // Mark conversation as read when selecting it
+  useEffect(() => {
+    if (selectedConversationId && messagesData?.messages && messagesData.messages.length > 0) {
+      markAsReadMutation.mutate({ conversationId: selectedConversationId });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConversationId, messagesData?.messages?.length]);
   
   // Scroll to bottom when new messages arrive
   useEffect(() => {

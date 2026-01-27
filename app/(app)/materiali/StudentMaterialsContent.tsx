@@ -25,9 +25,9 @@ const getSubjectBgStyle = (hexColor: string | null | undefined, isDark: boolean 
   if (!hexColor) return {}; // No inline style, use Tailwind classes
   // Rimuovi # se presente
   const hex = hexColor.replace('#', '');
-  const r = parseInt(hex.substring(0, 2), 16);
-  const g = parseInt(hex.substring(2, 4), 16);
-  const b = parseInt(hex.substring(4, 6), 16);
+  const r = Number.parseInt(hex.substring(0, 2), 16);
+  const g = Number.parseInt(hex.substring(2, 4), 16);
+  const b = Number.parseInt(hex.substring(4, 6), 16);
   // Sfondo con opacità diversa per light/dark mode
   const opacity = isDark ? 0.2 : 0.15;
   return { backgroundColor: `rgba(${r}, ${g}, ${b}, ${opacity})` };
@@ -39,7 +39,24 @@ const getSubjectTextStyle = (hexColor: string | null | undefined) => {
   return { color: hexColor };
 };
 
+// Helper per classi Tailwind di fallback quando non c'è un colore custom
+const getNoColorFallbackClasses = (subjectColor: string | null | undefined) => {
+  return subjectColor ? '' : 'text-gray-600 dark:text-gray-300';
+};
+
+const getNoColorButtonClasses = (subjectColor: string | null | undefined) => {
+  return subjectColor
+    ? 'hover:opacity-80'
+    : 'bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700';
+};
+
+const getNoColorTextClasses = (subjectColor: string | null | undefined) => {
+  return subjectColor ? '' : 'text-gray-800 dark:text-gray-100';
+};
+
 // Interfacce per la gerarchia (aggiornate per nuovo schema)
+type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD';
+
 interface MaterialData {
   id: string;
   title: string;
@@ -61,7 +78,7 @@ interface MaterialData {
   subTopic: {
     id: string;
     name: string;
-    difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+    difficulty: DifficultyLevel;
   } | null;
   subject: {
     id: string;
@@ -85,7 +102,7 @@ interface HierarchyNode {
       subTopic: {
         id: string;
         name: string;
-        difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+        difficulty: DifficultyLevel;
       };
       materials: MaterialData[];
     }[];
@@ -96,6 +113,80 @@ interface HierarchyNode {
   directMaterials: MaterialData[];
 }
 
+// Helper per verificare se il materiale corrisponde alla ricerca (estratto per ridurre nesting)
+function matchesSearch(m: MaterialData, searchLower: string, additionalTexts: string[] = []): boolean {
+  const textToSearch = [
+    m.title.toLowerCase(),
+    m.description?.toLowerCase() ?? '',
+    ...additionalTexts.map(t => t.toLowerCase())
+  ].join(' ');
+  return textToSearch.includes(searchLower);
+}
+
+// Helper per filtrare materiali in un subTopic
+function filterSubTopicMaterials(
+  materials: MaterialData[],
+  searchLower: string,
+  subTopicName: string,
+  topicName: string
+): MaterialData[] {
+  return materials.filter((m) =>
+    matchesSearch(m, searchLower, [subTopicName, topicName])
+  );
+}
+
+// Helper per filtrare i subTopics
+function filterSubTopics(
+  subTopics: HierarchyNode['topics'][0]['subTopics'],
+  topicName: string,
+  searchLower: string,
+  difficultyFilter: string
+): HierarchyNode['topics'][0]['subTopics'] {
+  return subTopics
+    .filter((stNode) => !difficultyFilter || stNode.subTopic.difficulty === difficultyFilter)
+    .map((stNode) => ({
+      ...stNode,
+      materials: filterSubTopicMaterials(stNode.materials, searchLower, stNode.subTopic.name, topicName),
+    }))
+    .filter((stNode) => stNode.materials.length > 0);
+}
+
+// Helper per filtrare i topics
+function filterTopics(
+  topics: HierarchyNode['topics'],
+  searchLower: string,
+  difficultyFilter: string
+): HierarchyNode['topics'] {
+  return topics
+    .map((topicNode) => ({
+      ...topicNode,
+      directMaterials: topicNode.directMaterials.filter((m) =>
+        matchesSearch(m, searchLower, [topicNode.topic.name])
+      ),
+      subTopics: filterSubTopics(topicNode.subTopics, topicNode.topic.name, searchLower, difficultyFilter),
+    }))
+    .filter((topicNode) => topicNode.subTopics.length > 0 || topicNode.directMaterials.length > 0);
+}
+
+// Helper per filtrare la gerarchia completa
+function filterHierarchy(
+  hierarchy: HierarchyNode[],
+  searchQuery: string,
+  difficultyFilter: string
+): HierarchyNode[] {
+  if (!searchQuery && !difficultyFilter) return hierarchy;
+
+  const searchLower = searchQuery.toLowerCase();
+
+  return hierarchy
+    .map((subjectNode) => ({
+      ...subjectNode,
+      directMaterials: subjectNode.directMaterials.filter((m) => matchesSearch(m, searchLower)),
+      topics: filterTopics(subjectNode.topics, searchLower, difficultyFilter),
+    }))
+    .filter((subNode) => subNode.topics.length > 0 || subNode.directMaterials.length > 0);
+}
+
 export default function StudentMaterialsContent() {
   // Stati UI
   const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
@@ -104,9 +195,13 @@ export default function StudentMaterialsContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
-  // Query per materiali studente
-  const { data: materials, isLoading: loadingMaterials } = trpc.materials.getMyMaterials.useQuery();
+  // Query per categorie (cartelle) e materiali studente
+  const { data: categories, isLoading: loadingCategories } = trpc.materials.getCategories.useQuery();
+  const { data: materials, isLoading: loadingMaterials } = trpc.materials.getMyMaterials.useQuery(
+    selectedCategoryId ? { categoryId: selectedCategoryId } : undefined
+  );
 
   // Costruisci gerarchia dai materiali (aggiornata per nuovo schema)
   const hierarchy = useMemo<HierarchyNode[]>(() => {
@@ -134,7 +229,9 @@ export default function StudentMaterialsContent() {
           directMaterials: [],
         });
       }
-      const subjectNode = subjectMap.get(subjectId)!;
+      // We know it exists because we just set it above
+      const subjectNode = subjectMap.get(subjectId);
+      if (!subjectNode) return;
 
       // Se non c'è topic, aggiungi ai materiali diretti del subject
       if (!mat.topic) {
@@ -143,7 +240,8 @@ export default function StudentMaterialsContent() {
       }
 
       // Find or create topic
-      let topicNode = subjectNode.topics.find((t) => t.topic.id === mat.topic!.id);
+      const topicId = mat.topic.id;
+      let topicNode = subjectNode.topics.find((t) => t.topic.id === topicId);
       if (!topicNode) {
         topicNode = {
           topic: {
@@ -163,8 +261,9 @@ export default function StudentMaterialsContent() {
       }
 
       // Find or create subTopic
+      const subTopicId = mat.subTopic.id;
       let subTopicNode = topicNode.subTopics.find(
-        (st) => st.subTopic.id === mat.subTopic!.id
+        (st) => st.subTopic.id === subTopicId
       );
       if (!subTopicNode) {
         subTopicNode = {
@@ -185,51 +284,9 @@ export default function StudentMaterialsContent() {
     return Array.from(subjectMap.values());
   }, [materials]);
 
-  // Filtra materiali
+  // Filtra materiali usando helper estratti
   const filteredHierarchy = useMemo<HierarchyNode[]>(() => {
-    if (!searchQuery && !difficultyFilter) return hierarchy;
-
-    const searchLower = searchQuery.toLowerCase();
-
-    return hierarchy
-      .map((subjectNode) => ({
-        ...subjectNode,
-        directMaterials: subjectNode.directMaterials.filter(
-          (m) =>
-            m.title.toLowerCase().includes(searchLower) ||
-            m.description?.toLowerCase().includes(searchLower)
-        ),
-        topics: subjectNode.topics
-          .map((topicNode) => ({
-            ...topicNode,
-            directMaterials: topicNode.directMaterials.filter(
-              (m) =>
-                m.title.toLowerCase().includes(searchLower) ||
-                m.description?.toLowerCase().includes(searchLower) ||
-                topicNode.topic.name.toLowerCase().includes(searchLower)
-            ),
-            subTopics: topicNode.subTopics
-              .filter((stNode) => {
-                if (difficultyFilter && stNode.subTopic.difficulty !== difficultyFilter) {
-                  return false;
-                }
-                return true;
-              })
-              .map((stNode) => ({
-                ...stNode,
-                materials: stNode.materials.filter(
-                  (m) =>
-                    m.title.toLowerCase().includes(searchLower) ||
-                    m.description?.toLowerCase().includes(searchLower) ||
-                    stNode.subTopic.name.toLowerCase().includes(searchLower) ||
-                    topicNode.topic.name.toLowerCase().includes(searchLower)
-                ),
-              }))
-              .filter((stNode) => stNode.materials.length > 0),
-          }))
-          .filter((topicNode) => topicNode.subTopics.length > 0 || topicNode.directMaterials.length > 0),
-      }))
-      .filter((subNode) => subNode.topics.length > 0 || subNode.directMaterials.length > 0);
+    return filterHierarchy(hierarchy, searchQuery, difficultyFilter);
   }, [hierarchy, searchQuery, difficultyFilter]);
 
   // Toggle functions
@@ -274,7 +331,7 @@ export default function StudentMaterialsContent() {
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   // Helper per badge difficolta
@@ -298,8 +355,9 @@ export default function StudentMaterialsContent() {
 
   // Conta totale materiali
   const totalMaterials = materials?.length || 0;
+  const totalCategories = categories?.length || 0;
 
-  if (loadingMaterials) {
+  if (loadingMaterials || loadingCategories) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Spinner size="lg" />
@@ -314,7 +372,8 @@ export default function StudentMaterialsContent() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">I Miei Materiali</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            {totalMaterials} materiali disponibili
+            {totalCategories > 0 && `${totalCategories} ${totalCategories === 1 ? 'cartella' : 'cartelle'} • `}
+            {totalMaterials} {totalMaterials === 1 ? 'materiale' : 'materiali'}
           </p>
         </div>
 
@@ -331,6 +390,72 @@ export default function StudentMaterialsContent() {
           </button>
         </div>
       </div>
+
+      {/* Cartelle */}
+      {categories && categories.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+            <Folder className="w-5 h-5" />
+            Cartelle
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+            {categories.map((category) => {
+              const isSelected = selectedCategoryId === category.id;
+              const materialCount = category._count?.materials || 0;
+              return (
+                <button
+                  key={category.id}
+                  onClick={() => setSelectedCategoryId(isSelected ? null : category.id)}
+                  className={`p-4 rounded-lg border-2 text-left transition-all ${
+                    isSelected
+                      ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-500 bg-white dark:bg-gray-800'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    {isSelected ? (
+                      <FolderOpen className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                    ) : (
+                      <Folder className="w-6 h-6 text-gray-400" />
+                    )}
+                    <h3 className={`font-semibold ${
+                      isSelected
+                        ? 'text-indigo-600 dark:text-indigo-400'
+                        : 'text-gray-900 dark:text-white'
+                    }`}>
+                      {category.name}
+                    </h3>
+                  </div>
+                  {category.description && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-2 line-clamp-2">
+                      {category.description}
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-400">
+                    {materialCount} {materialCount === 1 ? 'materiale' : 'materiali'}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+          {selectedCategoryId && (
+            <div className="mb-4 p-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span className="text-sm text-indigo-900 dark:text-indigo-300">
+                  Filtrando per: <strong>{categories.find(c => c.id === selectedCategoryId)?.name}</strong>
+                </span>
+              </div>
+              <button
+                onClick={() => setSelectedCategoryId(null)}
+                className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Search & Filters */}
       <div className="space-y-3">
@@ -366,7 +491,7 @@ export default function StudentMaterialsContent() {
                     : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
                 }`}
               >
-                {diff === '' ? 'Tutti' : diff === 'EASY' ? 'Facile' : diff === 'MEDIUM' ? 'Medio' : 'Difficile'}
+                {{ '': 'Tutti', 'EASY': 'Facile', 'MEDIUM': 'Medio', 'HARD': 'Difficile' }[diff] || diff}
               </button>
             ))}
           </div>
@@ -374,7 +499,7 @@ export default function StudentMaterialsContent() {
       </div>
 
       {/* Empty State */}
-      {filteredHierarchy.length === 0 && (
+      {filteredHierarchy.length === 0 && (!categories || categories.length === 0) && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
             <Book className="w-8 h-8 text-gray-400" />
@@ -386,6 +511,21 @@ export default function StudentMaterialsContent() {
             {searchQuery || difficultyFilter
               ? 'Prova a modificare i filtri di ricerca'
               : 'I materiali assegnati appariranno qui'}
+          </p>
+        </div>
+      )}
+
+      {/* Empty State when filtering by category */}
+      {selectedCategoryId && filteredHierarchy.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+            <FolderOpen className="w-8 h-8 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+            Cartella vuota
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400 max-w-md">
+            Questa cartella non contiene ancora materiali
           </p>
         </div>
       )}
@@ -413,15 +553,15 @@ export default function StudentMaterialsContent() {
               <button
                 onClick={() => toggleSubject(subjectNode.subject.id)}
                 style={subjectColor ? getSubjectBgStyle(subjectColor) : undefined}
-                className={`w-full flex items-center gap-3 p-4 transition-colors ${!subjectColor ? 'bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700' : 'hover:opacity-80'}`}
+                className={`w-full flex items-center gap-3 p-4 transition-colors ${getNoColorButtonClasses(subjectColor)}`}
               >
                 {isSubjectExpanded ? (
-                  <ChevronDown style={getSubjectTextStyle(subjectColor)} className={`w-5 h-5 ${!subjectColor ? 'text-gray-600 dark:text-gray-300' : ''}`} />
+                  <ChevronDown style={getSubjectTextStyle(subjectColor)} className={`w-5 h-5 ${getNoColorFallbackClasses(subjectColor)}`} />
                 ) : (
-                  <ChevronRight style={getSubjectTextStyle(subjectColor)} className={`w-5 h-5 ${!subjectColor ? 'text-gray-600 dark:text-gray-300' : ''}`} />
+                  <ChevronRight style={getSubjectTextStyle(subjectColor)} className={`w-5 h-5 ${getNoColorFallbackClasses(subjectColor)}`} />
                 )}
-                <Book style={getSubjectTextStyle(subjectColor)} className={`w-5 h-5 ${!subjectColor ? 'text-gray-600 dark:text-gray-300' : ''}`} />
-                <span style={getSubjectTextStyle(subjectColor)} className={`font-semibold ${!subjectColor ? 'text-gray-800 dark:text-gray-100' : ''}`}>{subjectNode.subject.name}</span>
+                <Book style={getSubjectTextStyle(subjectColor)} className={`w-5 h-5 ${getNoColorFallbackClasses(subjectColor)}`} />
+                <span style={getSubjectTextStyle(subjectColor)} className={`font-semibold ${getNoColorTextClasses(subjectColor)}`}>{subjectNode.subject.name}</span>
                 <span className="ml-auto text-sm text-gray-600 dark:text-gray-400">
                   {totalMaterialsInSubject} materiali
                 </span>
@@ -491,51 +631,18 @@ export default function StudentMaterialsContent() {
                               </div>
                             )}
                             
-                            {topicNode.subTopics.map((stNode) => {
-                              const isStExpanded = expandedSubTopics.has(stNode.subTopic.id);
-
-                              return (
-                                <div key={stNode.subTopic.id}>
-                                  {/* SubTopic Header */}
-                                  <button
-                                    onClick={() => toggleSubTopic(stNode.subTopic.id)}
-                                    className="w-full flex items-center gap-3 p-3 pl-14 hover:bg-gray-100 dark:hover:bg-gray-700/30 transition-colors"
-                                  >
-                                    {isStExpanded ? (
-                                      <ChevronDown className="w-4 h-4 text-gray-400" />
-                                    ) : (
-                                      <ChevronRight className="w-4 h-4 text-gray-400" />
-                                    )}
-                                    {isStExpanded ? (
-                                      <FolderOpen className="w-4 h-4 text-gray-400" />
-                                    ) : (
-                                      <Folder className="w-4 h-4 text-gray-400" />
-                                    )}
-                                    <span className="text-gray-700 dark:text-gray-300">
-                                      {stNode.subTopic.name}
-                                    </span>
-                                    {getDifficultyBadge(stNode.subTopic.difficulty)}
-                                    <span className="ml-auto text-xs text-gray-400">
-                                      {stNode.materials.length} file
-                                    </span>
-                                  </button>
-
-                                  {/* Materials */}
-                                  {isStExpanded && (
-                                    <div className="pl-20 pr-4 pb-3 space-y-2">
-                                      {stNode.materials.map((material) => (
-                                        <MaterialCard
-                                          key={material.id}
-                                          material={material}
-                                          getFileIcon={getFileIcon}
-                                          formatFileSize={formatFileSize}
-                                        />
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
+                            {topicNode.subTopics.map((stNode) => (
+                              <SubTopicItem
+                                key={stNode.subTopic.id}
+                                stNode={stNode}
+                                isExpanded={expandedSubTopics.has(stNode.subTopic.id)}
+                                subTopicId={stNode.subTopic.id}
+                                toggleSubTopic={toggleSubTopic}
+                                getFileIcon={getFileIcon}
+                                formatFileSize={formatFileSize}
+                                getDifficultyBadge={getDifficultyBadge}
+                              />
+                            ))}
                           </div>
                         )}
                       </div>
@@ -551,16 +658,90 @@ export default function StudentMaterialsContent() {
   );
 }
 
+// Componente SubTopic Item (estratto per ridurre nesting)
+interface SubTopicItemProps {
+  readonly stNode: {
+    subTopic: {
+      id: string;
+      name: string;
+      difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+    };
+    materials: MaterialData[];
+  };
+  readonly isExpanded: boolean;
+  readonly subTopicId: string;
+  readonly toggleSubTopic: (id: string) => void;
+  readonly getFileIcon: (fileType: string) => JSX.Element;
+  readonly formatFileSize: (bytes: number) => string;
+  readonly getDifficultyBadge: (difficulty: DifficultyLevel) => JSX.Element;
+}
+
+function SubTopicItem({
+  stNode,
+  isExpanded,
+  subTopicId,
+  toggleSubTopic,
+  getFileIcon,
+  formatFileSize,
+  getDifficultyBadge,
+}: SubTopicItemProps) {
+  const handleToggle = () => toggleSubTopic(subTopicId);
+
+  return (
+    <div>
+      {/* SubTopic Header */}
+      <button
+        onClick={handleToggle}
+        className="w-full flex items-center gap-3 p-3 pl-14 hover:bg-gray-100 dark:hover:bg-gray-700/30 transition-colors"
+      >
+        {isExpanded ? (
+          <ChevronDown className="w-4 h-4 text-gray-400" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-gray-400" />
+        )}
+        {isExpanded ? (
+          <FolderOpen className="w-4 h-4 text-gray-400" />
+        ) : (
+          <Folder className="w-4 h-4 text-gray-400" />
+        )}
+        <span className="text-gray-700 dark:text-gray-300">
+          {stNode.subTopic.name}
+        </span>
+        {getDifficultyBadge(stNode.subTopic.difficulty)}
+        <span className="ml-auto text-xs text-gray-400">
+          {stNode.materials.length} file
+        </span>
+      </button>
+
+      {/* Materials */}
+      {isExpanded && (
+        <div className="pl-20 pr-4 pb-3 space-y-2">
+          {stNode.materials.map((material) => (
+            <MaterialCard
+              key={material.id}
+              material={material}
+              getFileIcon={getFileIcon}
+              formatFileSize={formatFileSize}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Componente card materiale
+interface MaterialCardProps {
+  readonly material: MaterialData;
+  readonly getFileIcon: (fileType: string) => JSX.Element;
+  readonly formatFileSize: (bytes: number) => string;
+}
+
 function MaterialCard({
   material,
   getFileIcon,
   formatFileSize,
-}: {
-  material: MaterialData;
-  getFileIcon: (fileType: string) => JSX.Element;
-  formatFileSize: (bytes: number) => string;
-}) {
+}: MaterialCardProps) {
   const handleOpen = () => {
     const url = material.fileUrl || material.externalUrl;
     if (url) {

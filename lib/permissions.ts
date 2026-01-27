@@ -7,6 +7,9 @@ import type { UserRole } from '@prisma/client';
 
 export type PermissionRole = 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
 
+/** Role input that can be a proper UserRole, string, or undefined */
+export type RoleInput = UserRole | string | undefined;
+
 /**
  * Page permissions mapping
  * Defines which roles can access each route
@@ -48,7 +51,7 @@ export const PAGE_PERMISSIONS: Record<string, PermissionRole[]> = {
 /**
  * Check if a role has access to a specific path
  */
-export function hasAccess(path: string, role: UserRole | string | undefined): boolean {
+export function hasAccess(path: string, role: RoleInput): boolean {
   if (!role) return false;
   
   // Find the matching permission entry
@@ -74,14 +77,14 @@ export function hasAccess(path: string, role: UserRole | string | undefined): bo
 /**
  * Get the default dashboard path for a role
  */
-export function getDefaultDashboard(_role: UserRole | string | undefined): string {
+export function getDefaultDashboard(_role: RoleInput): string {
   return '/dashboard';
 }
 
 /**
  * Get all accessible routes for a role
  */
-export function getAccessibleRoutes(role: UserRole | string | undefined): string[] {
+export function getAccessibleRoutes(role: RoleInput): string[] {
   if (!role) return [];
   
   return Object.entries(PAGE_PERMISSIONS)
@@ -92,21 +95,21 @@ export function getAccessibleRoutes(role: UserRole | string | undefined): string
 /**
  * Check if a role is staff (admin or collaborator)
  */
-export function isStaff(role: UserRole | string | undefined): boolean {
+export function isStaff(role: RoleInput): boolean {
   return role === 'ADMIN' || role === 'COLLABORATOR';
 }
 
 /**
  * Check if a role is admin
  */
-export function isAdmin(role: UserRole | string | undefined): boolean {
+export function isAdmin(role: RoleInput): boolean {
   return role === 'ADMIN';
 }
 
 /**
  * Check if a role is collaborator
  */
-export function isCollaborator(role: UserRole | string | undefined): boolean {
+export function isCollaborator(role: RoleInput): boolean {
   return role === 'COLLABORATOR';
 }
 

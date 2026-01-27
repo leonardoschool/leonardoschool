@@ -1,7 +1,7 @@
 // Server-Sent Events endpoint for Virtual Room real-time updates
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma/client';
-import { adminAuth } from '@/lib/firebase/admin';
+import { getAdminAuth } from '@/lib/firebase/admin';
 import { getSessionState } from '@/server/services/virtualRoomState';
 
 interface SSEConnection {
@@ -87,7 +87,7 @@ export async function GET(
   }
 
   try {
-    await adminAuth.verifyIdToken(token);
+    await getAdminAuth().verifyIdToken(token);
   } catch {
     return new Response('Invalid token', { status: 401 });
   }

@@ -18,116 +18,163 @@ import { notifySimulationCreated } from '@/server/services/simulationNotificatio
 import * as notificationService from '@/server/services/notificationService';
 import { notifications } from '@/lib/notifications';
 import { createLogger } from '@/lib/utils/logger';
+import { stripHtml } from '@/lib/utils/sanitizeHtml';
+import { secureShuffleArray } from '@/lib/utils';
 
 const log = createLogger('Simulations');
 
-// Helper function to create calendar events for simulation assignments
+// Type definitions for calendar event creation
+interface CalendarEventData {
+  title: string;
+  description: string | null;
+  type: 'SIMULATION';
+  startDate: Date;
+  endDate: Date;
+  isAllDay: boolean;
+  isPublic: boolean;
+  createdById: string;
+  invitations: Array<{
+    userId?: string;
+    groupId?: string;
+    status: 'PENDING' | 'ACCEPTED';
+  }>;
+}
+
+interface AssignmentForCalendar {
+  id: string;
+  studentId: string | null;
+  groupId: string | null;
+  startDate: Date | null;
+  endDate: Date | null;
+  createCalendarEvent?: boolean;
+}
+
+interface SimulationForCalendar {
+  title: string;
+  type: string;
+  isOfficial: boolean;
+  durationMinutes: number;
+}
+
+/**
+ * Build invitations for a calendar event based on assignment type
+ */
+async function buildInvitationsForAssignment(
+  assignment: AssignmentForCalendar,
+  simulation: SimulationForCalendar,
+  assignerId: string,
+  prisma: PrismaClient
+): Promise<CalendarEventData['invitations']> {
+  const invitations: CalendarEventData['invitations'] = [];
+
+  if (assignment.studentId) {
+    const student = await prisma.student.findUnique({
+      where: { id: assignment.studentId },
+      select: { userId: true },
+    });
+    if (student?.userId) {
+      invitations.push({ userId: student.userId, status: 'PENDING' as const });
+    }
+  } else if (assignment.groupId) {
+    invitations.push({ groupId: assignment.groupId, status: 'PENDING' as const });
+  }
+
+  // Add assigner if simulation is official
+  if (simulation.isOfficial && invitations.length > 0) {
+    invitations.push({ userId: assignerId, status: 'ACCEPTED' as const });
+  }
+
+  return invitations;
+}
+
+/**
+ * Build event description for multi-day events
+ */
+function buildEventDescription(startDate: Date, endDate: Date, isMultiDay: boolean): string | null {
+  if (!isMultiDay) {
+    return null;
+  }
+
+  const startDateFormatted = startDate.toLocaleDateString('it-IT', { 
+    day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' 
+  });
+  const endDateFormatted = endDate.toLocaleDateString('it-IT', { 
+    day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' 
+  });
+  return `Disponibile dal ${startDateFormatted} al ${endDateFormatted}`;
+}
+
+/**
+ * Process a single assignment and return the event data if applicable
+ */
+async function processAssignmentForCalendar(
+  assignment: AssignmentForCalendar,
+  simulation: SimulationForCalendar,
+  simulationId: string,
+  assignerId: string,
+  processedKeys: Set<string>,
+  prisma: PrismaClient
+): Promise<CalendarEventData | null> {
+  // Calculate dates
+  const startDate = assignment.startDate ?? new Date();
+  const endDate = assignment.endDate ?? new Date(startDate.getTime() + simulation.durationMinutes * 60 * 1000);
+  
+  // Build unique key to avoid duplicates
+  const eventKey = `${simulationId}-${startDate.getTime()}-${assignment.studentId ?? assignment.groupId}`;
+  if (processedKeys.has(eventKey)) {
+    return null;
+  }
+  processedKeys.add(eventKey);
+
+  // Check if multi-day event
+  const startDay = new Date(startDate).setHours(0, 0, 0, 0);
+  const endDay = new Date(endDate).setHours(0, 0, 0, 0);
+  const isMultiDay = startDay !== endDay;
+
+  // Build invitations
+  const invitations = await buildInvitationsForAssignment(assignment, simulation, assignerId, prisma);
+  
+  if (invitations.length === 0) {
+    return null;
+  }
+
+  return {
+    title: `${simulation.type === 'OFFICIAL' ? 'TOLC' : 'Simulazione'}: ${simulation.title}`,
+    description: buildEventDescription(startDate, endDate, isMultiDay),
+    type: 'SIMULATION',
+    startDate,
+    endDate,
+    isAllDay: isMultiDay,
+    isPublic: false,
+    createdById: assignerId,
+    invitations,
+  };
+}
+
+/**
+ * Create calendar events for simulation assignments
+ */
 async function createCalendarEventsForAssignments(
   simulationId: string,
-  simulation: {
-    title: string;
-    type: string;
-    isOfficial: boolean;
-    durationMinutes: number;
-  },
-  assignments: Array<{
-    id: string;
-    studentId: string | null;
-    groupId: string | null;
-    startDate: Date | null;
-    endDate: Date | null;
-    createCalendarEvent?: boolean;
-  }>,
+  simulation: SimulationForCalendar,
+  assignments: AssignmentForCalendar[],
   assignerId: string,
   prisma: PrismaClient
 ) {
-  const eventsToCreate: Array<{
-    title: string;
-    description: string | null;
-    type: 'SIMULATION';
-    startDate: Date;
-    endDate: Date;
-    isAllDay: boolean;
-    isPublic: boolean;
-    createdById: string;
-    invitations: Array<{
-      userId?: string;
-      groupId?: string;
-      status: 'PENDING' | 'ACCEPTED';
-    }>;
-  }> = [];
-
-  // Track which keys we've already created events for (to avoid duplicates)
   const processedKeys = new Set<string>();
+  const eventsToCreate: CalendarEventData[] = [];
 
   for (const assignment of assignments) {
-    // Calculate dates once per assignment
-    const startDate = assignment.startDate || new Date();
-    const endDate = assignment.endDate || new Date(startDate.getTime() + simulation.durationMinutes * 60 * 1000);
-    
-    // Build unique key for this event (to avoid duplicates)
-    const eventKey = `${simulationId}-${startDate.getTime()}-${assignment.studentId || assignment.groupId}`;
-    if (processedKeys.has(eventKey)) continue;
-    processedKeys.add(eventKey);
-
-    // Check if this is a multi-day event (start and end on different days)
-    const startDay = new Date(startDate).setHours(0, 0, 0, 0);
-    const endDay = new Date(endDate).setHours(0, 0, 0, 0);
-    const isMultiDay = startDay !== endDay;
-
-    // Build invitations based on assignment type
-    const invitations: Array<{ 
-      userId?: string; 
-      groupId?: string; 
-      status: 'PENDING' | 'ACCEPTED' 
-    }> = [];
-
-    if (assignment.studentId) {
-      // Direct assignment to student
-      const student = await prisma.student.findUnique({
-        where: { id: assignment.studentId },
-        select: { userId: true },
-      });
-      if (student?.userId) {
-        invitations.push({ userId: student.userId, status: 'PENDING' as const });
-      }
-    } else if (assignment.groupId) {
-      // Group assignment - invite the entire group
-      invitations.push({ groupId: assignment.groupId, status: 'PENDING' as const });
-    }
-
-    // Add assigner if simulation is official
-    if (simulation.isOfficial && invitations.length > 0) {
-      invitations.push({ userId: assignerId, status: 'ACCEPTED' as const });
-    }
-
-    // Create event only if we have invitations
-    if (invitations.length > 0) {
-      // Build description with date range for multi-day events
-      let description: string | null = null;
-      if (isMultiDay) {
-        const startDateFormatted = startDate.toLocaleDateString('it-IT', { 
-          day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' 
-        });
-        const endDateFormatted = endDate.toLocaleDateString('it-IT', { 
-          day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' 
-        });
-        description = `Disponibile dal ${startDateFormatted} al ${endDateFormatted}`;
-      }
-
-      eventsToCreate.push({
-        title: `${simulation.type === 'OFFICIAL' ? 'TOLC' : 'Simulazione'}: ${simulation.title}`,
-        description,
-        type: 'SIMULATION',
-        startDate,
-        endDate,
-        // For multi-day events, mark as all-day for cleaner calendar display
-        isAllDay: isMultiDay,
-        // Events are never public - visibility is controlled by invitations
-        isPublic: false,
-        createdById: assignerId,
-        invitations,
-      });
+    const eventData = await processAssignmentForCalendar(
+      assignment,
+      simulation,
+      simulationId,
+      assignerId,
+      processedKeys,
+      prisma
+    );
+    if (eventData) {
+      eventsToCreate.push(eventData);
     }
   }
 
@@ -225,6 +272,1447 @@ async function getStudentFromUser(prisma: PrismaClient, userId: string) {
   return student;
 }
 
+/**
+ * Validate collaborator can assign to specified groups/students
+ */
+async function validateCollaboratorAssignments(
+  prisma: PrismaClient,
+  collaboratorId: string,
+  assignments: Array<{ studentId?: string | null; groupId?: string | null }>
+): Promise<void> {
+  if (assignments.length === 0) return;
+
+  // Get groups managed by this collaborator
+  const collaboratorGroups = await prisma.group.findMany({
+    where: { referenceCollaboratorId: collaboratorId },
+    select: { id: true },
+  });
+  const allowedGroupIds = new Set(collaboratorGroups.map(g => g.id));
+
+  // Get students in those groups
+  const studentsInGroups = await prisma.groupMember.findMany({
+    where: { groupId: { in: Array.from(allowedGroupIds) } },
+    select: { studentId: true },
+  });
+  const allowedStudentIds = new Set(studentsInGroups.map(m => m.studentId));
+
+  // Validate each assignment
+  for (const target of assignments) {
+    if (target.groupId && !allowedGroupIds.has(target.groupId)) {
+      throw new TRPCError({
+        code: 'FORBIDDEN',
+        message: 'Non puoi assegnare a gruppi che non gestisci',
+      });
+    }
+    if (target.studentId && !allowedStudentIds.has(target.studentId)) {
+      throw new TRPCError({
+        code: 'FORBIDDEN',
+        message: 'Non puoi assegnare a studenti che non sono nei tuoi gruppi',
+      });
+    }
+  }
+}
+
+/**
+ * Validate that all questions exist
+ */
+async function validateQuestionsExist(
+  prisma: PrismaClient,
+  questionIds: string[]
+): Promise<Array<{
+  id: string;
+  status: string;
+  subjectId: string | null;
+  subject: { name: string } | null;
+}>> {
+  const existingQuestions = await prisma.question.findMany({
+    where: { id: { in: questionIds } },
+    select: { 
+      id: true, 
+      status: true,
+      subjectId: true,
+      subject: { select: { name: true } },
+    },
+  });
+
+  if (existingQuestions.length !== questionIds.length) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Una o più domande non esistono',
+    });
+  }
+
+  const unpublishedQuestions = existingQuestions.filter(q => q.status !== 'PUBLISHED');
+  if (unpublishedQuestions.length > 0) {
+    console.warn('Creating simulation with unpublished questions');
+  }
+
+  return existingQuestions;
+}
+
+/**
+ * Auto-generate sections based on question subjects
+ */
+function generateSectionsFromQuestions(
+  existingQuestions: Array<{
+    id: string;
+    subjectId: string | null;
+    subject: { name: string } | null;
+  }>,
+  durationMinutes: number
+): Array<{
+  id: string;
+  name: string;
+  durationMinutes: number;
+  questionIds: string[];
+  questionCount: number;
+  subjectId: string | null;
+  order: number;
+}> {
+  // Group questions by subject
+  const questionsBySubject = new Map<string, typeof existingQuestions>();
+  for (const q of existingQuestions) {
+    const subjectId = q.subjectId ?? 'GENERAL';
+    if (!questionsBySubject.has(subjectId)) {
+      questionsBySubject.set(subjectId, []);
+    }
+    questionsBySubject.get(subjectId)?.push(q);
+  }
+
+  // Create a section for each subject
+  const numSections = questionsBySubject.size;
+  const durationPerSection = numSections > 0 ? Math.floor(durationMinutes / numSections) : 0;
+
+  const generatedSections = [];
+  let order = 0;
+  for (const [subjectId, subjectQuestions] of questionsBySubject.entries()) {
+    const subjectName = subjectQuestions[0]?.subject?.name ?? 'Sezione Generale';
+    generatedSections.push({
+      id: `section-${order}`,
+      name: subjectName,
+      durationMinutes: durationPerSection,
+      questionIds: subjectQuestions.map(q => q.id),
+      questionCount: subjectQuestions.length,
+      subjectId: subjectId === 'GENERAL' ? null : subjectId,
+      order,
+    });
+    order++;
+  }
+
+  return generatedSections;
+}
+
+/**
+ * Select questions automatically based on subject and difficulty distribution
+ */
+async function selectQuestionsAutomatically(
+  prisma: PrismaClient,
+  subjectDistribution: Record<string, number>,
+  difficultyDistribution: { EASY?: number; MEDIUM?: number; HARD?: number } | null | undefined,
+  topicIds: string[] | null | undefined
+): Promise<Array<{ id: string; order: number }>> {
+  const selectedQuestions: { id: string; order: number }[] = [];
+  let currentOrder = 0;
+
+  for (const [subjectId, count] of Object.entries(subjectDistribution)) {
+    if (count <= 0) continue;
+
+    const where: Prisma.QuestionWhereInput = {
+      subjectId,
+      status: 'PUBLISHED',
+    };
+
+    if (topicIds && topicIds.length > 0) {
+      where.topicId = { in: topicIds };
+    }
+
+    // Get questions for this subject
+    const questions = await prisma.question.findMany({
+      where,
+      select: { id: true, difficulty: true },
+      take: count * 3,
+    });
+
+    if (questions.length < count) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `Non ci sono abbastanza domande per la materia selezionata (disponibili: ${questions.length}, richieste: ${count})`,
+      });
+    }
+
+    // Apply difficulty filter if specified
+    const filteredQuestions = difficultyDistribution
+      ? filterByDifficulty(questions, difficultyDistribution, count)
+      : questions;
+
+    // Shuffle and select
+    const shuffled = secureShuffleArray(filteredQuestions);
+    const selected = shuffled.slice(0, count);
+
+    for (const q of selected) {
+      selectedQuestions.push({ id: q.id, order: currentOrder++ });
+    }
+  }
+
+  return selectedQuestions;
+}
+
+/**
+ * Filter questions by difficulty distribution
+ */
+function filterByDifficulty(
+  questions: Array<{ id: string; difficulty: string | null }>,
+  distribution: { EASY?: number; MEDIUM?: number; HARD?: number },
+  count: number
+): Array<{ id: string; difficulty: string | null }> {
+  const EASY = distribution.EASY ?? 0;
+  const MEDIUM = distribution.MEDIUM ?? 0;
+  const HARD = distribution.HARD ?? 0;
+  const total = EASY + MEDIUM + HARD;
+  
+  if (total === 0) {
+    return questions;
+  }
+
+  const easyCount = Math.round((EASY / total) * count);
+  const mediumCount = Math.round((MEDIUM / total) * count);
+  const hardCount = count - easyCount - mediumCount;
+
+  const easyQs = questions.filter(q => q.difficulty === 'EASY').slice(0, easyCount);
+  const mediumQs = questions.filter(q => q.difficulty === 'MEDIUM').slice(0, mediumCount);
+  const hardQs = questions.filter(q => q.difficulty === 'HARD').slice(0, hardCount);
+
+  return [...easyQs, ...mediumQs, ...hardQs];
+}
+
+/**
+ * Check if an existing assignment is a single-date assignment that overlaps with target dates
+ */
+function checkSingleAssignmentOverlap(
+  existing: { startDate: Date | null; endDate: Date | null; simulation: { title: string } | null },
+  targetStartDate: Date,
+  targetEndDate: Date
+): { hasOverlap: boolean; title: string; startDate: Date; endDate: Date } | null {
+  if (!existing.startDate || !existing.endDate) return null;
+  
+  const existingDiffInHours = 
+    (existing.endDate.getTime() - existing.startDate.getTime()) / (1000 * 60 * 60);
+  
+  // Skip range assignments
+  if (existingDiffInHours > 24) return null;
+  
+  const hasOverlap = 
+    targetStartDate.getTime() < existing.endDate.getTime() &&
+    existing.startDate.getTime() < targetEndDate.getTime();
+  
+  if (!hasOverlap) return null;
+  
+  return {
+    hasOverlap: true,
+    title: existing.simulation?.title ?? 'Simulazione',
+    startDate: existing.startDate,
+    endDate: existing.endDate,
+  };
+}
+
+/**
+ * Check for overlapping single-date assignments
+ */
+async function checkOverlappingAssignments(
+  prisma: PrismaClient,
+  target: {
+    studentId?: string | null;
+    groupId?: string | null;
+    startDate?: string | null;
+    endDate?: string | null;
+  }
+): Promise<void> {
+  const startDate = target.startDate ? new Date(target.startDate) : null;
+  const endDate = target.endDate ? new Date(target.endDate) : null;
+  
+  if (!startDate || !endDate) return;
+
+  const diffInHours = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60);
+  if (diffInHours > 24) return; // Skip range assignments
+
+  const existingAssignments = await prisma.simulationAssignment.findMany({
+    where: {
+      ...(target.studentId ? { studentId: target.studentId } : {}),
+      ...(target.groupId ? { groupId: target.groupId } : {}),
+      status: { in: ['ACTIVE', 'CLOSED'] },
+      startDate: { not: null },
+      endDate: { not: null },
+    },
+    include: {
+      simulation: { select: { title: true } },
+    },
+  });
+  
+  for (const existing of existingAssignments) {
+    const overlap = checkSingleAssignmentOverlap(existing, startDate, endDate);
+    if (overlap) {
+      const targetType = target.groupId ? 'gruppo' : 'studente';
+      const existingStart = overlap.startDate.toLocaleString('it-IT', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      });
+      const existingEnd = overlap.endDate.toLocaleString('it-IT', {
+        hour: '2-digit', minute: '2-digit',
+      });
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `Il ${targetType} ha già un'assegnazione di "${overlap.title}" programmata per ${existingStart} - ${existingEnd}. Non è possibile sovrapporre le simulazioni.`,
+      });
+    }
+  }
+}
+
+// Types for paper-based answer evaluation
+interface SimulationQuestionForEval {
+  questionId: string;
+  customPoints: number | null;
+  customNegativePoints: number | null;
+  question: {
+    points: number;
+    negativePoints: number;
+    answers: Array<{ id: string; isCorrect: boolean }>;
+  };
+}
+
+interface EvaluatedAnswer {
+  questionId: string;
+  answerId: string | null;
+  isCorrect: boolean;
+  earnedPoints: number;
+  timeSpent: number;
+}
+
+interface EvaluationResult {
+  correctCount: number;
+  wrongCount: number;
+  blankCount: number;
+  totalScore: number;
+  evaluatedAnswers: EvaluatedAnswer[];
+}
+
+/**
+ * Evaluate paper-based simulation answers
+ */
+function evaluatePaperBasedAnswers(
+  simulationQuestions: SimulationQuestionForEval[],
+  answers: Array<{ questionId: string; answerId?: string | null }>,
+  simulation: { useQuestionPoints: boolean; correctPoints: number; wrongPoints: number; blankPoints: number }
+): EvaluationResult {
+  let correctCount = 0;
+  let wrongCount = 0;
+  let blankCount = 0;
+  let totalScore = 0;
+  const evaluatedAnswers: EvaluatedAnswer[] = [];
+
+  for (const sq of simulationQuestions) {
+    const studentAnswer = answers.find(a => a.questionId === sq.questionId);
+    const correctAnswer = sq.question.answers.find(a => a.isCorrect);
+
+    const points = sq.customPoints ?? (simulation.useQuestionPoints ? sq.question.points : simulation.correctPoints);
+    const negativePoints = sq.customNegativePoints ?? (simulation.useQuestionPoints ? sq.question.negativePoints : simulation.wrongPoints);
+
+    let isCorrect = false;
+    let earnedPoints = 0;
+
+    if (!studentAnswer?.answerId) {
+      blankCount++;
+      earnedPoints = simulation.blankPoints;
+    } else if (studentAnswer.answerId === correctAnswer?.id) {
+      isCorrect = true;
+      correctCount++;
+      earnedPoints = points;
+    } else {
+      wrongCount++;
+      earnedPoints = negativePoints;
+    }
+
+    totalScore += earnedPoints;
+    evaluatedAnswers.push({
+      questionId: sq.questionId,
+      answerId: studentAnswer?.answerId ?? null,
+      isCorrect,
+      earnedPoints,
+      timeSpent: 0,
+    });
+  }
+
+  return { correctCount, wrongCount, blankCount, totalScore, evaluatedAnswers };
+}
+
+/**
+ * Calculate delta counts for self-correction
+ */
+function calculateSelfCorrectionDeltas(
+  isCorrect: boolean,
+  previousState: boolean | null
+): { correctDelta: number; wrongDelta: number; pendingDelta: number } {
+  const wasCorrect = previousState === true;
+  const wasWrong = previousState === false;
+  const wasPending = previousState === null;
+
+  if (isCorrect) {
+    return {
+      correctDelta: wasCorrect ? 0 : 1,
+      wrongDelta: wasWrong ? -1 : 0,
+      pendingDelta: wasPending ? -1 : 0,
+    };
+  } else {
+    return {
+      correctDelta: wasCorrect ? -1 : 0,
+      wrongDelta: wasWrong ? 0 : 1,
+      pendingDelta: wasPending ? -1 : 0,
+    };
+  }
+}
+
+/**
+ * Check if student has access to simulation based on date constraints
+ */
+function checkSimulationDateAccess(
+  effectiveStartDate: Date | null,
+  effectiveEndDate: Date | null,
+  now: Date,
+  isAssignmentActive: boolean,
+  hasActiveVirtualRoom: boolean
+): { allowed: boolean; errorMessage?: string } {
+  // Block before start date UNLESS Virtual Room is active
+  if (effectiveStartDate && effectiveStartDate > now && !hasActiveVirtualRoom) {
+    return { allowed: false, errorMessage: 'La simulazione non è ancora iniziata' };
+  }
+
+  // For non-official simulations, strictly enforce end date
+  // For official simulations with ACTIVE status, allow access (admin control)
+  if (effectiveEndDate && effectiveEndDate < now && !isAssignmentActive) {
+    return { allowed: false, errorMessage: 'La simulazione è scaduta' };
+  }
+
+  return { allowed: true };
+}
+
+/**
+ * Check simulation attempt limits
+ */
+function checkAttemptLimits(
+  completedAttempts: number,
+  hasInProgress: boolean,
+  isRepeatable: boolean,
+  maxAttempts: number | null
+): { allowed: boolean; errorMessage?: string } {
+  if (!isRepeatable && completedAttempts > 0 && !hasInProgress) {
+    return { allowed: false, errorMessage: 'Hai già completato questa simulazione' };
+  }
+
+  if (maxAttempts && completedAttempts >= maxAttempts && !hasInProgress) {
+    return { 
+      allowed: false, 
+      errorMessage: `Hai raggiunto il numero massimo di tentativi (${maxAttempts})` 
+    };
+  }
+
+  return { allowed: true };
+}
+
+/**
+ * Check if student has access to simulation
+ */
+function hasSimulationAccess(
+  simulation: { isPublic: boolean; type: string; createdById: string; assignments: unknown[] },
+  userId: string
+): boolean {
+  const isOwnSelfPractice = simulation.type === 'QUICK_QUIZ' && simulation.createdById === userId;
+  return simulation.isPublic || simulation.assignments.length > 0 || isOwnSelfPractice;
+}
+
+// Types for saved answer parsing
+interface SavedAnswerItem {
+  questionId: string;
+  answerId: string | null;
+  answerText: string | null;
+  timeSpent: number;
+  flagged: boolean;
+}
+
+interface ParsedSavedProgress {
+  savedAnswers: SavedAnswerItem[];
+  savedSectionTimes: Record<number, number>;
+  savedCurrentSectionIndex: number;
+}
+
+/**
+ * Parse saved answers from simulation result - handles both old and new format
+ */
+function parseSavedProgress(savedData: unknown): ParsedSavedProgress {
+  let savedAnswers: SavedAnswerItem[] = [];
+  let savedSectionTimes: Record<number, number> = {};
+  let savedCurrentSectionIndex = 0;
+
+  if (Array.isArray(savedData)) {
+    // Old format: just an array of answers
+    savedAnswers = savedData as SavedAnswerItem[];
+  } else if (savedData && typeof savedData === 'object' && 'items' in savedData) {
+    // New format: object with items, sectionTimes, currentSectionIndex
+    const meta = savedData as {
+      items: SavedAnswerItem[];
+      sectionTimes?: Record<string, number>;
+      currentSectionIndex?: number;
+    };
+    savedAnswers = meta.items || [];
+    // Convert string keys to number keys for sectionTimes
+    if (meta.sectionTimes) {
+      savedSectionTimes = Object.fromEntries(
+        Object.entries(meta.sectionTimes).map(([k, v]) => [Number(k), v])
+      );
+    }
+    savedCurrentSectionIndex = meta.currentSectionIndex ?? 0;
+  }
+
+  return { savedAnswers, savedSectionTimes, savedCurrentSectionIndex };
+}
+
+/**
+ * Check if an in-progress attempt should be invalidated due to new session
+ */
+async function shouldInvalidateOldAttempt(
+  prisma: PrismaClient,
+  inProgressAttempt: { id: string; startedAt: Date | null },
+  assignmentId: string,
+  studentId: string
+): Promise<{ shouldDelete: boolean; currentSessionId?: string; currentSessionCreatedAt?: Date }> {
+  const currentSession = await prisma.simulationSession.findFirst({
+    where: {
+      assignmentId: assignmentId,
+      status: { in: ['WAITING', 'STARTED'] },
+      participants: { some: { studentId } },
+    },
+    select: { id: true, createdAt: true },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (currentSession && inProgressAttempt.startedAt && inProgressAttempt.startedAt < currentSession.createdAt) {
+    return { 
+      shouldDelete: true, 
+      currentSessionId: currentSession.id, 
+      currentSessionCreatedAt: currentSession.createdAt 
+    };
+  }
+
+  return { shouldDelete: false };
+}
+
+// Types for submission scoring
+interface StudentAnswerInput {
+  questionId: string;
+  answerId?: string | null;
+  answerText?: string | null;
+  timeSpent?: number;
+}
+
+interface SimulationQuestionWithDetails {
+  questionId: string;
+  customPoints: number | null;
+  customNegativePoints: number | null;
+  question: {
+    type: string;
+    points: number;
+    negativePoints: number;
+    subject: { name: string } | null;
+    answers: Array<{ id: string; isCorrect: boolean }>;
+    keywords: Array<{ keyword: string; weight: number; isRequired: boolean }>;
+  };
+}
+
+interface ScoringConfig {
+  useQuestionPoints: boolean;
+  correctPoints: number;
+  wrongPoints: number;
+  blankPoints: number;
+}
+
+interface EvaluatedAnswerResult {
+  questionId: string;
+  answerId: string | null;
+  answerText: string | null;
+  isCorrect: boolean | null;
+  earnedPoints: number;
+  timeSpent: number;
+}
+
+interface ScoringResult {
+  correctCount: number;
+  wrongCount: number;
+  blankCount: number;
+  totalScore: number;
+  subjectScores: Record<string, { correct: number; wrong: number; blank: number }>;
+  evaluatedAnswers: EvaluatedAnswerResult[];
+}
+
+/**
+ * Evaluate a single submission answer and return scoring data
+ */
+function evaluateSingleSubmissionAnswer(
+  sq: SimulationQuestionWithDetails,
+  studentAnswer: StudentAnswerInput | undefined,
+  config: ScoringConfig
+): { isCorrect: boolean | null; earnedPoints: number; category: 'correct' | 'wrong' | 'blank' | 'pending' } {
+  const correctAnswer = sq.question.answers.find(a => a.isCorrect);
+  const points = sq.customPoints ?? (config.useQuestionPoints ? sq.question.points : config.correctPoints);
+  const negativePoints = sq.customNegativePoints ?? (config.useQuestionPoints ? sq.question.negativePoints : config.wrongPoints);
+
+  // Handle OPEN_TEXT questions
+  if (sq.question.type === 'OPEN_TEXT') {
+    if (studentAnswer?.answerText && studentAnswer.answerText.trim().length > 0) {
+      return { isCorrect: null, earnedPoints: 0, category: 'pending' };
+    } else {
+      return { isCorrect: null, earnedPoints: config.blankPoints, category: 'blank' };
+    }
+  }
+
+  // Handle choice questions
+  if (!studentAnswer?.answerId) {
+    return { isCorrect: false, earnedPoints: config.blankPoints, category: 'blank' };
+  }
+  
+  if (studentAnswer.answerId === correctAnswer?.id) {
+    return { isCorrect: true, earnedPoints: points, category: 'correct' };
+  }
+  
+  return { isCorrect: false, earnedPoints: negativePoints, category: 'wrong' };
+}
+
+/**
+ * Calculate full submission scores for all questions
+ */
+function calculateSubmissionScores(
+  questions: SimulationQuestionWithDetails[],
+  answers: StudentAnswerInput[],
+  config: ScoringConfig
+): ScoringResult {
+  let correctCount = 0;
+  let wrongCount = 0;
+  let blankCount = 0;
+  let totalScore = 0;
+  const subjectScores: Record<string, { correct: number; wrong: number; blank: number }> = {};
+  const evaluatedAnswers: EvaluatedAnswerResult[] = [];
+
+  for (const sq of questions) {
+    const studentAnswer = answers.find(a => a.questionId === sq.questionId);
+    const subject = sq.question.subject?.name;
+
+    // Initialize subject stats
+    if (subject && !subjectScores[subject]) {
+      subjectScores[subject] = { correct: 0, wrong: 0, blank: 0 };
+    }
+
+    const evaluation = evaluateSingleSubmissionAnswer(sq, studentAnswer, config);
+    
+    // Update counts based on category using switch for clarity
+    switch (evaluation.category) {
+      case 'correct':
+        correctCount++;
+        if (subject) subjectScores[subject].correct++;
+        break;
+      case 'wrong':
+        wrongCount++;
+        if (subject) subjectScores[subject].wrong++;
+        break;
+      case 'blank':
+        blankCount++;
+        if (subject) subjectScores[subject].blank++;
+        break;
+    }
+
+    totalScore += evaluation.earnedPoints;
+    evaluatedAnswers.push({
+      questionId: sq.questionId,
+      answerId: studentAnswer?.answerId ?? null,
+      answerText: studentAnswer?.answerText ?? null,
+      isCorrect: evaluation.isCorrect,
+      earnedPoints: evaluation.earnedPoints,
+      timeSpent: studentAnswer?.timeSpent ?? 0,
+    });
+  }
+
+  return { correctCount, wrongCount, blankCount, totalScore, subjectScores, evaluatedAnswers };
+}
+
+/**
+ * Auto-score an open text answer against keywords
+ */
+function autoScoreOpenAnswer(
+  answerText: string,
+  keywords: Array<{ keyword: string; weight: number; isRequired: boolean }>
+): { autoScore: number | null; keywordsMatched: string[]; keywordsMissed: string[] } {
+  if (keywords.length === 0) {
+    return { autoScore: null, keywordsMatched: [], keywordsMissed: [] };
+  }
+
+  const answerLower = answerText.toLowerCase();
+  const keywordsMatched: string[] = [];
+  const keywordsMissed: string[] = [];
+  let matchedWeight = 0;
+  let totalWeight = 0;
+
+  for (const kw of keywords) {
+    totalWeight += kw.weight;
+    if (answerLower.includes(kw.keyword.toLowerCase())) {
+      keywordsMatched.push(kw.keyword);
+      matchedWeight += kw.weight;
+    } else if (kw.isRequired) {
+      keywordsMissed.push(kw.keyword);
+    }
+  }
+
+  return {
+    autoScore: totalWeight > 0 ? matchedWeight / totalWeight : null,
+    keywordsMatched,
+    keywordsMissed,
+  };
+}
+
+/**
+ * Build open answer submissions for staff review
+ */
+function buildOpenAnswerSubmissions(
+  questions: SimulationQuestionWithDetails[],
+  answers: StudentAnswerInput[],
+  studentId: string,
+  simulationResultId: string
+): Array<{
+  questionId: string;
+  studentId: string;
+  simulationResultId: string;
+  answerText: string;
+  keywordsMatched: string[];
+  keywordsMissed: string[];
+  autoScore: number | null;
+  finalScore: number | null;
+  isValidated: boolean;
+}> {
+  const submissions = [];
+  
+  for (const sq of questions) {
+    if (sq.question.type !== 'OPEN_TEXT') continue;
+    
+    const studentAnswer = answers.find(a => a.questionId === sq.questionId);
+    if (!studentAnswer?.answerText?.trim()) continue;
+
+    const scoring = autoScoreOpenAnswer(studentAnswer.answerText, sq.question.keywords);
+    
+    submissions.push({
+      questionId: sq.questionId,
+      studentId,
+      simulationResultId,
+      answerText: studentAnswer.answerText,
+      keywordsMatched: scoring.keywordsMatched,
+      keywordsMissed: scoring.keywordsMissed,
+      autoScore: scoring.autoScore,
+      finalScore: scoring.autoScore,
+      isValidated: false,
+    });
+  }
+
+  return submissions;
+}
+
+/**
+ * Get or create simulation result for submission
+ */
+async function getOrCreateSimulationResult(
+  prisma: PrismaClient,
+  simulationId: string,
+  studentId: string,
+  totalQuestions: number,
+  isRepeatable: boolean
+): Promise<{ id: string }> {
+  // Try to find existing in-progress result
+  const existingResult = await prisma.simulationResult.findFirst({
+    where: { simulationId, studentId, completedAt: null },
+  });
+
+  if (existingResult) return existingResult;
+
+  // Check if there's already a completed result
+  const completedResult = await prisma.simulationResult.findFirst({
+    where: { simulationId, studentId, completedAt: { not: null } },
+    orderBy: { completedAt: 'desc' },
+  });
+  
+  if (completedResult && !isRepeatable) {
+    throw new TRPCError({ 
+      code: 'BAD_REQUEST', 
+      message: 'Hai già completato questa simulazione' 
+    });
+  }
+  
+  if (completedResult) {
+    throw new TRPCError({ 
+      code: 'BAD_REQUEST', 
+      message: 'Sessione scaduta. Per favore, riavvia la simulazione.' 
+    });
+  }
+  
+  // Create new result
+  try {
+    return await prisma.simulationResult.create({
+      data: {
+        simulation: { connect: { id: simulationId } },
+        student: { connect: { id: studentId } },
+        totalQuestions,
+        answers: [],
+      },
+    });
+  } catch (_error) {
+    // Handle unique constraint violation
+    const existing = await prisma.simulationResult.findFirst({
+      where: { simulationId, studentId },
+      orderBy: { startedAt: 'desc' },
+    });
+    if (existing?.completedAt) {
+      throw new TRPCError({ 
+        code: 'BAD_REQUEST', 
+        message: 'Questa simulazione è già stata completata' 
+      });
+    }
+    if (existing) return existing;
+    throw _error;
+  }
+}
+
+/**
+ * Check if student has active Virtual Room session for the simulation
+ */
+async function checkActiveVirtualRoomSession(
+  prisma: PrismaClient,
+  simulationId: string,
+  assignmentId: string | null,
+  studentId: string,
+  assignmentStatus: string | undefined
+): Promise<boolean> {
+  if (assignmentStatus !== 'ACTIVE' || !assignmentId) return false;
+  
+  const session = await prisma.simulationSession.findFirst({
+    where: {
+      simulationId,
+      assignmentId,
+      status: 'STARTED',
+      participants: { some: { studentId } },
+    },
+  });
+  
+  return !!session;
+}
+
+/**
+ * Validate and handle existing attempts for startAttempt
+ */
+async function handleExistingAttempts(
+  prisma: PrismaClient,
+  existingResults: Array<{ id: string; completedAt: Date | null; startedAt: Date; answers: Prisma.JsonValue; durationSeconds: number | null }>,
+  assignmentId: string | null,
+  studentId: string
+): Promise<{ inProgressAttempt: typeof existingResults[0] | undefined; completedAttempts: number }> {
+  const completedAttempts = existingResults.filter(r => r.completedAt).length;
+  let inProgressAttempt = existingResults.find(r => !r.completedAt);
+
+  // For Virtual Room simulations, check if the in-progress attempt should be invalidated
+  if (inProgressAttempt && assignmentId) {
+    const invalidationCheck = await shouldInvalidateOldAttempt(
+      prisma, 
+      inProgressAttempt, 
+      assignmentId, 
+      studentId
+    );
+    
+    if (invalidationCheck.shouldDelete) {
+      await prisma.simulationResult.delete({
+        where: { id: inProgressAttempt.id },
+      });
+      
+      log.info('Deleted old attempt from closed session - student will start fresh:', {
+        oldResultId: inProgressAttempt.id,
+        oldStartedAt: inProgressAttempt.startedAt,
+        newSessionId: invalidationCheck.currentSessionId,
+        newSessionCreatedAt: invalidationCheck.currentSessionCreatedAt,
+        studentId,
+        assignmentId,
+      });
+      
+      inProgressAttempt = undefined;
+    }
+  }
+
+  return { inProgressAttempt, completedAttempts };
+}
+
+// ============ Student Simulation Card Helpers ============
+
+type StudentStatusType = 'not_started' | 'available' | 'in_progress' | 'completed' | 'expired' | 'closed';
+
+type SimulationCardData = {
+  id: string;
+  title: string;
+  description: string | null;
+  type: string;
+  durationMinutes: number;
+  totalQuestions: number;
+  isOfficial: boolean;
+  isRepeatable: boolean;
+  maxAttempts: number | null;
+  visibility: string;
+  accessType: string;
+  enableAntiCheat: boolean;
+  startDate: Date | null;
+  endDate: Date | null;
+  createdBy: { name: string | null } | null;
+  _count: { questions: number };
+};
+
+/**
+ * Determine student status for an assigned simulation
+ */
+function determineAssignedSimulationStatus(
+  resultStatus: 'completed' | 'in_progress' | null,
+  isClosed: boolean,
+  effectiveStartDate: Date | null,
+  effectiveEndDate: Date | null,
+  hasActiveVirtualRoom: boolean,
+  now: Date
+): StudentStatusType {
+  if (resultStatus === 'completed') return 'completed';
+  if (isClosed) return 'closed';
+  
+  const isNotStarted = effectiveStartDate && effectiveStartDate > now;
+  if (isNotStarted && !hasActiveVirtualRoom) return 'not_started';
+  
+  if (resultStatus === 'in_progress') return 'in_progress';
+  
+  const isExpired = effectiveEndDate && effectiveEndDate < now;
+  if (isExpired) return 'expired';
+  
+  return 'available';
+}
+
+/**
+ * Determine student status for a public simulation
+ */
+function determinePublicSimulationStatus(
+  resultStatus: 'completed' | 'in_progress' | undefined,
+  startDate: Date | null,
+  endDate: Date | null,
+  now: Date
+): StudentStatusType {
+  if (resultStatus === 'completed') return 'completed';
+  
+  const isNotStarted = startDate && startDate > now;
+  if (isNotStarted) return 'not_started';
+  
+  const isExpired = endDate && endDate < now;
+  if (isExpired) return 'expired';
+  
+  if (resultStatus === 'in_progress') return 'in_progress';
+  
+  return 'available';
+}
+
+/**
+ * Determine student status for a self-practice simulation
+ */
+function determineSelfPracticeStatus(
+  resultStatus: 'completed' | 'in_progress' | undefined
+): StudentStatusType {
+  if (resultStatus === 'completed') return 'completed';
+  if (resultStatus === 'in_progress') return 'in_progress';
+  return 'available';
+}
+
+/**
+ * Check if status filter matches
+ */
+function matchesStatusFilter(
+  status: string | undefined,
+  studentStatus: StudentStatusType,
+  isAssigned: boolean
+): boolean {
+  if (!status) return true;
+  if (status === studentStatus) return true;
+  // For assigned simulations, allow "available" to also match "not_started"
+  if (isAssigned && status === 'available' && studentStatus === 'not_started') return true;
+  return false;
+}
+
+/**
+ * Build base simulation card from simulation data
+ */
+function buildBaseSimulationCard(
+  sim: SimulationCardData,
+  assignmentId: string | null,
+  studentStatus: StudentStatusType,
+  assignmentType: 'direct' | 'group' | 'public' | null,
+  assignmentData: { 
+    dueDate: Date | null; 
+    notes: string | null; 
+    status: string | null;
+    startDate: Date | null;
+    endDate: Date | null;
+  } | null
+) {
+  return {
+    id: sim.id,
+    assignmentId,
+    title: sim.title,
+    description: sim.description,
+    type: sim.type,
+    durationMinutes: sim.durationMinutes,
+    totalQuestions: sim.totalQuestions,
+    isOfficial: sim.isOfficial,
+    isRepeatable: sim.isRepeatable,
+    maxAttempts: sim.maxAttempts,
+    visibility: sim.visibility,
+    accessType: sim.accessType,
+    enableAntiCheat: sim.enableAntiCheat,
+    startDate: assignmentData?.startDate ?? sim.startDate,
+    endDate: assignmentData?.endDate ?? sim.endDate,
+    dueDate: assignmentData?.dueDate ?? null,
+    assignmentNotes: assignmentData?.notes ?? null,
+    assignmentType,
+    assignmentStatus: assignmentData?.status ?? null,
+    studentStatus,
+    createdBy: sim.createdBy,
+    _count: sim._count,
+  };
+}
+
+/**
+ * Build result status maps from student results
+ */
+function buildResultStatusMaps(
+  studentResults: Array<{ simulationId: string; assignmentId: string | null; completedAt: Date | null }>
+): {
+  resultByAssignmentMap: Map<string, 'completed' | 'in_progress'>;
+  resultBySimulationMap: Map<string, 'completed' | 'in_progress'>;
+} {
+  const resultByAssignmentMap = new Map<string, 'completed' | 'in_progress'>();
+  const resultBySimulationMap = new Map<string, 'completed' | 'in_progress'>();
+  
+  for (const r of studentResults) {
+    const status = r.completedAt ? 'completed' : 'in_progress';
+    if (r.assignmentId) {
+      resultByAssignmentMap.set(`${r.simulationId}:${r.assignmentId}`, status);
+    } else {
+      resultBySimulationMap.set(r.simulationId, status);
+    }
+  }
+  
+  return { resultByAssignmentMap, resultBySimulationMap };
+}
+
+/**
+ * Check if should fetch assigned or self-created simulations
+ */
+function determineFetchFilters(
+  assignedToMe: boolean | undefined,
+  selfCreated: boolean | undefined
+): { shouldFetchAssigned: boolean; shouldFetchSelfCreated: boolean } {
+  const shouldFetchAssigned = assignedToMe === true || (assignedToMe === undefined && selfCreated !== true);
+  const shouldFetchSelfCreated = selfCreated === true || (selfCreated === undefined && assignedToMe !== true);
+  return { shouldFetchAssigned, shouldFetchSelfCreated };
+}
+
+/**
+ * Build simulation type/official filter for where clause
+ */
+function buildSimulationTypeFilter(
+  type: string | undefined,
+  isOfficial: boolean | undefined
+): Prisma.SimulationWhereInput {
+  const filter: Prisma.SimulationWhereInput = {};
+  if (type) filter.type = type as Prisma.SimulationWhereInput['type'];
+  if (typeof isOfficial === 'boolean') filter.isOfficial = isOfficial;
+  return filter;
+}
+
+/**
+ * Build active session map for Virtual Room assignments
+ */
+function buildActiveSessionMap(
+  activeSessions: Array<{ assignmentId: string | null; status: string }>
+): Map<string, string> {
+  return new Map<string, string>(
+    activeSessions
+      .filter((s): s is typeof s & { assignmentId: string } => s.assignmentId !== null)
+      .map(s => [s.assignmentId, s.status])
+  );
+}
+
+/**
+ * Sort simulation cards by dynamic field
+ */
+function sortSimulationCards<T extends Record<string, unknown>>(
+  cards: T[],
+  sortBy: string,
+  sortOrder: 'asc' | 'desc'
+): void {
+  cards.sort((a, b) => compareCardValues(a[sortBy], b[sortBy], sortOrder));
+}
+
+/**
+ * Compare two values for sorting
+ */
+function compareCardValues(
+  aVal: unknown,
+  bVal: unknown,
+  sortOrder: 'asc' | 'desc'
+): number {
+  if (aVal === null || aVal === undefined) return sortOrder === 'asc' ? 1 : -1;
+  if (bVal === null || bVal === undefined) return sortOrder === 'asc' ? -1 : 1;
+  if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+  if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+  return 0;
+}
+
+/**
+ * Fetch student assignments if needed
+ */
+async function fetchStudentAssignments(
+  prisma: PrismaClient,
+  shouldFetch: boolean,
+  studentId: string,
+  groupIds: string[],
+  typeFilter: Prisma.SimulationWhereInput,
+  sortOrder: 'asc' | 'desc'
+) {
+  if (!shouldFetch) return [];
+  
+  return prisma.simulationAssignment.findMany({
+    where: {
+      OR: [
+        { studentId },
+        ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
+      ],
+      simulation: {
+        status: 'PUBLISHED',
+        ...typeFilter,
+      },
+    },
+    include: {
+      simulation: {
+        include: {
+          createdBy: { select: { name: true } },
+          _count: { select: { questions: true } },
+        },
+      },
+    },
+    orderBy: { startDate: sortOrder },
+  });
+}
+
+/**
+ * Fetch public simulations if needed
+ */
+async function fetchPublicSimulations(
+  prisma: PrismaClient,
+  shouldFetch: boolean,
+  typeFilter: Prisma.SimulationWhereInput
+) {
+  if (!shouldFetch) return [];
+  
+  return prisma.simulation.findMany({
+    where: {
+      status: 'PUBLISHED',
+      isPublic: true,
+      ...typeFilter,
+    },
+    include: {
+      createdBy: { select: { name: true } },
+      _count: { select: { questions: true } },
+    },
+  });
+}
+
+/**
+ * Fetch self-practice simulations if needed
+ */
+async function fetchSelfPracticeSimulations(
+  prisma: PrismaClient,
+  shouldFetch: boolean,
+  userId: string,
+  isOfficial: boolean | undefined
+) {
+  if (!shouldFetch) return [];
+  
+  return prisma.simulation.findMany({
+    where: {
+      status: 'PUBLISHED',
+      type: 'QUICK_QUIZ',
+      createdById: userId,
+      ...(typeof isOfficial === 'boolean' ? { isOfficial } : {}),
+    },
+    include: {
+      createdBy: { select: { name: true } },
+      _count: { select: { questions: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+/**
+ * Fetch active Virtual Room sessions for assignments
+ */
+async function fetchActiveVirtualRoomSessions(
+  prisma: PrismaClient,
+  assignments: Array<{ id: string; simulation: { accessType: string } }>
+): Promise<Map<string, string>> {
+  const roomAssignmentIds = assignments
+    .filter(a => a.simulation.accessType === 'ROOM')
+    .map(a => a.id);
+  
+  if (roomAssignmentIds.length === 0) return new Map();
+  
+  const activeSessions = await prisma.simulationSession.findMany({
+    where: {
+      assignmentId: { in: roomAssignmentIds },
+      status: { in: ['WAITING', 'STARTED'] },
+    },
+    select: { assignmentId: true, status: true },
+  });
+  
+  return buildActiveSessionMap(activeSessions);
+}
+
+/**
+ * Get result status for a specific assignment
+ */
+function getAssignmentResultStatus(
+  resultByAssignmentMap: Map<string, 'completed' | 'in_progress'>,
+  simulationId: string,
+  assignmentId: string | null
+): 'completed' | 'in_progress' | null {
+  if (!assignmentId) return null;
+  return resultByAssignmentMap.get(`${simulationId}:${assignmentId}`) ?? null;
+}
+
+// Type for simulation cards
+type SimulationCard = {
+  id: string;
+  assignmentId: string | null;
+  title: string;
+  description: string | null;
+  type: string;
+  durationMinutes: number;
+  totalQuestions: number;
+  isOfficial: boolean;
+  isRepeatable: boolean;
+  maxAttempts: number | null;
+  visibility: string;
+  accessType: string;
+  enableAntiCheat: boolean;
+  startDate: Date | null;
+  endDate: Date | null;
+  dueDate: Date | null;
+  assignmentNotes: string | null;
+  assignmentType: 'direct' | 'group' | 'public' | null;
+  assignmentStatus: string | null;
+  studentStatus: StudentStatusType;
+  createdBy: { name: string | null } | null;
+  _count: { questions: number };
+};
+
+/**
+ * Process assignments into simulation cards
+ */
+function processAssignmentsToCards(
+  assignments: Awaited<ReturnType<typeof fetchStudentAssignments>>,
+  resultByAssignmentMap: Map<string, 'completed' | 'in_progress'>,
+  activeSessionMap: Map<string, string>,
+  status: string | undefined,
+  now: Date
+): SimulationCard[] {
+  const cards: SimulationCard[] = [];
+  
+  for (const assignment of assignments) {
+    const sim = assignment.simulation;
+    const resultStatus = getAssignmentResultStatus(resultByAssignmentMap, sim.id, assignment.id);
+    
+    const effectiveStartDate = assignment.startDate || sim.startDate;
+    const effectiveEndDate = assignment.endDate || sim.endDate;
+    const hasActiveVirtualRoom = sim.accessType === 'ROOM' && activeSessionMap.has(assignment.id);
+    
+    const studentStatus = determineAssignedSimulationStatus(
+      resultStatus,
+      assignment.status === 'CLOSED',
+      effectiveStartDate,
+      effectiveEndDate,
+      hasActiveVirtualRoom,
+      now
+    );
+
+    if (!matchesStatusFilter(status, studentStatus, true)) continue;
+
+    cards.push(buildBaseSimulationCard(
+      sim,
+      assignment.id,
+      studentStatus,
+      assignment.studentId ? 'direct' : 'group',
+      {
+        dueDate: assignment.dueDate,
+        notes: assignment.notes,
+        status: assignment.status,
+        startDate: effectiveStartDate,
+        endDate: effectiveEndDate,
+      }
+    ));
+  }
+  
+  return cards;
+}
+
+/**
+ * Process public simulations into cards
+ */
+function processPublicSimulationsToCards(
+  publicSimulations: Awaited<ReturnType<typeof fetchPublicSimulations>>,
+  existingCardIds: Set<string>,
+  resultBySimulationMap: Map<string, 'completed' | 'in_progress'>,
+  status: string | undefined,
+  now: Date
+): SimulationCard[] {
+  const cards: SimulationCard[] = [];
+  
+  for (const sim of publicSimulations) {
+    if (existingCardIds.has(sim.id)) continue;
+
+    const resultStatus = resultBySimulationMap.get(sim.id);
+    const studentStatus = determinePublicSimulationStatus(resultStatus, sim.startDate, sim.endDate, now);
+
+    if (!matchesStatusFilter(status, studentStatus, false)) continue;
+
+    cards.push(buildBaseSimulationCard(sim, null, studentStatus, 'public', null));
+  }
+  
+  return cards;
+}
+
+/**
+ * Process self-practice simulations into cards
+ */
+function processSelfPracticeToCards(
+  selfPracticeSimulations: Awaited<ReturnType<typeof fetchSelfPracticeSimulations>>,
+  existingCardIds: Set<string>,
+  resultBySimulationMap: Map<string, 'completed' | 'in_progress'>,
+  status: string | undefined
+): SimulationCard[] {
+  const cards: SimulationCard[] = [];
+  
+  for (const sim of selfPracticeSimulations) {
+    if (existingCardIds.has(sim.id)) continue;
+
+    const resultStatus = resultBySimulationMap.get(sim.id);
+    const studentStatus = determineSelfPracticeStatus(resultStatus);
+
+    if (!matchesStatusFilter(status, studentStatus, false)) continue;
+
+    cards.push(buildBaseSimulationCard(sim, null, studentStatus, null, null));
+  }
+  
+  return cards;
+}
+
+/**
+ * Apply basic filters to simulation where clause
+ */
+function applyBasicFilters(
+  where: Prisma.SimulationWhereInput,
+  input: z.infer<typeof simulationFilterSchema>
+): void {
+  if (input.type) where.type = input.type;
+  if (input.status) where.status = input.status;
+  if (input.visibility) where.visibility = input.visibility;
+  if (typeof input.isOfficial === 'boolean') where.isOfficial = input.isOfficial;
+  if (input.createdById) where.createdById = input.createdById;
+  if (input.creatorRole) {
+    where.creatorRole = input.creatorRole;
+  } else {
+    // Exclude simulations created by students (self-practice)
+    where.creatorRole = { not: 'STUDENT' };
+  }
+}
+
+/**
+ * Apply date range filters to simulation where clause
+ */
+function applyDateRangeFilters(
+  where: Prisma.SimulationWhereInput,
+  input: z.infer<typeof simulationFilterSchema>
+): void {
+  if (input.startDateFrom || input.startDateTo) {
+    where.startDate = {};
+    if (input.startDateFrom) where.startDate.gte = new Date(input.startDateFrom);
+    if (input.startDateTo) where.startDate.lte = new Date(input.startDateTo);
+  }
+
+  if (input.endDateFrom || input.endDateTo) {
+    where.endDate = {};
+    if (input.endDateFrom) where.endDate.gte = new Date(input.endDateFrom);
+    if (input.endDateTo) where.endDate.lte = new Date(input.endDateTo);
+  }
+}
+
+/**
+ * Build the where clause for simulation filtering
+ */
+function buildSimulationWhereClause(
+  input: z.infer<typeof simulationFilterSchema>,
+  userRole: string,
+  userId: string
+): Prisma.SimulationWhereInput {
+  const where: Prisma.SimulationWhereInput = {};
+  const andConditions: Prisma.SimulationWhereInput[] = [];
+
+  // Apply search filter
+  if (input.search) {
+    andConditions.push({
+      OR: [
+        { title: { contains: input.search, mode: 'insensitive' } },
+        { description: { contains: input.search, mode: 'insensitive' } },
+      ],
+    });
+  }
+
+  // Apply basic filters
+  applyBasicFilters(where, input);
+  
+  // Filter by group
+  if (input.groupId) {
+    andConditions.push({
+      assignments: { some: { groupId: input.groupId } },
+    });
+  }
+
+  // Apply date range filters
+  applyDateRangeFilters(where, input);
+
+  // Collaborators can only see their own + published simulations
+  if (userRole === 'COLLABORATOR') {
+    andConditions.push({
+      OR: [
+        { createdById: userId },
+        { status: 'PUBLISHED' },
+      ],
+    });
+  }
+
+  // Combine AND conditions
+  if (andConditions.length > 0) {
+    where.AND = andConditions;
+  }
+
+  return where;
+}
+
 export const simulationsRouter = router({
   // ==================== ADMIN/STAFF PROCEDURES ====================
 
@@ -232,89 +1720,10 @@ export const simulationsRouter = router({
   getSimulations: staffProcedure
     .input(simulationFilterSchema)
     .query(async ({ ctx, input }) => {
-      const {
-        page,
-        pageSize,
-        search,
-        type,
-        status,
-        visibility,
-        isOfficial,
-        groupId,
-        createdById,
-        creatorRole,
-        startDateFrom,
-        startDateTo,
-        endDateFrom,
-        endDateTo,
-        sortBy,
-        sortOrder,
-      } = input;
+      const { page, pageSize, sortBy, sortOrder } = input;
 
-      // Build where clause
-      const where: Prisma.SimulationWhereInput = {};
-      const andConditions: Prisma.SimulationWhereInput[] = [];
-
-      // Search in title and description
-      if (search) {
-        andConditions.push({
-          OR: [
-            { title: { contains: search, mode: 'insensitive' } },
-            { description: { contains: search, mode: 'insensitive' } },
-          ],
-        });
-      }
-
-      // Filters
-      if (type) where.type = type;
-      if (status) where.status = status;
-      if (visibility) where.visibility = visibility;
-      if (typeof isOfficial === 'boolean') where.isOfficial = isOfficial;
-      if (createdById) where.createdById = createdById;
-      if (creatorRole) where.creatorRole = creatorRole;
-      
-      // Exclude simulations created by students (self-practice)
-      // Only show simulations created by admins or collaborators
-      if (!creatorRole) {
-        where.creatorRole = { not: 'STUDENT' };
-      }
-      
-      // Filter by group (simulations assigned to a specific group)
-      if (groupId) {
-        andConditions.push({
-          assignments: {
-            some: { groupId },
-          },
-        });
-      }
-
-      // Date ranges
-      if (startDateFrom || startDateTo) {
-        where.startDate = {};
-        if (startDateFrom) where.startDate.gte = new Date(startDateFrom);
-        if (startDateTo) where.startDate.lte = new Date(startDateTo);
-      }
-
-      if (endDateFrom || endDateTo) {
-        where.endDate = {};
-        if (endDateFrom) where.endDate.gte = new Date(endDateFrom);
-        if (endDateTo) where.endDate.lte = new Date(endDateTo);
-      }
-
-      // Collaborators can only see their own + published simulations
-      if (ctx.user.role === 'COLLABORATOR') {
-        andConditions.push({
-          OR: [
-            { createdById: ctx.user.id },
-            { status: 'PUBLISHED' },
-          ],
-        });
-      }
-
-      // Combine AND conditions
-      if (andConditions.length > 0) {
-        where.AND = andConditions;
-      }
+      // Build where clause using helper function
+      const where = buildSimulationWhereClause(input, ctx.user.role, ctx.user.id);
 
       // Count total
       const total = await ctx.prisma.simulation.count({ where });
@@ -413,112 +1822,26 @@ export const simulationsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { questions, assignments, ...simulationData } = input;
 
-      // For collaborators: validate they can only assign to their groups/students
-      if (ctx.user.role === 'COLLABORATOR' && ctx.user.collaborator?.id && assignments.length > 0) {
-        const collaboratorId = ctx.user.collaborator.id;
-        
-        // Get groups managed by this collaborator
-        const collaboratorGroups = await ctx.prisma.group.findMany({
-          where: { referenceCollaboratorId: collaboratorId },
-          select: { id: true },
-        });
-        const allowedGroupIds = new Set(collaboratorGroups.map(g => g.id));
-
-        // Get students in those groups
-        const studentsInGroups = await ctx.prisma.groupMember.findMany({
-          where: { groupId: { in: Array.from(allowedGroupIds) } },
-          select: { studentId: true },
-        });
-        const allowedStudentIds = new Set(studentsInGroups.map(m => m.studentId));
-
-        // Validate each assignment
-        for (const target of assignments) {
-          if (target.groupId && !allowedGroupIds.has(target.groupId)) {
-            throw new TRPCError({
-              code: 'FORBIDDEN',
-              message: 'Non puoi assegnare a gruppi che non gestisci',
-            });
-          }
-          if (target.studentId && !allowedStudentIds.has(target.studentId)) {
-            throw new TRPCError({
-              code: 'FORBIDDEN',
-              message: 'Non puoi assegnare a studenti che non sono nei tuoi gruppi',
-            });
-          }
-        }
+      // Validate collaborator assignments
+      if (ctx.user.role === 'COLLABORATOR' && ctx.user.collaborator?.id) {
+        await validateCollaboratorAssignments(ctx.prisma, ctx.user.collaborator.id, assignments);
       }
 
-      // Validate all questions exist and are published
+      // Validate all questions exist
       const questionIds = questions.map(q => q.questionId);
-      const existingQuestions = await ctx.prisma.question.findMany({
-        where: { id: { in: questionIds } },
-        select: { 
-          id: true, 
-          status: true,
-          subjectId: true,
-          subject: {
-            select: {
-              name: true,
-            },
-          },
-        },
-      });
-
-      if (existingQuestions.length !== questionIds.length) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Una o più domande non esistono',
-        });
-      }
-
-      const unpublishedQuestions = existingQuestions.filter(q => q.status !== 'PUBLISHED');
-      // Note: simulationData from createWithQuestions doesn't include status field
-      // Status is always DRAFT on creation, can be changed via update
-      if (unpublishedQuestions.length > 0) {
-        // Allow creation but warn (status will be DRAFT by default)
-        console.warn('Creating simulation with unpublished questions');
-      }
+      const existingQuestions = await validateQuestionsExist(ctx.prisma, questionIds);
 
       // Calculate maxScore if not provided
       const correctPts = simulationData.correctPoints ?? 1.5;
       const calculatedMaxScore = simulationData.maxScore ?? (questions.length * correctPts);
 
       // Auto-generate sections if hasSections=true but no sections provided
-      let sectionsData = simulationData.sections;
-      if (simulationData.hasSections && (!sectionsData || (Array.isArray(sectionsData) && sectionsData.length === 0))) {
-        // Group questions by subject
-        const questionsBySubject = new Map<string, typeof existingQuestions>();
-        for (const q of existingQuestions) {
-          const subjectId = q.subjectId || 'GENERAL';
-          if (!questionsBySubject.has(subjectId)) {
-            questionsBySubject.set(subjectId, []);
-          }
-          questionsBySubject.get(subjectId)!.push(q);
-        }
-
-        // Create a section for each subject
-        const totalDuration = simulationData.durationMinutes ?? 0;
-        const numSections = questionsBySubject.size;
-        const durationPerSection = numSections > 0 ? Math.floor(totalDuration / numSections) : 0;
-
-        const generatedSections = [];
-        let order = 0;
-        for (const [subjectId, subjectQuestions] of questionsBySubject.entries()) {
-          const subjectName = subjectQuestions[0]?.subject?.name || 'Sezione Generale';
-          generatedSections.push({
-            id: `section-${order}`,
-            name: subjectName,
-            durationMinutes: durationPerSection,
-            questionIds: subjectQuestions.map(q => q.id),
-            questionCount: subjectQuestions.length,
-            subjectId: subjectId === 'GENERAL' ? null : subjectId,
-            order,
-          });
-          order++;
-        }
-
-        sectionsData = generatedSections;
-      }
+      const needsAutoSections = simulationData.hasSections && 
+        (!simulationData.sections || (Array.isArray(simulationData.sections) && simulationData.sections.length === 0));
+      
+      const sectionsData = needsAutoSections
+        ? generateSectionsFromQuestions(existingQuestions, simulationData.durationMinutes ?? 0)
+        : simulationData.sections;
 
       // Create simulation with questions and assignments
       const simulation = await ctx.prisma.simulation.create({
@@ -528,7 +1851,6 @@ export const simulationsRouter = router({
           type: simulationData.type,
           visibility: simulationData.visibility ?? 'PRIVATE',
           isOfficial: simulationData.isOfficial ?? false,
-          // Auto-set accessType based on isOfficial: ROOM for official, OPEN otherwise
           accessType: (simulationData.isOfficial ?? false) ? 'ROOM' : 'OPEN',
           durationMinutes: simulationData.durationMinutes ?? 0,
           totalQuestions: questions.length,
@@ -551,7 +1873,6 @@ export const simulationsRouter = router({
           topicIds: simulationData.topicIds ?? [],
           subjectDistribution: simulationData.subjectDistribution ?? undefined,
           difficultyDistribution: simulationData.difficultyDistribution ?? undefined,
-          // New fields for paper-based, attendance, sections, and anti-cheat
           isPaperBased: simulationData.isPaperBased ?? false,
           paperInstructions: simulationData.paperInstructions,
           showSectionsInPaper: simulationData.showSectionsInPaper ?? true,
@@ -609,39 +1930,9 @@ export const simulationsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { subjectDistribution, difficultyDistribution, topicIds, assignments, ...simulationData } = input;
 
-      // For collaborators: validate they can only assign to their groups/students
-      if (ctx.user.role === 'COLLABORATOR' && ctx.user.collaborator?.id && assignments.length > 0) {
-        const collaboratorId = ctx.user.collaborator.id;
-        
-        // Get groups managed by this collaborator
-        const collaboratorGroups = await ctx.prisma.group.findMany({
-          where: { referenceCollaboratorId: collaboratorId },
-          select: { id: true },
-        });
-        const allowedGroupIds = new Set(collaboratorGroups.map(g => g.id));
-
-        // Get students in those groups
-        const studentsInGroups = await ctx.prisma.groupMember.findMany({
-          where: { groupId: { in: Array.from(allowedGroupIds) } },
-          select: { studentId: true },
-        });
-        const allowedStudentIds = new Set(studentsInGroups.map(m => m.studentId));
-
-        // Validate each assignment
-        for (const target of assignments) {
-          if (target.groupId && !allowedGroupIds.has(target.groupId)) {
-            throw new TRPCError({
-              code: 'FORBIDDEN',
-              message: 'Non puoi assegnare a gruppi che non gestisci',
-            });
-          }
-          if (target.studentId && !allowedStudentIds.has(target.studentId)) {
-            throw new TRPCError({
-              code: 'FORBIDDEN',
-              message: 'Non puoi assegnare a studenti che non sono nei tuoi gruppi',
-            });
-          }
-        }
+      // Validate collaborator assignments
+      if (ctx.user.role === 'COLLABORATOR' && ctx.user.collaborator?.id) {
+        await validateCollaboratorAssignments(ctx.prisma, ctx.user.collaborator.id, assignments);
       }
 
       // Calculate total questions from distribution
@@ -655,62 +1946,12 @@ export const simulationsRouter = router({
       }
 
       // Select questions based on criteria
-      const selectedQuestions: { id: string; order: number }[] = [];
-      let currentOrder = 0;
-
-      for (const [subjectId, count] of Object.entries(subjectDistribution)) {
-        if (count <= 0) continue;
-
-        const where: Prisma.QuestionWhereInput = {
-          subjectId,
-          status: 'PUBLISHED',
-        };
-
-        if (topicIds && topicIds.length > 0) {
-          where.topicId = { in: topicIds };
-        }
-
-        // Get questions for this subject
-        const questions = await ctx.prisma.question.findMany({
-          where,
-          select: { id: true, difficulty: true },
-          take: count * 3, // Get more than needed for random selection
-        });
-
-        if (questions.length < count) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: `Non ci sono abbastanza domande per la materia selezionata (disponibili: ${questions.length}, richieste: ${count})`,
-          });
-        }
-
-        // Apply difficulty filter if specified
-        let filteredQuestions = questions;
-        if (difficultyDistribution) {
-          const { EASY, MEDIUM, HARD } = difficultyDistribution;
-          const total = EASY + MEDIUM + HARD;
-          if (total > 0) {
-            // Proportionally select by difficulty
-            const easyCount = Math.round((EASY / total) * count);
-            const mediumCount = Math.round((MEDIUM / total) * count);
-            const hardCount = count - easyCount - mediumCount;
-
-            const easyQs = questions.filter(q => q.difficulty === 'EASY').slice(0, easyCount);
-            const mediumQs = questions.filter(q => q.difficulty === 'MEDIUM').slice(0, mediumCount);
-            const hardQs = questions.filter(q => q.difficulty === 'HARD').slice(0, hardCount);
-
-            filteredQuestions = [...easyQs, ...mediumQs, ...hardQs];
-          }
-        }
-
-        // Shuffle and select
-        const shuffled = filteredQuestions.sort(() => Math.random() - 0.5);
-        const selected = shuffled.slice(0, count);
-
-        for (const q of selected) {
-          selectedQuestions.push({ id: q.id, order: currentOrder++ });
-        }
-      }
+      const selectedQuestions = await selectQuestionsAutomatically(
+        ctx.prisma,
+        subjectDistribution,
+        difficultyDistribution,
+        topicIds
+      );
 
       // Calculate maxScore if not provided
       const correctPts = simulationData.correctPoints ?? 1.5;
@@ -874,11 +2115,11 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Una o più domande non esistono' });
       }
 
-      await ctx.prisma.$transaction(async (tx) => {
+      await ctx.prisma.$transaction(async () => {
         if (mode === 'replace') {
           // Delete all existing questions and add new ones
-          await tx.simulationQuestion.deleteMany({ where: { simulationId } });
-          await tx.simulationQuestion.createMany({
+          await ctx.prisma.simulationQuestion.deleteMany({ where: { simulationId } });
+          await ctx.prisma.simulationQuestion.createMany({
             data: questions.map((q, index) => ({
               simulationId,
               questionId: q.questionId,
@@ -887,20 +2128,20 @@ export const simulationsRouter = router({
               customNegativePoints: q.customNegativePoints,
             })),
           });
-          await tx.simulation.update({
+          await ctx.prisma.simulation.update({
             where: { id: simulationId },
             data: { totalQuestions: questions.length },
           });
         } else if (mode === 'append') {
           // Get current max order
-          const maxOrder = await tx.simulationQuestion.findFirst({
+          const maxOrder = await ctx.prisma.simulationQuestion.findFirst({
             where: { simulationId },
             orderBy: { order: 'desc' },
             select: { order: true },
           });
           const startOrder = (maxOrder?.order ?? -1) + 1;
 
-          await tx.simulationQuestion.createMany({
+          await ctx.prisma.simulationQuestion.createMany({
             data: questions.map((q, index) => ({
               simulationId,
               questionId: q.questionId,
@@ -911,21 +2152,21 @@ export const simulationsRouter = router({
           });
 
           // Update total
-          const newTotal = await tx.simulationQuestion.count({ where: { simulationId } });
-          await tx.simulation.update({
+          const newTotal = await ctx.prisma.simulationQuestion.count({ where: { simulationId } });
+          await ctx.prisma.simulation.update({
             where: { id: simulationId },
             data: { totalQuestions: newTotal },
           });
         } else if (mode === 'remove') {
-          await tx.simulationQuestion.deleteMany({
+          await ctx.prisma.simulationQuestion.deleteMany({
             where: {
               simulationId,
               questionId: { in: questionIds },
             },
           });
 
-          const newTotal = await tx.simulationQuestion.count({ where: { simulationId } });
-          await tx.simulation.update({
+          const newTotal = await ctx.prisma.simulationQuestion.count({ where: { simulationId } });
+          await ctx.prisma.simulation.update({
             where: { id: simulationId },
             data: { totalQuestions: newTotal },
           });
@@ -1219,120 +2460,25 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
       }
 
-      // Note: Collaborators can assign any published simulation to their groups
-      // They can only modify/delete assignments they created, but can assign any template
-
-      // For collaborators: validate they can only assign to their groups/students
+      // Validate collaborator assignments
       if (ctx.user.role === 'COLLABORATOR' && ctx.user.collaborator?.id) {
-        const collaboratorId = ctx.user.collaborator.id;
-        
-        // Get groups managed by this collaborator
-        const collaboratorGroups = await ctx.prisma.group.findMany({
-          where: { referenceCollaboratorId: collaboratorId },
-          select: { id: true },
-        });
-        const allowedGroupIds = new Set(collaboratorGroups.map(g => g.id));
-
-        // Get students in those groups
-        const studentsInGroups = await ctx.prisma.groupMember.findMany({
-          where: { groupId: { in: Array.from(allowedGroupIds) } },
-          select: { studentId: true },
-        });
-        const allowedStudentIds = new Set(studentsInGroups.map(m => m.studentId));
-
-        // Validate each target
-        for (const target of targets) {
-          if (target.groupId && !allowedGroupIds.has(target.groupId)) {
-            throw new TRPCError({
-              code: 'FORBIDDEN',
-              message: 'Non puoi assegnare a gruppi che non gestisci',
-            });
-          }
-          if (target.studentId && !allowedStudentIds.has(target.studentId)) {
-            throw new TRPCError({
-              code: 'FORBIDDEN',
-              message: 'Non puoi assegnare a studenti che non sono nei tuoi gruppi',
-            });
-          }
-        }
+        await validateCollaboratorAssignments(ctx.prisma, ctx.user.collaborator.id, targets);
       }
 
       // Check for overlapping assignments BEFORE creating new ones
       for (const target of targets) {
-        const startDate = target.startDate ? new Date(target.startDate) : null;
-        const endDate = target.endDate ? new Date(target.endDate) : null;
-        
-        if (startDate && endDate) {
-          // Determine if this is a single-date assignment
-          const diffInHours = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60);
-          const isSingleDateAssignment = diffInHours <= 24;
-          
-          if (isSingleDateAssignment) {
-            // For single-date assignments, check for overlaps with ANY simulation (not just this one)
-            const existingAssignments = await ctx.prisma.simulationAssignment.findMany({
-              where: {
-                // Don't filter by simulationId - check ALL simulations
-                ...(target.studentId ? { studentId: target.studentId } : {}),
-                ...(target.groupId ? { groupId: target.groupId } : {}),
-                status: { in: ['ACTIVE', 'CLOSED'] },
-                startDate: { not: null },
-                endDate: { not: null },
-              },
-              include: {
-                simulation: {
-                  select: { title: true },
-                },
-              },
-            });
-            
-            // Check each existing assignment for overlap
-            for (const existing of existingAssignments) {
-              if (!existing.startDate || !existing.endDate) continue;
-              
-              const existingDiffInHours = 
-                (existing.endDate.getTime() - existing.startDate.getTime()) / (1000 * 60 * 60);
-              
-              // Skip if existing is a range assignment
-              if (existingDiffInHours > 24) continue;
-              
-              // Both are single-date - check for overlap
-              const hasOverlap = 
-                startDate.getTime() < existing.endDate.getTime() &&
-                existing.startDate.getTime() < endDate.getTime();
-              
-              if (hasOverlap) {
-                const targetType = target.groupId ? 'gruppo' : 'studente';
-                const existingStart = existing.startDate.toLocaleString('it-IT', {
-                  day: '2-digit',
-                  month: '2-digit',
-                  year: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                });
-                const existingEnd = existing.endDate.toLocaleString('it-IT', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                });
-                const existingTitle = existing.simulation?.title || 'Simulazione';
-                throw new TRPCError({
-                  code: 'BAD_REQUEST',
-                  message: `Il ${targetType} ha già un'assegnazione di "${existingTitle}" programmata per ${existingStart} - ${existingEnd}. Non è possibile sovrapporre le simulazioni.`,
-                });
-              }
-            }
-          }
-        }
+        await checkOverlappingAssignments(ctx.prisma, target);
       }
 
       // Create assignments and auto-publish simulation
-      const created = await ctx.prisma.$transaction(async (tx) => {
+      const created = await ctx.prisma.$transaction(async () => {
         const results = [];
         for (const target of targets) {
           const startDate = target.startDate ? new Date(target.startDate) : null;
           const endDate = target.endDate ? new Date(target.endDate) : null;
 
           // Create the assignment
-          const assignment = await tx.simulationAssignment.create({
+          const assignment = await ctx.prisma.simulationAssignment.create({
             data: {
               simulationId,
               studentId: target.studentId,
@@ -1352,7 +2498,7 @@ export const simulationsRouter = router({
 
         // Auto-publish simulation when assignments are created
         if (results.length > 0 && simulation.status === 'DRAFT') {
-          await tx.simulation.update({
+          await ctx.prisma.simulation.update({
             where: { id: simulationId },
             data: { status: 'PUBLISHED' },
           });
@@ -1410,14 +2556,14 @@ export const simulationsRouter = router({
 
       // Get directly assigned student IDs
       const directlyAssignedStudentIds = assignments
-        .filter(a => a.studentId)
-        .map(a => a.studentId as string);
+        .filter((a): a is typeof a & { studentId: string } => !!a.studentId)
+        .map(a => a.studentId);
 
       return {
         assignedStudentIds: directlyAssignedStudentIds,
         assignedGroupIds: assignments
-          .filter(a => a.groupId)
-          .map(a => a.groupId as string),
+          .filter((a): a is typeof a & { groupId: string } => !!a.groupId)
+          .map(a => a.groupId),
         assignments: assignments.map(a => ({
           id: a.id,
           studentId: a.studentId,
@@ -1550,7 +2696,9 @@ export const simulationsRouter = router({
         .map(m => {
           const sources = assignmentSources[m.studentId] || [];
           const isDirect = sources.some(s => s.type === 'direct');
-          const fromGroups = sources.filter(s => s.type === 'group').map(s => s.name!);
+          const fromGroups = sources
+            .filter((s): s is typeof s & { name: string } => s.type === 'group' && !!s.name)
+            .map(s => s.name);
           
           return {
             studentId: m.studentId,
@@ -1662,11 +2810,11 @@ export const simulationsRouter = router({
       if (assignment.studentId && assignment.student?.userId) {
         userIds.push(assignment.student.userId);
       } else if (assignment.groupId && assignment.group) {
-        userIds.push(
-          ...assignment.group.members
-            .map(m => m.student.userId)
-            .filter(Boolean) as string[]
-        );
+        for (const member of assignment.group.members) {
+          if (member.student.userId) {
+            userIds.push(member.student.userId);
+          }
+        }
       }
 
       // Delete assignment
@@ -1709,67 +2857,13 @@ export const simulationsRouter = router({
       const groupIds = groupMembers.map(gm => gm.groupId);
 
       // Determine what to fetch based on filters
-      const shouldFetchAssigned = assignedToMe === true || (assignedToMe === undefined && selfCreated !== true);
-      const shouldFetchSelfCreated = selfCreated === true || (selfCreated === undefined && assignedToMe !== true);
+      const { shouldFetchAssigned, shouldFetchSelfCreated } = determineFetchFilters(assignedToMe, selfCreated);
+      const typeFilter = buildSimulationTypeFilter(type, isOfficial);
 
-      // Get ALL assignments for this student (if not filtering for self-created only)
-      const assignments = shouldFetchAssigned 
-        ? await ctx.prisma.simulationAssignment.findMany({
-            where: {
-              OR: [
-                { studentId },
-                ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
-              ],
-              simulation: {
-                status: 'PUBLISHED',
-                ...(type ? { type } : {}),
-                ...(typeof isOfficial === 'boolean' ? { isOfficial } : {}),
-              },
-            },
-            include: {
-              simulation: {
-                include: {
-                  createdBy: { select: { name: true } },
-                  _count: { select: { questions: true } },
-                },
-              },
-            },
-            orderBy: { startDate: sortOrder },
-          })
-        : [];
-
-      // Also get public simulations (no assignment needed - if not filtering for self-created only)
-      const publicSimulations = shouldFetchAssigned
-        ? await ctx.prisma.simulation.findMany({
-            where: {
-              status: 'PUBLISHED',
-              isPublic: true,
-              ...(type ? { type } : {}),
-              ...(typeof isOfficial === 'boolean' ? { isOfficial } : {}),
-            },
-            include: {
-              createdBy: { select: { name: true } },
-              _count: { select: { questions: true } },
-            },
-          })
-        : [];
-
-      // Get self-practice simulations (QUICK_QUIZ type created by student)
-      const selfPracticeSimulations = shouldFetchSelfCreated
-        ? await ctx.prisma.simulation.findMany({
-            where: {
-              status: 'PUBLISHED',
-              type: 'QUICK_QUIZ',
-              createdById: ctx.user.id,
-              ...(typeof isOfficial === 'boolean' ? { isOfficial } : {}),
-            },
-            include: {
-              createdBy: { select: { name: true } },
-              _count: { select: { questions: true } },
-            },
-            orderBy: { createdAt: 'desc' },
-          })
-        : [];
+      // Fetch data using helpers
+      const assignments = await fetchStudentAssignments(ctx.prisma, shouldFetchAssigned, studentId, groupIds, typeFilter, sortOrder);
+      const publicSimulations = await fetchPublicSimulations(ctx.prisma, shouldFetchAssigned, typeFilter);
+      const selfPracticeSimulations = await fetchSelfPracticeSimulations(ctx.prisma, shouldFetchSelfCreated, ctx.user.id, isOfficial);
 
       // Get ALL student's results (with assignmentId)
       const studentResults = await ctx.prisma.simulationResult.findMany({
@@ -1781,283 +2875,45 @@ export const simulationsRouter = router({
         },
       });
 
-      // Create maps for quick lookup
-      // Map by specific assignment: "simulationId:assignmentId" -> result status
-      const resultByAssignmentMap = new Map<string, 'completed' | 'in_progress'>();
-      // Map by simulation (for legacy results without assignmentId): "simulationId" -> result status
-      const resultBySimulationMap = new Map<string, 'completed' | 'in_progress'>();
-      
-      for (const r of studentResults) {
-        if (r.assignmentId) {
-          const key = `${r.simulationId}:${r.assignmentId}`;
-          resultByAssignmentMap.set(key, r.completedAt ? 'completed' : 'in_progress');
-        } else {
-          // Legacy result without assignmentId - mark by simulation only
-          resultBySimulationMap.set(r.simulationId, r.completedAt ? 'completed' : 'in_progress');
-        }
-      }
+      // Create maps for quick lookup using helper
+      const { resultByAssignmentMap, resultBySimulationMap } = buildResultStatusMaps(studentResults);
 
-      // Helper function to get result status for an assignment
-      const getResultStatus = (simulationId: string, assignmentId: string | null): 'completed' | 'in_progress' | null => {
-        // First check for specific assignment result
-        if (assignmentId) {
-          const specificKey = `${simulationId}:${assignmentId}`;
-          if (resultByAssignmentMap.has(specificKey)) {
-            return resultByAssignmentMap.get(specificKey)!;
-          }
-        }
-        // Fall back to legacy result (no assignmentId)
-        // Only use legacy result if this is the first/oldest assignment for this simulation
-        return null; // Don't inherit from legacy - each assignment should be independent
-      };
+      // Get active Virtual Room sessions using helper
+      const activeSessionMap = await fetchActiveVirtualRoomSessions(ctx.prisma, assignments);
 
-      // Get active Virtual Room sessions for ROOM-type assignments
-      // This allows students to access the simulation when staff has opened the room
-      const roomAssignmentIds = assignments
-        .filter(a => a.simulation.accessType === 'ROOM')
-        .map(a => a.id);
+      // Build simulation cards using helpers
+      const assignmentCards = processAssignmentsToCards(
+        assignments,
+        resultByAssignmentMap,
+        activeSessionMap,
+        status,
+        now
+      );
       
-      const activeSessions = roomAssignmentIds.length > 0 
-        ? await ctx.prisma.simulationSession.findMany({
-            where: {
-              assignmentId: { in: roomAssignmentIds },
-              status: { in: ['WAITING', 'STARTED'] },
-            },
-            select: { assignmentId: true, status: true },
-          })
-        : [];
+      const existingCardIds = new Set(assignmentCards.map(c => c.id));
       
-      // Map by assignmentId for quick lookup
-      const activeSessionMap = new Map<string, string>(
-        activeSessions
-          .filter((s): s is typeof s & { assignmentId: string } => s.assignmentId !== null)
-          .map(s => [s.assignmentId, s.status])
+      const publicCards = processPublicSimulationsToCards(
+        publicSimulations,
+        existingCardIds,
+        resultBySimulationMap,
+        status,
+        now
+      );
+      
+      // Add public card IDs to existing set
+      for (const c of publicCards) existingCardIds.add(c.id);
+      
+      const selfPracticeCards = processSelfPracticeToCards(
+        selfPracticeSimulations,
+        existingCardIds,
+        resultBySimulationMap,
+        status
       );
 
-      // Build simulation cards from assignments
-      type SimulationCard = {
-        id: string;
-        assignmentId: string | null;
-        title: string;
-        description: string | null;
-        type: string;
-        durationMinutes: number;
-        totalQuestions: number;
-        isOfficial: boolean;
-        isRepeatable: boolean;
-        maxAttempts: number | null;
-        visibility: string;
-        accessType: string;
-        enableAntiCheat: boolean;
-        startDate: Date | null;
-        endDate: Date | null;
-        dueDate: Date | null;
-        assignmentNotes: string | null;
-        assignmentType: 'direct' | 'group' | 'public' | null;
-        assignmentStatus: string | null;
-        studentStatus: 'not_started' | 'available' | 'in_progress' | 'completed' | 'expired' | 'closed';
-        createdBy: { name: string | null } | null;
-        _count: { questions: number };
-      };
+      const simulationCards = [...assignmentCards, ...publicCards, ...selfPracticeCards];
 
-      const simulationCards: SimulationCard[] = [];
-
-      // Process each assignment
-      for (const assignment of assignments) {
-        const sim = assignment.simulation;
-        const resultStatus = getResultStatus(sim.id, assignment.id);
-        
-        const isCompleted = resultStatus === 'completed';
-        const isInProgress = resultStatus === 'in_progress';
-        const isClosed = assignment.status === 'CLOSED';
-        
-        const effectiveStartDate = assignment.startDate || sim.startDate;
-        const effectiveEndDate = assignment.endDate || sim.endDate;
-        
-        const isExpired = effectiveEndDate && effectiveEndDate < now;
-        const isNotStarted = effectiveStartDate && effectiveStartDate > now;
-
-        let studentStatus: SimulationCard['studentStatus'];
-        
-        // For ROOM-type simulations, check if staff has opened the Virtual Room for this assignment
-        // If session is active (WAITING or STARTED), student can access regardless of date
-        const hasActiveVirtualRoom = sim.accessType === 'ROOM' && activeSessionMap.has(assignment.id);
-        
-        if (isCompleted) {
-          studentStatus = 'completed';
-        } else if (isClosed) {
-          studentStatus = 'closed';
-        } else if (isNotStarted && !hasActiveVirtualRoom) {
-          // Only show "not_started" if Virtual Room is NOT active for this assignment
-          studentStatus = 'not_started';
-        } else if (isInProgress) {
-          // Student has started but not completed (has a SimulationResult without completedAt)
-          studentStatus = 'in_progress';
-        } else if (isExpired) {
-          studentStatus = 'expired';
-        } else {
-          studentStatus = 'available';
-        }
-
-        // Apply status filter
-        if (status && status !== studentStatus) {
-          if (!(status === 'available' && studentStatus === 'not_started')) {
-            continue;
-          }
-        }
-
-        simulationCards.push({
-          id: sim.id,
-          assignmentId: assignment.id,
-          title: sim.title,
-          description: sim.description,
-          type: sim.type,
-          durationMinutes: sim.durationMinutes,
-          totalQuestions: sim.totalQuestions,
-          isOfficial: sim.isOfficial,
-          isRepeatable: sim.isRepeatable,
-          maxAttempts: sim.maxAttempts,
-          visibility: sim.visibility,
-          accessType: sim.accessType,
-          enableAntiCheat: sim.enableAntiCheat,
-          startDate: effectiveStartDate,
-          endDate: effectiveEndDate,
-          dueDate: assignment.dueDate,
-          assignmentNotes: assignment.notes,
-          assignmentType: assignment.studentId ? 'direct' : 'group',
-          assignmentStatus: assignment.status,
-          studentStatus,
-          createdBy: sim.createdBy,
-          _count: sim._count,
-        });
-      }
-
-      // Process public simulations
-      for (const sim of publicSimulations) {
-        // Skip if already added via assignment
-        if (simulationCards.some(c => c.id === sim.id)) {
-          continue;
-        }
-
-        // For public simulations, use legacy result map (no assignmentId)
-        const resultStatus = resultBySimulationMap.get(sim.id);
-        
-        const isCompleted = resultStatus === 'completed';
-        const isInProgress = resultStatus === 'in_progress';
-        
-        const isExpired = sim.endDate && sim.endDate < now;
-        const isNotStarted = sim.startDate && sim.startDate > now;
-
-        let studentStatus: SimulationCard['studentStatus'];
-        
-        // Note: Public simulations don't have Virtual Room (ROOM type requires assignment)
-        if (isCompleted) {
-          studentStatus = 'completed';
-        } else if (isNotStarted) {
-          studentStatus = 'not_started';
-        } else if (isExpired) {
-          studentStatus = 'expired';
-        } else if (isInProgress) {
-          studentStatus = 'in_progress';
-        } else {
-          studentStatus = 'available';
-        }
-
-        // Apply status filter
-        if (status && status !== studentStatus) {
-          continue;
-        }
-
-        simulationCards.push({
-          id: sim.id,
-          assignmentId: null,
-          title: sim.title,
-          description: sim.description,
-          type: sim.type,
-          durationMinutes: sim.durationMinutes,
-          totalQuestions: sim.totalQuestions,
-          isOfficial: sim.isOfficial,
-          isRepeatable: sim.isRepeatable,
-          maxAttempts: sim.maxAttempts,
-          visibility: sim.visibility,
-          accessType: sim.accessType,
-          enableAntiCheat: sim.enableAntiCheat,
-          startDate: sim.startDate,
-          endDate: sim.endDate,
-          dueDate: null,
-          assignmentNotes: null,
-          assignmentType: 'public',
-          assignmentStatus: null,
-          studentStatus,
-          createdBy: sim.createdBy,
-          _count: sim._count,
-        });
-      }
-
-      // Process self-practice simulations (QUICK_QUIZ created by student)
-      for (const sim of selfPracticeSimulations) {
-        // Skip if already added via assignment
-        if (simulationCards.some(c => c.id === sim.id)) {
-          continue;
-        }
-
-        // For self-practice simulations, use legacy result map (no assignmentId)
-        const resultStatus = resultBySimulationMap.get(sim.id);
-        
-        const isCompleted = resultStatus === 'completed';
-        const isInProgress = resultStatus === 'in_progress';
-
-        let studentStatus: SimulationCard['studentStatus'];
-        
-        if (isCompleted) {
-          studentStatus = 'completed';
-        } else if (isInProgress) {
-          studentStatus = 'in_progress';
-        } else {
-          studentStatus = 'available'; // Self-practice is always available
-        }
-
-        // Apply status filter (for self-practice, status can only be available/in_progress/completed)
-        if (status && status !== studentStatus) {
-          continue;
-        }
-
-        simulationCards.push({
-          id: sim.id,
-          assignmentId: null,
-          title: sim.title,
-          description: sim.description,
-          type: sim.type,
-          durationMinutes: sim.durationMinutes,
-          totalQuestions: sim.totalQuestions,
-          isOfficial: sim.isOfficial,
-          isRepeatable: sim.isRepeatable,
-          maxAttempts: sim.maxAttempts,
-          visibility: sim.visibility,
-          accessType: sim.accessType,
-          enableAntiCheat: sim.enableAntiCheat,
-          startDate: sim.startDate,
-          endDate: sim.endDate,
-          dueDate: null,
-          assignmentNotes: null,
-          assignmentType: null, // Self-created, not assigned
-          assignmentStatus: null,
-          studentStatus,
-          createdBy: sim.createdBy,
-          _count: sim._count,
-        });
-      }
-
-      // Sort cards
-      simulationCards.sort((a, b) => {
-        const aVal = a[sortBy as keyof SimulationCard];
-        const bVal = b[sortBy as keyof SimulationCard];
-        if (aVal === null || aVal === undefined) return sortOrder === 'asc' ? 1 : -1;
-        if (bVal === null || bVal === undefined) return sortOrder === 'asc' ? -1 : 1;
-        if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
-        if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
-        return 0;
-      });
+      // Sort cards using helper
+      sortSimulationCards(simulationCards, sortBy, sortOrder);
 
       // Paginate
       const total = simulationCards.length;
@@ -2145,14 +3001,8 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
       }
 
-      // Check access: public, has assignment, or created by this student (self-practice)
-      const isOwnSelfPractice = simulation.type === 'QUICK_QUIZ' && simulation.createdById === ctx.user.id;
-      const hasAccess = 
-        simulation.isPublic ||
-        simulation.assignments.length > 0 ||
-        isOwnSelfPractice;
-
-      if (!hasAccess) {
+      // Check access using helper
+      if (!hasSimulationAccess(simulation, ctx.user.id)) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai accesso a questa simulazione' });
       }
 
@@ -2160,7 +3010,7 @@ export const simulationsRouter = router({
       const assignment = simulation.assignments[0];
 
       // Check if assignment is closed
-      if (assignment && assignment.status === 'CLOSED') {
+      if (assignment?.status === 'CLOSED') {
         // Allow access only if they have a completed result (to view stats)
         const hasCompletedResult = await ctx.prisma.simulationResult.findFirst({
           where: { 
@@ -2181,48 +3031,33 @@ export const simulationsRouter = router({
       // Use assignment dates if available, otherwise use simulation dates
       const effectiveStartDate = assignment?.startDate || simulation.startDate;
       const effectiveEndDate = assignment?.endDate || simulation.endDate;
-
-      // Date validation logic:
-      // - NON-official: strict date check (before startDate or after endDate = blocked)
-      // - Official (Virtual Room): 
-      //   - Before startDate = always blocked
-      //   - After startDate with ACTIVE status = allowed (but startAttempt will check for STARTED session)
-      //   - After endDate with CLOSED status = blocked
-      //   - After endDate with ACTIVE status = allowed (admin reopened)
       
       const isAssignmentActive = assignment?.status === 'ACTIVE';
       
       // For Virtual Room simulations, check if staff has opened the room
-      // If session is active (WAITING or STARTED), student can access regardless of start date
-      let hasActiveVirtualRoom = false;
-      if (simulation.accessType === 'ROOM' && assignment?.id) {
-        const activeSession = await ctx.prisma.simulationSession.findFirst({
-          where: {
-            assignmentId: assignment.id,
-            status: { in: ['WAITING', 'STARTED'] },
-          },
-        });
-        hasActiveVirtualRoom = !!activeSession;
-      }
+      const hasActiveVirtualRoom = simulation.accessType === 'ROOM' && assignment?.id
+        ? !!(await ctx.prisma.simulationSession.findFirst({
+            where: { assignmentId: assignment.id, status: { in: ['WAITING', 'STARTED'] } },
+          }))
+        : false;
       
-      // Block before start date UNLESS Virtual Room is active for this assignment
-      if (effectiveStartDate && effectiveStartDate > now && !hasActiveVirtualRoom) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'La simulazione non è ancora iniziata' });
-      }
-
-      // For non-official simulations, strictly enforce end date
-      // For official simulations with ACTIVE status, allow access (admin control)
-      if (effectiveEndDate && effectiveEndDate < now && !isAssignmentActive) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'La simulazione è scaduta' });
+      // Check date access using helper
+      const dateAccess = checkSimulationDateAccess(
+        effectiveStartDate,
+        effectiveEndDate,
+        now,
+        isAssignmentActive,
+        hasActiveVirtualRoom
+      );
+      if (!dateAccess.allowed) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: dateAccess.errorMessage ?? 'Accesso non consentito' });
       }
 
       // Check attempts - filter by assignmentId if provided
-      // This allows the same student to attempt the same simulation in different assignments
       const existingResults = await ctx.prisma.simulationResult.findMany({
         where: { 
           simulationId: input.id, 
           studentId,
-          // If assignmentId is provided, only check results for that specific assignment
           ...(input.assignmentId ? { assignmentId: input.assignmentId } : {}),
         },
         orderBy: { startedAt: 'desc' },
@@ -2231,24 +3066,21 @@ export const simulationsRouter = router({
       const completedAttempts = existingResults.filter(r => r.completedAt).length;
       const inProgressAttempt = existingResults.find(r => !r.completedAt);
 
-      if (!simulation.isRepeatable && completedAttempts > 0 && !inProgressAttempt) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Hai già completato questa simulazione',
-        });
-      }
-
-      if (simulation.maxAttempts && completedAttempts >= simulation.maxAttempts && !inProgressAttempt) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: `Hai raggiunto il numero massimo di tentativi (${simulation.maxAttempts})`,
-        });
+      // Check attempt limits using helper
+      const attemptCheck = checkAttemptLimits(
+        completedAttempts,
+        !!inProgressAttempt,
+        simulation.isRepeatable,
+        simulation.maxAttempts
+      );
+      if (!attemptCheck.allowed) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: attemptCheck.errorMessage ?? 'Tentativi esauriti' });
       }
 
       // Randomize if needed
       let questions = simulation.questions;
       if (simulation.randomizeOrder) {
-        questions = [...questions].sort(() => Math.random() - 0.5);
+        questions = secureShuffleArray(questions);
       }
 
       if (simulation.randomizeAnswers) {
@@ -2256,7 +3088,7 @@ export const simulationsRouter = router({
           ...sq,
           question: {
             ...sq.question,
-            answers: [...sq.question.answers].sort(() => Math.random() - 0.5),
+            answers: secureShuffleArray(sq.question.answers),
           },
         }));
       }
@@ -2324,7 +3156,7 @@ export const simulationsRouter = router({
         },
       });
 
-      if (!simulation || simulation.status !== 'PUBLISHED') {
+      if (!simulation?.status || simulation.status !== 'PUBLISHED') {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non disponibile' });
       }
 
@@ -2332,7 +3164,7 @@ export const simulationsRouter = router({
       const assignment = simulation.assignments[0];
       const assignmentId = assignment?.id || null;
       
-      if (assignment && assignment.status === 'CLOSED') {
+      if (assignment?.status === 'CLOSED') {
         throw new TRPCError({ 
           code: 'FORBIDDEN', 
           message: 'Questa simulazione è stata chiusa e non puoi più accedervi' 
@@ -2340,34 +3172,23 @@ export const simulationsRouter = router({
       }
 
       // For Virtual Room simulations, check if there's an active STARTED session
-      // Only bypass date checks if the student is actually in a started session
-      let hasActiveVirtualRoomSession = false;
-      if (assignment?.status === 'ACTIVE') {
-        const activeSession = await ctx.prisma.simulationSession.findFirst({
-          where: {
-            simulationId: input.simulationId,
-            assignmentId: assignmentId, // Filter by specific assignment
-            status: 'STARTED', // Must be actually started, not just WAITING
-            participants: {
-              some: { studentId },
-            },
-          },
-        });
-        hasActiveVirtualRoomSession = !!activeSession;
-      }
+      const hasActiveVirtualRoomSession = await checkActiveVirtualRoomSession(
+        ctx.prisma,
+        input.simulationId,
+        assignmentId,
+        studentId,
+        assignment?.status
+      );
       
       // Use assignment dates if available
       const effectiveStartDate = assignment?.startDate || simulation.startDate;
       const effectiveEndDate = assignment?.endDate || simulation.endDate;
 
-      // Check dates UNLESS student is in an active Virtual Room session that has started
+      // Check dates UNLESS student is in an active Virtual Room session
       if (!hasActiveVirtualRoomSession) {
-        const now = new Date();
-        if (effectiveStartDate && effectiveStartDate > now) {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: 'La simulazione non è ancora iniziata' });
-        }
-        if (effectiveEndDate && effectiveEndDate < now) {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: 'La simulazione è scaduta' });
+        const dateAccess = checkSimulationDateAccess(effectiveStartDate, effectiveEndDate, new Date(), false, false);
+        if (!dateAccess.allowed) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: dateAccess.errorMessage ?? 'Accesso non consentito' });
         }
       }
 
@@ -2376,92 +3197,37 @@ export const simulationsRouter = router({
         where: { 
           simulationId: input.simulationId, 
           studentId,
-          assignmentId: assignmentId, // Filter by assignment (null for public simulations)
+          assignmentId: assignmentId,
+        },
+        select: {
+          id: true,
+          completedAt: true,
+          startedAt: true,
+          answers: true,
+          durationSeconds: true,
         },
       });
 
-      const completedAttempts = existingResults.filter(r => r.completedAt).length;
-      let inProgressAttempt = existingResults.find(r => !r.completedAt);
-
-      // For Virtual Room simulations, check if the in-progress attempt is for the current session
-      // If not, invalidate it (delete the old attempt) and create a new one
-      if (inProgressAttempt && assignmentId) {
-        // Check if there's an active session for this assignment
-        const currentSession = await ctx.prisma.simulationSession.findFirst({
-          where: {
-            assignmentId: assignmentId,
-            status: { in: ['WAITING', 'STARTED'] }, // Active sessions
-            participants: {
-              some: { studentId },
-            },
-          },
-          select: { id: true, createdAt: true },
-          orderBy: { createdAt: 'desc' }, // Get the most recent session
-        });
-
-        // If there's a current session, check if the in-progress attempt was created before it
-        // This means the attempt is from a previous (now closed) session
-        if (currentSession && inProgressAttempt.startedAt && inProgressAttempt.startedAt < currentSession.createdAt) {
-          // Old attempt from a closed session - delete it so student starts fresh
-          await ctx.prisma.simulationResult.delete({
-            where: { id: inProgressAttempt.id },
-          });
-          
-          log.info('Deleted old attempt from closed session - student will start fresh:', {
-            oldResultId: inProgressAttempt.id,
-            oldStartedAt: inProgressAttempt.startedAt,
-            newSessionId: currentSession.id,
-            newSessionCreatedAt: currentSession.createdAt,
-            studentId,
-            assignmentId,
-          });
-          
-          // Clear inProgressAttempt so a new one will be created below
-          inProgressAttempt = undefined;
-        }
-      }
+      // Handle existing attempts (invalidation, etc.)
+      const { inProgressAttempt, completedAttempts } = await handleExistingAttempts(
+        ctx.prisma,
+        existingResults,
+        assignmentId,
+        studentId
+      );
 
       // Return existing in-progress attempt (if still valid)
       if (inProgressAttempt) {
-        // Parse saved answers - handle both old format (array) and new format (object with metadata)
-        const savedData = inProgressAttempt.answers as unknown;
-        let savedAnswers: Array<{
-          questionId: string;
-          answerId: string | null;
-          answerText: string | null;
-          timeSpent: number;
-          flagged: boolean;
-        }> = [];
-        let savedSectionTimes: Record<number, number> = {};
-        let savedCurrentSectionIndex = 0;
-
-        if (Array.isArray(savedData)) {
-          // Old format: just an array of answers
-          savedAnswers = savedData as typeof savedAnswers;
-        } else if (savedData && typeof savedData === 'object' && 'items' in savedData) {
-          // New format: object with items, sectionTimes, currentSectionIndex
-          const meta = savedData as {
-            items: typeof savedAnswers;
-            sectionTimes?: Record<string, number>;
-            currentSectionIndex?: number;
-          };
-          savedAnswers = meta.items || [];
-          // Convert string keys to number keys for sectionTimes
-          if (meta.sectionTimes) {
-            savedSectionTimes = Object.fromEntries(
-              Object.entries(meta.sectionTimes).map(([k, v]) => [Number(k), v])
-            );
-          }
-          savedCurrentSectionIndex = meta.currentSectionIndex ?? 0;
-        }
+        // Parse saved answers using helper
+        const savedProgress = parseSavedProgress(inProgressAttempt.answers);
 
         return { 
           resultId: inProgressAttempt.id, 
           resumed: true,
           savedTimeSpent: inProgressAttempt.durationSeconds || 0,
-          savedAnswers,
-          savedSectionTimes,
-          savedCurrentSectionIndex,
+          savedAnswers: savedProgress.savedAnswers,
+          savedSectionTimes: savedProgress.savedSectionTimes,
+          savedCurrentSectionIndex: savedProgress.savedCurrentSectionIndex,
         };
       }
 
@@ -2573,142 +3339,29 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
       }
 
-      // Get existing in-progress result
-      let result = await ctx.prisma.simulationResult.findFirst({
-        where: { simulationId, studentId, completedAt: null },
-      });
+      // Get or create simulation result using helper
+      const result = await getOrCreateSimulationResult(
+        ctx.prisma,
+        simulationId,
+        studentId,
+        simulation.totalQuestions,
+        simulation.isRepeatable
+      );
 
-      if (!result) {
-        // Check if there's already a completed result
-        const completedResult = await ctx.prisma.simulationResult.findFirst({
-          where: { simulationId, studentId, completedAt: { not: null } },
-          orderBy: { completedAt: 'desc' },
-        });
-        
-        if (completedResult) {
-          // If simulation is not repeatable, user shouldn't be submitting again
-          if (!simulation.isRepeatable) {
-            throw new TRPCError({ 
-              code: 'BAD_REQUEST', 
-              message: 'Hai già completato questa simulazione' 
-            });
-          }
-          // For repeatable simulations with no in-progress result,
-          // this is likely a stale submission - return error
-          throw new TRPCError({ 
-            code: 'BAD_REQUEST', 
-            message: 'Sessione scaduta. Per favore, riavvia la simulazione.' 
-          });
+      // Calculate scores using helper
+      const scoringResult = calculateSubmissionScores(
+        simulation.questions as unknown as SimulationQuestionWithDetails[],
+        answers.map(a => ({ ...a, questionId: a.questionId ?? '' })),
+        {
+          useQuestionPoints: simulation.useQuestionPoints,
+          correctPoints: simulation.correctPoints,
+          wrongPoints: simulation.wrongPoints,
+          blankPoints: simulation.blankPoints,
         }
-        
-        // Create new result for this submission attempt
-        try {
-          result = await ctx.prisma.simulationResult.create({
-            data: {
-              simulation: { connect: { id: simulationId } },
-              student: { connect: { id: studentId } },
-              totalQuestions: simulation.totalQuestions,
-              answers: [],
-            },
-          });
-        } catch (error) {
-          // Handle unique constraint violation - result was created in parallel
-          const existingResult = await ctx.prisma.simulationResult.findFirst({
-            where: { simulationId, studentId },
-            orderBy: { startedAt: 'desc' },
-          });
-          if (existingResult?.completedAt) {
-            throw new TRPCError({ 
-              code: 'BAD_REQUEST', 
-              message: 'Questa simulazione è già stata completata' 
-            });
-          }
-          if (existingResult) {
-            result = existingResult;
-          } else {
-            throw error;
-          }
-        }
-      }
-
-      // Calculate score
-      let correctCount = 0;
-      let wrongCount = 0;
-      let blankCount = 0;
-      let totalScore = 0;
-
-      // Track subject-level statistics for subjectScores field
-      const subjectScores: Record<string, { correct: number; wrong: number; blank: number }> = {};
-
-      const evaluatedAnswers = [];
-
-      for (const sq of simulation.questions) {
-        const studentAnswer = answers.find(a => a.questionId === sq.questionId);
-        const correctAnswer = sq.question.answers.find(a => a.isCorrect);
-        const subject = sq.question.subject?.name; // Get subject name for each question
-
-        // Initialize subject stats if not exists
-        if (subject && !subjectScores[subject]) {
-          subjectScores[subject] = { correct: 0, wrong: 0, blank: 0 };
-        }
-
-        const points = sq.customPoints ?? (simulation.useQuestionPoints ? sq.question.points : simulation.correctPoints);
-        const negativePoints = sq.customNegativePoints ?? (simulation.useQuestionPoints ? sq.question.negativePoints : simulation.wrongPoints);
-
-        let isCorrect: boolean | null = false; // null = pending review (for open questions)
-        let earnedPoints = 0;
-
-        // Handle OPEN_TEXT questions separately
-        if (sq.question.type === 'OPEN_TEXT') {
-          if (studentAnswer?.answerText && studentAnswer.answerText.trim().length > 0) {
-            // Has text answer - always pending review initially
-            // If showCorrectAnswers=true, student can self-correct via UI
-            // If showCorrectAnswers=false, staff will review
-            isCorrect = null; // null indicates pending review
-            earnedPoints = 0; // Points assigned after correction
-          } else {
-            // No answer for open text question
-            blankCount++;
-            earnedPoints = simulation.blankPoints;
-            isCorrect = null;
-            // Track blank for subject
-            if (subject) subjectScores[subject].blank++;
-          }
-        } else if (!studentAnswer?.answerId) {
-          // Blank answer for choice questions
-          blankCount++;
-          earnedPoints = simulation.blankPoints;
-          // Track blank for subject
-          if (subject) subjectScores[subject].blank++;
-        } else if (studentAnswer.answerId === correctAnswer?.id) {
-          // Correct answer
-          isCorrect = true;
-          correctCount++;
-          earnedPoints = points;
-          // Track correct for subject
-          if (subject) subjectScores[subject].correct++;
-        } else {
-          // Wrong answer
-          wrongCount++;
-          earnedPoints = negativePoints;
-          // Track wrong for subject
-          if (subject) subjectScores[subject].wrong++;
-        }
-
-        totalScore += earnedPoints;
-
-        evaluatedAnswers.push({
-          questionId: sq.questionId,
-          answerId: studentAnswer?.answerId ?? null,
-          answerText: studentAnswer?.answerText ?? null,
-          isCorrect,
-          earnedPoints,
-          timeSpent: studentAnswer?.timeSpent ?? 0,
-        });
-      }
+      );
 
       // Count pending open answers (isCorrect === null with text)
-      const pendingOpenCount = evaluatedAnswers.filter(a => 
+      const pendingOpenCount = scoringResult.evaluatedAnswers.filter(a => 
         a.isCorrect === null && a.answerText && a.answerText.trim().length > 0
       ).length;
 
@@ -2716,85 +3369,40 @@ export const simulationsRouter = router({
       const updatedResult = await ctx.prisma.simulationResult.update({
         where: { id: result.id },
         data: {
-          answers: evaluatedAnswers as Prisma.JsonArray,
-          totalScore: totalScore,
-          percentageScore: simulation.maxScore ? (totalScore / simulation.maxScore) * 100 : 0,
-          correctAnswers: correctCount,
-          wrongAnswers: wrongCount,
-          blankAnswers: blankCount,
+          answers: scoringResult.evaluatedAnswers as unknown as Prisma.JsonArray,
+          totalScore: scoringResult.totalScore,
+          percentageScore: simulation.maxScore ? (scoringResult.totalScore / simulation.maxScore) * 100 : 0,
+          correctAnswers: scoringResult.correctCount,
+          wrongAnswers: scoringResult.wrongCount,
+          blankAnswers: scoringResult.blankCount,
           pendingOpenAnswers: pendingOpenCount,
           durationSeconds: totalTimeSpent,
           completedAt: new Date(),
-          subjectScores: Object.keys(subjectScores).length > 0 ? subjectScores : undefined,
+          subjectScores: Object.keys(scoringResult.subjectScores).length > 0 ? scoringResult.subjectScores : undefined,
         },
       });
 
-      // Create OpenAnswerSubmission records for OPEN_TEXT questions with text answers
-      // BUT ONLY if showCorrectAnswers is false (staff correction required)
-      // If showCorrectAnswers is true, student can self-correct by seeing the correct answers
-      const openAnswersToCreate = [];
+      // Create OpenAnswerSubmission records only if staff correction is required
+      let openAnswersCount = 0;
       if (!simulation.showCorrectAnswers) {
-        for (const sq of simulation.questions) {
-          // Check if this is an OPEN_TEXT question
-          if (sq.question.type === 'OPEN_TEXT') {
-            const studentAnswer = answers.find(a => a.questionId === sq.questionId);
-            if (studentAnswer?.answerText && studentAnswer.answerText.trim().length > 0) {
-              // Auto-validate against keywords if available (keywords is a relation, not JSON)
-              const keywords = sq.question.keywords; // QuestionKeyword[]
-              const answerLower = studentAnswer.answerText.toLowerCase();
-              
-              const keywordsMatched: string[] = [];
-              const keywordsMissed: string[] = [];
-              let autoScore: number | null = null;
-
-              if (keywords.length > 0) {
-                let matchedWeight = 0;
-                let totalWeight = 0;
-
-                for (const kw of keywords) {
-                  totalWeight += kw.weight;
-                  if (answerLower.includes(kw.keyword.toLowerCase())) {
-                    keywordsMatched.push(kw.keyword);
-                    matchedWeight += kw.weight;
-                  } else if (kw.isRequired) {
-                    keywordsMissed.push(kw.keyword);
-                  }
-                }
-
-                autoScore = totalWeight > 0 ? matchedWeight / totalWeight : null;
-              }
-
-              openAnswersToCreate.push({
-                questionId: sq.questionId,
-                studentId,
-                simulationResultId: result.id,
-                answerText: studentAnswer.answerText,
-                keywordsMatched,
-                keywordsMissed,
-                autoScore,
-                finalScore: autoScore, // Will be overwritten by manual review
-                isValidated: false,
-              });
-            }
-          }
+        const openAnswersToCreate = buildOpenAnswerSubmissions(
+          simulation.questions as unknown as SimulationQuestionWithDetails[],
+          answers.map(a => ({ ...a, questionId: a.questionId ?? '' })),
+          studentId,
+          result.id
+        );
+        
+        if (openAnswersToCreate.length > 0) {
+          await ctx.prisma.openAnswerSubmission.createMany({
+            data: openAnswersToCreate,
+          });
+          await ctx.prisma.simulationResult.update({
+            where: { id: result.id },
+            data: { pendingOpenAnswers: openAnswersToCreate.length },
+          });
         }
+        openAnswersCount = openAnswersToCreate.length;
       }
-
-      // Create open answer submissions
-      if (openAnswersToCreate.length > 0) {
-        await ctx.prisma.openAnswerSubmission.createMany({
-          data: openAnswersToCreate,
-        });
-
-        // Update result with pending count
-        await ctx.prisma.simulationResult.update({
-          where: { id: result.id },
-          data: { pendingOpenAnswers: openAnswersToCreate.length },
-        });
-      }
-
-      // Count open answers that need review (answers with text but no answerId selected)
-      const openAnswersCount = openAnswersToCreate.length;
 
       // Notify staff about completion (background, don't block response)
       notificationService.notifySimulationCompletedByStudent(ctx.prisma, {
@@ -2811,15 +3419,15 @@ export const simulationsRouter = router({
       if (simulation.showResults) {
         return {
           resultId: updatedResult.id,
-          score: totalScore,
+          score: scoringResult.totalScore,
           maxScore: simulation.maxScore,
-          correctCount,
-          wrongCount,
-          blankCount,
+          correctCount: scoringResult.correctCount,
+          wrongCount: scoringResult.wrongCount,
+          blankCount: scoringResult.blankCount,
           totalQuestions: simulation.totalQuestions,
-          passed: simulation.passingScore ? totalScore >= simulation.passingScore : null,
+          passed: simulation.passingScore ? scoringResult.totalScore >= simulation.passingScore : null,
           showCorrectAnswers: simulation.showCorrectAnswers,
-          answers: simulation.showCorrectAnswers ? evaluatedAnswers : undefined,
+          answers: simulation.showCorrectAnswers ? scoringResult.evaluatedAnswers : undefined,
         };
       }
 
@@ -2919,32 +3527,14 @@ export const simulationsRouter = router({
       const pointDifference = newPoints - oldPoints;
 
       // Update the answer
-      const wasCorrect = answer.isCorrect === true;
-      const wasWrong = answer.isCorrect === false;
-      const wasPending = answer.isCorrect === null;
-
       currentAnswers[answerIndex] = {
         ...answer,
         isCorrect,
         earnedPoints: newPoints,
       };
 
-      // Calculate new counts
-      let correctDelta = 0;
-      let wrongDelta = 0;
-      let pendingDelta = 0;
-
-      if (isCorrect) {
-        correctDelta = 1;
-        if (wasWrong) wrongDelta = -1;
-        if (wasPending) pendingDelta = -1;
-        if (wasCorrect) correctDelta = 0; // Already correct, no change
-      } else {
-        wrongDelta = 1;
-        if (wasCorrect) correctDelta = -1;
-        if (wasPending) pendingDelta = -1;
-        if (wasWrong) wrongDelta = 0; // Already wrong, no change
-      }
+      // Calculate new counts using helper
+      const deltas = calculateSelfCorrectionDeltas(isCorrect, answer.isCorrect);
 
       // Update result
       await ctx.prisma.simulationResult.update({
@@ -2952,17 +3542,17 @@ export const simulationsRouter = router({
         data: {
           answers: currentAnswers as Prisma.JsonArray,
           totalScore: (result.totalScore ?? 0) + pointDifference,
-          correctAnswers: (result.correctAnswers ?? 0) + correctDelta,
-          wrongAnswers: (result.wrongAnswers ?? 0) + wrongDelta,
-          pendingOpenAnswers: Math.max(0, (result.pendingOpenAnswers ?? 0) + pendingDelta),
+          correctAnswers: (result.correctAnswers ?? 0) + deltas.correctDelta,
+          wrongAnswers: (result.wrongAnswers ?? 0) + deltas.wrongDelta,
+          pendingOpenAnswers: Math.max(0, (result.pendingOpenAnswers ?? 0) + deltas.pendingDelta),
         },
       });
 
       return {
         success: true,
         newScore: (result.totalScore ?? 0) + pointDifference,
-        correctAnswers: (result.correctAnswers ?? 0) + correctDelta,
-        wrongAnswers: (result.wrongAnswers ?? 0) + wrongDelta,
+        correctAnswers: (result.correctAnswers ?? 0) + deltas.correctDelta,
+        wrongAnswers: (result.wrongAnswers ?? 0) + deltas.wrongDelta,
       };
     }),
 
@@ -3251,8 +3841,8 @@ export const simulationsRouter = router({
         });
       }
 
-      // Shuffle and select
-      const shuffled = questions.sort(() => Math.random() - 0.5);
+      // Shuffle using secure shuffle and select
+      const shuffled = secureShuffleArray(questions);
       const selected = shuffled.slice(0, questionCount);
 
       // Create simulation
@@ -3376,7 +3966,8 @@ export const simulationsRouter = router({
         titleSubject = 'Multi-materia';
       } else {
         // 2-3 subjects: show most common one
-        const mainSubject = Object.entries(subjectCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+        const sortedSubjects = Object.entries(subjectCounts).toSorted((a, b) => b[1] - a[1]);
+        const mainSubject = sortedSubjects[0]?.[0];
         titleSubject = mainSubject || 'Varie';
       }
 
@@ -3400,7 +3991,7 @@ export const simulationsRouter = router({
           allowReview: true,
           randomizeOrder: true,
           randomizeAnswers: true,
-          correctPoints: 1.0,
+          correctPoints: 1,
           wrongPoints: 0,
           blankPoints: 0,
           isRepeatable: true,
@@ -3510,7 +4101,7 @@ export const simulationsRouter = router({
 
       // Calculate pass rate if passingScore is set
       const passRate = simulation.passingScore 
-        ? results.filter(r => (r.totalScore ?? 0) >= simulation.passingScore!).length / results.length * 100
+        ? results.filter(r => (r.totalScore ?? 0) >= simulation.passingScore).length / results.length * 100
         : 0;
 
       return {
@@ -3597,7 +4188,7 @@ export const simulationsRouter = router({
       const answerIdToLetter = new Map<string, string>();
       simulation.questions.forEach(sq => {
         sq.question.answers.forEach((a, i) => {
-          answerIdToLetter.set(a.id, String.fromCharCode(65 + i));
+          answerIdToLetter.set(a.id, String.fromCodePoint(65 + i));
         });
       });
 
@@ -3622,12 +4213,12 @@ export const simulationsRouter = router({
       simulation.questions.forEach((sq, idx) => {
         const correctAnswerObj = sq.question.answers.find(a => a.isCorrect);
         const correctAnswerLetter = correctAnswerObj 
-          ? String.fromCharCode(65 + sq.question.answers.indexOf(correctAnswerObj)) 
+          ? String.fromCodePoint(65 + sq.question.answers.indexOf(correctAnswerObj)) 
           : '';
 
         // Build answers array with letter labels
         const answersWithLabels = sq.question.answers.map((a, i) => ({
-          label: String.fromCharCode(65 + i), // A, B, C, D, E
+          label: String.fromCodePoint(65 + i), // A, B, C, D, E
           text: a.text,
           isCorrect: a.isCorrect,
         }));
@@ -3662,10 +4253,7 @@ export const simulationsRouter = router({
           stats.totalAnswers++;
           
           // Check if answer is blank (no answerId)
-          if (!answerData.answerId) {
-            stats.blankCount++;
-            stats.answerDistribution['BLANK']++;
-          } else {
+          if (answerData.answerId) {
             // Get the letter label for this answerId
             const answerLetter = answerIdToLetter.get(answerData.answerId) || 'UNKNOWN';
             
@@ -3678,6 +4266,9 @@ export const simulationsRouter = router({
               stats.answerDistribution[answerLetter] = 
                 (stats.answerDistribution[answerLetter] || 0) + 1;
             }
+          } else {
+            stats.blankCount++;
+            stats.answerDistribution['BLANK']++;
           }
 
           if (typeof answerData.timeSpent === 'number' && answerData.timeSpent > 0) {
@@ -3726,11 +4317,13 @@ export const simulationsRouter = router({
           });
         }
 
-        const stats = subjectStats.get(q.subject.id)!;
-        stats.totalQuestions++;
-        stats.totalCorrect += q.correctCount;
-        stats.totalWrong += q.wrongCount;
-        stats.totalBlank += q.blankCount;
+        const stats = subjectStats.get(q.subject.id);
+        if (stats) {
+          stats.totalQuestions++;
+          stats.totalCorrect += q.correctCount;
+          stats.totalWrong += q.wrongCount;
+          stats.totalBlank += q.blankCount;
+        }
       });
 
       const subjectBreakdown = Array.from(subjectStats.values()).map(stats => ({
@@ -4168,49 +4761,12 @@ export const simulationsRouter = router({
         };
       }
 
-      // Calculate score
-      let correctCount = 0;
-      let wrongCount = 0;
-      let blankCount = 0;
-      let totalScore = 0;
-
-      const evaluatedAnswers = [];
-
-      for (const sq of simulation.questions) {
-        const studentAnswer = answers.find(a => a.questionId === sq.questionId);
-        const correctAnswer = sq.question.answers.find(a => a.isCorrect);
-
-        const points = sq.customPoints ?? (simulation.useQuestionPoints ? sq.question.points : simulation.correctPoints);
-        const negativePoints = sq.customNegativePoints ?? (simulation.useQuestionPoints ? sq.question.negativePoints : simulation.wrongPoints);
-
-        let isCorrect = false;
-        let earnedPoints = 0;
-
-        if (!studentAnswer?.answerId) {
-          // Blank answer
-          blankCount++;
-          earnedPoints = simulation.blankPoints;
-        } else if (studentAnswer.answerId === correctAnswer?.id) {
-          // Correct answer
-          isCorrect = true;
-          correctCount++;
-          earnedPoints = points;
-        } else {
-          // Wrong answer
-          wrongCount++;
-          earnedPoints = negativePoints;
-        }
-
-        totalScore += earnedPoints;
-
-        evaluatedAnswers.push({
-          questionId: sq.questionId,
-          answerId: studentAnswer?.answerId ?? null,
-          isCorrect,
-          earnedPoints,
-          timeSpent: 0, // Paper-based doesn't track time
-        });
-      }
+      // Calculate score using helper
+      const evaluation = evaluatePaperBasedAnswers(
+        simulation.questions,
+        answers.map(a => ({ questionId: a.questionId, answerId: a.answerId })),
+        simulation
+      );
 
       // Create result
       const result = await ctx.prisma.simulationResult.create({
@@ -4218,12 +4774,12 @@ export const simulationsRouter = router({
           simulation: { connect: { id: simulationId } },
           student: { connect: { id: studentId } },
           totalQuestions: simulation.totalQuestions,
-          correctAnswers: correctCount,
-          wrongAnswers: wrongCount,
-          blankAnswers: blankCount,
-          totalScore,
-          percentageScore: simulation.maxScore ? (totalScore / simulation.maxScore) * 100 : 0,
-          answers: evaluatedAnswers as Prisma.JsonArray,
+          correctAnswers: evaluation.correctCount,
+          wrongAnswers: evaluation.wrongCount,
+          blankAnswers: evaluation.blankCount,
+          totalScore: evaluation.totalScore,
+          percentageScore: simulation.maxScore ? (evaluation.totalScore / simulation.maxScore) * 100 : 0,
+          answers: evaluation.evaluatedAnswers as unknown as Prisma.JsonArray,
           completedAt: new Date(),
         },
       });
@@ -4231,12 +4787,12 @@ export const simulationsRouter = router({
       return {
         resultId: result.id,
         wasPresent: true,
-        score: totalScore,
+        score: evaluation.totalScore,
         maxScore: simulation.maxScore,
-        correctCount,
-        wrongCount,
-        blankCount,
-        passed: simulation.passingScore ? totalScore >= simulation.passingScore : null,
+        correctCount: evaluation.correctCount,
+        wrongCount: evaluation.wrongCount,
+        blankCount: evaluation.blankCount,
+        passed: simulation.passingScore ? evaluation.totalScore >= simulation.passingScore : null,
       };
     }),
 
@@ -4297,11 +4853,12 @@ export const simulationsRouter = router({
       for (const assignment of simulation.assignments) {
         // Direct student assignment
         if (assignment.student) {
-          studentsMap.set(assignment.student.id, {
-            id: assignment.student.id,
+          const studentId = assignment.student.id;
+          studentsMap.set(studentId, {
+            id: studentId,
             name: assignment.student.user.name,
             email: assignment.student.user.email,
-            hasResult: simulation.results.some(r => r.studentId === assignment.student!.id),
+            hasResult: simulation.results.some(r => r.studentId === studentId),
           });
         }
 
@@ -4332,11 +4889,11 @@ export const simulationsRouter = router({
         questions: simulation.questions.map((sq, index) => ({
           id: sq.questionId,
           order: index + 1,
-          text: sq.question.text.replace(/<[^>]*>/g, '').substring(0, 100) + '...',
+          text: stripHtml(sq.question.text).substring(0, 100) + '...',
           subject: sq.question.subject?.name,
           answers: sq.question.answers.map(a => ({
             id: a.id,
-            label: a.label || String.fromCharCode(65 + (a.order || 0)), // A, B, C, D, E
+            label: a.label || String.fromCodePoint(65 + (a.order || 0)), // A, B, C, D, E
           })),
         })),
         students,
@@ -4443,15 +5000,23 @@ export const simulationsRouter = router({
 
       // Calculate overview stats
       const scores = results.map(r => r.percentageScore ?? 0);
-      const times = results.filter(r => r.durationSeconds && r.durationSeconds > 0).map(r => r.durationSeconds!);
+      const times = results
+        .filter((r): r is typeof r & { durationSeconds: number } => 
+          r.durationSeconds !== null && r.durationSeconds > 0
+        )
+        .map(r => r.durationSeconds);
       const passedCount = simulation.passingScore 
-        ? results.filter(r => (r.percentageScore ?? 0) >= simulation.passingScore!).length
+        ? results.filter(r => (r.percentageScore ?? 0) >= simulation.passingScore).length
         : null;
+
+      // Calculate median score
+      const sortedScores = [...scores].toSorted((a, b) => a - b);
+      const medianScore = sortedScores[Math.floor(sortedScores.length / 2)];
 
       const overview = {
         totalAttempts: results.length,
         averageScore: scores.reduce((a, b) => a + b, 0) / scores.length,
-        medianScore: scores.sort((a, b) => a - b)[Math.floor(scores.length / 2)],
+        medianScore,
         highestScore: Math.max(...scores),
         lowestScore: Math.min(...scores),
         standardDeviation: calculateStandardDeviation(scores),
@@ -4485,10 +5050,14 @@ export const simulationsRouter = router({
         scoreDistribution[bucketIndex].count++;
       });
 
+      // Calculate median time
+      const sortedTimes = [...times].toSorted((a, b) => a - b);
+      const medianTime = sortedTimes.length > 0 ? sortedTimes[Math.floor(sortedTimes.length / 2)] : 0;
+
       // Time analysis
       const timeAnalysis = times.length > 0 ? {
         averageTime: times.reduce((a, b) => a + b, 0) / times.length,
-        medianTime: times.sort((a, b) => a - b)[Math.floor(times.length / 2)],
+        medianTime,
         fastestTime: Math.min(...times),
         slowestTime: Math.max(...times),
         expectedTime: simulation.durationMinutes * 60,
@@ -4570,6 +5139,13 @@ export const simulationsRouter = router({
       groupId: z.string().optional(), // If provided, filter by group
     }))
     .query(async ({ ctx, input }) => {
+      // Build assignment filter
+      const buildAssignmentFilter = () => {
+        if (input.assignmentId) return { id: input.assignmentId };
+        if (input.groupId) return { groupId: input.groupId };
+        return undefined;
+      };
+
       const simulation = await ctx.prisma.simulation.findUnique({
         where: { id: input.simulationId },
         include: {
@@ -4586,7 +5162,7 @@ export const simulationsRouter = router({
             },
           },
           assignments: {
-            where: input.assignmentId ? { id: input.assignmentId } : input.groupId ? { groupId: input.groupId } : undefined,
+            where: buildAssignmentFilter(),
             include: {
               student: {
                 include: { user: { select: { id: true, name: true, email: true } } },
@@ -4630,17 +5206,24 @@ export const simulationsRouter = router({
       // If assignmentId is specified, filter by that specific assignment
       // Otherwise, if groupId is specified, filter by all assignments for that group
       // Otherwise, filter by all assignments for this simulation
+      
+      // Build assignment filter for results query
+      const buildResultAssignmentFilter = () => {
+        if (input.assignmentId) {
+          return { assignmentId: input.assignmentId };
+        }
+        if (targetedAssignmentIds.size > 0) {
+          return { assignmentId: { in: Array.from(targetedAssignmentIds) } };
+        }
+        return {};
+      };
+
       const results = await ctx.prisma.simulationResult.findMany({
         where: { 
           simulationId: input.simulationId,
           studentId: { in: Array.from(targetedStudentIds) },
           // Filter by assignmentId(s) to ensure we only get results for this specific assignment/group
-          ...(input.assignmentId 
-            ? { assignmentId: input.assignmentId }
-            : targetedAssignmentIds.size > 0 
-              ? { assignmentId: { in: Array.from(targetedAssignmentIds) } }
-              : {}
-          ),
+          ...buildResultAssignmentFilter(),
         },
         select: {
           id: true,
@@ -4699,7 +5282,7 @@ export const simulationsRouter = router({
       simulation.questions.forEach((sq, idx) => {
         const correctAnswer = sq.question.answers.find(a => a.isCorrect);
         const correctLetter = correctAnswer 
-          ? String.fromCharCode(65 + sq.question.answers.indexOf(correctAnswer))
+          ? String.fromCodePoint(65 + sq.question.answers.indexOf(correctAnswer))
           : '';
         const correctText = correctAnswer?.text || '';
         
@@ -4707,14 +5290,14 @@ export const simulationsRouter = router({
         const answerIdToLetter: Record<string, string> = {};
         const answerIdToText: Record<string, string> = {};
         sq.question.answers.forEach((a, ansIdx) => {
-          answerIdToLetter[a.id] = String.fromCharCode(65 + ansIdx);
+          answerIdToLetter[a.id] = String.fromCodePoint(65 + ansIdx);
           answerIdToText[a.id] = a.text;
         });
         
         questionMap.set(sq.questionId, {
           id: sq.questionId,
           order: idx + 1,
-          text: sq.question.text.replace(/<[^>]*>/g, '').substring(0, 80),
+          text: stripHtml(sq.question.text).substring(0, 80),
           subject: sq.question.subject,
           topic: sq.question.topic,
           correctAnswerLetter: correctLetter,
@@ -5123,9 +5706,9 @@ export const simulationsRouter = router({
       }
 
       // Update all open answers in a transaction
-      await ctx.prisma.$transaction(async (tx) => {
+      await ctx.prisma.$transaction(async () => {
         for (const validation of input.validations) {
-          await tx.openAnswerSubmission.update({
+          await ctx.prisma.openAnswerSubmission.update({
             where: { id: validation.openAnswerId },
             data: {
               manualScore: validation.manualScore,
@@ -5139,7 +5722,7 @@ export const simulationsRouter = router({
         }
 
         // Check remaining pending
-        const remainingPending = await tx.openAnswerSubmission.count({
+        const remainingPending = await ctx.prisma.openAnswerSubmission.count({
           where: {
             simulationResultId: input.resultId,
             isValidated: false,
@@ -5147,7 +5730,7 @@ export const simulationsRouter = router({
         });
 
         // Update result
-        await tx.simulationResult.update({
+        await ctx.prisma.simulationResult.update({
           where: { id: input.resultId },
           data: {
             pendingOpenAnswers: remainingPending,

@@ -261,7 +261,8 @@ export default function CollaboratorSimulationsContent() {
         });
       }
 
-      const group = groups.get(key)!;
+      const group = groups.get(key);
+      if (!group) return;
 
       // Add student or group to the grouped assignment
       if (assignment.student) {
@@ -332,9 +333,9 @@ export default function CollaboratorSimulationsContent() {
     const menuWidth = 208; // w-52 = 13rem = 208px
     
     // Calculate available space
-    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceBelow = globalThis.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
-    const spaceRight = window.innerWidth - rect.right;
+    const spaceRight = globalThis.innerWidth - rect.right;
     
     // Determine if menu should open upward or downward
     // Only open upward if there's really not enough space below
@@ -342,27 +343,27 @@ export default function CollaboratorSimulationsContent() {
     
     // Calculate vertical position
     const top = openUpward
-      ? rect.top + window.scrollY - menuHeight - 4 // 4px gap
-      : rect.bottom + window.scrollY + 4; // 4px gap
+      ? rect.top + globalThis.scrollY - menuHeight - 4 // 4px gap
+      : rect.bottom + globalThis.scrollY + 4; // 4px gap
     
     // Calculate horizontal position with responsive logic
     let left: number;
     
     // On mobile/small screens or when not enough space on right
-    if (window.innerWidth < 640 || spaceRight < menuWidth + 16) {
+    if (globalThis.innerWidth < 640 || spaceRight < menuWidth + 16) {
       // Align to right edge with padding, or center if very small screen
-      if (window.innerWidth < menuWidth + 32) {
+      if (globalThis.innerWidth < menuWidth + 32) {
         // Center on very small screens
-        left = window.scrollX + (window.innerWidth - menuWidth) / 2;
+        left = globalThis.scrollX + (globalThis.innerWidth - menuWidth) / 2;
       } else {
         // Align to right edge of button but ensure it stays on screen
-        const idealLeft = rect.right + window.scrollX - menuWidth;
-        const minLeft = window.scrollX + 8; // 8px padding from left edge
+        const idealLeft = rect.right + globalThis.scrollX - menuWidth;
+        const minLeft = globalThis.scrollX + 8; // 8px padding from left edge
         left = Math.max(minLeft, idealLeft);
       }
     } else {
       // Desktop: align to right edge of button
-      left = rect.right + window.scrollX - menuWidth;
+      left = rect.right + globalThis.scrollX - menuWidth;
     }
     
     setMenuPosition({ top, left });
@@ -556,7 +557,7 @@ export default function CollaboratorSimulationsContent() {
                       <tr
                         key={simulation.id}
                         className={`${colors.background.hover} transition-colors cursor-pointer`}
-                        onClick={() => window.location.href = `/simulazioni/${simulation.id}`}
+                        onClick={() => globalThis.location.href = `/simulazioni/${simulation.id}`}
                       >
                         <td className="px-3 sm:px-4 py-3 sm:py-4">
                           <div className="flex items-start gap-2 sm:gap-3">
@@ -707,26 +708,35 @@ export default function CollaboratorSimulationsContent() {
           </div>
 
           {/* Assignments Table */}
-          {assignmentsLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Spinner size="lg" />
-            </div>
-          ) : !assignmentsData?.assignments.length ? (
-            <div className="py-12 text-center">
-              <Calendar className={`w-12 h-12 mx-auto mb-4 ${colors.text.muted}`} />
-              <h3 className={`text-lg font-medium ${colors.text.primary} mb-2`}>
-                Nessuna assegnazione trovata
-              </h3>
-              <p className={`text-sm ${colors.text.muted}`}>
-                Le simulazioni assegnate a gruppi, classi o studenti appariranno qui.
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className={`border-b ${colors.border.light}`}>
+          {(() => {
+            if (assignmentsLoading) {
+              return (
+                <div className="flex items-center justify-center py-12">
+                  <Spinner size="lg" />
+                </div>
+              );
+            }
+            
+            if (!assignmentsData?.assignments.length) {
+              return (
+                <div className="py-12 text-center">
+                  <Calendar className={`w-12 h-12 mx-auto mb-4 ${colors.text.muted}`} />
+                  <h3 className={`text-lg font-medium ${colors.text.primary} mb-2`}>
+                    Nessuna assegnazione trovata
+                  </h3>
+                  <p className={`text-sm ${colors.text.muted}`}>
+                    Le simulazioni assegnate a gruppi, classi o studenti appariranno qui.
+                  </p>
+                </div>
+              );
+            }
+            
+            return (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className={`border-b ${colors.border.light}`}>
                       <th className={`px-4 py-3 text-left text-xs font-medium ${colors.text.muted} uppercase tracking-wider`}>
                         Simulazione
                       </th>
@@ -891,13 +901,11 @@ export default function CollaboratorSimulationsContent() {
                             <div className="flex items-center gap-2">
                               <div className="flex-1 h-2 rounded-full bg-gray-200 dark:bg-gray-700 max-w-[80px]">
                                 <div 
-                                  className={`h-full rounded-full ${
-                                    group.completionRate >= 80 
-                                      ? 'bg-green-500' 
-                                      : group.completionRate >= 50 
-                                      ? 'bg-yellow-500' 
-                                      : 'bg-red-500'
-                                  }`}
+                                  className={`h-full rounded-full ${(() => {
+                                    if (group.completionRate >= 80) return 'bg-green-500';
+                                    if (group.completionRate >= 50) return 'bg-yellow-500';
+                                    return 'bg-red-500';
+                                  })()}`}
                                   style={{ width: `${group.completionRate}%` }}
                                 />
                               </div>
@@ -932,11 +940,11 @@ export default function CollaboratorSimulationsContent() {
                                   <button
                                     onClick={() => {
                                       const url = `/virtual-room/${group.id}`;
-                                      const width = Math.min(1400, window.screen.width - 100);
-                                      const height = Math.min(900, window.screen.height - 100);
-                                      const left = (window.screen.width - width) / 2;
-                                      const top = (window.screen.height - height) / 2;
-                                      window.open(
+                                      const width = Math.min(1400, globalThis.screen.width - 100);
+                                      const height = Math.min(900, globalThis.screen.height - 100);
+                                      const left = (globalThis.screen.width - width) / 2;
+                                      const top = (globalThis.screen.height - height) / 2;
+                                      globalThis.open(
                                         url,
                                         `VirtualRoom_${group.id}`,
                                         `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes`
@@ -1056,7 +1064,8 @@ export default function CollaboratorSimulationsContent() {
                 </div>
               )}
             </>
-          )}
+            );
+          })()}
         </div>
       )}
 
@@ -1064,8 +1073,10 @@ export default function CollaboratorSimulationsContent() {
       {openMenuId && menuPosition && (
         <Portal>
           {/* Mobile: Overlay */}
-          <div 
+          <button 
+            type="button"
             className="fixed inset-0 bg-black/50 z-40 sm:hidden"
+            aria-label="Chiudi menu"
             onClick={() => setOpenMenuId(null)}
           />
           
@@ -1083,8 +1094,8 @@ export default function CollaboratorSimulationsContent() {
               sm:w-52 sm:inset-x-auto sm:bottom-auto
             `}
             style={{ 
-              top: window.innerWidth >= 640 ? menuPosition.top : undefined,
-              left: window.innerWidth >= 640 ? menuPosition.left : undefined 
+              top: globalThis.innerWidth >= 640 ? menuPosition.top : undefined,
+              left: globalThis.innerWidth >= 640 ? menuPosition.left : undefined 
             }}
           >
             {/* Mobile: Drag handle */}

@@ -51,18 +51,29 @@ interface SimulationPdfData {
 }
 
 /**
- * Strip HTML tags from text
+ * Strip HTML tags from text using iterative approach (avoids regex backtracking)
  */
 function stripHtml(html: string): string {
-  return html
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
+  // First handle special tags that need newlines
+  let result = html
+    .replaceAll(/<br\s*\/?>/gi, '\n')
+    .replaceAll(/<\/p>/gi, '\n');
+  
+  // Use iterative approach to remove remaining tags safely
+  let startIdx = result.indexOf('<');
+  while (startIdx !== -1) {
+    const endIdx = result.indexOf('>', startIdx);
+    if (endIdx === -1) break;
+    result = result.slice(0, startIdx) + result.slice(endIdx + 1);
+    startIdx = result.indexOf('<');
+  }
+  
+  return result
+    .replaceAll(/&nbsp;/g, ' ')
+    .replaceAll(/&amp;/g, '&')
+    .replaceAll(/&lt;/g, '<')
+    .replaceAll(/&gt;/g, '>')
+    .replaceAll(/&quot;/g, '"')
     .trim();
 }
 
@@ -75,7 +86,7 @@ function cleanTextForPdf(text: string): string {
   
   // First, handle LaTeX environments (convert to readable format)
   // \begin{cases}...\end{cases} -> simplified system notation
-  cleaned = cleaned.replace(/\\begin\{cases\}([\s\S]*?)\\end\{cases\}/g, (_, content) => {
+  cleaned = cleaned.replaceAll(/\\begin\{cases\}([\s\S]*?)\\end\{cases\}/g, (_, content) => {
     // Convert cases content to readable format
     const equations = content
       .split('\\\\')
@@ -86,17 +97,17 @@ function cleanTextForPdf(text: string): string {
   });
   
   // Handle other common LaTeX environments
-  cleaned = cleaned.replace(/\\begin\{(\w+)\}([\s\S]*?)\\end\{\1\}/g, (_, _env, content) => {
-    return content.replace(/\\\\/g, '; ').trim();
+  cleaned = cleaned.replaceAll(/\\begin\{(\w+)\}([\s\S]*?)\\end\{\1\}/g, (_, _env, content) => {
+    return content.replaceAll(/\\\\/g, '; ').trim();
   });
   
   // Handle display math delimiters: $$ ... $$ or \[ ... \]
-  cleaned = cleaned.replace(/\$\$([\s\S]*?)\$\$/g, (_, latex) => simplifyLatex(latex));
-  cleaned = cleaned.replace(/\\\[([\s\S]*?)\\\]/g, (_, latex) => simplifyLatex(latex));
+  cleaned = cleaned.replaceAll(/\$\$([\s\S]*?)\$\$/g, (_, latex) => simplifyLatex(latex));
+  cleaned = cleaned.replaceAll(/\\\[([\s\S]*?)\\\]/g, (_, latex) => simplifyLatex(latex));
   
   // Handle inline math: $ ... $ or \( ... \)
-  cleaned = cleaned.replace(/(?<!\$)\$(?!\$)(.*?)(?<!\$)\$(?!\$)/g, (_, latex) => simplifyLatex(latex));
-  cleaned = cleaned.replace(/\\\(([\s\S]*?)\\\)/g, (_, latex) => simplifyLatex(latex));
+  cleaned = cleaned.replaceAll(/(?<!\$)\$(?!\$)(.*?)(?<!\$)\$(?!\$)/g, (_, latex) => simplifyLatex(latex));
+  cleaned = cleaned.replaceAll(/\\\(([\s\S]*?)\\\)/g, (_, latex) => simplifyLatex(latex));
   
   // Now strip HTML
   return stripHtml(cleaned);
@@ -110,44 +121,44 @@ function simplifyLatex(latex: string): string {
   
   // Common LaTeX to text conversions
   simplified = simplified
-    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1)/($2)') // fractions
-    .replace(/\\sqrt\{([^}]+)\}/g, '√($1)') // square root
-    .replace(/\\sqrt\[(\d+)\]\{([^}]+)\}/g, '$1√($2)') // nth root
-    .replace(/\^(\d)/g, '^$1') // simple exponents
-    .replace(/\^\{([^}]+)\}/g, '^($1)') // complex exponents
-    .replace(/_(\d)/g, '₍$1₎') // simple subscripts (approximate)
-    .replace(/_\{([^}]+)\}/g, '_($1)') // complex subscripts
-    .replace(/\\times/g, '×')
-    .replace(/\\cdot/g, '·')
-    .replace(/\\div/g, '÷')
-    .replace(/\\pm/g, '±')
-    .replace(/\\neq/g, '≠')
-    .replace(/\\leq/g, '≤')
-    .replace(/\\geq/g, '≥')
-    .replace(/\\approx/g, '≈')
-    .replace(/\\infty/g, '∞')
-    .replace(/\\pi/g, 'π')
-    .replace(/\\alpha/g, 'α')
-    .replace(/\\beta/g, 'β')
-    .replace(/\\gamma/g, 'γ')
-    .replace(/\\delta/g, 'δ')
-    .replace(/\\theta/g, 'θ')
-    .replace(/\\lambda/g, 'λ')
-    .replace(/\\mu/g, 'μ')
-    .replace(/\\sigma/g, 'σ')
-    .replace(/\\omega/g, 'ω')
-    .replace(/\\sum/g, 'Σ')
-    .replace(/\\prod/g, 'Π')
-    .replace(/\\int/g, '∫')
-    .replace(/\\partial/g, '∂')
-    .replace(/\\nabla/g, '∇')
-    .replace(/\\rightarrow/g, '→')
-    .replace(/\\leftarrow/g, '←')
-    .replace(/\\Rightarrow/g, '⇒')
-    .replace(/\\Leftarrow/g, '⇐')
-    .replace(/\\[a-zA-Z]+/g, '') // remove remaining LaTeX commands
-    .replace(/\{|\}/g, '') // remove braces
-    .replace(/\s+/g, ' ') // normalize spaces
+    .replaceAll(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1)/($2)') // fractions
+    .replaceAll(/\\sqrt\{([^}]+)\}/g, '√($1)') // square root
+    .replaceAll(/\\sqrt\[(\d+)\]\{([^}]+)\}/g, '$1√($2)') // nth root
+    .replaceAll(/\^(\d)/g, '^$1') // simple exponents
+    .replaceAll(/\^\{([^}]+)\}/g, '^($1)') // complex exponents
+    .replaceAll(/_(\d)/g, '₍$1₎') // simple subscripts (approximate)
+    .replaceAll(/_\{([^}]+)\}/g, '_($1)') // complex subscripts
+    .replaceAll('\\times', '×')
+    .replaceAll('\\cdot', '·')
+    .replaceAll('\\div', '÷')
+    .replaceAll('\\pm', '±')
+    .replaceAll('\\neq', '≠')
+    .replaceAll('\\leq', '≤')
+    .replaceAll('\\geq', '≥')
+    .replaceAll('\\approx', '≈')
+    .replaceAll('\\infty', '∞')
+    .replaceAll('\\pi', 'π')
+    .replaceAll('\\alpha', 'α')
+    .replaceAll('\\beta', 'β')
+    .replaceAll('\\gamma', 'γ')
+    .replaceAll('\\delta', 'δ')
+    .replaceAll('\\theta', 'θ')
+    .replaceAll('\\lambda', 'λ')
+    .replaceAll('\\mu', 'μ')
+    .replaceAll('\\sigma', 'σ')
+    .replaceAll('\\omega', 'ω')
+    .replaceAll('\\sum', 'Σ')
+    .replaceAll('\\prod', 'Π')
+    .replaceAll('\\int', '∫')
+    .replaceAll('\\partial', '∂')
+    .replaceAll('\\nabla', '∇')
+    .replaceAll('\\rightarrow', '→')
+    .replaceAll('\\leftarrow', '←')
+    .replaceAll('\\Rightarrow', '⇒')
+    .replaceAll('\\Leftarrow', '⇐')
+    .replaceAll(/\\[a-zA-Z]+/g, '') // remove remaining LaTeX commands
+    .replaceAll(/[{}]/g, '') // remove braces
+    .replaceAll(/\s+/g, ' ') // normalize spaces
     .trim();
   
   return simplified;
@@ -241,8 +252,9 @@ export function generateSimulationPdf(data: SimulationPdfData): jsPDF {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   
+  const durationText = data.durationMinutes > 0 ? `${data.durationMinutes} minuti` : 'Illimitato';
   const instructions = [
-    `• Tempo a disposizione: ${data.durationMinutes > 0 ? `${data.durationMinutes} minuti` : 'Illimitato'}`,
+    `• Tempo a disposizione: ${durationText}`,
     `• Punteggio: Risposta corretta +${data.correctPoints}, Risposta errata ${data.wrongPoints}, Non risposta ${data.blankPoints}`,
     `• Numero domande: ${data.questions.length}`,
     data.paperInstructions ? `• ${data.paperInstructions}` : '• Segnare con una X la risposta corretta. Non sono ammesse correzioni.',
@@ -424,7 +436,7 @@ export function previewSimulationPdf(data: SimulationPdfData): void {
   const doc = generateSimulationPdf(data);
   const pdfBlob = doc.output('blob');
   const url = URL.createObjectURL(pdfBlob);
-  window.open(url, '_blank');
+  globalThis.open(url, '_blank');
 }
 
 /**

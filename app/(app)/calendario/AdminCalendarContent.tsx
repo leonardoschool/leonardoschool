@@ -232,6 +232,7 @@ export default function AdminCalendarContent() {
     onError: handleMutationError,
   });
 
+  // eslint-disable-next-line sonarjs/no-unused-vars -- reserved for future cancel button
   const _cancelEventMutation = trpc.calendar.cancelEvent.useMutation({
     onSuccess: () => {
       utils.calendar.getEvents.invalidate();

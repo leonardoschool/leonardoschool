@@ -21,7 +21,7 @@ const PROVINCE_ITALIANE = [
 ] as const;
 
 // Regex per codice fiscale italiano
-const CODICE_FISCALE_REGEX = /^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$/;
+const CODICE_FISCALE_REGEX = /^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/;
 
 export const collaboratorsRouter = router({
   /**
@@ -293,10 +293,11 @@ export const collaboratorsRouter = router({
       }
 
       // Transaction to update both user and collaborator
+      const userId = ctx.user.id; // Already validated by protectedProcedure
       const result = await ctx.prisma.$transaction(async (tx: any) => {
         // Update collaborator data
         const updatedCollaborator = await tx.collaborator.update({
-          where: { userId: ctx.user!.id },
+          where: { userId },
           data: {
             fiscalCode: input.fiscalCode,
             dateOfBirth: input.dateOfBirth,
@@ -310,7 +311,7 @@ export const collaboratorsRouter = router({
 
         // Mark profile as completed
         const updatedUser = await tx.user.update({
-          where: { id: ctx.user!.id },
+          where: { id: userId },
           data: { profileCompleted: true },
         });
 

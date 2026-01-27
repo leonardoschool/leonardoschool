@@ -21,16 +21,19 @@ try {
   
   // Execute prisma db push with force reset
   console.log('📦 Running prisma db push --force-reset...');
-  execSync(`prisma db push --force-reset --url "${databaseUrl}"`, {
+  // eslint-disable-next-line sonarjs/no-os-command-from-path -- dev script, PATH is trusted
+  execSync('npx prisma db push --force-reset', {
     stdio: 'inherit',
     cwd: resolve(__dirname, '..'),
+    env: { ...process.env, DATABASE_URL: databaseUrl },
   });
   
   console.log('\n✅ Database reset complete!');
   console.log('\n🌱 Running seed...\n');
   
   // Execute seed
-  execSync('tsx scripts/seed.ts', {
+  // eslint-disable-next-line sonarjs/no-os-command-from-path -- dev script, PATH is trusted
+  execSync('npx tsx scripts/seed.ts', {
     stdio: 'inherit',
     cwd: resolve(__dirname, '..'),
     env: { ...process.env }

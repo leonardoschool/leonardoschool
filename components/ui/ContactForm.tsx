@@ -36,7 +36,7 @@ export default function ContactForm({ defaultSubject = '', subjectReadonly = fal
     message: '',
     cv: null,
   });
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, sonarjs/no-dead-store, sonarjs/no-unused-vars
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [errors, setErrors] = useState<FormErrors>({});
@@ -63,12 +63,18 @@ export default function ContactForm({ defaultSubject = '', subjectReadonly = fal
       newErrors.phone = 'Il telefono può contenere solo numeri';
     }
 
-    // Email: validazione robusta
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
+    // Email: validazione robusta senza regex per evitare vulnerabilità DoS
+    const emailValid = (() => {
+      if (!formData.email || formData.email.length > 100) return false;
+      const atIdx = formData.email.indexOf('@');
+      if (atIdx < 1 || atIdx === formData.email.length - 1) return false;
+      const dotIdx = formData.email.lastIndexOf('.');
+      if (dotIdx < atIdx + 2 || dotIdx === formData.email.length - 1) return false;
+      return !formData.email.includes(' ');
+    })();
+    
+    if (!emailValid) {
       newErrors.email = "Inserisci un'Email valida";
-    } else if (formData.email.length > 100) {
-      newErrors.email = 'Email troppo lunga (max 100 caratteri)';
     }
 
     // Oggetto: min 6, max 200 caratteri
@@ -149,7 +155,7 @@ export default function ContactForm({ defaultSubject = '', subjectReadonly = fal
     }
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, sonarjs/no-dead-store, sonarjs/no-unused-vars
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {

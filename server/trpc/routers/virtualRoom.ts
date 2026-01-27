@@ -233,9 +233,9 @@ export const virtualRoomRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       // Use transaction to ensure atomicity
-      const session = await ctx.prisma.$transaction(async (tx) => {
+      const session = await ctx.prisma.$transaction(async () => {
         // Update session status
-        const updatedSession = await tx.simulationSession.update({
+        const updatedSession = await ctx.prisma.simulationSession.update({
           where: { id: input.sessionId },
           data: {
             status: 'COMPLETED',
@@ -247,7 +247,7 @@ export const virtualRoomRouter = router({
         });
 
         // Disconnect all participants
-        await tx.simulationSessionParticipant.updateMany({
+        await ctx.prisma.simulationSessionParticipant.updateMany({
           where: { sessionId: input.sessionId },
           data: {
             isConnected: false,
@@ -259,7 +259,7 @@ export const virtualRoomRouter = router({
         const participantIds = updatedSession.participants.map(p => p.id);
         
         if (participantIds.length > 0) {
-          const deletedMessages = await tx.sessionMessage.deleteMany({
+          const deletedMessages = await ctx.prisma.sessionMessage.deleteMany({
             where: {
               participantId: { in: participantIds },
             },

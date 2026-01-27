@@ -1,0 +1,47 @@
+version: 2
+
+updates:
+  # 🔒 NPM / PNPM dependencies
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Rome"
+
+    open-pull-requests-limit: 5
+
+    labels:
+      - "dependencies"
+      - "security"
+
+    commit-message:
+      prefix: "chore(deps)"
+
+    groups:
+      production-dependencies:
+        dependency-type: "production"
+      dev-dependencies:
+        dependency-type: "development"
+
+    ignore:
+      # evita major automatici in prod
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # ⚙️ GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Rome"
+
+    labels:
+      - "dependencies"
+      - "ci"
+
+    commit-message:
+      prefix: "chore(ci)"

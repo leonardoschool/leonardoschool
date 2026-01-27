@@ -101,6 +101,7 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
 
   // Form state
   const [type, setType] = useState<QuestionType>(initialData?.type ?? 'SINGLE_CHOICE');
+  // eslint-disable-next-line sonarjs/no-unused-vars -- status state reserved for future status toggle
   const [_status, _setStatus] = useState<QuestionStatus>(initialData?.status ?? 'DRAFT');
   const [text, setText] = useState(initialData?.text ?? '');
   const [textLatex, setTextLatex] = useState(initialData?.textLatex ?? '');
@@ -110,12 +111,13 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
   const [topicId, setTopicId] = useState(initialData?.topicId ?? '');
   const [subTopicId, setSubTopicId] = useState(initialData?.subTopicId ?? '');
   const [difficulty, setDifficulty] = useState<DifficultyLevel>(initialData?.difficulty ?? 'MEDIUM');
+  // eslint-disable-next-line sonarjs/no-unused-vars, sonarjs/no-dead-store -- setter is used in form input
   const [timeLimitSeconds, setTimeLimitSeconds] = useState<number | ''>(
     initialData?.timeLimitSeconds ?? ''
   );
 
   // Image upload state
-  const [imageMode, setImageMode] = useState<'url' | 'upload'>(initialData?.imageUrl ? 'url' : 'url');
+  const [imageMode, setImageMode] = useState<'url' | 'upload'>('url');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string>('');
   const [uploadingImage, setUploadingImage] = useState(false);

@@ -7,6 +7,7 @@ import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { PageLoader } from '@/components/ui/loaders';
 import { getSimulationTypeLabel, getSimulationTypeColors } from '@/lib/utils/simulationLabels';
+import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import {
   ArrowLeft,
   Trophy,
@@ -49,7 +50,7 @@ import {
 
 type TabType = 'details' | 'charts';
 
-export default function StudentSimulationsPage({ params }: { params: Promise<{ id: string }> }) {
+export default function StudentSimulationsPage({ params }: { readonly params: Promise<{ id: string }> }) {
   const { id: studentId } = use(params);
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('details');
@@ -264,8 +265,9 @@ export default function StudentSimulationsPage({ params }: { params: Promise<{ i
                   className={`rounded-xl ${colors.background.card} border ${colors.border.light} overflow-hidden`}
                 >
                   {/* Simulation Header */}
-                  <div
-                    className={`p-6 cursor-pointer ${colors.background.hover}`}
+                  <button
+                    type="button"
+                    className={`w-full p-6 cursor-pointer text-left ${colors.background.hover}`}
                     onClick={() => setExpandedSimulation(isExpanded ? null : sim.resultId)}
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -341,7 +343,7 @@ export default function StudentSimulationsPage({ params }: { params: Promise<{ i
                         )}
                       </div>
                     </div>
-                  </div>
+                  </button>
 
                   {/* Expanded Content */}
                   {isExpanded && (
@@ -412,8 +414,9 @@ export default function StudentSimulationsPage({ params }: { params: Promise<{ i
                                   key={subjectGroup.subjectCode}
                                   className={`rounded-lg border ${colors.border.light} overflow-hidden`}
                                 >
-                                  <div
-                                    className={`p-4 ${colors.background.secondary} cursor-pointer flex items-center justify-between`}
+                                  <button
+                                    type="button"
+                                    className={`w-full p-4 ${colors.background.secondary} cursor-pointer flex items-center justify-between text-left`}
                                     onClick={() => setExpandedSubject(
                                       isSubjectExpanded ? null : `${sim.resultId}-${subjectGroup.subjectCode}`
                                     )}
@@ -432,7 +435,7 @@ export default function StudentSimulationsPage({ params }: { params: Promise<{ i
                                     ) : (
                                       <ChevronDown className={`w-5 h-5 ${colors.text.muted}`} />
                                     )}
-                                  </div>
+                                  </button>
 
                                   {isSubjectExpanded && (
                                     <div className="p-4 space-y-4">
@@ -448,7 +451,7 @@ export default function StudentSimulationsPage({ params }: { params: Promise<{ i
                                             <div className="flex-1">
                                               <div
                                                 className={`${colors.text.primary} mb-3`}
-                                                dangerouslySetInnerHTML={{ __html: question.questionText }}
+                                                dangerouslySetInnerHTML={{ __html: sanitizeHtml(question.questionText) }}
                                               />
                                               {question.topicName && (
                                                 <span className={`text-xs px-2 py-1 rounded-full ${colors.background.secondary} ${colors.text.muted}`}>
@@ -499,7 +502,7 @@ export default function StudentSimulationsPage({ params }: { params: Promise<{ i
                                                     </p>
                                                     <div
                                                       className={`text-sm ${colors.text.secondary}`}
-                                                      dangerouslySetInnerHTML={{ __html: question.explanation }}
+                                                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(question.explanation ?? '') }}
                                                     />
                                                   </div>
                                                 </div>
@@ -595,14 +598,14 @@ interface ChartsSectionProps {
   };
 }
 
-function ChartsSection({ simulations, statistics }: ChartsSectionProps) {
+function ChartsSection({ simulations, statistics }: Readonly<ChartsSectionProps>) {
   // Prepare data for time-based trend chart (sorted by date)
   const trendData = useMemo(() => {
     return [...simulations]
-      .sort((a, b) => new Date(a.completedAt!).getTime() - new Date(b.completedAt!).getTime())
+      .sort((a, b) => new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime())
       .map((sim, index) => ({
         index: index + 1,
-        date: new Date(sim.completedAt!).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' }),
+        date: new Date(sim.completedAt).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' }),
         percentageScore: sim.percentageScore || 0,
         title: sim.simulationTitle,
         correct: sim.correctAnswers || 0,
@@ -776,8 +779,8 @@ function ChartsSection({ simulations, statistics }: ChartsSectionProps) {
                   label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                   labelLine={false}
                 >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  {pieData.map((entry) => (
+                    <Cell key={entry.name} fill={entry.color} />
                   ))}
                 </Pie>
                 <Tooltip 
@@ -909,49 +912,57 @@ function ChartsSection({ simulations, statistics }: ChartsSectionProps) {
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* First vs Last comparison */}
-          {trendData.length >= 2 && (
+          {trendData.length >= 2 && (() => {
+            const firstScore = trendData[0].percentageScore;
+            const lastScore = trendData.at(-1)?.percentageScore ?? 0;
+            const scoreDiff = lastScore - firstScore;
+            
+            const getTrendIcon = (): React.ReactNode => {
+              if (lastScore > firstScore) return <TrendingUp className="w-8 h-8 text-green-500" />;
+              if (lastScore < firstScore) return <TrendingUp className="w-8 h-8 text-red-500 rotate-180" />;
+              return <MinusCircle className="w-8 h-8 text-gray-500" />;
+            };
+            
+            const getTrendColor = (): string => {
+              if (lastScore > firstScore) return 'text-green-600 dark:text-green-400';
+              if (lastScore < firstScore) return 'text-red-600 dark:text-red-400';
+              return colors.text.muted;
+            };
+            
+            const getTrendText = (): string => {
+              if (lastScore > firstScore) return `+${scoreDiff.toFixed(0)}%`;
+              if (lastScore < firstScore) return `${scoreDiff.toFixed(0)}%`;
+              return 'Nessun cambiamento';
+            };
+
+            return (
             <div className={`p-4 rounded-xl ${colors.background.secondary}`}>
               <h4 className={`text-sm font-medium ${colors.text.muted} mb-3`}>Prima vs Ultima Simulazione</h4>
               <div className="flex items-center justify-between">
                 <div className="text-center">
                   <p className={`text-2xl font-bold ${colors.text.primary}`}>
-                    {trendData[0].percentageScore.toFixed(0)}%
+                    {firstScore.toFixed(0)}%
                   </p>
                   <p className={`text-xs ${colors.text.muted}`}>Prima</p>
                 </div>
                 <div className="flex-shrink-0 px-4">
-                  {trendData[trendData.length - 1].percentageScore > trendData[0].percentageScore ? (
-                    <TrendingUp className="w-8 h-8 text-green-500" />
-                  ) : trendData[trendData.length - 1].percentageScore < trendData[0].percentageScore ? (
-                    <TrendingUp className="w-8 h-8 text-red-500 rotate-180" />
-                  ) : (
-                    <MinusCircle className="w-8 h-8 text-gray-500" />
-                  )}
+                  {getTrendIcon()}
                 </div>
                 <div className="text-center">
                   <p className={`text-2xl font-bold ${colors.text.primary}`}>
-                    {trendData[trendData.length - 1].percentageScore.toFixed(0)}%
+                    {lastScore.toFixed(0)}%
                   </p>
                   <p className={`text-xs ${colors.text.muted}`}>Ultima</p>
                 </div>
               </div>
               <div className="mt-3 text-center">
-                <span className={`text-sm font-medium ${
-                  trendData[trendData.length - 1].percentageScore > trendData[0].percentageScore
-                    ? 'text-green-600 dark:text-green-400'
-                    : trendData[trendData.length - 1].percentageScore < trendData[0].percentageScore
-                    ? 'text-red-600 dark:text-red-400'
-                    : colors.text.muted
-                }`}>
-                  {trendData[trendData.length - 1].percentageScore > trendData[0].percentageScore
-                    ? `+${(trendData[trendData.length - 1].percentageScore - trendData[0].percentageScore).toFixed(0)}%`
-                    : trendData[trendData.length - 1].percentageScore < trendData[0].percentageScore
-                    ? `${(trendData[trendData.length - 1].percentageScore - trendData[0].percentageScore).toFixed(0)}%`
-                    : 'Nessun cambiamento'}
+                <span className={`text-sm font-medium ${getTrendColor()}`}>
+                  {getTrendText()}
                 </span>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* Best Performance */}
           <div className={`p-4 rounded-xl ${colors.background.secondary}`}>
@@ -974,7 +985,7 @@ function ChartsSection({ simulations, statistics }: ChartsSectionProps) {
                 {(() => {
                   const worstSubject = subjectData.reduce((prev, curr) => 
                     curr.percentage < prev.percentage ? curr : prev
-                  );
+                  , subjectData[0]);
                   return (
                     <>
                       <p className="text-xl font-bold text-red-600 dark:text-red-400">

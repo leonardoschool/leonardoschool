@@ -95,7 +95,14 @@ export const materialsRouter = router({
             include: { group: { select: { id: true, name: true } } },
           },
           studentAccess: {
-            include: { student: { include: { user: { select: { id: true, name: true } } } } },
+            include: { 
+              student: { 
+                select: { 
+                  id: true,
+                  user: { select: { id: true, name: true } } 
+                } 
+              } 
+            },
           },
         },
       });
@@ -1102,62 +1109,56 @@ export const materialsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { groupIds, studentIds, categoryIds, subjectId, topicId, subTopicId, ...materialData } = input;
 
-      const result = await ctx.prisma.$transaction(async (tx) => {
-        // Create material
-        const material = await tx.material.create({
-          data: {
-            title: materialData.title,
-            description: materialData.description,
-            type: materialData.type,
-            fileUrl: materialData.fileUrl,
-            fileName: materialData.fileName,
-            fileSize: materialData.fileSize,
-            externalUrl: materialData.externalUrl,
-            thumbnailUrl: materialData.thumbnailUrl,
-            visibility: materialData.visibility,
-            tags: materialData.tags || [],
-            order: materialData.order,
-            createdBy: ctx.user.id,
-            // Connect multiple categories if provided
-            ...(categoryIds?.length ? {
-              categories: {
-                create: categoryIds.map(categoryId => ({
-                  category: { connect: { id: categoryId } }
-                }))
-              }
-            } : {}),
-            // Connect subject if provided
-            ...(subjectId ? { subject: { connect: { id: subjectId } } } : {}),
-            // Connect topic (classification) if provided
-            ...(topicId ? { topic: { connect: { id: topicId } } } : {}),
-            // Connect subtopic (classification) if provided
-            ...(subTopicId ? { subTopic: { connect: { id: subTopicId } } } : {}),
-          },
-        });
-
-        // If GROUP_BASED, create group access records
-        if (input.visibility === 'GROUP_BASED' && groupIds?.length) {
-          await tx.materialGroupAccess.createMany({
-            data: groupIds.map((groupId) => ({
-              materialId: material.id,
-              groupId,
-            })),
-          });
-        }
-
-        // If SELECTED_STUDENTS, create student access records
-        if (input.visibility === 'SELECTED_STUDENTS' && studentIds?.length) {
-          await tx.materialStudentAccess.createMany({
-            data: studentIds.map((studentId) => ({
-              materialId: material.id,
-              studentId,
-              grantedBy: ctx.user.id,
-            })),
-          });
-        }
-
-        return { material, groupIds, studentIds };
+      // Use nested writes to create material with all relations atomically
+      const material = await ctx.prisma.material.create({
+        data: {
+          title: materialData.title,
+          description: materialData.description,
+          type: materialData.type,
+          fileUrl: materialData.fileUrl,
+          fileName: materialData.fileName,
+          fileSize: materialData.fileSize,
+          externalUrl: materialData.externalUrl,
+          thumbnailUrl: materialData.thumbnailUrl,
+          visibility: materialData.visibility,
+          tags: materialData.tags || [],
+          order: materialData.order,
+          createdBy: ctx.user.id,
+          // Connect multiple categories if provided
+          ...(categoryIds?.length ? {
+            categories: {
+              create: categoryIds.map(categoryId => ({
+                category: { connect: { id: categoryId } }
+              }))
+            }
+          } : {}),
+          // Connect subject if provided
+          ...(subjectId ? { subject: { connect: { id: subjectId } } } : {}),
+          // Connect topic (classification) if provided
+          ...(topicId ? { topic: { connect: { id: topicId } } } : {}),
+          // Connect subtopic (classification) if provided
+          ...(subTopicId ? { subTopic: { connect: { id: subTopicId } } } : {}),
+          // If GROUP_BASED, create group access records with nested write
+          ...(input.visibility === 'GROUP_BASED' && groupIds?.length ? {
+            groupAccess: {
+              create: groupIds.map((groupId) => ({
+                group: { connect: { id: groupId } }
+              }))
+            }
+          } : {}),
+          // If SELECTED_STUDENTS, create student access records with nested write
+          ...(input.visibility === 'SELECTED_STUDENTS' && studentIds?.length ? {
+            studentAccess: {
+              create: studentIds.map((studentId) => ({
+                student: { connect: { id: studentId } },
+                grantedBy: ctx.user.id,
+              }))
+            }
+          } : {}),
+        },
       });
+
+      const result = { material, groupIds, studentIds };
 
       // Send notifications to target students (background, outside transaction)
       // Get target user IDs based on visibility
@@ -1227,11 +1228,10 @@ export const materialsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { files, groupIds, studentIds, categoryId, subjectId, topicId, subTopicId, visibility, tags } = input;
 
-      const createdMaterials = await ctx.prisma.$transaction(async (tx) => {
-        const materials = [];
-
-        for (const file of files) {
-          const material = await tx.material.create({
+      // Create all materials with nested writes (no interactive transaction needed)
+      const createdMaterials = await Promise.all(
+        files.map(async (file) => {
+          return ctx.prisma.material.create({
             data: {
               title: file.title,
               description: file.description,
@@ -1247,34 +1247,27 @@ export const materialsRouter = router({
               ...(subjectId ? { subject: { connect: { id: subjectId } } } : {}),
               ...(topicId ? { topic: { connect: { id: topicId } } } : {}),
               ...(subTopicId ? { subTopic: { connect: { id: subTopicId } } } : {}),
+              // Create group access records with nested write
+              ...(visibility === 'GROUP_BASED' && groupIds?.length ? {
+                groupAccess: {
+                  create: groupIds.map((groupId) => ({
+                    group: { connect: { id: groupId } }
+                  }))
+                }
+              } : {}),
+              // Create student access records with nested write
+              ...(visibility === 'SELECTED_STUDENTS' && studentIds?.length ? {
+                studentAccess: {
+                  create: studentIds.map((studentId) => ({
+                    student: { connect: { id: studentId } },
+                    grantedBy: ctx.user.id,
+                  }))
+                }
+              } : {}),
             },
           });
-
-          // Create access records for each material
-          if (visibility === 'GROUP_BASED' && groupIds?.length) {
-            await tx.materialGroupAccess.createMany({
-              data: groupIds.map((groupId) => ({
-                materialId: material.id,
-                groupId,
-              })),
-            });
-          }
-
-          if (visibility === 'SELECTED_STUDENTS' && studentIds?.length) {
-            await tx.materialStudentAccess.createMany({
-              data: studentIds.map((studentId) => ({
-                materialId: material.id,
-                studentId,
-                grantedBy: ctx.user.id,
-              })),
-            });
-          }
-
-          materials.push(material);
-        }
-
-        return materials;
-      });
+        })
+      );
 
       // Send notifications for new materials (background)
       let targetUserIds: string[] = [];
@@ -1365,9 +1358,30 @@ export const materialsRouter = router({
         });
       }
 
-      const result = await ctx.prisma.$transaction(async (tx) => {
-        // Update material
-        const material = await tx.material.update({
+      const result = await ctx.prisma.$transaction(async () => {
+        // First, handle categories - delete and recreate if provided
+        if (categoryIds !== undefined) {
+          await ctx.prisma.materialCategoryLink.deleteMany({
+            where: { materialId: id },
+          });
+        }
+
+        // Handle group access - delete and recreate if GROUP_BASED
+        if (input.visibility === 'GROUP_BASED' && groupIds !== undefined) {
+          await ctx.prisma.materialGroupAccess.deleteMany({
+            where: { materialId: id },
+          });
+        }
+
+        // Handle student access - delete and recreate if SELECTED_STUDENTS
+        if (input.visibility === 'SELECTED_STUDENTS' && studentIds !== undefined) {
+          await ctx.prisma.materialStudentAccess.deleteMany({
+            where: { materialId: id },
+          });
+        }
+
+        // Update material with all nested creates
+        const material = await ctx.prisma.material.update({
           where: { id },
           data: {
             ...materialData,
@@ -1383,63 +1397,33 @@ export const materialsRouter = router({
             ...(subTopicId !== undefined ? (
               subTopicId ? { subTopic: { connect: { id: subTopicId } } } : { subTopic: { disconnect: true } }
             ) : {}),
+            // Handle categories - create new links
+            ...(categoryIds !== undefined && categoryIds.length ? {
+              categories: {
+                create: categoryIds.map((categoryId) => ({
+                  category: { connect: { id: categoryId } }
+                }))
+              }
+            } : {}),
+            // Handle group access - create new links
+            ...(input.visibility === 'GROUP_BASED' && groupIds !== undefined && groupIds.length ? {
+              groupAccess: {
+                create: groupIds.map((groupId) => ({
+                  group: { connect: { id: groupId } }
+                }))
+              }
+            } : {}),
+            // Handle student access - create new links
+            ...(input.visibility === 'SELECTED_STUDENTS' && studentIds !== undefined && studentIds.length ? {
+              studentAccess: {
+                create: studentIds.map((studentId) => ({
+                  student: { connect: { id: studentId } },
+                  grantedBy: ctx.user.id,
+                }))
+              }
+            } : {}),
           },
         });
-
-        // Handle categories - replace all if provided
-        if (categoryIds !== undefined) {
-          // Remove all existing category links
-          await tx.materialCategoryLink.deleteMany({
-            where: { materialId: id },
-          });
-          
-          // Add new category links
-          if (categoryIds.length) {
-            await tx.materialCategoryLink.createMany({
-              data: categoryIds.map((categoryId) => ({
-                materialId: id,
-                categoryId,
-              })),
-            });
-          }
-        }
-
-        // If visibility changed to GROUP_BASED, update group access
-        if (input.visibility === 'GROUP_BASED' && groupIds !== undefined) {
-          // Remove existing group access
-          await tx.materialGroupAccess.deleteMany({
-            where: { materialId: id },
-          });
-          
-          // Add new group access
-          if (groupIds.length) {
-            await tx.materialGroupAccess.createMany({
-              data: groupIds.map((groupId) => ({
-                materialId: id,
-                groupId,
-              })),
-            });
-          }
-        }
-
-        // If visibility changed to SELECTED_STUDENTS, update student access
-        if (input.visibility === 'SELECTED_STUDENTS' && studentIds !== undefined) {
-          // Remove existing student access
-          await tx.materialStudentAccess.deleteMany({
-            where: { materialId: id },
-          });
-          
-          // Add new student access
-          if (studentIds.length) {
-            await tx.materialStudentAccess.createMany({
-              data: studentIds.map((studentId) => ({
-                materialId: id,
-                studentId,
-                grantedBy: ctx.user.id,
-              })),
-            });
-          }
-        }
 
         return { material, groupIds, studentIds };
       });

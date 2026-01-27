@@ -86,7 +86,6 @@ export default function FeedbacksPage() {
   const [page, setPage] = useState(1);
   const [selectedFeedback, setSelectedFeedback] = useState<string | null>(null);
   const [adminResponse, setAdminResponse] = useState('');
-  const [_newStatus, setNewStatus] = useState<FeedbackStatus | ''>('');
 
   // Fetch feedbacks
   const { data, isLoading } = trpc.questions.getPendingFeedbacks.useQuery({
@@ -103,7 +102,6 @@ export default function FeedbacksPage() {
       utils.questions.getQuestionStats.invalidate();
       setSelectedFeedback(null);
       setAdminResponse('');
-      setNewStatus('');
     },
     onError: handleMutationError,
   });
@@ -166,9 +164,10 @@ export default function FeedbacksPage() {
         {(['PENDING', 'REVIEWED', 'FIXED', 'REJECTED'] as const).map((status) => {
           const count = feedbacks.filter((f) => f.status === status).length;
           return (
-            <div
+            <button
               key={status}
-              className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} cursor-pointer hover:opacity-80 transition-opacity ${
+              type="button"
+              className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} cursor-pointer hover:opacity-80 transition-opacity text-left ${
                 statusFilter === status ? 'ring-2 ring-[#a8012b]' : ''
               }`}
               onClick={() => setStatusFilter(statusFilter === status ? '' : status)}
@@ -182,7 +181,7 @@ export default function FeedbacksPage() {
                   <p className={`text-sm ${colors.text.muted}`}>{statusLabels[status].label}</p>
                 </div>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>

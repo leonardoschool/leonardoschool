@@ -214,9 +214,10 @@ export default function AdminQuestionsContent() {
 
   const bulkDeleteMutation = trpc.questions.bulkDelete.useMutation({
     onSuccess: (result) => {
+      const skippedText = result.skipped > 0 ? `, ${result.skipped} saltate (in uso)` : '';
       showSuccess(
         'Eliminazione completata',
-        `${result.deleted} domande eliminate${result.skipped > 0 ? `, ${result.skipped} saltate (in uso)` : ''}.`
+        `${result.deleted} domande eliminate${skippedText}.`
       );
       utils.questions.getQuestions.invalidate();
       utils.questions.getQuestionStats.invalidate();
@@ -410,7 +411,11 @@ export default function AdminQuestionsContent() {
           >
             <Download className="w-4 h-4" />
             <span className="hidden sm:inline">
-              {isExporting ? 'Esportando...' : selectedIds.size > 0 ? `Esporta (${selectedIds.size})` : 'Esporta'}
+              {(() => {
+                if (isExporting) return 'Esportando...';
+                if (selectedIds.size > 0) return `Esporta (${selectedIds.size})`;
+                return 'Esporta';
+              })()}
             </span>
           </button>
           <Link
@@ -664,9 +669,9 @@ export default function AdminQuestionsContent() {
                 <div className={`absolute top-full left-0 mt-1 z-50 min-w-[280px] max-h-[400px] overflow-y-auto ${colors.background.card} ${colors.effects.shadow.lg} rounded-lg border ${colors.border.primary} py-2`}>
                   {/* Mode toggle */}
                   <div className="px-4 pb-2 border-b border-gray-200 dark:border-gray-700 mb-2">
-                    <label className={`text-xs font-medium ${colors.text.muted} block mb-1.5`}>
+                    <div className={`text-xs font-medium ${colors.text.muted} block mb-1.5`}>
                       Modalità
-                    </label>
+                    </div>
                     <div className="flex gap-2">
                       <button
                         onClick={(e) => { e.stopPropagation(); setBulkTagMode('add'); }}
@@ -700,8 +705,9 @@ export default function AdminQuestionsContent() {
                       <p className={`text-xs ${colors.text.muted} text-center py-4`}>
                         Le domande selezionate non hanno tag
                       </p>
-                    ) : (
-                      (bulkTagMode === 'remove' ? selectedQuestionsTags : tagsData?.tags || []).map((tag) => {
+                    ) : (() => {
+                      const tagsToShow = bulkTagMode === 'remove' ? selectedQuestionsTags : (tagsData?.tags || []);
+                      return tagsToShow.map((tag) => {
                         const tagId = tag.id;
                         const tagName = tag.name;
                         const tagColor = tag.color || ('categoryColor' in tag ? tag.categoryColor : tag.category?.color) || '#6366f1';
@@ -713,15 +719,15 @@ export default function AdminQuestionsContent() {
                             onClick={(e) => {
                               e.stopPropagation();
                               const newSet = new Set(selectedBulkTagIds);
-                              if (newSet.has(tagId!)) {
-                                newSet.delete(tagId!);
+                              if (newSet.has(tagId)) {
+                                newSet.delete(tagId);
                               } else {
-                                newSet.add(tagId!);
+                                newSet.add(tagId);
                               }
                               setSelectedBulkTagIds(newSet);
                             }}
                             className={`w-full text-left px-3 py-2 text-sm rounded-lg mb-1 flex items-center gap-2 transition-colors ${
-                              selectedBulkTagIds.has(tagId!)
+                              selectedBulkTagIds.has(tagId)
                                 ? 'bg-purple-100 dark:bg-purple-900/40'
                                 : `hover:${colors.background.secondary}`
                             } ${colors.text.primary}`}
@@ -733,13 +739,13 @@ export default function AdminQuestionsContent() {
                             <span className="flex-1 truncate">
                               {categoryName ? `${categoryName} > ${tagName}` : tagName}
                             </span>
-                            {selectedBulkTagIds.has(tagId!) && (
+                            {selectedBulkTagIds.has(tagId) && (
                               <Check className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
                             )}
                           </button>
                         );
-                      })
-                    )}
+                      });
+                    })()}
                   </div>
                   
                   {/* Apply button */}
@@ -881,23 +887,29 @@ export default function AdminQuestionsContent() {
                       </div>
                     </td>
                     <td className="px-3 py-3 hidden lg:table-cell">
-                      {question.createdBy ? (
-                        <span 
-                          className={`text-sm ${colors.text.primary} truncate block max-w-[100px]`}
-                          title={question.createdBy.name}
-                        >
-                          {question.createdBy.name}
-                        </span>
-                      ) : question.source ? (
-                        <span 
-                          className={`text-sm ${colors.text.muted} truncate block max-w-[100px] italic`}
-                          title={`Importata: ${question.source}`}
-                        >
-                          {question.source}
-                        </span>
-                      ) : (
-                        <span className={`text-sm ${colors.text.muted}`}>-</span>
-                      )}
+                      {(() => {
+                        if (question.createdBy) {
+                          return (
+                            <span 
+                              className={`text-sm ${colors.text.primary} truncate block max-w-[100px]`}
+                              title={question.createdBy.name}
+                            >
+                              {question.createdBy.name}
+                            </span>
+                          );
+                        }
+                        if (question.source) {
+                          return (
+                            <span 
+                              className={`text-sm ${colors.text.muted} truncate block max-w-[100px] italic`}
+                              title={`Importata: ${question.source}`}
+                            >
+                              {question.source}
+                            </span>
+                          );
+                        }
+                        return <span className={`text-sm ${colors.text.muted}`}>-</span>;
+                      })()}
                     </td>
                     <td className="px-3 py-3 hidden md:table-cell">
                       {question.subject ? (
@@ -936,16 +948,13 @@ export default function AdminQuestionsContent() {
                       {question.questionTags && question.questionTags.length > 0 ? (
                         <span
                           className="text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap"
-                          style={{
-                            backgroundColor: question.questionTags[0].tag.color 
-                              ? `${question.questionTags[0].tag.color}20` 
-                              : (question.questionTags[0].tag.category?.color 
-                                  ? `${question.questionTags[0].tag.category.color}20` 
-                                  : '#6366f120'),
-                            color: question.questionTags[0].tag.color 
-                              || question.questionTags[0].tag.category?.color 
-                              || '#6366f1',
-                          }}
+                          style={(() => {
+                            const tagColor = question.questionTags[0].tag.color || question.questionTags[0].tag.category?.color || '#6366f1';
+                            return {
+                              backgroundColor: `${tagColor}20`,
+                              color: tagColor,
+                            };
+                          })()}
                           title={question.questionTags.map(qt => qt.tag?.name).filter(Boolean).join(', ')}
                         >
                           {question.questionTags[0].tag.name}
@@ -1020,9 +1029,11 @@ export default function AdminQuestionsContent() {
       {/* Actions Dropdown Portal */}
       {openMenuId && menuPosition && (
         <Portal>
-          <div
-            className="fixed inset-0 z-[100]"
+          <button
+            type="button"
+            className="fixed inset-0 z-[100] bg-transparent border-0 cursor-default"
             onClick={() => setOpenMenuId(null)}
+            aria-label="Chiudi menu"
           />
           <div
             className={`fixed w-48 rounded-lg ${colors.background.card} shadow-xl border ${colors.border.primary} z-[101] py-1`}

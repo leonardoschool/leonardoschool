@@ -93,7 +93,9 @@ export default function RootLayout({
             root.classList.add('dark');
           }
         }
-      } catch (e) {}
+      } catch (e) {
+        // Ignore localStorage errors - fallback to system preference
+      }
     })();
   `;
 

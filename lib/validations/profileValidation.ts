@@ -36,7 +36,7 @@ export type ValidationResult = {
  */
 export const validateCodiceFiscale = (value: string): ValidationResult => {
   // Remove spaces and convert to uppercase
-  const cleaned = value.replace(/\s/g, '').toUpperCase();
+  const cleaned = value.replaceAll(/\s/g, '').toUpperCase();
   
   if (!cleaned) {
     return { isValid: false, error: 'Il codice fiscale è obbligatorio' };
@@ -46,8 +46,8 @@ export const validateCodiceFiscale = (value: string): ValidationResult => {
     return { isValid: false, error: 'Il codice fiscale deve essere di 16 caratteri' };
   }
   
-  // Regex pattern for Italian fiscal code
-  const cfRegex = /^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$/;
+  // Regex pattern for Italian fiscal code (using \d for digits)
+  const cfRegex = /^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/;
   
   if (!cfRegex.test(cleaned)) {
     return { isValid: false, error: 'Formato codice fiscale non valido' };
@@ -96,7 +96,7 @@ const validateCodiceFiscaleCheckDigit = (cf: string): boolean => {
  */
 export const validateTelefono = (value: string): ValidationResult => {
   // Remove all non-digit characters except +
-  let cleaned = value.replace(/[^\d+]/g, '');
+  let cleaned = value.replaceAll(/[^\d+]/g, '');
   
   if (!cleaned) {
     return { isValid: false, error: 'Il numero di telefono è obbligatorio' };
@@ -131,7 +131,7 @@ export const validateTelefono = (value: string): ValidationResult => {
  */
 export const validateCAP = (value: string): ValidationResult => {
   // Remove all non-digit characters
-  const cleaned = value.replace(/\D/g, '');
+  const cleaned = value.replaceAll(/\D/g, '');
   
   if (!cleaned) {
     return { isValid: false, error: 'Il CAP è obbligatorio' };
@@ -142,7 +142,7 @@ export const validateCAP = (value: string): ValidationResult => {
   }
   
   // Italian CAPs range from 00010 to 98168
-  const capNum = parseInt(cleaned, 10);
+  const capNum = Number.parseInt(cleaned, 10);
   if (capNum < 10 || capNum > 98168) {
     return { isValid: false, error: 'CAP non valido' };
   }
@@ -155,7 +155,7 @@ export const validateCAP = (value: string): ValidationResult => {
  * Must be a valid 2-letter province code
  */
 export const validateProvincia = (value: string): ValidationResult => {
-  const cleaned = value.replace(/\s/g, '').toUpperCase();
+  const cleaned = value.replaceAll(/\s/g, '').toUpperCase();
   
   if (!cleaned) {
     return { isValid: false, error: 'La provincia è obbligatoria' };
@@ -467,9 +467,24 @@ export const validateEmailOptional = (value: string): ValidationResult => {
   }
   
   const cleaned = value.trim().toLowerCase();
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   
-  if (!emailRegex.test(cleaned)) {
+  // Limit length to prevent DoS
+  if (cleaned.length > 254) {
+    return { isValid: false, error: 'Formato email non valido' };
+  }
+  
+  // Simple structural check without regex (avoids backtracking vulnerabilities)
+  const atIndex = cleaned.indexOf('@');
+  if (atIndex < 1 || atIndex === cleaned.length - 1) {
+    return { isValid: false, error: 'Formato email non valido' };
+  }
+  
+  const dotIndex = cleaned.lastIndexOf('.');
+  if (dotIndex < atIndex + 2 || dotIndex === cleaned.length - 1) {
+    return { isValid: false, error: 'Formato email non valido' };
+  }
+  
+  if (cleaned.includes(' ')) {
     return { isValid: false, error: 'Formato email non valido' };
   }
   

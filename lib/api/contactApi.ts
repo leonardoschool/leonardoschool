@@ -15,7 +15,7 @@ import {
   MAX_FILE_SIZES 
 } from '@/lib/validations/fileValidation';
 import { prisma } from '@/lib/prisma/client';
-import { adminStorage } from '@/lib/firebase/admin';
+import { getAdminStorage } from '@/lib/firebase/admin';
 
 // =============================================================================
 // RATE LIMITING
@@ -246,15 +246,16 @@ export async function handleContactRequest(options: HandleContactRequestOptions)
     
     if (isJobApplication) {
       // Parse FormData for job applications (with file upload)
-      const formData = await request.formData();
+      // Cast to globalThis.FormData to use Web API FormData type
+      const formData = await request.formData() as unknown as globalThis.FormData;
       
       data = {
-        name: formData.get('name') as string || '',
-        phone: formData.get('phone') as string || '',
-        email: formData.get('email') as string || '',
-        subject: formData.get('subject') as string || '',
-        message: formData.get('message') as string || '',
-        materia: formData.get('materia') as string || '',
+        name: (formData.get('name') as string) || '',
+        phone: (formData.get('phone') as string) || '',
+        email: (formData.get('email') as string) || '',
+        subject: (formData.get('subject') as string) || '',
+        message: (formData.get('message') as string) || '',
+        materia: (formData.get('materia') as string) || '',
       };
       
       cvFile = formData.get('cv') as File | null;
@@ -313,7 +314,7 @@ export async function handleContactRequest(options: HandleContactRequestOptions)
         try {
           const buffer = Buffer.from(await cvFile.arrayBuffer());
           const fileName = `cv/${Date.now()}_${cvFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-          const bucket = adminStorage.bucket();
+          const bucket = getAdminStorage().bucket();
           const file = bucket.file(fileName);
           
           await file.save(buffer, {

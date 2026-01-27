@@ -110,7 +110,7 @@ export const ADMISSION_TESTS: TestCardType[] = [
       { title: 'Syllabus TOLC-PSI (Scienze psicologiche)', url: 'https://www.cisiaonline.it/tolc/tolc-psi/struttura-della-prova-e-sillabo' },
       { title: 'Syllabus TOLC-S (Scienze chimiche, fisiche, matematiche, geologiche e naturali)', url: 'https://www.cisiaonline.it/tolc/tolc-s/struttura-della-prova-e-sillabo' },
       { title: 'Syllabus TOLC-SPS (Scienze politiche e sociali)', url: 'https://www.cisiaonline.it/tolc/tolc-sps/struttura-della-prova-e-sillabo' },
-      { title: 'Syllabus TOLC-SU (Scienze umanistiche)', url: 'http://tolc-su/' },
+      { title: 'Syllabus TOLC-SU (Scienze umanistiche)', url: 'https://www.cisiaonline.it/tolc/tolc-su/struttura-della-prova-e-sillabo' },
       { title: 'English TOLC-E', url: 'https://www.cisiaonline.it/tolc/english-tolc-e/structure-and-syllabus' },
       { title: 'English TOLC-F', url: 'https://www.cisiaonline.it/tolc/english-tolc-f/structure-and-syllabus' },
       { title: 'English TOLC-I', url: 'https://www.cisiaonline.it/tolc/english-tolc-i/structure-and-syllabus' },

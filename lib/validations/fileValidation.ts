@@ -70,20 +70,23 @@ export function hasDangerousExtension(filename: string): boolean {
  * Sanitize filename to prevent path traversal attacks
  */
 export function sanitizeFilename(filename: string): string {
-  return filename
-    // Remove path traversal attempts
-    .replace(/\.\./g, '')
-    .replace(/[\/\\]/g, '')
-    // Remove null bytes
-    .replace(/\0/g, '')
-    // Remove control characters
-    .replace(/[\x00-\x1f\x7f]/g, '')
-    // Keep only safe characters
-    .replace(/[^a-zA-Z0-9_\-\.\s]/g, '_')
-    // Trim whitespace
-    .trim()
-    // Limit length
-    .substring(0, 200);
+  // Remove path traversal attempts
+  let result = filename.replaceAll('..', '');
+  
+  // Remove path separators
+  result = result.split('/').join('').split('\\').join('');
+  
+  // Remove null bytes and control characters using character codes
+  result = result.split('').filter((char, idx) => {
+    const code = filename.codePointAt(filename.indexOf(char, idx));
+    return code !== undefined && code >= 32 && code !== 127; // Exclude control chars (0-31) and DEL (127)
+  }).join('');
+  
+  // Keep only safe characters
+  result = result.replaceAll(/[^a-zA-Z0-9_\-.\s]/g, '_');
+  
+  // Trim whitespace and limit length
+  return result.trim().substring(0, 200);
 }
 
 /**
@@ -192,7 +195,7 @@ export function validateSignatureDataUrl(dataUrl: string | null | undefined): Fi
   }
   
   // Validate MIME type
-  const mimeMatch = dataUrl.match(/^data:([^;]+);/);
+  const mimeMatch = /^data:([^;]+);/.exec(dataUrl);
   if (!mimeMatch) {
     return { valid: false, error: 'Formato firma non riconosciuto' };
   }
