@@ -110,36 +110,33 @@ jobs:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/test')
 
     steps:
-      - name: Trigger Vercel Deploy Hook
+      - uses: actions/checkout@v4
+      
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+        
+      - name: Pull Vercel Environment Information
         run: |
           if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
-            echo "Deploying main branch..."
-            response=$(curl -s -w "\n%{http_code}" -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_MAIN }}")
-            http_code=$(echo "$response" | tail -n1)
-            if [ "$http_code" != "201" ] && [ "$http_code" != "200" ]; then
-              echo "Deploy hook failed with status $http_code"
-              echo "$response"
-              exit 1
-            fi
-            echo "Deploy triggered successfully!"
-          elif [ "${GITHUB_REF}" = "refs/heads/develop" ]; then
-            echo "Deploying develop branch..."
-            response=$(curl -s -w "\n%{http_code}" -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_DEVELOP }}")
-            http_code=$(echo "$response" | tail -n1)
-            if [ "$http_code" != "201" ] && [ "$http_code" != "200" ]; then
-              echo "Deploy hook failed with status $http_code"
-              echo "$response"
-              exit 1
-            fi
-            echo "Deploy triggered successfully!"
+            echo "Pulling production environment..."
+            vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
           else
-            echo "Deploying test branch..."
-            response=$(curl -s -w "\n%{http_code}" -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_TEST }}")
-            http_code=$(echo "$response" | tail -n1)
-            if [ "$http_code" != "201" ] && [ "$http_code" != "200" ]; then
-              echo "Deploy hook failed with status $http_code"
-              echo "$response"
-              exit 1
-            fi
-            echo "Deploy triggered successfully!"
+            echo "Pulling preview environment..."
+            vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
           fi
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        
+      - name: Deploy to Vercel
+        run: |
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            echo "Deploying main to production..."
+            vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
+          else
+            echo "Deploying to preview..."
+            vercel deploy --token=${{ secrets.VERCEL_TOKEN }}
+          fi
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
