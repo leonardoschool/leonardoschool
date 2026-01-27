@@ -115,27 +115,14 @@ jobs:
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
         
-      - name: Pull Vercel Environment Information
-        run: |
-          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
-            echo "Pulling production environment..."
-            vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-          else
-            echo "Pulling preview environment..."
-            vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
-          fi
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        
       - name: Deploy to Vercel
         run: |
           if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
             echo "Deploying main to production..."
-            vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
+            vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
           else
             echo "Deploying to preview..."
-            vercel deploy --token=${{ secrets.VERCEL_TOKEN }}
+            vercel deploy --token=${{ secrets.VERCEL_TOKEN }} --yes
           fi
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
