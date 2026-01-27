@@ -95,7 +95,14 @@ export const materialsRouter = router({
             include: { group: { select: { id: true, name: true } } },
           },
           studentAccess: {
-            include: { student: { include: { user: { select: { id: true, name: true } } } } },
+            include: { 
+              student: { 
+                select: { 
+                  id: true,
+                  user: { select: { id: true, name: true } } 
+                } 
+              } 
+            },
           },
         },
       });

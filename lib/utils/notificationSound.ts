@@ -54,7 +54,7 @@ export async function playNotificationSound(volume: number = 0.5): Promise<boole
   } catch {
     // Fallback: Generate a pleasant notification sound using Web Audio API
     try {
-      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AudioContextClass = globalThis.AudioContext || (globalThis as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AudioContextClass) return false;
       
       const audioContext = new AudioContextClass();
@@ -106,7 +106,7 @@ export async function playTestSound(volume: number = 0.5): Promise<boolean> {
   } catch {
     // Fallback to Web Audio API
     try {
-      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AudioContextClass = globalThis.AudioContext || (globalThis as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AudioContextClass) return false;
       
       const audioContext = new AudioContextClass();

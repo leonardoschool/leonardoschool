@@ -18,6 +18,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { formatDistanceToNow } from 'date-fns';
@@ -53,9 +54,10 @@ interface ChatModalProps {
   participantId: string;
   visible: boolean;
   onClose: () => void;
+  onMessagesRead?: (messageIds: string[]) => void;
 }
 
-function ChatModal({ participantId, visible, onClose }: ChatModalProps) {
+function ChatModal({ participantId, visible, onClose, onMessagesRead }: ChatModalProps) {
   const { themed } = useTheme();
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -93,9 +95,12 @@ function ChatModal({ participantId, visible, onClose }: ChatModalProps) {
         .map((m: Message) => m.id);
       if (unreadIds.length > 0) {
         markMessagesRead.mutate({ participantId, messageIds: unreadIds });
+        // Notify parent about read messages
+        onMessagesRead?.(unreadIds);
       }
     }
-  }, [visible, messagesQuery.data, participantId, markMessagesRead]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, messagesQuery.data, participantId]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -255,6 +260,8 @@ export default function StudentWaitingRoom({
 
   // App state for background detection
   const appState = useRef(AppState.currentState);
+  // Track message IDs we've already vibrated for
+  const seenMessageIds = useRef<Set<string>>(new Set());
 
   // Check session status
   const { data: sessionStatus, isLoading: isCheckingSession } = trpc.virtualRoom.getStudentSessionStatus.useQuery(
@@ -332,11 +339,24 @@ export default function StudentWaitingRoom({
         setTotalParticipants(data.totalParticipants);
       }
 
-      // Handle unread messages
+      // Handle unread messages - only update count if chat is not open
       if (data.unreadMessages && data.unreadMessages.length > 0) {
-        setUnreadCount(data.unreadMessages.length);
-        // Vibrate for new messages
-        Vibration.vibrate(100);
+        // Check if there are any truly NEW messages we haven't seen
+        const newMessageIds = data.unreadMessages
+          .map(m => m.id)
+          .filter(id => !seenMessageIds.current.has(id));
+        
+        // Only vibrate if there are new messages AND chat is not open
+        if (newMessageIds.length > 0 && !showChat) {
+          Vibration.vibrate(100);
+          // Add new IDs to seen set
+          newMessageIds.forEach(id => seenMessageIds.current.add(id));
+        }
+        
+        // Only update unread count from server if chat is closed
+        if (!showChat) {
+          setUnreadCount(data.unreadMessages.length);
+        }
       } else {
         setUnreadCount(0);
       }
@@ -349,7 +369,8 @@ export default function StudentWaitingRoom({
       setIsJoining(true);
       joinSession.mutate({ assignmentId });
     }
-  }, [assignmentId, participantId, isJoining, sessionStatus?.hasSession, joinSession]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignmentId, participantId, isJoining, sessionStatus?.hasSession]);
 
   // Heartbeat polling
   useEffect(() => {
@@ -360,7 +381,8 @@ export default function StudentWaitingRoom({
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [participantId, heartbeat]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [participantId]);
 
   // Handle app state changes (background/foreground)
   useEffect(() => {
@@ -383,34 +405,42 @@ export default function StudentWaitingRoom({
         disconnect.mutate({ participantId });
       }
     };
-  }, [participantId, disconnect]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [participantId]);
 
   // Handle ready click
   const handleReady = useCallback(() => {
     if (!participantId) return;
     setReadyMutation.mutate({ participantId });
-  }, [participantId, setReadyMutation]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [participantId]);
+
+  // Handle opening chat - reset unread count
+  const handleOpenChat = useCallback(() => {
+    setShowChat(true);
+    setUnreadCount(0);
+  }, []);
 
   // ==================== RENDER ====================
 
   // Loading state
   if (isCheckingSession) {
     return (
-      <View style={[styles.container, { backgroundColor: themed(colors.background.primary) }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: themed(colors.background.primary) }]} edges={['top']}>
         <View style={styles.centerContent}>
           <PageLoader />
           <Text variant="body" color="muted" style={{ marginTop: spacing[4] }}>
             Verifica stato stanza virtuale...
           </Text>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   // Session ended state
   if (sessionEnded) {
     return (
-      <View style={[styles.container, { backgroundColor: themed(colors.background.primary) }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: themed(colors.background.primary) }]} edges={['top']}>
         <View style={styles.centerContent}>
           <Card style={styles.endedCard}>
             <View style={[
@@ -437,14 +467,14 @@ export default function StudentWaitingRoom({
             </Button>
           </Card>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   // Session not active yet
   if (!sessionStatus?.hasSession) {
     return (
-      <View style={[styles.container, { backgroundColor: themed(colors.background.primary) }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: themed(colors.background.primary) }]} edges={['top']}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <Card style={styles.mainCard}>
             {/* Icon */}
@@ -496,13 +526,13 @@ export default function StudentWaitingRoom({
             </View>
           </Card>
         </ScrollView>
-      </View>
+      </SafeAreaView>
     );
   }
 
   // Main waiting room (session active, waiting for start)
   return (
-    <View style={[styles.container, { backgroundColor: themed(colors.background.primary) }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: themed(colors.background.primary) }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Card style={styles.mainCard}>
           {/* Header with animation */}
@@ -576,7 +606,7 @@ export default function StudentWaitingRoom({
           {/* Chat button */}
           <TouchableOpacity
             style={[styles.chatButton, { backgroundColor: themed(colors.background.secondary) }]}
-            onPress={() => setShowChat(true)}
+            onPress={handleOpenChat}
           >
             <View style={styles.chatButtonContent}>
               <Ionicons name="chatbubbles-outline" size={24} color={colors.status.info.main} />
@@ -603,9 +633,13 @@ export default function StudentWaitingRoom({
           participantId={participantId}
           visible={showChat}
           onClose={() => setShowChat(false)}
+          onMessagesRead={(messageIds) => {
+            // Add read message IDs to seenMessageIds so they don't trigger vibration again
+            messageIds.forEach(id => seenMessageIds.current.add(id));
+          }}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 

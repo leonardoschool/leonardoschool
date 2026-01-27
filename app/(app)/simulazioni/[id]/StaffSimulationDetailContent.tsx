@@ -3,11 +3,11 @@
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
+import { stripHtml } from '@/lib/utils/sanitizeHtml';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { PageLoader, Spinner } from '@/components/ui/loaders';
 import ConfirmModal from '@/components/ui/ConfirmModal';
-import { downloadSimulationPdf } from '@/lib/utils/simulationPdfGenerator';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -23,7 +23,6 @@ import {
   XCircle,
   AlertCircle,
   Clock,
-  FileDown,
   Printer,
 } from 'lucide-react';
 import type { SimulationType, SimulationStatus } from '@/lib/validations/simulationValidation';
@@ -130,44 +129,361 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
     return mins > 0 ? `${hours}h ${mins}m` : `${hours} ore`;
   };
 
-  // Download PDF handler
-  const handleDownloadPdf = () => {
+  // Print handler - opens print dialog directly
+  const handlePrint = () => {
     if (!simulation) return;
     
-    const pdfData = {
-      title: simulation.title,
-      description: simulation.description || undefined,
-      durationMinutes: simulation.durationMinutes || 0,
-      correctPoints: simulation.correctPoints || 1.5,
-      wrongPoints: simulation.wrongPoints || -0.4,
-      blankPoints: simulation.blankPoints || 0,
-      paperInstructions: simulation.paperInstructions || undefined,
-      schoolName: 'Leonardo School',
-      date: simulation.startDate 
-        ? new Date(simulation.startDate).toLocaleDateString('it-IT', { 
-            day: 'numeric', 
-            month: 'long', 
-            year: 'numeric' 
-          })
-        : undefined,
-      questions: simulation.questions.map(sq => ({
-        id: sq.question.id,
-        text: sq.question.text,
-        type: sq.question.type,
-        difficulty: sq.question.difficulty,
-        subject: sq.question.subject,
-        topic: sq.question.topic,
-        answers: sq.question.answers.map(a => ({
-          id: a.id,
-          text: a.text,
-          isCorrect: a.isCorrect,
-          order: a.order,
-        })),
-      })),
+    // Calculate academic year
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth();
+    const academicYearStart = currentMonth >= 8 ? currentYear : currentYear - 1;
+    const academicYearEnd = academicYearStart + 1;
+    const academicYearText = `Anno accademico ${academicYearStart}/${academicYearEnd}`;
+    
+    // Check if simulation has sections
+    const hasSections = simulation.hasSections;
+    const showSectionsInPaper = simulation.showSectionsInPaper !== false;
+    const sections = simulation.sections as Array<{
+      id: string;
+      name: string;
+      durationMinutes: number;
+      questionIds?: string[];
+      subjectId?: string | null;
+      order: number;
+    }> | null;
+    
+    // Type for simulation question
+    type SimQuestion = typeof simulation.questions[0];
+    
+    // Helper to render questions grouped by type
+    const renderQuestionsByType = (
+      questionsToRender: SimQuestion[],
+      startNumber: number
+    ): { html: string; nextNumber: number } => {
+      let html = '';
+      let questionNumber = startNumber;
+      
+      // Group by type
+      const multipleChoice = questionsToRender.filter(sq => sq.question.type === 'MULTIPLE_CHOICE');
+      const singleChoice = questionsToRender.filter(sq => sq.question.type === 'SINGLE_CHOICE');
+      const openText = questionsToRender.filter(sq => sq.question.type === 'OPEN_TEXT');
+      
+      // Render MULTIPLE_CHOICE
+      if (multipleChoice.length > 0) {
+        html += `<div class="question-type-header">DOMANDE A RISPOSTA MULTIPLA</div>`;
+        for (const sq of multipleChoice) {
+          const imageHtml = sq.question.imageUrl 
+            ? `<div class="question-image"><img src="${sq.question.imageUrl}" alt="Immagine" style="max-width: 300px; max-height: 200px;"></div>`
+            : '';
+          const answersHtml = sq.question.answers 
+            ? `<div class="answers">
+                ${[...sq.question.answers]
+                  .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                  .map((answer, ansIndex) => `
+                    <div class="answer"><strong>${String.fromCharCode(65 + ansIndex)})</strong> ${answer.text}</div>
+                  `).join('')}
+              </div>`
+            : '';
+          html += `
+            <div class="question">
+              <div class="question-text"><strong>${questionNumber}.</strong> ${sq.question.text}</div>
+              ${imageHtml}
+              ${answersHtml}
+            </div>
+          `;
+          questionNumber++;
+        }
+      }
+      
+      // Render SINGLE_CHOICE
+      if (singleChoice.length > 0) {
+        html += `<div class="question-type-header">DOMANDE A RISPOSTA SINGOLA</div>`;
+        for (const sq of singleChoice) {
+          const imageHtml = sq.question.imageUrl 
+            ? `<div class="question-image"><img src="${sq.question.imageUrl}" alt="Immagine" style="max-width: 300px; max-height: 200px;"></div>`
+            : '';
+          const answersHtml = sq.question.answers 
+            ? `<div class="answers">
+                ${[...sq.question.answers]
+                  .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                  .map((answer, ansIndex) => `
+                    <div class="answer"><strong>${String.fromCharCode(65 + ansIndex)})</strong> ${answer.text}</div>
+                  `).join('')}
+              </div>`
+            : '';
+          html += `
+            <div class="question">
+              <div class="question-text"><strong>${questionNumber}.</strong> ${sq.question.text}</div>
+              ${imageHtml}
+              ${answersHtml}
+            </div>
+          `;
+          questionNumber++;
+        }
+      }
+      
+      // Render OPEN_TEXT
+      if (openText.length > 0) {
+        html += `<div class="question-type-header">DOMANDE A RISPOSTA APERTA</div>`;
+        for (const sq of openText) {
+          const imageHtml = sq.question.imageUrl 
+            ? `<div class="question-image"><img src="${sq.question.imageUrl}" alt="Immagine" style="max-width: 300px; max-height: 200px;"></div>`
+            : '';
+          html += `
+            <div class="question">
+              <div class="question-text"><strong>${questionNumber}.</strong> ${sq.question.text}</div>
+              ${imageHtml}
+              <div class="open-answer-space"></div>
+            </div>
+          `;
+          questionNumber++;
+        }
+      }
+      
+      return { html, nextNumber: questionNumber };
     };
     
-    downloadSimulationPdf(pdfData, `${simulation.title.replace(/\s+/g, '_')}.pdf`);
-    showSuccess('PDF Scaricato', 'Il PDF della simulazione è stato scaricato');
+    // Generate questions HTML - with or without sections
+    let questionsHtml = '';
+    
+    if (hasSections && showSectionsInPaper && sections && sections.length > 0) {
+      // Group questions by section, then by type within each section
+      const sortedSections = [...sections].sort((a, b) => a.order - b.order);
+      let globalQuestionNumber = 1;
+      
+      for (const section of sortedSections) {
+        const sectionQuestionIds = section.questionIds || [];
+        const sectionQuestions = sectionQuestionIds
+          .map(id => simulation.questions.find(sq => sq.question.id === id))
+          .filter((sq): sq is SimQuestion => sq !== undefined);
+        
+        if (sectionQuestions.length === 0) continue;
+        
+        questionsHtml += `<div class="section-header">${section.name}</div>`;
+        const result = renderQuestionsByType(sectionQuestions, globalQuestionNumber);
+        questionsHtml += result.html;
+        globalQuestionNumber = result.nextNumber;
+      }
+    } else {
+      // No sections - just group by type
+      const result = renderQuestionsByType(simulation.questions, 1);
+      questionsHtml = result.html;
+    }
+    
+    // Open print window
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${simulation.title}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    /* Page margins - allows browser to show header/footer checkbox */
+    @page { 
+      size: A4; 
+      margin: 10mm 15mm 15mm 15mm;
+    }
+    
+    @media print {
+      body { 
+        -webkit-print-color-adjust: exact !important; 
+        print-color-adjust: exact !important;
+      }
+      
+      /* Hide the instruction message when printing */
+      .print-instruction { display: none !important; }
+    }
+    
+    body { 
+      font-family: Arial, Helvetica, sans-serif; 
+      font-size: 11pt; 
+      line-height: 1.4; 
+      color: #000;
+      background: #fff;
+      padding: 0;
+      margin: 0;
+      position: relative;
+    }
+    
+    /* Instruction for user - hidden when printing */
+    .print-instruction {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 10px 15px;
+      margin-bottom: 15px;
+      border-radius: 5px;
+      font-size: 12px;
+      color: #856404;
+    }
+    
+    /* Page header - centered logo (first page only) */
+    .page-header {
+      text-align: center;
+      margin-bottom: 15px;
+    }
+    .page-header-logo {
+      width: 100px;
+      height: auto;
+      display: inline-block;
+    }
+    
+    /* Watermark background logo */
+    .watermark {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      opacity: 0.06;
+      z-index: -1;
+      width: 50%;
+      max-width: 350px;
+      pointer-events: none;
+    }
+    
+    .container { 
+      max-width: 100%; 
+      padding: 0; 
+      position: relative; 
+      z-index: 1;
+      margin-top: 0;
+      margin-bottom: 25px;
+    }
+    
+    /* Description (centered, bold, underlined) */
+    .description {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 12pt;
+      text-align: center;
+      text-decoration: underline;
+      font-weight: bold;
+      margin: 5px 0;
+    }
+    
+    /* Academic year */
+    .academic-year {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 11pt;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    
+    /* Section header (e.g., FISICA E MATEMATICA) */
+    .section-header {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 12pt;
+      font-weight: bold;
+      text-align: center;
+      text-decoration: underline;
+      margin: 25px 0 10px 0;
+      text-transform: uppercase;
+    }
+    
+    /* Question type header (e.g., DOMANDE A RISPOSTA MULTIPLA) */
+    .question-type-header {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 11pt;
+      font-weight: bold;
+      text-align: center;
+      text-decoration: underline;
+      margin: 15px 0 12px 0;
+      text-transform: uppercase;
+    }
+    
+    /* Questions */
+    .question { 
+      margin-bottom: 14px; 
+    }
+    
+    /* Open answer space for OPEN_TEXT questions */
+    .open-answer-space {
+      border: 1px solid #ccc;
+      min-height: 120px;
+      margin: 8px 0 8px 25px;
+      background: #fafafa;
+    }
+    .question-text { 
+      margin-bottom: 4px;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 11pt;
+      font-weight: bold;
+    }
+    .question-text strong {
+      font-weight: bold;
+    }
+    .question-image {
+      margin: 6px 0;
+      text-align: center;
+    }
+    .answers { 
+      margin-left: 25px; 
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .answer { 
+      margin: 2px 0; 
+      font-size: 11pt;
+    }
+    .answer strong {
+      font-weight: bold;
+    }
+    
+    /* Subscript and superscript */
+    sub { font-size: 0.7em; vertical-align: sub; }
+    sup { font-size: 0.7em; vertical-align: super; }
+    
+    /* KaTeX */
+    .katex { font-size: 1em; }
+    .katex-display { margin: 6px 0; }
+  </style>
+</head>
+<body>
+  <!-- Instruction message - hidden when printing -->
+  <div class="print-instruction">
+    <strong>💡 SUGGERIMENTO:</strong> Nelle opzioni di stampa, <strong>SELEZIONA "Intestazioni e piè di pagina"</strong> per vedere i numeri di pagina in basso.
+  </div>
+
+  <!-- Header - centered logo (first page only) -->
+  <div class="page-header">
+    <img src="/images/Logo_testata_doc.png" alt="" class="page-header-logo">
+  </div>
+  
+  <!-- Watermark logo -->
+  <img src="/images/logo.png" alt="" class="watermark">
+  
+  <div class="container">
+    <!-- Description -->
+    ${simulation.description ? `<div class="description">${simulation.description}</div>` : ''}
+    
+    <div class="academic-year">${academicYearText}</div>
+    
+    ${questionsHtml}
+  </div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"><\/script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"><\/script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      renderMathInElement(document.body, {
+        delimiters: [
+          {left: '$$', right: '$$', display: true},
+          {left: '$', right: '$', display: false},
+          {left: '\\\\[', right: '\\\\]', display: true},
+          {left: '\\\\(', right: '\\\\)', display: false}
+        ],
+        throwOnError: false
+      });
+      setTimeout(function() { window.print(); }, 800);
+    });
+  <\/script>
+</body>
+</html>
+      `);
+      printWindow.document.close();
+    }
   };
 
   if (isLoading) {
@@ -256,21 +572,13 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
                 <span className="hidden lg:inline">Statistiche</span>
               </Link>
             )}
-            <Link
-              href={`/simulazioni/${id}/stampa`}
+            <button
+              onClick={handlePrint}
               className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg border border-blue-300 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20`}
-              title="Versione stampabile con formule LaTeX"
+              title="Stampa simulazione"
             >
               <Printer className="w-4 h-4" />
               <span className="hidden xl:inline">Stampa</span>
-            </Link>
-            <button
-              onClick={handleDownloadPdf}
-              className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm rounded-lg border border-purple-300 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20`}
-              title="PDF semplice (senza formule LaTeX grafiche)"
-            >
-              <FileDown className="w-4 h-4" />
-              <span className="hidden xl:inline">PDF</span>
             </button>
             {isAdmin && (
               <button
@@ -329,7 +637,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm ${colors.text.primary} line-clamp-2 leading-relaxed`}>
-                        {sq.question.text.replace(/<[^>]*>/g, '')}
+                        {stripHtml(sq.question.text)}
                       </p>
                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-2">
                         {sq.question.subject && (

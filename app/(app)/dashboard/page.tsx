@@ -15,13 +15,16 @@ export default function DashboardPage() {
     if (error || (!isLoading && !user)) {
       const handleLogout = async () => {
         try {
+          // Solo signOut - i cookie vengono puliti dal listener onIdTokenChanged in useAuth
+          // o direttamente qui per garantire pulizia
           await auth.signOut();
-          await fetch('/api/auth/logout', { method: 'POST' });
+          await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
         } catch (e) {
           console.error('Logout error:', e);
         } finally {
-          window.location.href = '/auth/login';
+          globalThis.location.href = '/auth/login';
         }
+        window.location.href = '/auth/login';
       };
       handleLogout();
     }

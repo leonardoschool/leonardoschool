@@ -20,7 +20,7 @@ const PROVINCE_ITALIANE = [
 ] as const;
 
 // Regex per codice fiscale italiano
-const CODICE_FISCALE_REGEX = /^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$/;
+const CODICE_FISCALE_REGEX = /^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/;
 
 // Parent/Guardian relationship types
 const PARENT_RELATIONSHIP_TYPES = ['PADRE', 'MADRE', 'TUTORE_LEGALE', 'ALTRO'] as const;
@@ -50,7 +50,7 @@ const capitalizeProperName = (str: string): string => {
 
 // Funzione per formattare il telefono
 const formatPhone = (phone: string): string => {
-  let cleaned = phone.replace(/[^\d+]/g, '');
+  let cleaned = phone.replaceAll(/[^\d+]/g, '');
   
   // Rimuovi prefisso internazionale se presente
   if (cleaned.startsWith('+39')) {
@@ -75,6 +75,286 @@ const calculateAge = (dateOfBirth: Date): number => {
   
   return age;
 };
+
+// ==================== STATS HELPER FUNCTIONS ====================
+// Extracted from getDetailedStats to reduce cognitive complexity
+
+type SimulationResultWithSimulation = {
+  id: string;
+  simulationId: string;
+  percentageScore: number;
+  correctAnswers: number;
+  wrongAnswers: number;
+  blankAnswers: number;
+  totalQuestions: number;
+  durationSeconds: number | null;
+  startedAt: Date;
+  completedAt: Date | null;
+  subjectScores: unknown;
+  answers: unknown;
+  simulation: {
+    id: string;
+    title: string;
+    type: string;
+    isOfficial: boolean;
+    durationMinutes: number;
+    totalQuestions: number;
+    subjectDistribution: unknown;
+    questions: Array<{
+      questionId: string;
+      question: {
+        id: string;
+        difficulty: string;
+        subjectId: string;
+        subject: { id: string; name: string; code: string; color: string } | null;
+      } | null;
+    }>;
+  };
+};
+
+/** Calculate overview stats from simulation results */
+function calculateOverviewStats(allResults: SimulationResultWithSimulation[]) {
+  const totalSimulations = allResults.length;
+  const totalQuestions = allResults.reduce((sum, r) => sum + r.totalQuestions, 0);
+  const totalCorrect = allResults.reduce((sum, r) => sum + r.correctAnswers, 0);
+  const totalWrong = allResults.reduce((sum, r) => sum + r.wrongAnswers, 0);
+  const totalBlank = allResults.reduce((sum, r) => sum + r.blankAnswers, 0);
+  
+  const avgPercentage = totalSimulations > 0 
+    ? allResults.reduce((sum, r) => sum + r.percentageScore, 0) / totalSimulations 
+    : 0;
+  const bestScore = allResults.length > 0 
+    ? Math.max(...allResults.map(r => r.percentageScore)) 
+    : 0;
+  const worstScore = allResults.length > 0 
+    ? Math.min(...allResults.map(r => r.percentageScore)) 
+    : 0;
+
+  // Calculate improvement (last 5 vs first 5)
+  const first5Avg = allResults.length >= 5 
+    ? allResults.slice(0, 5).reduce((sum, r) => sum + r.percentageScore, 0) / 5 
+    : allResults.reduce((sum, r) => sum + r.percentageScore, 0) / Math.max(allResults.length, 1);
+  const last5Avg = allResults.length >= 5 
+    ? allResults.slice(-5).reduce((sum, r) => sum + r.percentageScore, 0) / 5 
+    : allResults.reduce((sum, r) => sum + r.percentageScore, 0) / Math.max(allResults.length, 1);
+
+  // Simulations this month
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const simulationsThisMonth = allResults.filter(r => 
+    r.completedAt && r.completedAt >= startOfMonth
+  ).length;
+
+  return {
+    totalSimulations,
+    totalQuestions,
+    totalCorrect,
+    totalWrong,
+    totalBlank,
+    avgPercentage,
+    bestScore,
+    worstScore,
+    improvement: last5Avg - first5Avg,
+    simulationsThisMonth,
+  };
+}
+
+/** Calculate type breakdown from simulation results */
+function calculateTypeBreakdown(allResults: SimulationResultWithSimulation[]) {
+  const typeBreakdown: Record<string, { count: number; avgScore: number; totalScore: number }> = {};
+  
+  for (const result of allResults) {
+    const type = result.simulation.type;
+    if (!typeBreakdown[type]) {
+      typeBreakdown[type] = { count: 0, avgScore: 0, totalScore: 0 };
+    }
+    typeBreakdown[type].count++;
+    typeBreakdown[type].totalScore += result.percentageScore;
+  }
+  
+  for (const type of Object.keys(typeBreakdown)) {
+    typeBreakdown[type].avgScore = typeBreakdown[type].totalScore / typeBreakdown[type].count;
+  }
+  
+  return typeBreakdown;
+}
+
+/** Calculate monthly trend from simulation results */
+function calculateMonthlyTrend(allResults: SimulationResultWithSimulation[]) {
+  const monthlyData: Record<string, { month: string; count: number; avgScore: number; totalScore: number }> = {};
+  
+  for (const result of allResults) {
+    if (!result.completedAt) continue;
+    const monthKey = `${result.completedAt.getFullYear()}-${String(result.completedAt.getMonth() + 1).padStart(2, '0')}`;
+    if (!monthlyData[monthKey]) {
+      monthlyData[monthKey] = { month: monthKey, count: 0, avgScore: 0, totalScore: 0 };
+    }
+    monthlyData[monthKey].count++;
+    monthlyData[monthKey].totalScore += result.percentageScore;
+  }
+  
+  return Object.values(monthlyData)
+    .map(m => ({ ...m, avgScore: m.totalScore / m.count }))
+    .sort((a, b) => a.month.localeCompare(b.month))
+    .slice(-6);
+}
+
+/** Calculate subject stats from simulation results */
+function calculateSubjectStats(allResults: SimulationResultWithSimulation[]) {
+  const subjectAccumulator: Record<string, { total: number; correct: number; wrong: number; blank: number }> = {};
+  
+  for (const result of allResults) {
+    const subjectScores = result.subjectScores as Record<string, { correct: number; wrong: number; blank: number }> | null;
+    if (!subjectScores) continue;
+    
+    for (const [subject, scores] of Object.entries(subjectScores)) {
+      if (!subjectAccumulator[subject]) {
+        subjectAccumulator[subject] = { total: 0, correct: 0, wrong: 0, blank: 0 };
+      }
+      subjectAccumulator[subject].correct += scores.correct || 0;
+      subjectAccumulator[subject].wrong += scores.wrong || 0;
+      subjectAccumulator[subject].blank += scores.blank || 0;
+      subjectAccumulator[subject].total += (scores.correct || 0) + (scores.wrong || 0) + (scores.blank || 0);
+    }
+  }
+
+  const subjectStats = Object.entries(subjectAccumulator).map(([subject, data]) => ({
+    subject,
+    totalQuestions: data.total,
+    correctAnswers: data.correct,
+    wrongAnswers: data.wrong,
+    blankAnswers: data.blank,
+    accuracy: data.total > 0 ? (data.correct / data.total) * 100 : 0,
+  })).sort((a, b) => b.totalQuestions - a.totalQuestions);
+
+  const sortedByAccuracy = [...subjectStats].filter(s => s.totalQuestions >= 5).sort((a, b) => b.accuracy - a.accuracy);
+  
+  return {
+    subjectStats,
+    bestSubject: sortedByAccuracy[0] || null,
+    worstSubject: sortedByAccuracy.at(-1) ?? null,
+  };
+}
+
+/** Calculate difficulty breakdown from simulation results */
+function calculateDifficultyBreakdown(allResults: SimulationResultWithSimulation[]) {
+  const difficultyStats: Record<string, { total: number; correct: number }> = {
+    EASY: { total: 0, correct: 0 },
+    MEDIUM: { total: 0, correct: 0 },
+    HARD: { total: 0, correct: 0 },
+  };
+
+  for (const result of allResults) {
+    const answers = result.answers as Array<{
+      questionId: string;
+      isCorrect: boolean;
+      difficulty?: string;
+    }> | null;
+    
+    if (!answers || !Array.isArray(answers)) continue;
+    
+    for (const answer of answers) {
+      let difficulty = answer.difficulty;
+      if (!difficulty) {
+        const simQuestion = result.simulation.questions.find(q => q.questionId === answer.questionId);
+        difficulty = simQuestion?.question?.difficulty || 'MEDIUM';
+      }
+      
+      if (difficultyStats[difficulty]) {
+        difficultyStats[difficulty].total++;
+        if (answer.isCorrect) {
+          difficultyStats[difficulty].correct++;
+        }
+      }
+    }
+  }
+
+  return Object.entries(difficultyStats).map(([difficulty, data]) => ({
+    difficulty,
+    total: data.total,
+    correct: data.correct,
+    accuracy: data.total > 0 ? (data.correct / data.total) * 100 : 0,
+  }));
+}
+
+/** Calculate achievements based on stats */
+function calculateAchievements(
+  totalSimulations: number,
+  bestScore: number,
+  studentStats: { longestStreak?: number | null } | null
+) {
+  const achievements: Array<{
+    id: string;
+    title: string;
+    description: string;
+    icon: string;
+    unlocked: boolean;
+    progress?: number;
+    target?: number;
+  }> = [];
+
+  // Unlocked achievements
+  if (totalSimulations >= 1) {
+    achievements.push({ id: 'first_sim', title: 'Prima Simulazione', description: 'Hai completato la tua prima simulazione!', icon: '🎯', unlocked: true });
+  }
+  if (totalSimulations >= 10) {
+    achievements.push({ id: 'ten_sims', title: '10 Simulazioni', description: '10 simulazioni completate', icon: '🔟', unlocked: true });
+  }
+  if (totalSimulations >= 50) {
+    achievements.push({ id: 'fifty_sims', title: '50 Simulazioni', description: '50 simulazioni completate', icon: '🏆', unlocked: true });
+  }
+  if (bestScore >= 90) {
+    achievements.push({ id: 'score_90', title: 'Eccellenza', description: 'Hai raggiunto il 90%!', icon: '⭐', unlocked: true });
+  }
+  if (bestScore >= 100) {
+    achievements.push({ id: 'perfect', title: 'Punteggio Perfetto', description: '100% in una simulazione!', icon: '💯', unlocked: true });
+  }
+  if (studentStats?.longestStreak && studentStats.longestStreak >= 7) {
+    achievements.push({ id: 'streak_7', title: 'Settimana Perfetta', description: '7 giorni consecutivi', icon: '🔥', unlocked: true });
+  }
+  if (studentStats?.longestStreak && studentStats.longestStreak >= 30) {
+    achievements.push({ id: 'streak_30', title: 'Mese Perfetto', description: '30 giorni consecutivi', icon: '🌟', unlocked: true });
+  }
+
+  // Potential achievements (not yet unlocked)
+  if (totalSimulations < 10) {
+    achievements.push({ id: 'ten_sims', title: '10 Simulazioni', description: `${totalSimulations}/10 completate`, icon: '🔟', unlocked: false, progress: totalSimulations, target: 10 });
+  }
+  if (totalSimulations >= 10 && totalSimulations < 50) {
+    achievements.push({ id: 'fifty_sims', title: '50 Simulazioni', description: `${totalSimulations}/50 completate`, icon: '🏆', unlocked: false, progress: totalSimulations, target: 50 });
+  }
+  if (bestScore < 90) {
+    achievements.push({ id: 'score_90', title: 'Eccellenza', description: 'Raggiungi il 90%', icon: '⭐', unlocked: false, progress: bestScore, target: 90 });
+  }
+
+  return achievements;
+}
+
+/** Calculate time stats from simulation results */
+function calculateTimeStats(allResults: SimulationResultWithSimulation[], storedTotalMinutes?: number | null) {
+  const completedWithTime = allResults.filter(r => r.durationSeconds && r.durationSeconds > 0);
+  const avgTimeSeconds = completedWithTime.length > 0
+    ? completedWithTime.reduce((sum, r) => sum + (r.durationSeconds || 0), 0) / completedWithTime.length
+    : 0;
+  const totalStudyMinutes = storedTotalMinutes || 
+    Math.round(completedWithTime.reduce((sum, r) => sum + (r.durationSeconds || 0), 0) / 60);
+
+  return { avgTimeSeconds, totalStudyMinutes };
+}
+
+/** Calculate official simulation stats */
+function calculateOfficialStats(allResults: SimulationResultWithSimulation[]) {
+  const officialResults = allResults.filter(r => r.simulation.isOfficial);
+  return {
+    count: officialResults.length,
+    avgScore: officialResults.length > 0 
+      ? officialResults.reduce((sum, r) => sum + r.percentageScore, 0) / officialResults.length 
+      : 0,
+    bestScore: officialResults.length > 0 
+      ? Math.max(...officialResults.map(r => r.percentageScore)) 
+      : 0,
+  };
+}
 
 // Parent/Guardian schema
 const parentGuardianSchema = z.object({
@@ -166,7 +446,7 @@ export const studentsRouter = router({
           .length(5, 'Il CAP deve essere di 5 cifre')
           .regex(/^\d{5}$/, 'Il CAP deve contenere solo numeri')
           .refine(val => {
-            const num = parseInt(val, 10);
+            const num = Number.parseInt(val, 10);
             return num >= 10 && num <= 98168;
           }, 'CAP non valido'),
       })
@@ -227,7 +507,7 @@ export const studentsRouter = router({
         }),
         // Mark profile as completed in User table
         ctx.prisma.user.update({
-          where: { id: ctx.user!.id },
+          where: { id: ctx.user.id },
           data: { profileCompleted: true },
         }),
       ]);
@@ -354,7 +634,7 @@ export const studentsRouter = router({
         },
       });
 
-      if (!user || !user.student) {
+      if (!user?.student) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Studente non trovato',
@@ -615,9 +895,7 @@ export const studentsRouter = router({
 
     const student = await ctx.prisma.student.findUnique({
       where: { userId: ctx.user.id },
-      include: {
-        stats: true,
-      },
+      include: { stats: true },
     });
 
     if (!student) {
@@ -651,14 +929,7 @@ export const studentsRouter = router({
                     id: true,
                     difficulty: true,
                     subjectId: true,
-                    subject: {
-                      select: {
-                        id: true,
-                        name: true,
-                        code: true,
-                        color: true,
-                      },
-                    },
+                    subject: { select: { id: true, name: true, code: true, color: true } },
                   },
                 },
               },
@@ -668,56 +939,17 @@ export const studentsRouter = router({
       },
     });
 
-    // Get recent results (last 20) for the activity section
-    const recentResults = allResults.slice(-20).reverse();
+    // Use helper functions to calculate stats (reduces cognitive complexity)
+    const overview = calculateOverviewStats(allResults);
+    const typeBreakdown = calculateTypeBreakdown(allResults);
+    const monthlyTrend = calculateMonthlyTrend(allResults);
+    const { subjectStats, bestSubject, worstSubject } = calculateSubjectStats(allResults);
+    const difficultyBreakdown = calculateDifficultyBreakdown(allResults);
+    const { avgTimeSeconds, totalStudyMinutes } = calculateTimeStats(allResults, student.stats?.totalStudyTimeMinutes);
+    const achievements = calculateAchievements(overview.totalSimulations, overview.bestScore, student.stats);
+    const officialStats = calculateOfficialStats(allResults);
 
-    // === OVERVIEW STATS ===
-    const totalSimulations = allResults.length;
-    const totalQuestions = allResults.reduce((sum, r) => sum + r.totalQuestions, 0);
-    const totalCorrect = allResults.reduce((sum, r) => sum + r.correctAnswers, 0);
-    const totalWrong = allResults.reduce((sum, r) => sum + r.wrongAnswers, 0);
-    const totalBlank = allResults.reduce((sum, r) => sum + r.blankAnswers, 0);
-    const avgPercentage = totalSimulations > 0 
-      ? allResults.reduce((sum, r) => sum + r.percentageScore, 0) / totalSimulations 
-      : 0;
-    const bestScore = allResults.length > 0 
-      ? Math.max(...allResults.map(r => r.percentageScore)) 
-      : 0;
-    const worstScore = allResults.length > 0 
-      ? Math.min(...allResults.map(r => r.percentageScore)) 
-      : 0;
-
-    // Calculate improvement (last 5 vs first 5)
-    const first5Avg = allResults.length >= 5 
-      ? allResults.slice(0, 5).reduce((sum, r) => sum + r.percentageScore, 0) / 5 
-      : allResults.reduce((sum, r) => sum + r.percentageScore, 0) / Math.max(allResults.length, 1);
-    const last5Avg = allResults.length >= 5 
-      ? allResults.slice(-5).reduce((sum, r) => sum + r.percentageScore, 0) / 5 
-      : allResults.reduce((sum, r) => sum + r.percentageScore, 0) / Math.max(allResults.length, 1);
-    const improvement = last5Avg - first5Avg;
-
-    // Simulations this month
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const simulationsThisMonth = allResults.filter(r => 
-      r.completedAt && r.completedAt >= startOfMonth
-    ).length;
-
-    // === SIMULATION TYPE BREAKDOWN ===
-    const typeBreakdown: Record<string, { count: number; avgScore: number; totalScore: number }> = {};
-    for (const result of allResults) {
-      const type = result.simulation.type;
-      if (!typeBreakdown[type]) {
-        typeBreakdown[type] = { count: 0, avgScore: 0, totalScore: 0 };
-      }
-      typeBreakdown[type].count++;
-      typeBreakdown[type].totalScore += result.percentageScore;
-    }
-    for (const type of Object.keys(typeBreakdown)) {
-      typeBreakdown[type].avgScore = typeBreakdown[type].totalScore / typeBreakdown[type].count;
-    }
-
-    // === TREND DATA (last 12 simulations or all if less) ===
+    // Trend data for charts (last 12 simulations)
     const trendData = allResults.slice(-12).map((r, index) => ({
       index: index + 1,
       date: r.completedAt?.toISOString() || '',
@@ -726,205 +958,37 @@ export const studentsRouter = router({
       type: r.simulation.type,
     }));
 
-    // === MONTHLY TREND (group by month) ===
-    const monthlyData: Record<string, { month: string; count: number; avgScore: number; totalScore: number }> = {};
-    for (const result of allResults) {
-      if (!result.completedAt) continue;
-      const monthKey = `${result.completedAt.getFullYear()}-${String(result.completedAt.getMonth() + 1).padStart(2, '0')}`;
-      if (!monthlyData[monthKey]) {
-        monthlyData[monthKey] = { 
-          month: monthKey, 
-          count: 0, 
-          avgScore: 0, 
-          totalScore: 0 
-        };
-      }
-      monthlyData[monthKey].count++;
-      monthlyData[monthKey].totalScore += result.percentageScore;
-    }
-    const monthlyTrend = Object.values(monthlyData)
-      .map(m => ({
-        ...m,
-        avgScore: m.totalScore / m.count,
-      }))
-      .sort((a, b) => a.month.localeCompare(b.month))
-      .slice(-6); // Last 6 months
-
-    // === SUBJECT STATS (calculate from results' subjectScores) ===
-    const subjectAccumulator: Record<string, { total: number; correct: number; wrong: number; blank: number }> = {};
-    for (const result of allResults) {
-      const subjectScores = result.subjectScores as Record<string, { correct: number; wrong: number; blank: number }> | null;
-      if (subjectScores) {
-        for (const [subject, scores] of Object.entries(subjectScores)) {
-          if (!subjectAccumulator[subject]) {
-            subjectAccumulator[subject] = { total: 0, correct: 0, wrong: 0, blank: 0 };
-          }
-          subjectAccumulator[subject].correct += scores.correct || 0;
-          subjectAccumulator[subject].wrong += scores.wrong || 0;
-          subjectAccumulator[subject].blank += scores.blank || 0;
-          subjectAccumulator[subject].total += (scores.correct || 0) + (scores.wrong || 0) + (scores.blank || 0);
-        }
-      }
-    }
-
-    const subjectStats = Object.entries(subjectAccumulator).map(([subject, data]) => ({
-      subject,
-      totalQuestions: data.total,
-      correctAnswers: data.correct,
-      wrongAnswers: data.wrong,
-      blankAnswers: data.blank,
-      accuracy: data.total > 0 ? (data.correct / data.total) * 100 : 0,
-    })).sort((a, b) => b.totalQuestions - a.totalQuestions);
-
-    // Best and worst subjects
-    const sortedByAccuracy = [...subjectStats].filter(s => s.totalQuestions >= 5).sort((a, b) => b.accuracy - a.accuracy);
-    const bestSubject = sortedByAccuracy[0] || null;
-    const worstSubject = sortedByAccuracy[sortedByAccuracy.length - 1] || null;
-
-    // === ANSWER DISTRIBUTION (for pie chart) ===
-    const answerDistribution = {
-      correct: totalCorrect,
-      wrong: totalWrong,
-      blank: totalBlank,
-    };
-
-    // === DIFFICULTY BREAKDOWN ===
-    const difficultyStats: Record<string, { total: number; correct: number }> = {
-      EASY: { total: 0, correct: 0 },
-      MEDIUM: { total: 0, correct: 0 },
-      HARD: { total: 0, correct: 0 },
-    };
-
-    // Calculate from answers in results
-    for (const result of allResults) {
-      const answers = result.answers as Array<{
-        questionId: string;
-        isCorrect: boolean;
-        difficulty?: string;
-      }> | null;
-      
-      if (answers && Array.isArray(answers)) {
-        for (const answer of answers) {
-          // Try to get difficulty from the answer or from the simulation's questions
-          let difficulty = answer.difficulty;
-          if (!difficulty) {
-            const simQuestion = result.simulation.questions.find(q => q.questionId === answer.questionId);
-            difficulty = simQuestion?.question?.difficulty || 'MEDIUM';
-          }
-          
-          if (difficultyStats[difficulty]) {
-            difficultyStats[difficulty].total++;
-            if (answer.isCorrect) {
-              difficultyStats[difficulty].correct++;
-            }
-          }
-        }
-      }
-    }
-
-    const difficultyBreakdown = Object.entries(difficultyStats).map(([difficulty, data]) => ({
-      difficulty,
-      total: data.total,
-      correct: data.correct,
-      accuracy: data.total > 0 ? (data.correct / data.total) * 100 : 0,
-    }));
-
-    // === TIME STATS ===
-    const completedWithTime = allResults.filter(r => r.durationSeconds && r.durationSeconds > 0);
-    const avgTimeSeconds = completedWithTime.length > 0
-      ? completedWithTime.reduce((sum, r) => sum + (r.durationSeconds || 0), 0) / completedWithTime.length
-      : 0;
-    const totalStudyMinutes = student.stats?.totalStudyTimeMinutes || 
-      Math.round(completedWithTime.reduce((sum, r) => sum + (r.durationSeconds || 0), 0) / 60);
-
-    // === ACHIEVEMENTS/MILESTONES ===
-    const achievements: Array<{
-      id: string;
-      title: string;
-      description: string;
-      icon: string;
-      unlocked: boolean;
-      progress?: number;
-      target?: number;
-    }> = [];
-    if (totalSimulations >= 1) achievements.push({ id: 'first_sim', title: 'Prima Simulazione', description: 'Hai completato la tua prima simulazione!', icon: '🎯', unlocked: true });
-    if (totalSimulations >= 10) achievements.push({ id: 'ten_sims', title: '10 Simulazioni', description: '10 simulazioni completate', icon: '🔟', unlocked: true });
-    if (totalSimulations >= 50) achievements.push({ id: 'fifty_sims', title: '50 Simulazioni', description: '50 simulazioni completate', icon: '🏆', unlocked: true });
-    if (bestScore >= 90) achievements.push({ id: 'score_90', title: 'Eccellenza', description: 'Hai raggiunto il 90%!', icon: '⭐', unlocked: true });
-    if (bestScore >= 100) achievements.push({ id: 'perfect', title: 'Punteggio Perfetto', description: '100% in una simulazione!', icon: '💯', unlocked: true });
-    if (student.stats?.longestStreak && student.stats.longestStreak >= 7) {
-      achievements.push({ id: 'streak_7', title: 'Settimana Perfetta', description: '7 giorni consecutivi', icon: '🔥', unlocked: true });
-    }
-    if (student.stats?.longestStreak && student.stats.longestStreak >= 30) {
-      achievements.push({ id: 'streak_30', title: 'Mese Perfetto', description: '30 giorni consecutivi', icon: '🌟', unlocked: true });
-    }
-
-    // Potential achievements (not yet unlocked)
-    if (totalSimulations < 10) achievements.push({ id: 'ten_sims', title: '10 Simulazioni', description: `${totalSimulations}/10 completate`, icon: '🔟', unlocked: false, progress: totalSimulations, target: 10 });
-    if (totalSimulations >= 10 && totalSimulations < 50) achievements.push({ id: 'fifty_sims', title: '50 Simulazioni', description: `${totalSimulations}/50 completate`, icon: '🏆', unlocked: false, progress: totalSimulations, target: 50 });
-    if (bestScore < 90) achievements.push({ id: 'score_90', title: 'Eccellenza', description: `Raggiungi il 90%`, icon: '⭐', unlocked: false, progress: bestScore, target: 90 });
-
-    // === OFFICIAL SIMULATIONS STATS ===
-    const officialResults = allResults.filter(r => r.simulation.isOfficial);
-    const officialStats = {
-      count: officialResults.length,
-      avgScore: officialResults.length > 0 
-        ? officialResults.reduce((sum, r) => sum + r.percentageScore, 0) / officialResults.length 
-        : 0,
-      bestScore: officialResults.length > 0 
-        ? Math.max(...officialResults.map(r => r.percentageScore)) 
-        : 0,
-    };
+    // Recent results (last 20)
+    const recentResults = allResults.slice(-20).reverse();
 
     return {
-      // Overview
       overview: {
-        totalSimulations,
-        totalQuestions,
-        totalCorrect,
-        totalWrong,
-        totalBlank,
-        averageScore: avgPercentage,
-        bestScore,
-        worstScore,
-        improvement,
-        simulationsThisMonth,
+        ...overview,
+        averageScore: overview.avgPercentage,
         totalTimeSpent: totalStudyMinutes,
         averageTime: Math.round(avgTimeSeconds / 60),
         currentStreak: student.stats?.currentStreak || 0,
         longestStreak: student.stats?.longestStreak || 0,
         lastActivityDate: student.stats?.lastActivityDate,
       },
-
-      // Breakdown by simulation type
       typeBreakdown: Object.entries(typeBreakdown).map(([type, data]) => ({
         type,
         count: data.count,
         averageScore: data.avgScore,
       })),
-
-      // Trend data for charts
       trendData,
       monthlyTrend,
-
-      // Subject stats
       subjectStats,
       bestSubject,
       worstSubject,
-
-      // Answer distribution
-      answerDistribution,
-
-      // Difficulty breakdown
+      answerDistribution: {
+        correct: overview.totalCorrect,
+        wrong: overview.totalWrong,
+        blank: overview.totalBlank,
+      },
       difficultyBreakdown,
-
-      // Achievements
       achievements,
-
-      // Official simulations
       officialStats,
-
-      // Recent results
       recentResults: recentResults.map(r => ({
         id: r.id,
         title: r.simulation.title,
@@ -1097,7 +1161,7 @@ export const studentsRouter = router({
       });
 
       // If not found by userId, try to find by studentId
-      if (!user || !user.student) {
+      if (!user?.student) {
         const student = await ctx.prisma.student.findUnique({
           where: { id: input.studentId },
           include: {
@@ -1143,7 +1207,7 @@ export const studentsRouter = router({
         }
       }
 
-      if (!user || !user.student) {
+      if (!user?.student) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Studente non trovato',
@@ -1276,13 +1340,13 @@ export const studentsRouter = router({
     });
 
     return groupMembers
-      .filter(gm => gm.student !== null)
+      .filter((gm): gm is typeof gm & { student: NonNullable<typeof gm.student> } => gm.student !== null)
       .map(gm => ({
-        id: gm.student!.id,
-        userId: gm.student!.user.id,
-        name: gm.student!.user.name,
-        email: gm.student!.user.email,
-        user: gm.student!.user,
+        id: gm.student.id,
+        userId: gm.student.user.id,
+        name: gm.student.user.name,
+        email: gm.student.user.email,
+        user: gm.student.user,
       }));
   }),
 
@@ -1499,7 +1563,8 @@ export const studentsRouter = router({
             });
           }
 
-          const stats = subjectStats.get(subjectCode)!;
+          const stats = subjectStats.get(subjectCode);
+          if (!stats) return; // Type guard - should never happen since we just set it
           stats.total++;
           if (answer.isCorrect === null) {
             stats.blank++;
@@ -1520,14 +1585,17 @@ export const studentsRouter = router({
               ? question.answers.find(a => a.id === answer.answerId) 
               : null;
 
-            wrongBySubject.get(subjectCode)!.push({
-              questionId: answer.questionId,
-              questionText: question.text,
-              selectedAnswerText: selectedAnswer?.text || null,
-              correctAnswerText: correctAnswer?.text || 'N/A',
-              explanation: question.generalExplanation || question.correctExplanation || null,
-              topicName: question.topic?.name || null,
-            });
+            const wrongList = wrongBySubject.get(subjectCode);
+            if (wrongList) {
+              wrongList.push({
+                questionId: answer.questionId,
+                questionText: question.text,
+                selectedAnswerText: selectedAnswer?.text || null,
+                correctAnswerText: correctAnswer?.text || 'N/A',
+                explanation: question.generalExplanation || question.correctExplanation || null,
+                topicName: question.topic?.name || null,
+              });
+            }
           }
         });
 
@@ -1971,7 +2039,7 @@ export const studentsRouter = router({
         },
       });
 
-      if (!user || !user.student) {
+      if (!user?.student) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Studente non trovato',

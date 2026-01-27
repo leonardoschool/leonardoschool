@@ -61,17 +61,24 @@ export default function CompleteProfileScreen() {
           // Navigate based on user state (same logic as login)
           if (userData.parentDataRequired) {
             router.replace('/(onboarding)/parent-data');
-          } else if (userData.pendingContractToken) {
+            return;
+          }
+          
+          if (userData.pendingContractToken) {
             router.replace({
               pathname: '/(onboarding)/pending-contract',
               params: { token: userData.pendingContractToken },
             });
-          } else if (!userData.isActive) {
-            // User is waiting for contract assignment
-            router.replace('/(onboarding)/pending-contract');
-          } else {
-            router.replace('/(tabs)');
+            return;
           }
+          
+          if (userData.isActive) {
+            router.replace('/(tabs)');
+            return;
+          }
+          
+          // User is waiting for contract assignment
+          router.replace('/(onboarding)/pending-contract');
         }
       }
     } catch (error) {

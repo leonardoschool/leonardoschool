@@ -265,10 +265,10 @@ export const calendarRouter = router({
               where: { studentId: student.id },
               select: { groupId: true },
             });
-            const studentGroupIds = groupMembers.map(gm => gm.groupId);
+            const studentGroupIds = new Set(groupMembers.map(gm => gm.groupId));
             
             isInvitedViaGroup = event.invitations?.some(
-              (inv) => inv.groupId && studentGroupIds.includes(inv.groupId)
+              (inv) => inv.groupId && studentGroupIds.has(inv.groupId)
             ) || false;
           }
         }
@@ -422,14 +422,15 @@ export const calendarRouter = router({
           }
         }
 
-        if (invitees.length > 0) {
+        // Send email invitations if we have invitees and valid dates
+        if (invitees.length > 0 && event.startDate && event.endDate) {
           const eventEmailData: EventEmailData = {
             id: event.id,
             title: event.title,
             description: event.description,
             type: event.type,
-            startDate: event.startDate!,
-            endDate: event.endDate!,
+            startDate: event.startDate,
+            endDate: event.endDate,
             isAllDay: event.isAllDay,
             locationType: event.locationType,
             locationDetails: event.locationDetails,
@@ -584,14 +585,15 @@ export const calendarRouter = router({
           }
         }
 
-        if (invitees.length > 0) {
+        // Send modification emails if we have invitees and valid dates
+        if (invitees.length > 0 && event.startDate && event.endDate) {
           const eventEmailData: EventEmailData = {
             id: event.id,
             title: event.title,
             description: event.description,
             type: event.type,
-            startDate: event.startDate!,
-            endDate: event.endDate!,
+            startDate: event.startDate,
+            endDate: event.endDate,
             isAllDay: event.isAllDay,
             locationType: event.locationType,
             locationDetails: event.locationDetails,
@@ -729,14 +731,15 @@ export const calendarRouter = router({
           }
         }
 
-        if (invitees.length > 0) {
+        // Send cancellation emails if we have invitees and valid dates
+        if (invitees.length > 0 && eventWithInvitations.startDate && eventWithInvitations.endDate) {
           const eventEmailData: EventEmailData = {
             id: eventWithInvitations.id,
             title: eventWithInvitations.title,
             description: eventWithInvitations.description,
             type: eventWithInvitations.type,
-            startDate: eventWithInvitations.startDate!,
-            endDate: eventWithInvitations.endDate!,
+            startDate: eventWithInvitations.startDate,
+            endDate: eventWithInvitations.endDate,
             isAllDay: eventWithInvitations.isAllDay,
             locationType: eventWithInvitations.locationType,
             locationDetails: eventWithInvitations.locationDetails,
@@ -752,11 +755,13 @@ export const calendarRouter = router({
 
           // Create in-app notifications
           const userIds = invitees.map(i => i.id);
+          const reasonSuffix = input.reason ? `: ${input.reason}` : '';
+          const notificationMessage = `L'evento "${eventWithInvitations.title}" è stato annullato${reasonSuffix}`;
           createBulkNotifications(ctx.prisma, {
             userIds,
             type: 'EVENT_CANCELLED',
             title: 'Evento annullato',
-            message: `L'evento "${eventWithInvitations.title}" è stato annullato${input.reason ? `: ${input.reason}` : ''}`,
+            message: notificationMessage,
             linkType: 'event',
             linkEntityId: eventWithInvitations.id,
           }).catch((error) => {
@@ -996,7 +1001,7 @@ export const calendarRouter = router({
 
       event.invitations.forEach((inv) => {
         // Direct user invitation (if student)
-        if (inv.user && inv.user.role === 'STUDENT' && inv.user.student) {
+        if (inv.user?.role === 'STUDENT' && inv.user.student) {
           studentsMap.set(inv.user.student.id, {
             id: inv.user.student.id,
             name: inv.user.name,

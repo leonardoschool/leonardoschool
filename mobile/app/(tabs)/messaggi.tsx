@@ -145,6 +145,12 @@ export default function MessaggiScreen() {
     });
   };
 
+  const getEmptyStateIcon = (): keyof typeof Ionicons.glyphMap => {
+    if (filter === 'archived') return 'archive-outline';
+    if (filter === 'unread') return 'mail-unread-outline';
+    return 'chatbubbles-outline';
+  };
+
   const filterOptions: Array<{ value: ConversationFilter; label: string; icon: string }> = [
     { value: 'all', label: 'Tutte', icon: 'mail-outline' },
     { value: 'unread', label: 'Non lette', icon: 'mail-unread-outline' },
@@ -235,7 +241,7 @@ export default function MessaggiScreen() {
                   ]}
                   numberOfLines={1}
                 >
-                  {item.lastMessage.sender.id !== mainParticipant?.id ? 'Tu: ' : ''}
+                  {item.lastMessage.sender.id === user?.id ? 'Tu: ' : ''}
                   {item.lastMessage.content.substring(0, 50)}
                   {item.lastMessage.content.length > 50 ? '...' : ''}
                 </Text>
@@ -261,6 +267,14 @@ export default function MessaggiScreen() {
       <AppHeader 
         title="Messaggi" 
         onMenuPress={() => setDrawerVisible(true)} 
+        rightActions={
+          <TouchableOpacity
+            onPress={() => router.push('/new-message')}
+            style={[styles.newMessageButton, { backgroundColor: colors.primary.main }]}
+          >
+            <Ionicons name="create-outline" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        }
       />
 
       {/* Search Bar */}
@@ -327,29 +341,27 @@ export default function MessaggiScreen() {
         </View>
       )}
 
-      {isLoading ? (
+      {isLoading && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary.main} />
           <Text style={{ marginTop: 12, color: themedColors.textMuted }}>
             Caricamento conversazioni...
           </Text>
         </View>
-      ) : filteredConversations.length === 0 ? (
+      )}
+      {!isLoading && filteredConversations.length === 0 && (
         <View style={styles.emptyContainer}>
-          <Card variant="outlined" style={styles.emptyCard}>
+          <Card style={styles.emptyCard}>
             <View style={styles.emptyContent}>
               <Ionicons 
-                name={filter === 'archived' ? 'archive-outline' : filter === 'unread' ? 'mail-unread-outline' : 'chatbubbles-outline'} 
+                name={getEmptyStateIcon()} 
                 size={48} 
                 color={themedColors.textMuted} 
               />
               <Heading3 style={{ marginTop: 16, textAlign: 'center' }}>
-                {filter === 'archived' 
-                  ? 'Nessuna conversazione archiviata'
-                  : filter === 'unread'
-                    ? 'Nessun messaggio non letto'
-                    : 'Nessuna conversazione'
-                }
+                {filter === 'archived' && 'Nessuna conversazione archiviata'}
+                {filter === 'unread' && 'Nessun messaggio non letto'}
+                {filter === 'all' && 'Nessuna conversazione'}
               </Heading3>
               <Caption style={{ marginTop: 8, textAlign: 'center' }}>
                 {filter === 'all' 
@@ -360,7 +372,8 @@ export default function MessaggiScreen() {
             </View>
           </Card>
         </View>
-      ) : (
+      )}
+      {!isLoading && filteredConversations.length > 0 && (
         <FlatList
           data={filteredConversations}
           renderItem={renderConversation}
@@ -512,5 +525,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 11,
     fontWeight: 'bold',
+  },
+  newMessageButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

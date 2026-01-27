@@ -592,6 +592,7 @@ describe('Contracts Router', () => {
       });
 
       it('should store IP address', () => {
+        // eslint-disable-next-line sonarjs/no-hardcoded-ip -- Test data for contract signing
         const ip = '192.168.1.1';
         const signed = createMockContract({ signatureIp: ip });
         expect(signed.signatureIp).toBe(ip);
@@ -817,10 +818,12 @@ describe('Contracts Router', () => {
     });
 
     it('should log IP and User Agent for audit trail', () => {
+      /* eslint-disable sonarjs/no-hardcoded-ip -- Test data for audit trail */
       const signed = createMockContract({
         signatureIp: '192.168.1.1',
         signatureUserAgent: 'Mozilla/5.0...',
       });
+      /* eslint-enable sonarjs/no-hardcoded-ip */
       expect(signed.signatureIp).toBeDefined();
       expect(signed.signatureUserAgent).toBeDefined();
     });

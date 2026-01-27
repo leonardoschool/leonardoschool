@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/test-results
+/playwright-report
 
 # next.js
 /.next/
@@ -43,6 +45,9 @@ env/.env.*
 *service-account*.json
 firebase-uids.json
 leonardo-school-*.json
+
+# Test users credentials (SECURITY - do not commit!)
+TEST_USERS.md
 
 # vercel
 .vercel

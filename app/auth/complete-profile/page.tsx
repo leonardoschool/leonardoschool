@@ -376,35 +376,31 @@ export default function CompleteProfilePage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
-    // Skip profile validation if showing only parent data form
-    if (!showOnlyParentForm) {
-      // Validate all fields
-      const validation = validateProfileForm(formData);
-      
-      if (!validation.success) {
-        // Type guard: we know errors exists when success is false
-        const errors = 'errors' in validation ? validation.errors : {};
-        setFieldErrors(prev => ({ ...prev, ...errors }));
-        setTouched(prev => ({
-          ...prev,
-          fiscalCode: true,
-          dateOfBirth: true,
-          phone: true,
-          address: true,
-          city: true,
-          province: true,
-          postalCode: true,
-        }));
-        setError('Correggi gli errori nei campi evidenziati');
-        return;
-      }
+  // Helper functions for handleSubmit to reduce cognitive complexity
+  const validateProfileFields = (): boolean => {
+    if (showOnlyParentForm) return true;
+    
+    const validation = validateProfileForm(formData);
+    if (!validation.success) {
+      const errors = 'errors' in validation ? validation.errors : {};
+      setFieldErrors(prev => ({ ...prev, ...errors }));
+      setTouched(prev => ({
+        ...prev,
+        fiscalCode: true,
+        dateOfBirth: true,
+        phone: true,
+        address: true,
+        city: true,
+        province: true,
+        postalCode: true,
+      }));
+      setError('Correggi gli errori nei campi evidenziati');
+      return false;
     }
+    return true;
+  };
 
-    // Validate parent data if required or if form is shown with data
+  const validateParentFields = (): boolean => {
     const hasParentData = showParentForm && (
       parentFormData.relationship || 
       parentFormData.firstName || 
@@ -413,119 +409,125 @@ export default function CompleteProfilePage() {
       parentFormData.phone
     );
 
-    if (parentDataRequired || hasParentData) {
-      const parentValidation = validateParentGuardianForm(parentFormData);
+    if (!parentDataRequired && !hasParentData) return true;
+
+    const parentValidation = validateParentGuardianForm(parentFormData);
+    if (!parentValidation.success) {
+      const parentErrors: Record<string, string> = {};
+      for (const [key, value] of Object.entries('errors' in parentValidation ? parentValidation.errors : {})) {
+        parentErrors[`parent_${key}`] = value;
+      }
+      setFieldErrors(prev => ({ ...prev, ...parentErrors }));
+      setTouched(prev => ({
+        ...prev,
+        parent_relationship: true,
+        parent_firstName: true,
+        parent_lastName: true,
+        parent_fiscalCode: true,
+        parent_phone: true,
+      }));
       
-      if (!parentValidation.success) {
-        const parentErrors: Record<string, string> = {};
-        for (const [key, value] of Object.entries('errors' in parentValidation ? parentValidation.errors : {})) {
-          parentErrors[`parent_${key}`] = value;
-        }
-        setFieldErrors(prev => ({ ...prev, ...parentErrors }));
-        setTouched(prev => ({
-          ...prev,
-          parent_relationship: true,
-          parent_firstName: true,
-          parent_lastName: true,
-          parent_fiscalCode: true,
-          parent_phone: true,
-        }));
-        
-        if (parentDataRequired) {
-          const errorMessage = showOnlyParentForm 
-            ? 'Inserisci i dati del genitore/tutore'
-            : 'Inserisci i dati del genitore/tutore (obbligatorio per minorenni)';
-          setError(errorMessage);
-          return;
-        }
+      if (parentDataRequired) {
+        const errorMessage = showOnlyParentForm 
+          ? 'Inserisci i dati del genitore/tutore'
+          : 'Inserisci i dati del genitore/tutore (obbligatorio per minorenni)';
+        setError(errorMessage);
+        return false;
       }
     }
+    return true;
+  };
+
+  const saveParentData = async () => {
+    const parentValidation = validateParentGuardianForm(parentFormData);
+    if (parentValidation.success) {
+      await saveParentGuardian.mutateAsync({
+        relationship: parentFormData.relationship as 'PADRE' | 'MADRE' | 'TUTORE_LEGALE' | 'ALTRO',
+        firstName: parentFormData.firstName,
+        lastName: parentFormData.lastName,
+        fiscalCode: parentFormData.fiscalCode,
+        phone: parentFormData.phone,
+        email: parentFormData.email || undefined,
+        address: parentFormData.address || undefined,
+        city: parentFormData.city || undefined,
+        province: parentFormData.province || undefined,
+        postalCode: parentFormData.postalCode || undefined,
+      });
+    }
+  };
+
+  const saveProfileData = async () => {
+    const profileData = {
+      fiscalCode: formData.fiscalCode,
+      dateOfBirth: new Date(formData.dateOfBirth),
+      phone: formData.phone,
+      address: formData.address,
+      city: formData.city,
+      province: formData.province,
+      postalCode: formData.postalCode,
+    };
+
+    if (isCollaborator) {
+      await collaboratorCompleteProfile.mutateAsync(profileData);
+    } else if (user?.role !== 'ADMIN') {
+      await studentCompleteProfile.mutateAsync(profileData);
+
+      const hasParentData = showParentForm && (
+        parentFormData.relationship || parentFormData.firstName || 
+        parentFormData.lastName || parentFormData.fiscalCode || parentFormData.phone
+      );
+      if (hasParentData || parentDataRequired) {
+        await saveParentData();
+      }
+    }
+  };
+
+  const updateAuthCookies = async () => {
+    const currentUser = firebaseAuth.getCurrentUser();
+    if (currentUser) {
+      const token = await currentUser.getIdToken();
+      const response = await fetch('/api/auth/me', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      if (!response.ok) {
+        throw new Error('Errore nell\'aggiornamento del profilo');
+      }
+    }
+  };
+
+  const showSuccessMessage = () => {
+    if (adminRequestedParentData) {
+      showSuccess('Dati genitore salvati', 'Il tuo account è stato riattivato.');
+    } else if (isParentDataMode) {
+      showSuccess('Dati genitore salvati', 'I dati sono stati aggiornati correttamente.');
+    } else if (isEditMode) {
+      showSuccess('Profilo aggiornato', 'I tuoi dati sono stati salvati correttamente.');
+    } else {
+      showSuccess('Profilo completato', 'In attesa di attivazione da parte dell\'amministratore.');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    // Validate fields
+    if (!validateProfileFields()) return;
+    if (!validateParentFields()) return;
 
     setLoading(true);
 
     try {
-      // If showing only parent data form, just save parent data
       if (showOnlyParentForm) {
-        const parentValidation = validateParentGuardianForm(parentFormData);
-        if (parentValidation.success) {
-          await saveParentGuardian.mutateAsync({
-            relationship: parentFormData.relationship as 'PADRE' | 'MADRE' | 'TUTORE_LEGALE' | 'ALTRO',
-            firstName: parentFormData.firstName,
-            lastName: parentFormData.lastName,
-            fiscalCode: parentFormData.fiscalCode,
-            phone: parentFormData.phone,
-            email: parentFormData.email || undefined,
-            address: parentFormData.address || undefined,
-            city: parentFormData.city || undefined,
-            province: parentFormData.province || undefined,
-            postalCode: parentFormData.postalCode || undefined,
-          });
-        }
+        await saveParentData();
       } else {
-        // Prepare profile data with proper types
-        const profileData = {
-          fiscalCode: formData.fiscalCode,
-          dateOfBirth: new Date(formData.dateOfBirth), // Convert string to Date
-          phone: formData.phone,
-          address: formData.address,
-          city: formData.city,
-          province: formData.province,
-          postalCode: formData.postalCode,
-        };
-
-        // Call the appropriate mutation based on user role
-        // Note: Admin users should not reach this point (redirected in useEffect)
-        if (isCollaborator) {
-          await collaboratorCompleteProfile.mutateAsync(profileData);
-        } else if (user?.role !== 'ADMIN') {
-          await studentCompleteProfile.mutateAsync(profileData);
-
-          // Save parent/guardian data if provided
-          if (hasParentData || parentDataRequired) {
-            const parentValidation = validateParentGuardianForm(parentFormData);
-            if (parentValidation.success) {
-              await saveParentGuardian.mutateAsync({
-                relationship: parentFormData.relationship as 'PADRE' | 'MADRE' | 'TUTORE_LEGALE' | 'ALTRO',
-                firstName: parentFormData.firstName,
-                lastName: parentFormData.lastName,
-                fiscalCode: parentFormData.fiscalCode,
-                phone: parentFormData.phone,
-                email: parentFormData.email || undefined,
-                address: parentFormData.address || undefined,
-                city: parentFormData.city || undefined,
-                province: parentFormData.province || undefined,
-                postalCode: parentFormData.postalCode || undefined,
-              });
-            }
-          }
-        }
+        await saveProfileData();
       }
 
-      // Update cookies by calling the auth endpoint with current token
-      const currentUser = firebaseAuth.getCurrentUser();
-      if (currentUser) {
-        const token = await currentUser.getIdToken();
-        const response = await fetch('/api/auth/me', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token }),
-        });
-        
-        if (!response.ok) {
-          throw new Error('Errore nell\'aggiornamento del profilo');
-        }
-      }
-
-      // Use hard navigation to ensure new cookies are used by middleware
-      if (adminRequestedParentData) {
-        showSuccess('Dati genitore salvati', 'Il tuo account è stato riattivato.');
-      } else if (isParentDataMode) {
-        showSuccess('Dati genitore salvati', 'I dati sono stati aggiornati correttamente.');
-      } else if (isEditMode) {
-        showSuccess('Profilo aggiornato', 'I tuoi dati sono stati salvati correttamente.');
-      } else {
-        showSuccess('Profilo completato', 'In attesa di attivazione da parte dell\'amministratore.');
-      }
+      await updateAuthCookies();
+      showSuccessMessage();
       window.location.href = (isEditMode || isParentDataMode) ? '/profilo' : '/dashboard';
     } catch (err) {
       const parsed = parseError(err);

@@ -383,13 +383,13 @@ describe('Collaborators Router', () => {
 
       it('should validate fiscal code format', () => {
         const validCode = 'RSSMRA85M01H501Z';
-        const regex = /^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$/;
+        const regex = /^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/;
         expect(regex.test(validCode)).toBe(true);
       });
 
       it('should reject invalid fiscal code format', () => {
         const invalidCode = '1234567890123456';
-        const regex = /^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$/;
+        const regex = /^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/;
         expect(regex.test(invalidCode)).toBe(false);
       });
 
@@ -768,7 +768,7 @@ describe('Collaborators Router', () => {
           'VRDLGI75A01F205X',
           'BNCLRI90S50H501T',
         ];
-        const regex = /^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$/;
+        const regex = /^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/;
         validCodes.forEach(code => {
           expect(regex.test(code)).toBe(true);
         });

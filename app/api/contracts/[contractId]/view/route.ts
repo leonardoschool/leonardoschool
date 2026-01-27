@@ -133,7 +133,9 @@ export async function GET(
     };
 
     // Status class and label are computed but used in templates - kept for future HTML template updates
+    // eslint-disable-next-line sonarjs/no-unused-vars -- reserved for future status badge in HTML template
     const _statusClass = statusClassMap[contract.status] ?? 'status-pending';
+    // eslint-disable-next-line sonarjs/no-unused-vars -- reserved for future status display in HTML template
     const _statusLabel = statusLabelMap[contract.status] ?? 'Stato non disponibile';
 
     const safeSignatureData =

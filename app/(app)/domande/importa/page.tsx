@@ -71,6 +71,7 @@ export default function ImportaDomandePage() {
   }, [loading, userRole, router]);
 
   const [file, setFile] = useState<File | null>(null);
+  // eslint-disable-next-line sonarjs/no-unused-vars -- state reserved for data preview feature
   const [_parsedData, setParsedData] = useState<ImportRow[]>([]);
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
   const [isValidating, setIsValidating] = useState(false);
@@ -122,12 +123,14 @@ export default function ImportaDomandePage() {
     let current = '';
     let inQuotes = false;
     
+     
     for (let i = 0; i < line.length; i++) {
       const char = line[i];
       
       if (char === '"') {
         if (inQuotes && line[i + 1] === '"') {
           current += '"';
+          // eslint-disable-next-line sonarjs/updated-loop-counter -- intentional skip of escaped quote
           i++;
         } else {
           inQuotes = !inQuotes;
@@ -219,7 +222,8 @@ export default function ImportaDomandePage() {
       
       const results = validateData(data);
       setValidationResults(results);
-    } catch (_err) {
+    } catch (err) {
+      console.error('Error parsing CSV file:', err);
       showError('Errore', 'Impossibile leggere il file. Assicurati che sia un file CSV valido.');
     } finally {
       setIsValidating(false);

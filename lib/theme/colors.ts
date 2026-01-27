@@ -22,8 +22,8 @@
  * @param hexColor - Colore hex della materia (es. "#D54F8A")
  * @returns Oggetto con classi Tailwind per bg, text, border, etc.
  */
-export function generateDynamicSubjectColor(hexColor: string | null | undefined) {
-  const color = hexColor || '#6B7280'; // Fallback grigio neutro
+export function generateDynamicSubjectColor(hexColor: string | null | undefined = '#6B7280') {
+  const color = hexColor || '#6B7280'; // Fallback grigio neutro se null/undefined passato esplicitamente
   
   return {
     main: color,
@@ -42,8 +42,8 @@ export function generateDynamicSubjectColor(hexColor: string | null | undefined)
  * Genera stile inline per una materia (alternativa alle classi Tailwind)
  * Utile quando si usano colori dinamici che Tailwind non può preprocessare
  */
-export function getSubjectInlineStyle(hexColor: string | null | undefined) {
-  const color = hexColor || '#6B7280';
+export function getSubjectInlineStyle(hexColor: string | null | undefined = '#6B7280') {
+  const color = hexColor || '#6B7280'; // Fallback grigio neutro se null/undefined passato esplicitamente
   return {
     backgroundColor: color,
     color: color,

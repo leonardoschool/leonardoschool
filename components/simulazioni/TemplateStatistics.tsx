@@ -79,7 +79,8 @@ export function TemplateStatistics({ simulationId }: TemplateStatisticsProps) {
     const mins = Math.floor(seconds / 60);
     const secs = Math.round(seconds % 60);
     if (mins === 0) return `${secs}s`;
-    return `${mins}m ${secs > 0 ? `${secs}s` : ''}`;
+    const secsDisplay = secs > 0 ? ` ${secs}s` : '';
+    return `${mins}m${secsDisplay}`;
   };
 
   // Get score color

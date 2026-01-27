@@ -7,6 +7,7 @@
 
 import React, { useState } from 'react';
 import { View, ScrollView, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Text, Button, Card } from '../ui';
@@ -158,10 +159,11 @@ export default function TolcInstructions({
   const canContinue = hasReadAll && acceptedRules;
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: themed(colors.background.primary) }}
-      contentContainerStyle={{ padding: spacing[4], paddingBottom: spacing[8] }}
-    >
+    <SafeAreaView style={{ flex: 1, backgroundColor: themed(colors.background.primary) }} edges={['top']}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: spacing[4], paddingBottom: spacing[8] }}
+      >
       {/* Intro Card */}
       <Card style={{ padding: spacing[5], marginBottom: spacing[4] }}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3], marginBottom: spacing[4] }}>
@@ -512,5 +514,6 @@ export default function TolcInstructions({
         </Text>
       )}
     </ScrollView>
+    </SafeAreaView>
   );
 }

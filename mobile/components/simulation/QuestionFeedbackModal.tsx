@@ -15,6 +15,8 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -41,10 +43,10 @@ interface FeedbackOption {
 }
 
 interface QuestionFeedbackModalProps {
-  visible: boolean;
-  questionId: string;
-  questionText?: string;
-  onClose: () => void;
+  readonly visible: boolean;
+  readonly questionId: string;
+  readonly questionText?: string;
+  readonly onClose: () => void;
 }
 
 // ==================== CONSTANTS ====================
@@ -58,6 +60,7 @@ const FEEDBACK_OPTIONS: FeedbackOption[] = [
 ];
 
 const MIN_MESSAGE_LENGTH = 10;
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // ==================== COMPONENT ====================
 
@@ -107,32 +110,28 @@ export function QuestionFeedbackModal({
   const isValid = feedbackMessage.length >= MIN_MESSAGE_LENGTH;
 
   // Dynamic styles
-  const dynamicStyles = {
-    container: themed({
-      light: colors.background.primary.light,
-      dark: colors.background.primary.dark,
-    }),
-    card: themed({
-      light: colors.background.card.light,
-      dark: colors.background.card.dark,
-    }),
-    border: themed({
-      light: colors.border.primary.light,
-      dark: colors.border.primary.dark,
-    }),
-    textPrimary: themed({
-      light: colors.text.primary.light,
-      dark: colors.text.primary.dark,
-    }),
-    textSecondary: themed({
-      light: colors.text.secondary.light,
-      dark: colors.text.secondary.dark,
-    }),
-    inputBg: themed({
-      light: colors.background.secondary.light,
-      dark: colors.background.secondary.dark,
-    }),
-  };
+  const cardBg = themed({
+    light: colors.background.card.light,
+    dark: colors.background.card.dark,
+  });
+  const borderColor = themed({
+    light: colors.border.primary.light,
+    dark: colors.border.primary.dark,
+  });
+  const textPrimary = themed({
+    light: colors.text.primary.light,
+    dark: colors.text.primary.dark,
+  });
+  const textSecondary = themed({
+    light: colors.text.secondary.light,
+    dark: colors.text.secondary.dark,
+  });
+  const inputBg = themed({
+    light: colors.background.secondary.light,
+    dark: colors.background.secondary.dark,
+  });
+
+  if (!visible) return null;
 
   return (
     <Modal
@@ -142,18 +141,16 @@ export function QuestionFeedbackModal({
       onRequestClose={resetAndClose}
     >
       <KeyboardAvoidingView 
-        style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <TouchableOpacity 
-          style={styles.backdrop} 
-          activeOpacity={1} 
-          onPress={resetAndClose}
-        />
+        {/* Backdrop */}
+        <Pressable style={styles.backdrop} onPress={resetAndClose} />
         
-        <View style={[styles.modal, { backgroundColor: dynamicStyles.card }]}>
+        {/* Modal Content */}
+        <View style={[styles.modalContainer, { backgroundColor: cardBg }]}>
           {/* Header */}
-          <View style={[styles.header, { borderBottomColor: dynamicStyles.border }]}>
+          <View style={[styles.header, { borderBottomColor: borderColor }]}>
             <View style={styles.headerTitle}>
               <Ionicons 
                 name="flag" 
@@ -164,119 +161,106 @@ export function QuestionFeedbackModal({
                 Segnala Problema
               </Text>
             </View>
-            <TouchableOpacity onPress={resetAndClose} style={styles.closeButton}>
-              <Ionicons 
-                name="close" 
-                size={24} 
-                color={dynamicStyles.textSecondary} 
-              />
+            <TouchableOpacity onPress={resetAndClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="close" size={24} color={textSecondary} />
             </TouchableOpacity>
           </View>
 
+          {/* Scrollable Content */}
           <ScrollView 
-            style={styles.content}
-            contentContainerStyle={styles.contentContainer}
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
           >
-            {/* Question preview (optional) */}
+            {/* Question preview */}
             {questionText && (
-              <View style={[styles.questionPreview, { backgroundColor: dynamicStyles.inputBg }]}>
+              <View style={[styles.questionPreview, { backgroundColor: inputBg }]}>
                 <Text variant="bodySmall" color="muted" numberOfLines={2}>
                   {questionText}
                 </Text>
               </View>
             )}
 
-            {/* Feedback type selection */}
-            <Text variant="body" style={{ fontWeight: '600', marginBottom: spacing[2] }}>
+            {/* Feedback type label */}
+            <Text variant="body" style={styles.sectionLabel}>
               Tipo di problema
             </Text>
-            <View style={styles.optionsContainer}>
-              {FEEDBACK_OPTIONS.map((option) => {
-                const isSelected = feedbackType === option.value;
-                return (
-                  <TouchableOpacity
-                    key={option.value}
+            
+            {/* Feedback options */}
+            {FEEDBACK_OPTIONS.map((option) => {
+              const isSelected = feedbackType === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.optionButton,
+                    {
+                      backgroundColor: isSelected ? `${colors.primary.main}15` : inputBg,
+                      borderColor: isSelected ? colors.primary.main : borderColor,
+                    },
+                  ]}
+                  onPress={() => setFeedbackType(option.value)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={option.icon}
+                    size={20}
+                    color={isSelected ? colors.primary.main : textSecondary}
+                  />
+                  <Text
+                    variant="body"
                     style={[
-                      styles.optionButton,
-                      {
-                        backgroundColor: isSelected 
-                          ? colors.primary.light 
-                          : dynamicStyles.inputBg,
-                        borderColor: isSelected 
-                          ? colors.primary.main 
-                          : dynamicStyles.border,
-                      },
+                      styles.optionText,
+                      { color: isSelected ? colors.primary.main : textPrimary },
                     ]}
-                    onPress={() => setFeedbackType(option.value)}
-                    activeOpacity={0.7}
                   >
-                    <Ionicons
-                      name={option.icon}
-                      size={20}
-                      color={isSelected ? colors.primary.main : dynamicStyles.textSecondary}
-                    />
-                    <Text
-                      variant="body"
-                      style={{
-                        flex: 1,
-                        marginLeft: spacing[2],
-                        color: isSelected ? colors.primary.main : dynamicStyles.textPrimary,
-                      }}
-                    >
-                      {option.label}
-                    </Text>
-                    {isSelected && (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={20}
-                        color={colors.primary.main}
-                      />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                    {option.label}
+                  </Text>
+                  {isSelected && (
+                    <Ionicons name="checkmark-circle" size={20} color={colors.primary.main} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
 
-            {/* Message input */}
-            <Text 
-              variant="body" 
-              style={{ fontWeight: '600', marginTop: spacing[4], marginBottom: spacing[2] }}
-            >
-              Descrizione
+            {/* Description label */}
+            <Text variant="body" style={[styles.sectionLabel, { marginTop: spacing[4] }]}>
+              Descrizione del problema
             </Text>
+            
+            {/* Text input */}
             <TextInput
               value={feedbackMessage}
               onChangeText={setFeedbackMessage}
               placeholder="Descrivi il problema in dettaglio..."
-              placeholderTextColor={dynamicStyles.textSecondary}
+              placeholderTextColor={textSecondary}
               multiline
               numberOfLines={4}
               style={[
                 styles.textInput,
                 {
-                  backgroundColor: dynamicStyles.inputBg,
-                  borderColor: dynamicStyles.border,
-                  color: dynamicStyles.textPrimary,
+                  backgroundColor: inputBg,
+                  borderColor: borderColor,
+                  color: textPrimary,
                 },
               ]}
               textAlignVertical="top"
             />
-            <Text 
-              variant="caption" 
-              color="muted"
-              style={{ marginTop: spacing[1] }}
-            >
+            
+            {/* Character count */}
+            <Text variant="caption" color="muted" style={styles.charCount}>
               Minimo {MIN_MESSAGE_LENGTH} caratteri ({feedbackMessage.length}/{MIN_MESSAGE_LENGTH})
             </Text>
           </ScrollView>
 
           {/* Footer buttons */}
-          <View style={[styles.footer, { borderTopColor: dynamicStyles.border }]}>
+          <View style={[styles.footer, { borderTopColor: borderColor }]}>
             <Button
               onPress={resetAndClose}
               variant="outline"
-              style={{ flex: 1, marginRight: spacing[2] }}
+              style={styles.footerButton}
             >
               Annulla
             </Button>
@@ -284,10 +268,10 @@ export function QuestionFeedbackModal({
               onPress={handleSubmit}
               variant="primary"
               disabled={!isValid || submitFeedbackMutation.isPending}
-              style={{ flex: 1 }}
+              style={styles.footerButton}
               loading={submitFeedbackMutation.isPending}
             >
-              Invia
+              Invia Segnalazione
             </Button>
           </View>
         </View>
@@ -299,47 +283,44 @@ export function QuestionFeedbackModal({
 // ==================== STYLES ====================
 
 const styles = StyleSheet.create({
-  overlay: {
+  container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: spacing[4],
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
   },
-  modal: {
-    width: '100%',
-    maxWidth: 420,
-    maxHeight: '85%',
+  modalContainer: {
+    width: '90%',
+    maxWidth: 400,
+    maxHeight: SCREEN_HEIGHT * 0.85,
     borderRadius: 20,
     overflow: 'hidden',
-    elevation: 10,
+    elevation: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
+    paddingVertical: spacing[4],
     borderBottomWidth: 1,
   },
   headerTitle: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  closeButton: {
-    padding: spacing[1],
+  scrollView: {
+    flexGrow: 0,
+    flexShrink: 1,
   },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
+  scrollContent: {
     padding: spacing[4],
   },
   questionPreview: {
@@ -347,27 +328,42 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: spacing[4],
   },
-  optionsContainer: {
-    gap: spacing[2],
+  sectionLabel: {
+    fontWeight: '600',
+    marginBottom: spacing[3],
   },
   optionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: spacing[3],
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 1.5,
+    marginBottom: spacing[2],
+  },
+  optionText: {
+    flex: 1,
+    marginLeft: spacing[3],
   },
   textInput: {
-    padding: spacing[3],
+    padding: spacing[4],
     borderRadius: 12,
-    borderWidth: 1,
-    minHeight: 100,
-    fontSize: 15,
+    borderWidth: 1.5,
+    minHeight: 120,
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  charCount: {
+    marginTop: spacing[2],
+    textAlign: 'right',
   },
   footer: {
     flexDirection: 'row',
     padding: spacing[4],
     borderTopWidth: 1,
+    gap: spacing[3],
+  },
+  footerButton: {
+    flex: 1,
   },
 });
 

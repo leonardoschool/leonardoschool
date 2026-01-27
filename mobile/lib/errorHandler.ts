@@ -87,6 +87,7 @@ export function parseError(error: unknown): ParsedError {
  * Parse Firebase auth error codes to Italian messages
  */
 function parseFirebaseError(code: string): string {
+  /* eslint-disable sonarjs/no-hardcoded-passwords -- These are Firebase error code keys, not passwords */
   const errorMessages: Record<string, string> = {
     // Auth errors
     'auth/invalid-email': 'Indirizzo email non valido.',
@@ -103,6 +104,7 @@ function parseFirebaseError(code: string): string {
     'auth/expired-action-code': 'Il link è scaduto. Richiedi un nuovo link.',
     'auth/invalid-action-code': 'Il link non è valido. Richiedi un nuovo link.',
   };
+  /* eslint-enable sonarjs/no-hardcoded-passwords */
 
   return errorMessages[code] || 'Errore di autenticazione. Riprova.';
 }

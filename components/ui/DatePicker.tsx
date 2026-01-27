@@ -204,20 +204,13 @@ export default function DatePicker({
   return (
     <div ref={containerRef} className="relative">
       {/* Input Field */}
-      <div
+      <button
+        type="button"
         id={id}
-        role="button"
-        tabIndex={0}
         onClick={() => {
           setIsOpen(!isOpen);
           setShowMonthPicker(false);
           setShowYearPicker(false);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            setIsOpen(!isOpen);
-          }
         }}
         className={`${inputClass} flex items-center justify-between`}
       >
@@ -232,7 +225,7 @@ export default function DatePicker({
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
-      </div>
+      </button>
 
       {/* Calendar Dropdown */}
       {isOpen && (

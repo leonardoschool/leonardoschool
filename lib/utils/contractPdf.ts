@@ -22,7 +22,7 @@ export interface ContractPdfData {
  * Opens a print dialog for the user to save as PDF
  */
 export function generateContractPdf(contract: ContractPdfData): void {
-  const logoUrl = `${window.location.origin}/images/NEW_LOGO_2026/Logo_sito.png`;
+  const logoUrl = `${globalThis.location.origin}/images/NEW_LOGO_2026/Logo_sito.png`;
   const studentName = contract.student?.user.name.replace(/\s+/g, '_') || 'Utente';
   const contractName = contract.template.name.replace(/\s+/g, '_');
   const fileName = `Contratto_${contractName}_${studentName}`;
@@ -141,7 +141,7 @@ export function generateContractPdf(contract: ContractPdfData): void {
   // Create blob and open print dialog
   const blob = new Blob([htmlContent], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
-  const printWindow = window.open(url, '_blank');
+  const printWindow = globalThis.open(url, '_blank');
   
   if (printWindow) {
     printWindow.onload = () => {

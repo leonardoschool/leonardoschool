@@ -12,15 +12,14 @@
 
 // IMPORTANTE: caricare dotenv PRIMA di qualsiasi altro import
 import { config } from 'dotenv';
-import { resolve } from 'path';
+import { resolve, join } from 'node:path';
 config({ path: resolve(__dirname, '../.env') });
 
 // Ora gli import che usano process.env
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { UserRole, PrismaClient } from '@prisma/client';
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readFileSync } from 'node:fs';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 
@@ -29,6 +28,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
+// eslint-disable-next-line sonarjs/no-hardcoded-passwords -- Intentional test password for seed data
 const TEST_PASSWORD = 'TestPassword123!';
 
 // Determina ambiente da DATABASE_URL (il modo più affidabile)
@@ -42,7 +42,7 @@ console.log(`   Database: ${process.env.DATABASE_URL?.split('@')[1]?.split('/')[
 let serviceAccount: Record<string, unknown>;
 
 // Prova file locale appropriato per ambiente
-const testServiceAccountPath = join(process.cwd(), 'leonardo-school-1cd72-firebase-adminsdk-fbsvc-6c031d9728.json');
+const testServiceAccountPath = join(process.cwd(), 'leonardo-school-1cd72-firebase-adminsdk-fbsvc-f8ed10561d.json');
 const prodServiceAccountPath = join(process.cwd(), 'leonardo-school-service-account.json');
 const serviceAccountPath = isProduction ? prodServiceAccountPath : testServiceAccountPath;
 
@@ -263,11 +263,14 @@ async function main() {
   console.log('🔗 Login: http://localhost:3000/auth/login\n');
 }
 
-main()
-  .catch((e) => {
+// Execute seed with proper cleanup
+(async () => {
+  try {
+    await main();
+  } catch (e) {
     console.error('❌ Seed failed:', e);
     process.exit(1);
-  })
-  .finally(async () => {
+  } finally {
     await prisma.$disconnect();
-  });
+  }
+})();

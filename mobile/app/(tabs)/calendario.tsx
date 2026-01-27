@@ -13,11 +13,11 @@ import {
   RefreshControl,
   TouchableOpacity,
   Modal,
-  ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Text, Heading3, Caption, Body } from '../../components/ui/Text';
+import { Text, Caption, Body } from '../../components/ui/Text';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { useThemedColors } from '../../contexts/ThemeContext';
@@ -25,6 +25,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { colors } from '../../lib/theme/colors';
 import { spacing, layout } from '../../lib/theme/spacing';
 import { DrawerMenu, AppHeader } from '../../components/navigation';
+import { MiniCalendar, MiniCalendarEvent } from '../../components/calendar';
 import { trpc } from '../../lib/trpc';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -36,15 +37,6 @@ const eventTypeLabels: Record<string, string> = {
   TUTORING: 'Tutoraggio',
   OTHER: 'Altro',
 };
-
-const eventTypeFilters = [
-  { value: '', label: 'Tutti gli eventi' },
-  { value: 'LESSON', label: 'Lezioni' },
-  { value: 'EXAM', label: 'Esami' },
-  { value: 'MEETING', label: 'Riunioni' },
-  { value: 'TUTORING', label: 'Tutoraggio' },
-  { value: 'OTHER', label: 'Altri' },
-];
 
 interface CalendarEvent {
   id: string;
@@ -64,22 +56,17 @@ export default function CalendarioScreen() {
   const themedColors = useThemedColors();
   const { user } = useAuthStore();
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [filterType, setFilterType] = useState<string>('');
-  const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
   // Calculate date range (current month + 60 days ahead)
-  const dateRange = useMemo(() => {
-    const start = new Date();
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-    
-    const end = new Date();
-    end.setDate(end.getDate() + 60);
-    end.setHours(23, 59, 59, 999);
-    
-    return { start, end };
-  }, []);
+  // No useMemo since we want fresh dates on each render
+  const today = new Date();
+  const dateRangeStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  dateRangeStart.setHours(0, 0, 0, 0);
+  
+  const dateRangeEnd = new Date();
+  dateRangeEnd.setDate(dateRangeEnd.getDate() + 60);
+  dateRangeEnd.setHours(23, 59, 59, 999);
 
   // Fetch calendar events
   const {
@@ -89,14 +76,13 @@ export default function CalendarioScreen() {
     isRefetching,
   } = trpc.calendar.getEvents.useQuery(
     {
-      startDate: dateRange.start,
-      endDate: dateRange.end,
-      type: filterType ? (filterType as CalendarEvent['type']) : undefined,
+      startDate: dateRangeStart,
+      endDate: dateRangeEnd,
       onlyMyEvents: true,
       includeInvitations: true,
       includeCancelled: false,
     },
-    { enabled: !!user }
+    { enabled: !!user?.isActive }
   );
 
   // Calcola stats lato client dagli eventi (getStats è solo per staff)
@@ -127,27 +113,19 @@ export default function CalendarioScreen() {
     return (eventsData?.events || []) as CalendarEvent[];
   }, [eventsData?.events]);
 
-  // Group events by date
-  const groupedEvents = useMemo(() => {
-    const groups: Record<string, CalendarEvent[]> = {};
-    
-    events.forEach((event) => {
-      const dateKey = new Date(event.startDate).toISOString().split('T')[0];
-      if (!groups[dateKey]) {
-        groups[dateKey] = [];
-      }
-      groups[dateKey].push(event);
-    });
-
-    // Sort dates
-    return Object.entries(groups)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, dateEvents]) => ({
-        date,
-        events: dateEvents.sort((a, b) => 
-          new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
-        ),
-      }));
+  // Transform events for MiniCalendar component
+  const miniCalendarEvents: MiniCalendarEvent[] = useMemo(() => {
+    return events.map((e) => ({
+      id: e.id,
+      title: e.title,
+      type: e.type || 'OTHER',
+      startDate: new Date(e.startDate),
+      endDate: new Date(e.endDate),
+      isAllDay: e.isAllDay || false,
+      locationType: e.locationType || 'IN_PERSON',
+      locationDetails: e.locationDetails,
+      onlineLink: e.onlineLink,
+    }));
   }, [events]);
 
   const formatDateHeader = (dateStr: string) => {
@@ -201,8 +179,6 @@ export default function CalendarioScreen() {
   const getLocationIcon = (locationType: string): keyof typeof Ionicons.glyphMap => {
     return locationType === 'ONLINE' ? 'videocam' : 'location';
   };
-
-  const selectedFilterLabel = eventTypeFilters.find(f => f.value === filterType)?.label || 'Tutti gli eventi';
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: themedColors.background }]} edges={[]}>
@@ -260,163 +236,31 @@ export default function CalendarioScreen() {
           </View>
         )}
 
-        {/* Filter Button */}
-        <TouchableOpacity
-          style={[styles.filterButton, { backgroundColor: themedColors.card, borderColor: themedColors.border }]}
-          onPress={() => setFilterModalVisible(true)}
-        >
-          <Ionicons name="filter" size={18} color={themedColors.textMuted} />
-          <Text variant="body" style={{ marginLeft: 8, flex: 1, color: themedColors.text }}>
-            {selectedFilterLabel}
-          </Text>
-          <Ionicons name="chevron-down" size={18} color={themedColors.textMuted} />
-        </TouchableOpacity>
-
-        {/* Events List */}
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.primary.main} />
-            <Caption style={{ marginTop: 12 }}>Caricamento eventi...</Caption>
-          </View>
-        ) : groupedEvents.length === 0 ? (
-          <Card variant="outlined" style={styles.emptyCard}>
-            <View style={styles.emptyContent}>
-              <Ionicons name="calendar-outline" size={48} color={themedColors.textMuted} />
-              <Heading3 style={{ marginTop: 16, textAlign: 'center' }}>
-                Nessun evento in programma
-              </Heading3>
-              <Caption style={{ marginTop: 8, textAlign: 'center' }}>
-                {filterType 
-                  ? 'Nessun evento trovato con questo filtro.'
-                  : 'Gli eventi e le lezioni appariranno qui quando saranno programmati.'}
-              </Caption>
-            </View>
-          </Card>
-        ) : (
-          groupedEvents.map(({ date, events: dayEvents }) => (
-            <View key={date} style={styles.dateGroup}>
-              <Text variant="h5" style={[styles.dateHeader, { color: themedColors.text }]}>
-                {formatDateHeader(date)}
-              </Text>
-              
-              {dayEvents.map((event) => (
-                <TouchableOpacity
-                  key={event.id}
-                  activeOpacity={0.7}
-                  onPress={() => setSelectedEvent(event)}
-                >
-                  <Card variant="outlined" style={styles.eventCard}>
-                    <View style={styles.eventRow}>
-                      <View
-                        style={[
-                          styles.eventIconContainer,
-                          { backgroundColor: `${getEventTypeColor(event.type || 'OTHER')}15` },
-                        ]}
-                      >
-                        <Ionicons
-                          name={getEventTypeIcon(event.type || 'OTHER')}
-                          size={20}
-                          color={getEventTypeColor(event.type || 'OTHER')}
-                        />
-                      </View>
-                      
-                      <View style={styles.eventInfo}>
-                        <View style={styles.eventTitleRow}>
-                          <Text variant="body" style={{ fontWeight: '600', flex: 1 }} numberOfLines={1}>
-                            {event.title}
-                          </Text>
-                          {event.isCancelled && (
-                            <Badge variant="error" size="sm">Annullato</Badge>
-                          )}
-                        </View>
-                        
-                        <View style={styles.eventMeta}>
-                          <Ionicons name="time-outline" size={14} color={themedColors.textMuted} />
-                          <Caption style={{ marginLeft: 4 }}>
-                            {event.isAllDay 
-                              ? 'Tutto il giorno' 
-                              : `${formatTime(event.startDate)} - ${formatTime(event.endDate)}`}
-                          </Caption>
-                        </View>
-                        
-                        {event.locationDetails && (
-                          <View style={styles.eventMeta}>
-                            <Ionicons 
-                              name={getLocationIcon(event.locationType || 'IN_PERSON')} 
-                              size={14} 
-                              color={themedColors.textMuted} 
-                            />
-                            <Caption style={{ marginLeft: 4 }} numberOfLines={1}>
-                              {event.locationDetails}
-                            </Caption>
-                          </View>
-                        )}
-                      </View>
-                      
-                      <Ionicons name="chevron-forward" size={20} color={themedColors.textMuted} />
-                    </View>
-                  </Card>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ))
-        )}
+        {/* Mini Calendar */}
+        <View style={styles.miniCalendarContainer}>
+          <MiniCalendar 
+            events={miniCalendarEvents} 
+            isLoading={isLoading}
+            showViewAllButton={false}
+          />
+        </View>
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
-
-      {/* Filter Modal */}
-      <Modal
-        visible={filterModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setFilterModalVisible(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
-          onPress={() => setFilterModalVisible(false)}
-        >
-          <View style={[styles.filterModal, { backgroundColor: themedColors.card }]}>
-            <Text variant="h4" style={{ marginBottom: 16 }}>Filtra per tipo</Text>
-            {eventTypeFilters.map((filter) => (
-              <TouchableOpacity
-                key={filter.value}
-                style={[
-                  styles.filterOption,
-                  filterType === filter.value && { backgroundColor: `${colors.primary.main}15` },
-                ]}
-                onPress={() => {
-                  setFilterType(filter.value);
-                  setFilterModalVisible(false);
-                }}
-              >
-                <Text 
-                  variant="body" 
-                  style={{ 
-                    color: filterType === filter.value ? colors.primary.main : themedColors.text,
-                    fontWeight: filterType === filter.value ? '600' : '400',
-                  }}
-                >
-                  {filter.label}
-                </Text>
-                {filterType === filter.value && (
-                  <Ionicons name="checkmark" size={20} color={colors.primary.main} />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
 
       {/* Event Detail Modal */}
       <Modal
         visible={!!selectedEvent}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setSelectedEvent(null)}
       >
         <View style={styles.modalOverlay}>
+          <TouchableOpacity 
+            style={StyleSheet.absoluteFill} 
+            activeOpacity={1} 
+            onPress={() => setSelectedEvent(null)} 
+          />
           <View style={[styles.eventDetailModal, { backgroundColor: themedColors.card }]}>
             {selectedEvent && (
               <>
@@ -500,6 +344,23 @@ export default function CalendarioScreen() {
                     </View>
                   )}
                 </ScrollView>
+
+                {/* Action Button for online events */}
+                {selectedEvent.onlineLink && (
+                  <TouchableOpacity
+                    style={[styles.eventActionButton, { backgroundColor: colors.primary.main }]}
+                    onPress={() => {
+                      if (selectedEvent.onlineLink) {
+                        Linking.openURL(selectedEvent.onlineLink);
+                      }
+                    }}
+                  >
+                    <Ionicons name="open-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text variant="body" style={{ color: '#FFFFFF', fontWeight: '600' }}>
+                      Apri Link
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </>
             )}
           </View>
@@ -546,6 +407,9 @@ const styles = StyleSheet.create({
   },
   statValue: {
     marginBottom: spacing[1],
+  },
+  miniCalendarContainer: {
+    marginBottom: spacing[4],
   },
   filterButton: {
     flexDirection: 'row',
@@ -665,5 +529,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[3],
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  eventActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing[4],
+    paddingHorizontal: spacing[6],
+    marginHorizontal: spacing[6],
+    marginTop: spacing[4],
+    marginBottom: spacing[6],
+    borderRadius: 12,
   },
 });

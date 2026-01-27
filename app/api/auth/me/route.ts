@@ -51,6 +51,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if student needs to provide parent data
+    const parentDataRequired = user.student?.requiresParentData && !user.student?.parentGuardian;
+    
+    // Note: We don't block deactivated users here anymore.
+    // The proxy middleware handles the redirect based on isActive cookie.
+    // This allows users to complete registration flow even if not yet activated.
+
     // Sincronizza emailVerified da Firebase al database se è cambiato
     if (decodedToken.email_verified && !user.emailVerified) {
       user = await prisma.user.update({
@@ -69,7 +76,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if student needs to provide parent data
-    const parentDataRequired = user.student?.requiresParentData && !user.student?.parentGuardian;
+    // Already calculated above
 
     // Check if user has a pending contract to sign
     let pendingContractToken: string | null = null;
@@ -105,6 +112,7 @@ export async function POST(request: NextRequest) {
       emailVerified: user.emailVerified,
       parentDataRequired: parentDataRequired || false,
       pendingContractToken: pendingContractToken,
+      createdAt: user.createdAt.toISOString(),
     });
 
     // Cookie duration: 7 days (refresh happens on each /api/auth/me call)

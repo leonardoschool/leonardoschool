@@ -39,20 +39,41 @@ const PAGE_PERMISSIONS: Record<string, string[]> = {
   '/gruppo': ['STUDENT'],
 };
 
+/** Paths allowed while user is waiting for contract assignment */
+const WAITING_PATHS = ['/dashboard', '/profilo', '/impostazioni'];
+
+/** Roles that require profile completion */
+const ROLES_REQUIRING_PROFILE = new Set(['STUDENT', 'COLLABORATOR']);
+
+// ============================================================================
+// Helper Types
+// ============================================================================
+
+interface UserContext {
+  authToken: string | undefined;
+  userRole: string | undefined;
+  profileCompleted: boolean;
+  parentDataRequired: boolean;
+  userActive: boolean;
+  pendingContract: string | undefined;
+}
+
+// ============================================================================
+// Route Checking Functions
+// ============================================================================
+
 /**
  * Check if a role has access to a specific path
  */
 function hasAccess(path: string, role: string | undefined): boolean {
   if (!role) return false;
   
-  const normalizedPath = path.split('?')[0]; // Remove query params
+  const normalizedPath = path.split('?')[0];
   
-  // Check exact match
   if (PAGE_PERMISSIONS[normalizedPath]) {
     return PAGE_PERMISSIONS[normalizedPath].includes(role);
   }
   
-  // Check prefix match (for nested routes like /simulazioni/[id])
   for (const [routePath, allowedRoles] of Object.entries(PAGE_PERMISSIONS)) {
     if (normalizedPath.startsWith(routePath + '/') || normalizedPath === routePath) {
       return allowedRoles.includes(role);
@@ -68,7 +89,6 @@ function hasAccess(path: string, role: string | undefined): boolean {
 function isUnifiedProtectedRoute(pathname: string): boolean {
   const normalizedPath = pathname.split('?')[0];
   
-  // Check if path matches any unified route
   for (const routePath of Object.keys(PAGE_PERMISSIONS)) {
     if (normalizedPath === routePath || normalizedPath.startsWith(routePath + '/')) {
       return true;
@@ -78,141 +98,298 @@ function isUnifiedProtectedRoute(pathname: string): boolean {
   return false;
 }
 
+/**
+ * Check if user role requires profile completion
+ */
+function requiresProfileCompletion(role: string | undefined): boolean {
+  return role !== undefined && ROLES_REQUIRING_PROFILE.has(role);
+}
+
+/**
+ * Check if path is in the allowed waiting paths list
+ */
+function isAllowedWaitingPath(pathname: string): boolean {
+  return WAITING_PATHS.some(path => pathname.startsWith(path));
+}
+
+// ============================================================================
+// Redirect Helper Functions
+// ============================================================================
+
+/**
+ * Create redirect to login page with optional redirect param
+ */
+function redirectToLogin(request: NextRequest, redirectPath?: string, error?: string): NextResponse {
+  const loginUrl = new URL('/auth/login', request.url);
+  if (redirectPath) {
+    loginUrl.searchParams.set('redirect', redirectPath);
+  }
+  if (error) {
+    loginUrl.searchParams.set('error', error);
+  }
+  return NextResponse.redirect(loginUrl);
+}
+
+/**
+ * Create redirect to dashboard
+ */
+function redirectToDashboard(request: NextRequest): NextResponse {
+  return NextResponse.redirect(new URL('/dashboard', request.url));
+}
+
+/**
+ * Create redirect to complete profile page
+ */
+function redirectToCompleteProfile(request: NextRequest): NextResponse {
+  return NextResponse.redirect(new URL('/auth/complete-profile', request.url));
+}
+
+/**
+ * Create redirect to profile page with parent section
+ */
+function redirectToProfileParent(request: NextRequest): NextResponse {
+  return NextResponse.redirect(new URL('/profilo?section=genitore', request.url));
+}
+
+/**
+ * Create redirect to contract signing page
+ */
+function redirectToContract(request: NextRequest, contractToken: string): NextResponse {
+  return NextResponse.redirect(new URL(`/contratto/${contractToken}`, request.url));
+}
+
+// ============================================================================
+// Protected Route Handlers
+// ============================================================================
+
+/**
+ * Handle incomplete profile redirect
+ */
+function handleIncompleteProfile(
+  request: NextRequest,
+  pathname: string,
+  ctx: UserContext
+): NextResponse | null {
+  if (!requiresProfileCompletion(ctx.userRole) || ctx.profileCompleted) {
+    return null;
+  }
+  
+  if (!pathname.startsWith('/auth/complete-profile')) {
+    return redirectToCompleteProfile(request);
+  }
+  
+  return NextResponse.next();
+}
+
+/**
+ * Handle parent data required redirect for students
+ */
+function handleParentDataRequired(
+  request: NextRequest,
+  pathname: string,
+  ctx: UserContext
+): NextResponse | null {
+  if (ctx.userRole !== 'STUDENT' || !ctx.parentDataRequired) {
+    return null;
+  }
+  
+  if (!pathname.startsWith('/profilo') && !pathname.startsWith('/auth/complete-profile')) {
+    return redirectToProfileParent(request);
+  }
+  
+  return NextResponse.next();
+}
+
+/**
+ * Handle pending contract redirect
+ */
+function handlePendingContract(
+  request: NextRequest,
+  pathname: string,
+  ctx: UserContext
+): NextResponse | null {
+  if (!ctx.pendingContract || !requiresProfileCompletion(ctx.userRole)) {
+    return null;
+  }
+  
+  if (!pathname.startsWith('/contratto')) {
+    return redirectToContract(request, ctx.pendingContract);
+  }
+  
+  return NextResponse.next();
+}
+
+/**
+ * Handle user waiting for contract assignment (not yet active)
+ */
+function handleWaitingForContract(
+  request: NextRequest,
+  pathname: string,
+  ctx: UserContext
+): NextResponse | null {
+  const isWaitingForContract = !ctx.userActive && 
+    requiresProfileCompletion(ctx.userRole) && 
+    !ctx.pendingContract;
+  
+  if (!isWaitingForContract) {
+    return null;
+  }
+  
+  if (!isAllowedWaitingPath(pathname)) {
+    return redirectToDashboard(request);
+  }
+  
+  return NextResponse.next();
+}
+
+/**
+ * Handle deactivated account
+ */
+function handleDeactivatedAccount(request: NextRequest, ctx: UserContext): NextResponse | null {
+  if (ctx.userActive) {
+    return null;
+  }
+  
+  return redirectToLogin(request, undefined, 'account-deactivated');
+}
+
+// ============================================================================
+// Main Proxy Function
+// ============================================================================
+
+/**
+ * Extract user context from request cookies
+ */
+function getUserContext(request: NextRequest): UserContext {
+  return {
+    authToken: request.cookies.get('auth-token')?.value,
+    userRole: request.cookies.get('user-role')?.value,
+    profileCompleted: request.cookies.get('profile-completed')?.value === 'true',
+    parentDataRequired: request.cookies.get('parent-data-required')?.value === 'true',
+    userActive: request.cookies.get('user-active')?.value !== 'false',
+    pendingContract: request.cookies.get('pending-contract')?.value,
+  };
+}
+
+/**
+ * Handle protected route access checks
+ * Returns a response if access should be denied/redirected, null if allowed
+ */
+function handleProtectedRoute(
+  request: NextRequest,
+  pathname: string,
+  ctx: UserContext
+): NextResponse | null {
+  // Check each condition in order of priority
+  const handlers = [
+    () => handleIncompleteProfile(request, pathname, ctx),
+    () => handleParentDataRequired(request, pathname, ctx),
+    () => handlePendingContract(request, pathname, ctx),
+    () => handleWaitingForContract(request, pathname, ctx),
+    () => handleDeactivatedAccount(request, ctx),
+  ];
+
+  for (const handler of handlers) {
+    const result = handler();
+    if (result) return result;
+  }
+
+  // Check role-based access
+  if (!hasAccess(pathname, ctx.userRole)) {
+    return redirectToDashboard(request);
+  }
+
+  return null;
+}
+
+/**
+ * Handle authenticated user on auth pages
+ */
+function handleAuthPageAccess(
+  request: NextRequest,
+  pathname: string,
+  ctx: UserContext
+): NextResponse | null {
+  // Skip complete-profile page
+  if (pathname.startsWith('/auth/complete-profile')) {
+    return null;
+  }
+
+  // If account is deactivated and not waiting for parent data, let them see login
+  if (!ctx.userActive && !(ctx.userRole === 'STUDENT' && ctx.parentDataRequired)) {
+    return NextResponse.next();
+  }
+
+  // If user with incomplete profile, redirect to complete-profile
+  if (requiresProfileCompletion(ctx.userRole) && !ctx.profileCompleted) {
+    return redirectToCompleteProfile(request);
+  }
+
+  // Redirect to dashboard
+  return redirectToDashboard(request);
+}
+
+/**
+ * Handle complete-profile page access
+ */
+function handleCompleteProfileAccess(
+  request: NextRequest,
+  ctx: UserContext
+): NextResponse | null {
+  const isEditMode = request.nextUrl.searchParams.get('edit') === 'true';
+  const isParentDataMode = request.nextUrl.searchParams.get('parentData') === 'true';
+
+  // Admins never need to complete profile
+  if (ctx.userRole === 'ADMIN') {
+    return redirectToDashboard(request);
+  }
+
+  // Check if user should be redirected away from complete-profile
+  const hasSpecialAccess = isEditMode || 
+    isParentDataMode || 
+    (ctx.userRole === 'STUDENT' && ctx.parentDataRequired);
+
+  if (ctx.profileCompleted && !hasSpecialAccess) {
+    return redirectToDashboard(request);
+  }
+
+  return null;
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  
-  // Get auth token and user data from cookies
-  const authToken = request.cookies.get('auth-token')?.value;
-  const userRole = request.cookies.get('user-role')?.value;
-  const profileCompleted = request.cookies.get('profile-completed')?.value === 'true';
-  const parentDataRequired = request.cookies.get('parent-data-required')?.value === 'true';
-  const userActive = request.cookies.get('user-active')?.value !== 'false'; // Default to true if not set
-  const pendingContract = request.cookies.get('pending-contract')?.value;
-  
-  // Check if it's a protected route
+  const ctx = getUserContext(request);
+
   const isProtectedRoute = isUnifiedProtectedRoute(pathname);
   const isContractSignRoute = pathname.startsWith('/contratto');
-  
-  // Protect private application routes
+  const isAuthPage = pathname.startsWith('/auth');
+
+  // Handle protected routes
   if (isProtectedRoute) {
-    if (!authToken) {
-      // Not authenticated, redirect to login
-      const loginUrl = new URL('/auth/login', request.url);
-      loginUrl.searchParams.set('redirect', pathname);
-      return NextResponse.redirect(loginUrl);
+    if (!ctx.authToken) {
+      return redirectToLogin(request, pathname);
     }
-    
-    // Check if student/collaborator has completed profile (skip for admins)
-    // Allow access to complete-profile even if account is not active yet (new users)
-    if ((userRole === 'STUDENT' || userRole === 'COLLABORATOR') && !profileCompleted) {
-      if (!pathname.startsWith('/auth/complete-profile')) {
-        // Profile incomplete, redirect to complete profile page
-        return NextResponse.redirect(new URL('/auth/complete-profile', request.url));
-      }
-      // Allow access to complete-profile page even if !userActive
-      return NextResponse.next();
-    }
-
-    // Check if student needs to add parent/guardian data
-    if (userRole === 'STUDENT' && parentDataRequired) {
-      // Allow access ONLY to profile page and complete-profile page
-      if (!pathname.startsWith('/profilo') && !pathname.startsWith('/auth/complete-profile')) {
-        return NextResponse.redirect(new URL('/profilo?section=genitore', request.url));
-      }
-      // Allow access to these pages even if !userActive
-      return NextResponse.next();
-    }
-
-    // Check if user has a pending contract to sign (blocks platform access until signed)
-    // This check comes BEFORE isActive check, because user needs to sign contract first
-    if (pendingContract && (userRole === 'STUDENT' || userRole === 'COLLABORATOR')) {
-      // Allow access ONLY to the contract signing page
-      if (!pathname.startsWith('/contratto')) {
-        return NextResponse.redirect(new URL(`/contratto/${pendingContract}`, request.url));
-      }
-      // Allow access to contract page even if !userActive
-      return NextResponse.next();
-    }
-
-    // For students/collaborators without a pending contract and not yet active:
-    // They are waiting for admin to assign a contract - allow access to dashboard
-    // The dashboard will show "In Attesa di Contratto" message
-    if (!userActive && (userRole === 'STUDENT' || userRole === 'COLLABORATOR') && !pendingContract) {
-      // Allow access to dashboard and basic profile pages while waiting for contract
-      const allowedWaitingPaths = ['/dashboard', '/profilo', '/impostazioni'];
-      const isAllowedPath = allowedWaitingPaths.some(path => pathname.startsWith(path));
-      
-      if (!isAllowedPath) {
-        // Redirect to dashboard where they'll see the waiting message
-        return NextResponse.redirect(new URL('/dashboard', request.url));
-      }
-      // Allow access to these limited pages
-      return NextResponse.next();
-    }
-
-    // Check if user account is deactivated (admin manually deactivated an active account)
-    if (!userActive) {
-      // This case is for users who were previously active but got deactivated
-      // Redirect to login with message
-      const loginUrl = new URL('/auth/login', request.url);
-      loginUrl.searchParams.set('error', 'account-deactivated');
-      return NextResponse.redirect(loginUrl);
-    }
-    
-    // Check role-based access using PAGE_PERMISSIONS
-    if (!hasAccess(pathname, userRole)) {
-      // User doesn't have access to this route, redirect to dashboard
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
+    const protectedResult = handleProtectedRoute(request, pathname, ctx);
+    if (protectedResult) return protectedResult;
   }
-  
-  // Contract signing page - requires authentication but any role can access
-  if (isContractSignRoute) {
-    if (!authToken) {
-      const loginUrl = new URL('/auth/login', request.url);
-      loginUrl.searchParams.set('redirect', pathname);
-      return NextResponse.redirect(loginUrl);
-    }
+
+  // Contract signing page - requires authentication
+  if (isContractSignRoute && !ctx.authToken) {
+    return redirectToLogin(request, pathname);
   }
-  
-  // If authenticated and trying to access auth pages (except complete-profile), redirect to dashboard
-  // BUT only if the account is active and profile is complete
-  if (authToken && pathname.startsWith('/auth') && !pathname.startsWith('/auth/complete-profile')) {
-    // If account is deactivated, allow them to stay on login page (don't redirect to dashboard)
-    if (!userActive && !(userRole === 'STUDENT' && parentDataRequired)) {
-      // Account is deactivated and not waiting for parent data - let them see login with error
-      return NextResponse.next();
-    }
-    
-    // If user with incomplete profile, redirect to complete-profile
-    if ((userRole === 'STUDENT' || userRole === 'COLLABORATOR') && !profileCompleted) {
-      return NextResponse.redirect(new URL('/auth/complete-profile', request.url));
-    }
-    
-    // Redirect to unified dashboard (instead of role-specific)
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+
+  // Handle authenticated user on auth pages
+  if (ctx.authToken && isAuthPage) {
+    const authResult = handleAuthPageAccess(request, pathname, ctx);
+    if (authResult) return authResult;
   }
-  
-  // If user with completed profile tries to access complete-profile page, redirect to dashboard
-  // Also redirect ADMIN users - they never need to complete profile
-  // BUT allow students with parentDataRequired to access it (they need to add parent data)
-  // AND allow access with ?edit=true query param for profile editing
-  // AND allow access with ?parentData=true for adding/editing parent data
-  if (authToken && pathname.startsWith('/auth/complete-profile')) {
-    const isEditMode = request.nextUrl.searchParams.get('edit') === 'true';
-    const isParentDataMode = request.nextUrl.searchParams.get('parentData') === 'true';
-    
-    if (userRole === 'ADMIN') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-    // Allow students with parentDataRequired even if profile is completed
-    // Allow edit mode for users who want to update their profile
-    // Allow parent data mode for adding/editing parent data
-    if (profileCompleted && !isEditMode && !isParentDataMode && !(userRole === 'STUDENT' && parentDataRequired)) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
+
+  // Handle complete-profile page access for authenticated users
+  if (ctx.authToken && pathname.startsWith('/auth/complete-profile')) {
+    const completeProfileResult = handleCompleteProfileAccess(request, ctx);
+    if (completeProfileResult) return completeProfileResult;
   }
-  
+
   return NextResponse.next();
 }
 

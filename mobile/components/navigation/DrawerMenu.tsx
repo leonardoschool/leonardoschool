@@ -5,7 +5,7 @@
  * Contiene tutte le sezioni studente come nella webapp.
  */
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -14,6 +14,7 @@ import {
   Dimensions,
   ScrollView,
   Animated,
+  Easing,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -53,43 +54,42 @@ export function DrawerMenu({ visible, onClose, currentRoute }: DrawerMenuProps) 
   // State to control Modal visibility separately from animation
   const [modalVisible, setModalVisible] = React.useState(false);
   
-  // Animation for slide from left - using useMemo to avoid re-creating on each render
-  const animations = useMemo(() => ({
-    slide: new Animated.Value(-DRAWER_WIDTH),
-    backdrop: new Animated.Value(0),
-  }), []);
+  // Animation values - use useRef for stable references
+  const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
+  const backdropAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
       // Show modal first, then animate
       setModalVisible(true);
-      // Reset animation values before animating in
-      animations.slide.setValue(-DRAWER_WIDTH);
-      animations.backdrop.setValue(0);
-      // Slide in from left
+      // Slide in from left with spring-like easing
       Animated.parallel([
-        Animated.timing(animations.slide, {
+        Animated.timing(slideAnim, {
           toValue: 0,
-          duration: 250,
+          duration: 280,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.timing(animations.backdrop, {
+        Animated.timing(backdropAnim, {
           toValue: 1,
-          duration: 250,
+          duration: 280,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
       ]).start();
     } else if (modalVisible) {
       // Animate out, then hide modal
       Animated.parallel([
-        Animated.timing(animations.slide, {
+        Animated.timing(slideAnim, {
           toValue: -DRAWER_WIDTH,
-          duration: 200,
+          duration: 220,
+          easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.timing(animations.backdrop, {
+        Animated.timing(backdropAnim, {
           toValue: 0,
-          duration: 200,
+          duration: 220,
+          easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
       ]).start(() => {
@@ -97,7 +97,8 @@ export function DrawerMenu({ visible, onClose, currentRoute }: DrawerMenuProps) 
         setModalVisible(false);
       });
     }
-  }, [visible, animations, modalVisible]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- slideAnim and backdropAnim are stable refs
+  }, [visible, modalVisible]);
 
   // Fetch unread messages count
   const { data: unreadMessagesData } = trpc.messages.getUnreadCount.useQuery(undefined, {
@@ -176,7 +177,17 @@ export function DrawerMenu({ visible, onClose, currentRoute }: DrawerMenuProps) 
   const isActive = (routeStr: Href) => {
     if (!currentRoute) return false;
     const routePath = typeof routeStr === 'string' ? routeStr : '';
-    return currentRoute.includes(routePath.replace('/(tabs)', ''));
+    
+    // Caso speciale per la dashboard: deve corrispondere esattamente a index
+    if (routePath === '/(tabs)') {
+      // La dashboard è attiva solo se siamo esattamente sulla route index
+      return currentRoute === '/' || currentRoute === '/index' || currentRoute === '(tabs)' || currentRoute === '(tabs)/index';
+    }
+    
+    // Per le altre route, verifica se currentRoute contiene il path
+    const cleanPath = routePath.replace('/(tabs)', '').replace('/', '');
+    if (!cleanPath) return false;
+    return currentRoute.includes(cleanPath);
   };
 
   return (
@@ -192,7 +203,7 @@ export function DrawerMenu({ visible, onClose, currentRoute }: DrawerMenuProps) 
         <Animated.View 
           style={[
             styles.backdrop,
-            { opacity: animations.backdrop }
+            { opacity: backdropAnim }
           ]}
         >
           <TouchableOpacity
@@ -209,7 +220,7 @@ export function DrawerMenu({ visible, onClose, currentRoute }: DrawerMenuProps) 
             {
               backgroundColor: themedColors.card,
               paddingTop: insets.top,
-              transform: [{ translateX: animations.slide }],
+              transform: [{ translateX: slideAnim }],
             },
           ]}
         >

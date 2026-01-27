@@ -44,6 +44,50 @@ const variantConfig: Record<ModalVariant, { gradient: string; iconBg: string }> 
   },
 };
 
+/**
+ * Shared hook for modal escape key and body scroll management
+ */
+function useModalBehavior(
+  isOpen: boolean,
+  onClose: () => void,
+  closeOnEscape: boolean
+): void {
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
+  // Handle Escape key
+  useEffect(() => {
+    if (!isOpen || !closeOnEscape) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, closeOnEscape, onClose]);
+}
+
+/**
+ * Shared function to create overlay click handler
+ */
+function createOverlayClickHandler(closeOnOverlayClick: boolean, onClose: () => void) {
+  return () => {
+    if (closeOnOverlayClick) {
+      onClose();
+    }
+  };
+}
+
 export interface ModalProps {
   /** Controls modal visibility */
   isOpen: boolean;
@@ -122,41 +166,13 @@ export function Modal({
   className = '',
   maxBodyHeight = '60vh',
 }: ModalProps) {
-  // Prevent body scroll when modal is open
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isOpen]);
-
-  // Handle Escape key
-  useEffect(() => {
-    if (!isOpen || !closeOnEscape) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, closeOnEscape, onClose]);
+  // Use shared modal behavior hook
+  useModalBehavior(isOpen, onClose, closeOnEscape);
 
   if (!isOpen) return null;
 
   const config = variantConfig[variant];
-
-  const handleOverlayClick = () => {
-    if (closeOnOverlayClick) {
-      onClose();
-    }
-  };
+  const handleOverlayClick = createOverlayClickHandler(closeOnOverlayClick, onClose);
 
   const modalContent = (
     <div
@@ -244,39 +260,12 @@ export function SimpleModal({
   closeOnEscape = true,
   className = '',
 }: SimpleModalProps) {
-  // Prevent body scroll when modal is open
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isOpen]);
-
-  // Handle Escape key
-  useEffect(() => {
-    if (!isOpen || !closeOnEscape) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, closeOnEscape, onClose]);
+  // Use shared modal behavior hook
+  useModalBehavior(isOpen, onClose, closeOnEscape);
 
   if (!isOpen) return null;
 
-  const handleOverlayClick = () => {
-    if (closeOnOverlayClick) {
-      onClose();
-    }
-  };
+  const handleOverlayClick = createOverlayClickHandler(closeOnOverlayClick, onClose);
 
   const modalContent = (
     <div

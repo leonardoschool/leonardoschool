@@ -46,7 +46,7 @@ export function LaTeXRenderer({
   fontSize = 16,
   style,
   minHeight = 40,
-}: LaTeXRendererProps) {
+}: Readonly<LaTeXRendererProps>) {
   const { themed } = useTheme();
   const { width: screenWidth } = useWindowDimensions();
   const [webViewHeight, setWebViewHeight] = useState(minHeight);
@@ -60,11 +60,16 @@ export function LaTeXRenderer({
 
     // Escape special HTML characters in LaTeX
     const escapedLatex = latex
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+
+    // Prepare LaTeX for use in JavaScript string context
+    const jsEscapedLatex = escapedLatex
+      .replaceAll('\\', '\\\\')
+      .replaceAll('"', '\\"');
 
     return `
 <!DOCTYPE html>
@@ -114,7 +119,7 @@ export function LaTeXRenderer({
   <script src="${KATEX_CDN}"></script>
   <script>
     try {
-      katex.render("${escapedLatex.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}", document.getElementById('latex'), {
+      katex.render("${jsEscapedLatex}", document.getElementById('latex'), {
         displayMode: ${displayMode},
         throwOnError: false,
         output: 'html',
@@ -178,7 +183,7 @@ export function LaTeXRenderer({
  * SimpleLaTeXText - Fallback for when WebView is not available
  * Displays the raw LaTeX wrapped in $ symbols
  */
-export function SimpleLaTeXText({ latex, style }: { latex: string; style?: object }) {
+export function SimpleLaTeXText({ latex, style }: Readonly<{ latex: string; style?: object }>) {
   const { themed } = useTheme();
   
   if (!latex?.trim()) return null;
@@ -202,7 +207,7 @@ interface RichTextWithLaTeXProps {
   fontSize?: number;
 }
 
-export function RichTextWithLaTeX({ content, style, fontSize = 16 }: RichTextWithLaTeXProps) {
+export function RichTextWithLaTeX({ content, style, fontSize = 16 }: Readonly<RichTextWithLaTeXProps>) {
   const { themed } = useTheme();
 
   // Check if content contains LaTeX
@@ -222,12 +227,15 @@ export function RichTextWithLaTeX({ content, style, fontSize = 16 }: RichTextWit
   return (
     <View style={[styles.richTextContainer, style]}>
       {parts.map((part, index) => {
+        // Generate a stable key based on content and position
+        const stableKey = `${part.slice(0, 20).replaceAll(/\s/g, '_')}-${index}`;
+        
         // Check if this part is display mode LaTeX ($$...$$)
         if (part.startsWith('$$') && part.endsWith('$$')) {
           const latex = part.slice(2, -2);
           return (
             <LaTeXRenderer
-              key={index}
+              key={stableKey}
               latex={latex}
               displayMode={true}
               fontSize={fontSize}
@@ -239,7 +247,7 @@ export function RichTextWithLaTeX({ content, style, fontSize = 16 }: RichTextWit
           const latex = part.slice(1, -1);
           return (
             <LaTeXRenderer
-              key={index}
+              key={stableKey}
               latex={latex}
               displayMode={false}
               fontSize={fontSize}
@@ -251,7 +259,7 @@ export function RichTextWithLaTeX({ content, style, fontSize = 16 }: RichTextWit
         if (part.trim()) {
           return (
             <Text
-              key={index}
+              key={stableKey}
               style={[styles.richText, { color: themed(colors.text.primary), fontSize }]}
             >
               {part}

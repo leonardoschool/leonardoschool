@@ -31,7 +31,7 @@ import { useVirtualRoomSSE, VirtualRoomData } from '@/lib/hooks/useVirtualRoomSS
 import { formatDistanceToNow } from 'date-fns';
 import { it } from 'date-fns/locale';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, sonarjs/redundant-type-aliases
 type Participant = any;
 
 interface ParticipantCardProps {
@@ -257,6 +257,7 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, onKickPar
   );
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity -- Complex real-time component with SSE, polling, and multi-role logic
 export default function VirtualRoomPage() {
   const params = useParams();
   const router = useRouter();
@@ -318,6 +319,7 @@ export default function VirtualRoomPage() {
     setSseData(data);
   }, []);
   
+  // eslint-disable-next-line sonarjs/no-unused-vars -- connection status reserved for UI indicator
   const { isConnected: _sseConnected, reconnect: sseReconnect } = useVirtualRoomSSE({
     sessionId: sessionId,
     participantId: selectedParticipantId, // Include messages for selected participant
@@ -432,8 +434,12 @@ export default function VirtualRoomPage() {
   });
 
   // Messages come from SSE data now - no need for separate polling
+  // Sort by createdAt ascending so newest messages appear at the bottom
   const messagesFromSSE = useMemo(() => {
-    return sseData?.messages || [];
+    const messages = sseData?.messages || [];
+    return [...messages].sort((a, b) => 
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
   }, [sseData?.messages]);
 
   // Mark messages as read
@@ -518,9 +524,9 @@ export default function VirtualRoomPage() {
           gainNode2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
           oscillator2.start(audioContext.currentTime + 0.1);
           oscillator2.stop(audioContext.currentTime + 0.2);
-        } catch (_error) {
-          // Silently fail if Web Audio API is not supported
-          console.log('Unable to play notification sound');
+        } catch {
+           
+          console.debug('Unable to play notification sound');
         }
       });
     }

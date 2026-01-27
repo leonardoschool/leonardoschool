@@ -43,7 +43,7 @@ const PROVINCE_ITALIANE = [
   'RM', 'MI', 'NA', 'TO', 'PA', 'GE', 'BO', 'FI', 'BA', 'VE',
 ] as const;
 
-const VALID_FISCAL_CODE_REGEX = /^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$/;
+const VALID_FISCAL_CODE_REGEX = /^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/;
 
 /**
  * Generate a valid Italian fiscal code

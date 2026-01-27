@@ -22,9 +22,9 @@ import {
 } from 'lucide-react';
 
 interface AssignmentStatisticsProps {
-  simulationId: string;
-  assignmentId?: string;
-  groupId?: string;
+  readonly simulationId: string;
+  readonly assignmentId?: string;
+  readonly groupId?: string;
 }
 
 /**
@@ -82,7 +82,8 @@ export function AssignmentStatistics({ simulationId, assignmentId, groupId }: As
     const mins = Math.floor(seconds / 60);
     const secs = Math.round(seconds % 60);
     if (mins === 0) return `${secs}s`;
-    return `${mins}m ${secs > 0 ? `${secs}s` : ''}`;
+    const secsDisplay = secs > 0 ? ` ${secs}s` : '';
+    return `${mins}m${secsDisplay}`;
   };
 
   // Get score color
@@ -90,6 +91,42 @@ export function AssignmentStatistics({ simulationId, assignmentId, groupId }: As
     if (score >= 70) return 'text-green-600 dark:text-green-400';
     if (score >= 50) return 'text-yellow-600 dark:text-yellow-400';
     return 'text-red-600 dark:text-red-400';
+  };
+
+  // Get completion rate color
+  const getCompletionRateColor = (rate: number) => {
+    if (rate >= 80) return 'text-green-600 dark:text-green-400';
+    if (rate >= 50) return 'text-yellow-600 dark:text-yellow-400';
+    return 'text-red-600 dark:text-red-400';
+  };
+
+  // Get completion rate bg color
+  const getCompletionRateBgColor = (rate: number) => {
+    if (rate >= 80) return 'bg-green-500';
+    if (rate >= 50) return 'bg-yellow-500';
+    return 'bg-red-500';
+  };
+
+  // Get miss rate classes
+  const getMissRateBgClasses = (rate: number) => {
+    if (rate >= 60) return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+    if (rate >= 40) return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300';
+    return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
+  };
+
+  // Get miss rate text color
+  const getMissRateTextColor = (rate: number) => {
+    if (rate >= 60) return 'text-red-600';
+    if (rate >= 40) return 'text-yellow-600';
+    return 'text-gray-600';
+  };
+
+  // Get student score classes
+  const getStudentScoreClasses = (score: number) => {
+    if (score >= 80) return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
+    if (score >= 60) return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300';
+    if (score >= 40) return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300';
+    return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
   };
 
   // Toggle student expansion
@@ -126,18 +163,12 @@ export function AssignmentStatistics({ simulationId, assignmentId, groupId }: As
             </div>
             <span className={`text-sm ${colors.text.muted}`}>Completamento</span>
           </div>
-          <p className={`text-3xl font-bold ${overview!.completionRate >= 80 ? 'text-green-600 dark:text-green-400' : overview!.completionRate >= 50 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>
+          <p className={`text-3xl font-bold ${getCompletionRateColor(overview!.completionRate)}`}>
             {overview!.completionRate.toFixed(0)}%
           </p>
           <div className="mt-2 h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
             <div 
-              className={`h-full rounded-full transition-all ${
-                overview!.completionRate >= 80 
-                  ? 'bg-green-500' 
-                  : overview!.completionRate >= 50 
-                    ? 'bg-yellow-500' 
-                    : 'bg-red-500'
-              }`}
+              className={`h-full rounded-full transition-all ${getCompletionRateBgColor(overview!.completionRate)}`}
               style={{ width: `${overview!.completionRate}%` }}
             />
           </div>
@@ -184,13 +215,7 @@ export function AssignmentStatistics({ simulationId, assignmentId, groupId }: As
               <div key={question.questionId} className={`px-6 py-4 ${colors.background.hover}`}>
                 <div className="flex items-start gap-4">
                   <div 
-                    className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
-                      question.missRate >= 60 
-                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' 
-                        : question.missRate >= 40
-                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
-                          : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
-                    }`}
+                    className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${getMissRateBgClasses(question.missRate)}`}
                   >
                     {question.order}
                   </div>
@@ -226,9 +251,7 @@ export function AssignmentStatistics({ simulationId, assignmentId, groupId }: As
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className={`text-2xl font-bold ${
-                      question.missRate >= 60 ? 'text-red-600' : question.missRate >= 40 ? 'text-yellow-600' : 'text-gray-600'
-                    }`}>
+                    <p className={`text-2xl font-bold ${getMissRateTextColor(question.missRate)}`}>
                       {question.missRate.toFixed(0)}%
                     </p>
                     <p className={`text-xs ${colors.text.muted}`}>errore</p>
@@ -268,15 +291,7 @@ export function AssignmentStatistics({ simulationId, assignmentId, groupId }: As
                   disabled={!hasErrors}
                 >
                   {/* Rank/Avatar */}
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
-                    student.percentageScore >= 80 
-                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                      : student.percentageScore >= 60
-                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                        : student.percentageScore >= 40
-                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
-                          : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                  }`}>
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${getStudentScoreClasses(student.percentageScore)}`}>
                     {student.studentName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
                   </div>
 
@@ -375,26 +390,31 @@ export function AssignmentStatistics({ simulationId, assignmentId, groupId }: As
 
                     {/* Blank Questions */}
                     {student.blankQuestions.length > 0 && (
-                      <div className={`py-4 ${student.wrongQuestions.length > 0 ? `border-t ${colors.border.light}` : ''}`}>
-                        <h4 className={`text-sm font-semibold ${colors.text.primary} mb-3 flex items-center gap-2`}>
-                          <HelpCircle className="w-4 h-4 text-gray-500" />
-                          Risposte Vuote ({student.blankQuestions.length})
-                        </h4>
-                        <div className="flex flex-wrap gap-2">
-                          {student.blankQuestions.map((q) => (
-                            <div 
-                              key={q.questionId} 
-                              className={`px-3 py-1.5 rounded-lg ${colors.background.card} text-sm`}
-                              title={q.text}
-                            >
-                              <span className={`font-medium ${colors.text.primary}`}>Q{q.order}</span>
-                              {q.subject && (
-                                <span className={`ml-2 ${colors.text.muted}`}>({q.subject})</span>
-                              )}
+                      (() => {
+                        const borderClass = student.wrongQuestions.length > 0 ? `border-t ${colors.border.light}` : '';
+                        return (
+                          <div className={`py-4 ${borderClass}`}>
+                            <h4 className={`text-sm font-semibold ${colors.text.primary} mb-3 flex items-center gap-2`}>
+                              <HelpCircle className="w-4 h-4 text-gray-500" />
+                              Risposte Vuote ({student.blankQuestions.length})
+                            </h4>
+                            <div className="flex flex-wrap gap-2">
+                              {student.blankQuestions.map((q) => (
+                                <div 
+                                  key={q.questionId} 
+                                  className={`px-3 py-1.5 rounded-lg ${colors.background.card} text-sm`}
+                                  title={q.text}
+                                >
+                                  <span className={`font-medium ${colors.text.primary}`}>Q{q.order}</span>
+                                  {q.subject && (
+                                    <span className={`ml-2 ${colors.text.muted}`}>({q.subject})</span>
+                                  )}
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      </div>
+                          </div>
+                        );
+                      })()
                     )}
                   </div>
                 )}

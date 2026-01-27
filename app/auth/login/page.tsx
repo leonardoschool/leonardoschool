@@ -9,9 +9,53 @@ import { Spinner } from '@/components/ui/loaders';
 import { useToast } from '@/components/ui/Toast';
 import Image from 'next/image';
 
+/**
+ * User data returned from /api/auth/me
+ */
+interface DbUser {
+  role: 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
+  profileCompleted: boolean;
+  parentDataRequired?: boolean;
+  pendingContractToken?: string | null;
+  name?: string;
+}
+
+/**
+ * Determines the redirect path based on user state after login
+ * Follows the complete onboarding flow:
+ * 1. Profile not complete → complete-profile
+ * 2. Parent data required → complete-profile (parent section)
+ * 3. Pending contract → contract signing page
+ * 4. All good → dashboard
+ */
+function getPostLoginRedirectPath(dbUser: DbUser): string {
+  // Check if user needs to complete profile
+  const needsProfileCompletion = 
+    (dbUser.role === 'STUDENT' || dbUser.role === 'COLLABORATOR') && 
+    !dbUser.profileCompleted;
+  
+  if (needsProfileCompletion) {
+    return '/auth/complete-profile';
+  }
+  
+  // Check if student needs to add parent/guardian data
+  if (dbUser.role === 'STUDENT' && dbUser.parentDataRequired) {
+    return '/auth/complete-profile';
+  }
+  
+  // Check if user has a pending contract to sign
+  if (dbUser.pendingContractToken) {
+    return `/contratto/${dbUser.pendingContractToken}`;
+  }
+  
+  // All conditions passed (or waiting for contract), redirect to dashboard
+  return '/dashboard';
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  // eslint-disable-next-line sonarjs/no-unused-vars -- reserved for redirect after login feature
   const _redirect = searchParams.get('redirect') || '/app';
   const errorParam = searchParams.get('error');
   const { showError } = useToast();
@@ -35,7 +79,7 @@ export default function LoginPage() {
   useEffect(() => {
     const updateTheme = () => {
       const savedTheme = localStorage.getItem('theme') || 'system';
-      const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const systemPrefersDark = globalThis.matchMedia('(prefers-color-scheme: dark)').matches;
       const isDark = savedTheme === 'dark' || (savedTheme === 'system' && systemPrefersDark);
       setIsDarkTheme(isDark);
     };
@@ -43,16 +87,16 @@ export default function LoginPage() {
     updateTheme();
 
     // Listen for theme changes
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const mediaQuery = globalThis.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = () => updateTheme();
     mediaQuery.addEventListener('change', handleChange);
 
     // Listen for localStorage changes (when theme is changed in other tabs/components)
-    window.addEventListener('storage', updateTheme);
+    globalThis.addEventListener('storage', updateTheme);
 
     return () => {
       mediaQuery.removeEventListener('change', handleChange);
-      window.removeEventListener('storage', updateTheme);
+      globalThis.removeEventListener('storage', updateTheme);
     };
   }, []);
 
@@ -79,37 +123,15 @@ export default function LoginPage() {
           });
           
           if (response.ok) {
-            const dbUser = await response.json();
+            const dbUser: DbUser = await response.json();
+            const redirectPath = getPostLoginRedirectPath(dbUser);
             
-            // Follow the complete onboarding flow:
-            // 1. Profile not complete → complete-profile
-            // 2. Parent data required → complete-profile (parent section)
-            // 3. Pending contract → contract signing page
-            // 4. Not active but no pending contract → dashboard (shows "waiting for contract" message)
-            // 5. All good → dashboard
-            
-            // Check if user needs to complete profile
-            if ((dbUser.role === 'STUDENT' || dbUser.role === 'COLLABORATOR') && !dbUser.profileCompleted) {
-              router.push('/auth/complete-profile');
-              return;
+            // Use location.href for dashboard to force full page reload
+            if (redirectPath === '/dashboard') {
+              globalThis.location.href = redirectPath;
+            } else {
+              router.push(redirectPath);
             }
-            
-            // Check if student needs to add parent/guardian data
-            if (dbUser.role === 'STUDENT' && dbUser.parentDataRequired) {
-              router.push('/auth/complete-profile');
-              return;
-            }
-            
-            // Check if user has a pending contract to sign
-            if (dbUser.pendingContractToken) {
-              router.push(`/contratto/${dbUser.pendingContractToken}`);
-              return;
-            }
-            
-            // If account is not active but has no pending contract, user is waiting for contract assignment
-            // Let them access the dashboard where they'll see the "waiting for contract" message
-            // All conditions passed (or waiting for contract), redirect to dashboard
-            window.location.href = '/dashboard';
             return;
           }
         } catch (err) {
@@ -154,10 +176,20 @@ export default function LoginPage() {
       
       if (!response.ok) {
         const errorData = await response.json();
+        
+        // If account is deactivated (403), logout from Firebase and show error
+        if (response.status === 403) {
+          await firebaseAuth.logout();
+          setError(errorData.error || 'Il tuo account è stato disattivato');
+          showError('Account disattivato', errorData.error || 'Il tuo account è stato disattivato. Contatta l\'amministrazione.');
+          setLoading(false);
+          return;
+        }
+        
         throw new Error(errorData.error || 'Errore nel recupero dati utente');
       }
       
-      const dbUser = await response.json();
+      const dbUser: DbUser = await response.json();
       
       // 4. Server ha già settato cookie HttpOnly con token
       // Salva dati non sensibili in localStorage per UI (non per autenticazione)
@@ -167,35 +199,15 @@ export default function LoginPage() {
         name: dbUser.name,
       }));
       
-      // 5. Follow the complete onboarding flow:
-      // 1. Profile not complete → complete-profile
-      // 2. Parent data required → complete-profile (parent section)
-      // 3. Pending contract → contract signing page
-      // 4. Not active but no pending contract → dashboard (shows "waiting for contract" message)
-      // 5. All good → dashboard
+      // 5. Redirect based on user state following the complete onboarding flow
+      const redirectPath = getPostLoginRedirectPath(dbUser);
       
-      // Check if user needs to complete profile
-      if ((dbUser.role === 'STUDENT' || dbUser.role === 'COLLABORATOR') && !dbUser.profileCompleted) {
-        router.push('/auth/complete-profile');
-        return;
+      // Use location.href for dashboard to force full page reload
+      if (redirectPath === '/dashboard') {
+        globalThis.location.href = redirectPath;
+      } else {
+        router.push(redirectPath);
       }
-      
-      // Check if student needs to add parent/guardian data
-      if (dbUser.role === 'STUDENT' && dbUser.parentDataRequired) {
-        router.push('/auth/complete-profile');
-        return;
-      }
-      
-      // Check if user has a pending contract to sign
-      if (dbUser.pendingContractToken) {
-        router.push(`/contratto/${dbUser.pendingContractToken}`);
-        return;
-      }
-      
-      // If account is not active but has no pending contract, user is waiting for contract assignment
-      // Let them access the dashboard where they'll see the "waiting for contract" message
-      // All conditions passed (or waiting for contract), redirect to dashboard
-      window.location.href = '/dashboard';
     } catch (err) {
       console.error('Login error:', err);
       const firebaseError = err as { code?: string };
@@ -380,6 +392,36 @@ export default function LoginPage() {
                 Registrati
               </Link>
             </p>
+          </div>
+
+          {/* Link to old platform */}
+          <div className={`mt-6 pt-6 border-t ${colors.border.primary}`}>
+            <div className="text-center space-y-2">
+              <p className={`text-xs ${colors.text.muted}`}>
+                Stai cercando la vecchia piattaforma?
+              </p>
+              <a
+                href="https://leonardo-school.web.app/#/login"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`inline-flex items-center gap-2 text-sm ${colors.text.secondary} hover:${colors.text.primary} transition-colors group`}
+              >
+                <span>Accedi al vecchio applicativo</span>
+                <svg 
+                  className="w-4 h-4 transition-transform group-hover:translate-x-1" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" 
+                  />
+                </svg>
+              </a>
+            </div>
           </div>
         </div>
         </div>

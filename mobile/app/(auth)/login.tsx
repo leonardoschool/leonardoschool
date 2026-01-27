@@ -100,15 +100,24 @@ export default function LoginScreen() {
 
     if (!email.trim()) {
       newErrors.email = 'Inserisci la tua email';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      newErrors.email = 'Email non valida';
+    } else {
+      // Validate email structure without slow regex
+      const trimmedEmail = email.trim();
+      const atIndex = trimmedEmail.indexOf('@');
+      const dotIndex = trimmedEmail.lastIndexOf('.');
+      const isValid = atIndex > 0 && dotIndex > atIndex + 1 && dotIndex < trimmedEmail.length - 1 && !trimmedEmail.includes(' ');
+      if (!isValid) {
+        newErrors.email = 'Email non valida';
+      }
     }
 
+    /* eslint-disable sonarjs/no-hardcoded-passwords -- These are error message assignments, not passwords */
     if (!password) {
       newErrors.password = 'Inserisci la password';
     } else if (password.length < 6) {
       newErrors.password = 'La password deve avere almeno 6 caratteri';
     }
+    /* eslint-enable sonarjs/no-hardcoded-passwords */
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;

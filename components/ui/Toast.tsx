@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 import { X, CheckCircle, AlertTriangle, XCircle, Info } from 'lucide-react';
 
 // Toast types
@@ -91,7 +91,7 @@ const toastConfig: Record<ToastType, {
 };
 
 // Single toast component
-function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: () => void }) {
+function ToastItem({ toast, onRemove }: { readonly toast: Toast; readonly onRemove: () => void }) {
   const config = toastConfig[toast.type];
   const Icon = config.icon;
 
@@ -135,7 +135,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: () => void }) 
 }
 
 // Toast container
-function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: string) => void }) {
+function ToastContainer({ toasts, onRemove }: { readonly toasts: Toast[]; readonly onRemove: (id: string) => void }) {
   if (toasts.length === 0) return null;
 
   return (
@@ -164,7 +164,7 @@ function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: 
  *   {children}
  * </ToastProvider>
  */
-export function ToastProvider({ children }: { children: ReactNode }) {
+export function ToastProvider({ children }: { readonly children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const removeToast = useCallback((id: string) => {
@@ -172,7 +172,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const showToast = useCallback((toast: Omit<Toast, 'id'>) => {
-    const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const id = `toast-${crypto.randomUUID()}`;
     const duration = toast.duration ?? 5000;
 
     setToasts((prev) => [...prev, { ...toast, id }]);
@@ -199,16 +199,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     showToast({ type: 'info', title, message });
   }, [showToast]);
 
+  const contextValue = useMemo(() => ({
+    toasts, 
+    showToast, 
+    showSuccess, 
+    showError, 
+    showWarning, 
+    showInfo, 
+    removeToast
+  }), [toasts, showToast, showSuccess, showError, showWarning, showInfo, removeToast]);
+
   return (
-    <ToastContext.Provider value={{ 
-      toasts, 
-      showToast, 
-      showSuccess, 
-      showError, 
-      showWarning, 
-      showInfo, 
-      removeToast 
-    }}>
+    <ToastContext.Provider value={contextValue}>
       {children}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </ToastContext.Provider>

@@ -172,7 +172,7 @@ export default function SimulationsScreen() {
 
     const assignmentQuery = simulation.assignmentId ? `?assignmentId=${simulation.assignmentId}` : '';
     const href = status === 'completed' 
-      ? `/simulation/result/${simulation.id}${assignmentQuery}`
+      ? `/simulation/${simulation.id}/result${assignmentQuery}`
       : `/simulation/${simulation.id}${assignmentQuery}`;
 
     return (
@@ -364,7 +364,7 @@ export default function SimulationsScreen() {
         {mainTab === 'self' && (
           <TouchableOpacity
             style={styles.quickQuizButton}
-            onPress={() => router.push('/(tabs)/simulations' as never)} // TODO: Open self practice modal
+            onPress={() => router.push('/self-practice' as never)}
             activeOpacity={0.9}
           >
             <LinearGradient

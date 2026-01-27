@@ -12,6 +12,10 @@ import {
 } from 'firebase/auth';
 import { auth } from './config';
 
+// Flag to prevent duplicate logout API calls - exported for useAuth hook
+let isLoggingOut = false;
+export const getIsLoggingOut = () => isLoggingOut;
+
 export const firebaseAuth = {
   /**
    * Login with email and password
@@ -39,16 +43,32 @@ export const firebaseAuth = {
 
   /**
    * Logout current user
+   * Note: Uses a flag to prevent duplicate /api/auth/logout calls
+   * when onIdTokenChanged listener in useAuth also triggers
    */
   logout: async (): Promise<void> => {
-    // 1. Clear server-side cookies
-    await fetch('/api/auth/logout', { method: 'POST' });
+    // Prevent duplicate logout calls
+    if (isLoggingOut) {
+      return await signOut(auth);
+    }
     
-    // 2. Clear localStorage
-    localStorage.removeItem('user');
+    isLoggingOut = true;
     
-    // 3. Sign out from Firebase
-    return await signOut(auth);
+    try {
+      // 1. Clear localStorage
+      localStorage.removeItem('user');
+      
+      // 2. Sign out from Firebase first (this triggers onIdTokenChanged)
+      await signOut(auth);
+      
+      // 3. Clear server-side cookies (in case useAuth listener isn't mounted)
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } finally {
+      // Reset flag after a short delay to allow for any race conditions
+      setTimeout(() => {
+        isLoggingOut = false;
+      }, 1000);
+    }
   },
 
   /**

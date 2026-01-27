@@ -500,7 +500,7 @@ pnpm seed
 | Collaboratori | 10 | collab1-10@leonardoschool.test |
 | Studenti | 20 | studente1-20@leonardoschool.test |
 
-**Password:** `TestPassword123!` per tutti
+> 📄 **Credenziali complete**: Vedi file `TEST_USERS.md` (non versionato, generato localmente)
 
 ### Note
 

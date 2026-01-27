@@ -23,6 +23,58 @@ const groupTypeLabels: Record<string, string> = {
   MIXED: 'Misto',
 };
 
+// Helper per ottenere le classi del badge tipo gruppo
+function getGroupTypeBadgeClasses(type: string): string {
+  if (type === 'STUDENTS') {
+    return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300';
+  }
+  if (type === 'COLLABORATORS') {
+    return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300';
+  }
+  return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300';
+}
+
+// Helper per ottenere le classi del container membro
+function getMemberContainerClasses(
+  isCurrentUser: boolean,
+  memberType: string,
+  colorsRef: typeof colors
+): string {
+  if (isCurrentUser) {
+    return `${colorsRef.primary.gradient} text-white`;
+  }
+  if (memberType === 'COLLABORATOR') {
+    return 'bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800';
+  }
+  return colorsRef.background.secondary;
+}
+
+// Helper per ottenere le classi dell'avatar membro
+function getMemberAvatarClasses(isCurrentUser: boolean, memberType: string): string {
+  if (isCurrentUser) {
+    return 'bg-white/20 text-white';
+  }
+  if (memberType === 'COLLABORATOR') {
+    return 'bg-purple-200 dark:bg-purple-800 text-purple-700 dark:text-purple-200';
+  }
+  return 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
+}
+
+// Helper per ottenere le classi del ruolo membro
+function getMemberRoleClasses(
+  isCurrentUser: boolean,
+  memberType: string,
+  colorsRef: typeof colors
+): string {
+  if (isCurrentUser) {
+    return 'text-white/70';
+  }
+  if (memberType === 'COLLABORATOR') {
+    return 'text-purple-600 dark:text-purple-400';
+  }
+  return colorsRef.text.muted;
+}
+
 export default function StudentGruppoContent() {
   const { data: groups, isLoading } = trpc.students.getMyGroup.useQuery();
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -124,11 +176,7 @@ export default function StudentGruppoContent() {
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-1">
                       <h2 className={`text-xl font-bold ${colors.text.primary}`}>{group.name}</h2>
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        group.type === 'STUDENTS' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
-                        group.type === 'COLLABORATORS' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' :
-                        'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-                      }`}>
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${getGroupTypeBadgeClasses(group.type)}`}>
                         {groupTypeLabels[group.type]}
                       </span>
                     </div>
@@ -158,7 +206,13 @@ export default function StudentGruppoContent() {
                 </div>
 
                 {/* Reference Contacts */}
-                <div className="flex flex-wrap gap-4" onClick={(e) => e.stopPropagation()}>
+                <div 
+                  className="flex flex-wrap gap-4" 
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
+                  role="group"
+                  aria-label="Contatti di riferimento"
+                >
                   {/* Reference Collaborator */}
                   {group.referenceCollaborator && (
                     <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
@@ -221,17 +275,9 @@ export default function StudentGruppoContent() {
                     {sortedMembers.map((member) => (
                       <div
                         key={member.memberId}
-                        className={`flex items-center gap-4 p-4 rounded-xl ${
-                          member.isCurrentUser ? `${colors.primary.gradient} text-white` :
-                          member.type === 'COLLABORATOR' ? 'bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800' :
-                          colors.background.secondary
-                        }`}
+                        className={`flex items-center gap-4 p-4 rounded-xl ${getMemberContainerClasses(member.isCurrentUser, member.type, colors)}`}
                       >
-                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-semibold text-lg ${
-                          member.isCurrentUser ? 'bg-white/20 text-white' :
-                          member.type === 'COLLABORATOR' ? 'bg-purple-200 dark:bg-purple-800 text-purple-700 dark:text-purple-200' :
-                          'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
-                        }`}>
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-semibold text-lg ${getMemberAvatarClasses(member.isCurrentUser, member.type)}`}>
                           {getInitials(member.name)}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -249,10 +295,7 @@ export default function StudentGruppoContent() {
                             ) : (
                               <UserCircle className={`w-3 h-3 ${member.isCurrentUser ? 'text-white/70' : 'text-purple-500'}`} />
                             )}
-                            <span className={`text-sm ${
-                              member.isCurrentUser ? 'text-white/70' :
-                              member.type === 'COLLABORATOR' ? 'text-purple-600 dark:text-purple-400' : colors.text.muted
-                            }`}>
+                            <span className={`text-sm ${getMemberRoleClasses(member.isCurrentUser, member.type, colors)}`}>
                               {member.type === 'STUDENT' ? 'Studente' : 'Collaboratore'}
                             </span>
                           </div>

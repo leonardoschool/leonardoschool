@@ -28,6 +28,7 @@ export function useProtectedRoute() {
 
     const inAuthGroup = segments[0] === '(auth)';
     // inTabsGroup could be used for additional logic if needed
+    // eslint-disable-next-line sonarjs/no-unused-vars -- reserved for future navigation logic
     const _inTabsGroup = segments[0] === '(tabs)';
 
     if (!isAuthenticated && !inAuthGroup) {

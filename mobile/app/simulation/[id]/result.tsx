@@ -47,6 +47,12 @@ export default function SimulationResultScreen() {
     { enabled: !!id }
   );
 
+  // Fetch leaderboard data
+  const { data: leaderboardData } = trpc.simulations.getLeaderboard.useQuery(
+    { simulationId: id || '', limit: 20 },
+    { enabled: !!id && !!result }
+  );
+
   const formatDuration = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
@@ -153,11 +159,33 @@ export default function SimulationResultScreen() {
             >
               {result.passed ? 'Superato' : 'Non Superato'}
             </Badge>
-            <Caption align="center">
-              Percentile: {result.percentile}° | Durata: {formatDuration(result.duration)}
-            </Caption>
+            {result.simulation.passingScore && (
+              <Caption align="center">
+                Soglia di sufficienza: {result.simulation.passingScore} punti
+              </Caption>
+            )}
           </View>
         </Card>
+
+        {/* Pending review banner */}
+        {result.pendingOpenAnswers > 0 && (
+          <Card variant="outlined" style={[styles.pendingBanner, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
+            <View style={styles.pendingBannerContent}>
+              <Ionicons name="create-outline" size={22} color="#D97706" />
+              <View style={{ flex: 1 }}>
+                <Text variant="body" style={{ fontWeight: '600', color: '#92400E' }}>
+                  {result.pendingOpenAnswers} {result.pendingOpenAnswers === 1 ? 'risposta aperta da valutare' : 'risposte aperte da valutare'}
+                </Text>
+                <Caption style={{ color: '#B45309' }}>
+                  {result.simulation.showCorrectAnswers 
+                    ? 'Vai alla revisione per valutare le tue risposte aperte.'
+                    : 'Il punteggio finale verrà ricalcolato dopo la correzione.'
+                  }
+                </Caption>
+              </View>
+            </View>
+          </Card>
+        )}
 
         {/* Summary Stats */}
         <View style={styles.statsRow}>
@@ -179,12 +207,54 @@ export default function SimulationResultScreen() {
 
           <Card variant="outlined" style={styles.statCard}>
             <View style={[styles.statIcon, { backgroundColor: colors.neutral[200] }]}>
-              <Ionicons name="help-circle" size={20} color={colors.neutral[500]} />
+              <Ionicons name="remove-circle" size={20} color={colors.neutral[500]} />
             </View>
-            <Text variant="h4">{result.unanswered}</Text>
-            <Caption>Senza risposta</Caption>
+            <Text variant="h4">{result.blankAnswers}</Text>
+            <Caption>Non date</Caption>
           </Card>
         </View>
+
+        {/* Time stat */}
+        <Card variant="outlined" style={styles.timeCard}>
+          <View style={[styles.statIcon, { backgroundColor: `${colors.primary.main}15` }]}>
+            <Ionicons name="time" size={20} color={colors.primary.main} />
+          </View>
+          <Text variant="h4">{formatDuration(result.timeSpent)}</Text>
+          <Caption>Tempo impiegato</Caption>
+        </Card>
+
+        {/* Score breakdown */}
+        <Card variant="outlined" style={styles.scoreBreakdown}>
+          <Text variant="body" style={{ fontWeight: '600', marginBottom: spacing[3] }}>
+            Dettaglio punteggio:
+          </Text>
+          <View style={styles.scoreBreakdownRow}>
+            <View style={styles.scoreBreakdownItem}>
+              <Text variant="bodySmall" style={{ color: colors.status.success.main }}>
+                {result.correctAnswers} corrette × +{result.simulation.correctPoints}
+              </Text>
+              <Text variant="body" style={{ color: colors.status.success.main, fontWeight: '600' }}>
+                +{(result.correctAnswers * result.simulation.correctPoints).toFixed(2)}
+              </Text>
+            </View>
+            <View style={styles.scoreBreakdownItem}>
+              <Text variant="bodySmall" style={{ color: colors.status.error.main }}>
+                {result.wrongAnswers} errate × {result.simulation.wrongPoints}
+              </Text>
+              <Text variant="body" style={{ color: colors.status.error.main, fontWeight: '600' }}>
+                {(result.wrongAnswers * result.simulation.wrongPoints).toFixed(2)}
+              </Text>
+            </View>
+            <View style={styles.scoreBreakdownItem}>
+              <Text variant="bodySmall" color="muted">
+                {result.blankAnswers} vuote × {result.simulation.blankPoints}
+              </Text>
+              <Text variant="body" color="muted" style={{ fontWeight: '600' }}>
+                {(result.blankAnswers * result.simulation.blankPoints).toFixed(2)}
+              </Text>
+            </View>
+          </View>
+        </Card>
 
         {/* Subject Results */}
         {subjectResults.length > 0 && (
@@ -251,6 +321,101 @@ export default function SimulationResultScreen() {
             );
           })}
         </View>
+        )}
+
+        {/* Leaderboard */}
+        {leaderboardData && leaderboardData.leaderboard.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.leaderboardHeader}>
+              <Ionicons name="trophy" size={20} color="#EAB308" />
+              <Heading3 style={{ marginLeft: spacing[2] }}>Classifica</Heading3>
+              <Caption style={{ marginLeft: spacing[2] }}>
+                ({leaderboardData.totalParticipants} partecipanti)
+              </Caption>
+            </View>
+
+            {leaderboardData.leaderboard.map((entry) => {
+              const isCurrentUser = entry.isCurrentUser ?? false;
+              const rank = entry.rank ?? 0;
+              const totalScore = entry.totalScore ?? 0;
+              const durationSeconds = entry.durationSeconds ?? 0;
+              const studentName = leaderboardData.canSeeAllNames || isCurrentUser 
+                ? (entry.studentName ?? 'Anonimo')
+                : 'Partecipante';
+
+              const getRankIcon = (r: number): string => {
+                if (r === 1) return 'trophy';
+                if (r === 2) return 'medal';
+                if (r === 3) return 'star';
+                return 'ellipse';
+              };
+
+              const getRankColor = (r: number): string => {
+                if (r === 1) return '#EAB308';
+                if (r === 2) return '#9CA3AF';
+                if (r === 3) return '#D97706';
+                return colors.neutral[400];
+              };
+
+              return (
+                <Card
+                  key={entry.studentId || `rank-${rank}`}
+                  variant={isCurrentUser ? 'elevated' : 'outlined'}
+                  style={[
+                    styles.leaderboardEntry,
+                    isCurrentUser && { backgroundColor: `${colors.primary.main}15`, borderColor: colors.primary.main },
+                  ]}
+                >
+                  <View style={styles.leaderboardRank}>
+                    {rank <= 3 ? (
+                      <Ionicons
+                        name={getRankIcon(rank) as keyof typeof Ionicons.glyphMap}
+                        size={24}
+                        color={getRankColor(rank)}
+                      />
+                    ) : (
+                      <Text variant="body" style={{ fontWeight: '700', color: colors.neutral[500] }}>
+                        #{rank}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={styles.leaderboardInfo}>
+                    <Text 
+                      variant="body" 
+                      style={{ fontWeight: '600', color: isCurrentUser ? colors.primary.main : undefined }}
+                      numberOfLines={1}
+                    >
+                      {studentName}
+                      {isCurrentUser && ' (Tu)'}
+                    </Text>
+                    {leaderboardData.canSeeAllNames && entry.studentMatricola && (
+                      <Caption>Matricola: {entry.studentMatricola}</Caption>
+                    )}
+                  </View>
+                  <View style={styles.leaderboardScore}>
+                    <Text 
+                      variant="body" 
+                      style={{ fontWeight: '700', color: isCurrentUser ? colors.primary.main : undefined }}
+                    >
+                      {totalScore.toFixed(2)}
+                    </Text>
+                    <Caption>
+                      {Math.floor(durationSeconds / 60)}:{(durationSeconds % 60).toString().padStart(2, '0')}
+                    </Caption>
+                  </View>
+                </Card>
+              );
+            })}
+
+            {!leaderboardData.canSeeAllNames && (
+              <View style={styles.privacyNote}>
+                <Ionicons name="information-circle" size={16} color={colors.neutral[500]} />
+                <Caption style={{ flex: 1, marginLeft: spacing[2] }}>
+                  I nomi degli altri partecipanti sono anonimi per proteggere la privacy.
+                </Caption>
+              </View>
+            )}
+          </View>
         )}
       </ScrollView>
 
@@ -378,5 +543,63 @@ const styles = StyleSheet.create({
     gap: spacing[3],
     padding: spacing[4],
     borderTopWidth: 1,
+  },
+  pendingBanner: {
+    padding: spacing[4],
+  },
+  pendingBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing[3],
+  },
+  timeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[3],
+    paddingVertical: spacing[4],
+  },
+  scoreBreakdown: {
+    padding: spacing[4],
+    gap: spacing[2],
+  },
+  scoreBreakdownRow: {
+    gap: spacing[2],
+  },
+  scoreBreakdownItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  leaderboardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing[3],
+  },
+  leaderboardEntry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing[3],
+    marginBottom: spacing[2],
+  },
+  leaderboardRank: {
+    width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  leaderboardInfo: {
+    flex: 1,
+    marginHorizontal: spacing[3],
+  },
+  leaderboardScore: {
+    alignItems: 'flex-end',
+  },
+  privacyNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: spacing[3],
+    backgroundColor: colors.neutral[100],
+    borderRadius: 12,
+    marginTop: spacing[2],
   },
 });

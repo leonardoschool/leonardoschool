@@ -280,10 +280,10 @@ describe('formValidation', () => {
       });
 
       it('should accept international characters (supported)', () => {
-        // The regex in validateName supports specific accented characters
-        // Testing with characters that are in the allowed set
-        expect(validateName('François Müller').valid).toBe(false); // ç and ü not in allowed set
-        expect(validateName('Maria José García').valid).toBe(true); // é and í are allowed
+        // The validateName function uses Unicode letter category \\p{L}
+        // which allows all Unicode letters including accented characters
+        expect(validateName('François Müller').valid).toBe(true); // All letters are allowed
+        expect(validateName('Maria José García').valid).toBe(true); // All letters are allowed
       });
     });
 

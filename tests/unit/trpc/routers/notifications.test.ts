@@ -684,7 +684,10 @@ describe('Notifications Router', () => {
 
     it('should sanitize notification content', () => {
       const dangerousHtml = '<script>alert("xss")</script>';
-      const sanitized = dangerousHtml.replace(/<script.*?>.*?<\/script>/gi, '');
+      // Use a simple string-based approach for this test case
+      const scriptStart = dangerousHtml.indexOf('<script');
+      const scriptEnd = dangerousHtml.indexOf('</script>') + 9;
+      const sanitized = scriptStart >= 0 ? dangerousHtml.slice(0, scriptStart) + dangerousHtml.slice(scriptEnd) : dangerousHtml;
       expect(sanitized).not.toContain('<script>');
     });
   });

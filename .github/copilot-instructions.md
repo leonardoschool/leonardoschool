@@ -101,6 +101,10 @@ Required in `.env`:
 - If you use a color check in the file if the color exists in 'lib/theme/colors' if not add it there following the existing patterns
 - Pay attention to the colors in both light and dark mode
 - Write test cases where applicable, follow existing testing patterns in the codebase, for more information check the TESTING.md file in the docs folder
+- Pay attention to sonarcloud rules if applicable
+- Pay attention to the folder structure and file naming conventions
+- When create new file, if possible, the file will be small and focused on a single responsibility, if the file is too big consider splitting it into smaller files
+- When creating or editing components, ensure they are reusable and follow existing component patterns
 
 ### Loader Components
 - Use loader components from `components/ui/loaders` - never use generic "Loading..." texts or custom spinners

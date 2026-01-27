@@ -13,6 +13,7 @@ import {
   Modal,
   Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Text, Button, Card } from '../ui';
@@ -22,6 +23,11 @@ import { spacing } from '../../lib/theme/spacing';
 import { useTheme } from '../../contexts/ThemeContext';
 
 // ==================== TYPES ====================
+
+/**
+ * Status type for question navigation buttons
+ */
+type QuestionStatus = 'answered' | 'flagged' | 'unanswered';
 
 interface SimulationSection {
   name: string;
@@ -76,6 +82,39 @@ interface TolcSimulationLayoutProps {
   totalQuestions: number;
 }
 
+// Helper function to get background color based on question status
+const getStatusBackgroundColor = (
+  status: QuestionStatus,
+  isActive: boolean,
+  themed: (value: string) => string
+): string => {
+  if (isActive) return colors.neutral[800];
+  if (status === 'answered') return colors.status.success.main;
+  if (status === 'flagged') return colors.status.warning.light;
+  return themed(colors.background.secondary);
+};
+
+// Helper function to get border color based on question status
+const getStatusBorderColor = (
+  status: QuestionStatus
+): string => {
+  if (status === 'flagged') return colors.status.warning.main;
+  if (status === 'unanswered') return colors.status.error.light;
+  return 'transparent';
+};
+
+// Helper function to get text color based on question status
+const getStatusTextColor = (
+  status: QuestionStatus,
+  isActive: boolean,
+  themed: (value: string) => string
+): string => {
+  if (isActive) return '#fff';
+  if (status === 'answered') return '#fff';
+  if (status === 'flagged') return colors.status.warning.main;
+  return themed(colors.text.primary);
+};
+
 // ==================== HELPER FUNCTIONS ====================
 
 const formatTime = (seconds: number) => {
@@ -108,12 +147,12 @@ function QuestionNavigator({
   onGoToQuestion,
   onCompleteSection,
   sectionName,
-}: QuestionNavigatorProps) {
+}: Readonly<QuestionNavigatorProps>) {
   const { themed } = useTheme();
   const screenWidth = Dimensions.get('window').width;
   const buttonSize = Math.floor((screenWidth - spacing[8] - spacing[2] * 4) / 5);
 
-  const getQuestionStatus = (question: Question) => {
+  const getQuestionStatus = (question: Question): QuestionStatus => {
     const answer = answers.find((a) => a.questionId === question.questionId);
     if (!answer) return 'unanswered';
     if (answer.flagged) return 'flagged';
@@ -127,23 +166,26 @@ function QuestionNavigator({
   }).length;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View
+    <Modal visible={visible} animationType="none" transparent onRequestClose={onClose}>
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={onClose}
         style={{
           flex: 1,
           backgroundColor: 'rgba(0, 0, 0, 0.5)',
           justifyContent: 'flex-end',
         }}
       >
-        <View
-          style={{
-            backgroundColor: themed(colors.background.card),
-            borderTopLeftRadius: 20,
-            borderTopRightRadius: 20,
-            maxHeight: '80%',
-            padding: spacing[4],
-          }}
-        >
+        <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
+          <View
+            style={{
+              backgroundColor: themed(colors.background.card),
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              maxHeight: '80%',
+              padding: spacing[4],
+            }}
+          >
           {/* Header */}
           <View
             style={{
@@ -190,33 +232,18 @@ function QuestionNavigator({
                       borderRadius: 8,
                       justifyContent: 'center',
                       alignItems: 'center',
-                      backgroundColor: isActive
-                        ? colors.neutral[800]
-                        : status === 'answered'
-                          ? colors.status.success.main
-                          : status === 'flagged'
-                            ? colors.status.warning.light
-                            : themed(colors.background.secondary),
+                      backgroundColor: getStatusBackgroundColor(status, isActive, themed),
                       borderWidth: status === 'flagged' || status === 'unanswered' ? 2 : 0,
-                      borderColor:
-                        status === 'flagged'
-                          ? colors.status.warning.main
-                          : status === 'unanswered'
-                            ? colors.status.error.light
-                            : 'transparent',
+                      borderColor: getStatusBorderColor(status),
+                      marginRight: spacing[1],
+                      marginBottom: spacing[1],
                     }}
                   >
                     <Text
                       variant="body"
                       style={{
                         fontWeight: '600',
-                        color: isActive
-                          ? '#fff'
-                          : status === 'answered'
-                            ? '#fff'
-                            : status === 'flagged'
-                              ? colors.status.warning.main
-                              : themed(colors.text.primary),
+                        color: getStatusTextColor(status, isActive, themed),
                       }}
                     >
                       {idx + 1}
@@ -226,11 +253,11 @@ function QuestionNavigator({
                       <View
                         style={{
                           position: 'absolute',
-                          top: -4,
-                          right: -4,
-                          width: 8,
-                          height: 8,
-                          borderRadius: 4,
+                          top: 2,
+                          right: 2,
+                          width: 6,
+                          height: 6,
+                          borderRadius: 3,
                           backgroundColor: colors.status.error.main,
                         }}
                       />
@@ -306,7 +333,8 @@ function QuestionNavigator({
             Concludi Sezione
           </Button>
         </View>
-      </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 }
@@ -323,13 +351,17 @@ export default function TolcSimulationLayout({
   sectionTimeRemaining,
   completedSections: _completedSections,
   onAnswerSelect,
+  onOpenTextChange: _onOpenTextChange,
   onToggleFlag,
   onGoToQuestion,
   onGoNext,
   onGoPrev,
   onCompleteSection,
+  onSubmit: _onSubmit,
   onReportQuestion,
-}: TolcSimulationLayoutProps) {
+  answeredCount: _answeredCount,
+  totalQuestions: _totalQuestions,
+}: Readonly<TolcSimulationLayoutProps>) {
   const { themed } = useTheme();
   const [showNavigator, setShowNavigator] = useState(false);
 
@@ -352,7 +384,7 @@ export default function TolcSimulationLayout({
     const idx = currentSectionQuestions.findIndex(
       (q) => q.questionId === currentQ.questionId
     );
-    return idx >= 0 ? idx : 0;
+    return Math.max(idx, 0);
   }, [questions, currentQuestionIndex, currentSectionQuestions]);
 
   const currentQuestion = questions[currentQuestionIndex];
@@ -365,6 +397,7 @@ export default function TolcSimulationLayout({
   const canGoPrev = sectionQuestionIndex > 0;
 
   // Get question status
+  // eslint-disable-next-line sonarjs/no-unused-vars -- utility for question status indicator
   const _getQuestionStatus = useCallback(
     (question: Question) => {
       const answer = answers.find((a) => a.questionId === question.questionId);
@@ -393,7 +426,7 @@ export default function TolcSimulationLayout({
   if (!currentQuestion) return null;
 
   return (
-    <View style={{ flex: 1, backgroundColor: themed(colors.background.primary) }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: themed(colors.background.primary) }} edges={['top']}>
       {/* Header */}
       <View
         style={{
@@ -449,7 +482,7 @@ export default function TolcSimulationLayout({
           >
             <Ionicons name="time-outline" size={18} color={getTimerColor()} />
             <Text variant="h6" style={{ color: getTimerColor() }}>
-              {sectionTimeRemaining !== null ? formatTime(sectionTimeRemaining) : '--:--'}
+              {sectionTimeRemaining === null ? '--:--' : formatTime(sectionTimeRemaining)}
             </Text>
           </View>
 
@@ -572,7 +605,7 @@ export default function TolcSimulationLayout({
                   padding: spacing[4],
                   borderRadius: 12,
                   backgroundColor: isSelected
-                    ? colors.primary.light
+                    ? `${colors.primary.main}15`
                     : themed(colors.background.card),
                   borderWidth: 2,
                   borderColor: isSelected
@@ -668,29 +701,48 @@ export default function TolcSimulationLayout({
           {sectionQuestionIndex + 1} / {currentSectionQuestions.length}
         </Text>
 
-        <TouchableOpacity
-          onPress={onGoNext}
-          disabled={!canGoNext}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: spacing[2],
-            paddingHorizontal: spacing[4],
-            paddingVertical: spacing[3],
-            borderRadius: 12,
-            backgroundColor: canGoNext
-              ? themed(colors.background.secondary)
-              : themed(colors.background.primary),
-            opacity: canGoNext ? 1 : 0.5,
-          }}
-        >
-          <Text variant="body">Succ</Text>
-          <Ionicons
-            name="chevron-forward"
-            size={20}
-            color={themed(colors.text.primary)}
-          />
-        </TouchableOpacity>
+        {/* Show "Concludi Sezione" when at last question, otherwise show "Succ" */}
+        {canGoNext ? (
+          <TouchableOpacity
+            onPress={onGoNext}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing[2],
+              paddingHorizontal: spacing[4],
+              paddingVertical: spacing[3],
+              borderRadius: 12,
+              backgroundColor: themed(colors.background.secondary),
+            }}
+          >
+            <Text variant="body">Succ</Text>
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={themed(colors.text.primary)}
+            />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            onPress={onCompleteSection}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing[2],
+              paddingHorizontal: spacing[4],
+              paddingVertical: spacing[3],
+              borderRadius: 12,
+              backgroundColor: colors.primary.main,
+            }}
+          >
+            <Text variant="body" style={{ color: '#fff' }}>Concludi</Text>
+            <Ionicons
+              name="checkmark-circle"
+              size={20}
+              color="#fff"
+            />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Question Navigator Modal */}
@@ -715,6 +767,6 @@ export default function TolcSimulationLayout({
         onCompleteSection={onCompleteSection}
         sectionName={currentSection?.name || 'Sezione'}
       />
-    </View>
+    </SafeAreaView>
   );
 }

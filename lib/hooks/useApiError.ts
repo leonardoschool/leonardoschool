@@ -48,7 +48,7 @@ export function useApiError(options: UseApiErrorOptions = {}) {
       showError(parsed.title, 'Effettua il login per continuare.');
       // Use setTimeout to allow toast to show before redirect
       setTimeout(() => {
-        window.location.href = '/auth/login';
+        globalThis.location.href = '/auth/login';
       }, 1500);
       return;
     }
