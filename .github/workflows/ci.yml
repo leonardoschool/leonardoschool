@@ -2,9 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, test]
+    branches: 
+      - main
+      - test
+      - develop
   pull_request:
-    branches: [main, develop, test]
+    branches: 
+      - main
+      - test
 
 env:
   NODE_VERSION: '20'
@@ -14,6 +19,10 @@ jobs:
   gitguardian:
     name: GitGuardian
     runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'pull_request' && github.base_ref != 'develop') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/develop' && (contains(github.event.head_commit.message, '[RELEASE]') || contains(github.event.head_commit.message, '[DEPLOY]'))) ||
+      (github.event_name == 'push' && github.ref != 'refs/heads/develop')
 
     steps:
       - name: Checkout repository
@@ -29,6 +38,10 @@ jobs:
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'pull_request' && github.base_ref != 'develop') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/develop' && (contains(github.event.head_commit.message, '[RELEASE]') || contains(github.event.head_commit.message, '[DEPLOY]'))) ||
+      (github.event_name == 'push' && github.ref != 'refs/heads/develop')
 
     steps:
       - uses: actions/checkout@v4
@@ -46,6 +59,10 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'pull_request' && github.base_ref != 'develop') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/develop' && (contains(github.event.head_commit.message, '[RELEASE]') || contains(github.event.head_commit.message, '[DEPLOY]'))) ||
+      (github.event_name == 'push' && github.ref != 'refs/heads/develop')
 
     steps:
       - uses: actions/checkout@v4
@@ -62,6 +79,10 @@ jobs:
   type-check:
     name: Type Check
     runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'pull_request' && github.base_ref != 'develop') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/develop' && (contains(github.event.head_commit.message, '[RELEASE]') || contains(github.event.head_commit.message, '[DEPLOY]'))) ||
+      (github.event_name == 'push' && github.ref != 'refs/heads/develop')
 
     steps:
       - uses: actions/checkout@v4
@@ -107,7 +128,16 @@ jobs:
     name: Deploy to Vercel
     runs-on: ubuntu-latest
     needs: [build]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/test')
+    if: |
+      github.event_name == 'push' && 
+      (
+        (github.ref == 'refs/heads/main') ||
+        (github.ref == 'refs/heads/test') ||
+        (
+          github.ref == 'refs/heads/develop' &&
+          (contains(github.event.head_commit.message, '[RELEASE]') || contains(github.event.head_commit.message, '[DEPLOY]'))
+        )
+      )
 
     steps:
       - name: Trigger Vercel Deploy
