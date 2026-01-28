@@ -10,6 +10,7 @@ import { SimulationAssignModal } from '@/components/ui/SimulationAssignModal';
 import { StudentDetailModal } from '@/components/ui/StudentDetailModal';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
+import { useFocusAwarePolling } from '@/lib/hooks/useWindowFocus';
 import Link from 'next/link';
 import {
   Plus,
@@ -85,10 +86,13 @@ const assignmentStatusColors: Record<AssignmentStatus, string> = {
 export default function CollaboratorSimulationsContent() {
   // Collaborators have READ-ONLY access - removed unused mutation hooks
 
+  // Focus-aware polling - 120 seconds for pending reviews badge, disabled when tab not visible
+  const pollingInterval = useFocusAwarePolling(120000, true);
+
   // Fetch pending open answers count for badge
   const { data: pendingReviewsData } = trpc.simulations.getResultsWithPendingReviews.useQuery(
     { limit: 1, offset: 0 },
-    { refetchInterval: 60000 } // Refetch every minute
+    { refetchInterval: pollingInterval }
   );
   const pendingReviewsCount = pendingReviewsData?.total ?? 0;
 

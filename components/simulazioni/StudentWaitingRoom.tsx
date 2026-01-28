@@ -10,6 +10,7 @@ import { Spinner } from '@/components/ui/loaders';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import { formatDistanceToNow } from 'date-fns';
 import { it } from 'date-fns/locale';
+import { useFocusAwarePolling } from '@/lib/hooks/useWindowFocus';
 import { 
   Clock, 
   CheckCircle, 
@@ -39,11 +40,14 @@ function StudentChatModal({ participantId, onClose, onSendMessage, isSending }: 
   const [messageText, setMessageText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Focus-aware polling - 5 seconds for waiting room chat, disabled when tab not visible
+  const pollingInterval = useFocusAwarePolling(5000, true);
+
   // Get all messages for this participant
   const messagesQuery = trpc.virtualRoom.getMessages.useQuery(
     { participantId },
     { 
-      refetchInterval: 3000, // Poll for new messages
+      refetchInterval: pollingInterval,
     }
   );
 

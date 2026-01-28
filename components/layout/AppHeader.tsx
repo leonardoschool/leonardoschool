@@ -8,6 +8,7 @@ import { trpc } from '@/lib/trpc/client';
 import { firebaseAuth } from '@/lib/firebase/auth';
 import { colors } from '@/lib/theme/colors';
 import { playNotificationSound } from '@/lib/utils/notificationSound';
+import { useFocusAwarePolling } from '@/lib/hooks/useWindowFocus';
 import {
   Bell,
   Menu,
@@ -39,8 +40,9 @@ import {
 } from './appHeaderParts';
 import type { Theme, NotificationData } from './appHeaderParts';
 
-// Polling interval for real-time updates (60 seconds - balanced for cost efficiency)
-const POLLING_INTERVAL = 60 * 1000;
+// Polling interval for real-time updates (120 seconds - optimized for cost efficiency)
+// Polling is automatically disabled when tab is not focused
+const POLLING_INTERVAL = 120 * 1000;
 
 export default function AppHeader() {
   const router = useRouter();
@@ -61,6 +63,9 @@ export default function AppHeader() {
 
   // Get current user
   const { data: user } = trpc.auth.me.useQuery();
+
+  // Focus-aware polling - stops polling when tab is not active to save serverless invocations
+  const focusAwarePollingInterval = useFocusAwarePolling(POLLING_INTERVAL, !!user);
   
   // Get collaborator contract status
   const { data: collaboratorContract } = trpc.contracts.getMyCollaboratorContract.useQuery(
@@ -68,7 +73,7 @@ export default function AppHeader() {
     { 
       enabled: (user?.role as string) === 'COLLABORATOR', 
       retry: false,
-      refetchInterval: POLLING_INTERVAL,
+      refetchInterval: focusAwarePollingInterval,
     }
   );
   
@@ -77,7 +82,7 @@ export default function AppHeader() {
     { unreadOnly: true, pageSize: 10 },
     { 
       enabled: !!user,
-      refetchInterval: POLLING_INTERVAL,
+      refetchInterval: focusAwarePollingInterval,
     }
   );
   
@@ -101,19 +106,19 @@ export default function AppHeader() {
   // Stats for badges (admin only)
   const { data: jobApplicationsStats } = trpc.jobApplications.getStats.useQuery(
     undefined,
-    { enabled: user?.role === 'ADMIN', refetchInterval: POLLING_INTERVAL }
+    { enabled: user?.role === 'ADMIN', refetchInterval: focusAwarePollingInterval }
   );
   const { data: contactRequestsStats } = trpc.contactRequests.getStats.useQuery(
     undefined,
-    { enabled: user?.role === 'ADMIN', refetchInterval: POLLING_INTERVAL }
+    { enabled: user?.role === 'ADMIN', refetchInterval: focusAwarePollingInterval }
   );
   const { data: studentsPendingContract } = trpc.contracts.getStudentsPendingContract.useQuery(
     undefined,
-    { enabled: user?.role === 'ADMIN', refetchInterval: POLLING_INTERVAL }
+    { enabled: user?.role === 'ADMIN', refetchInterval: focusAwarePollingInterval }
   );
   const { data: unreadMessagesData } = trpc.messages.getUnreadCount.useQuery(
     undefined,
-    { enabled: !!user, refetchInterval: POLLING_INTERVAL }
+    { enabled: !!user, refetchInterval: focusAwarePollingInterval }
   );
   const unreadMessagesCount = unreadMessagesData?.unreadCount || 0;
 

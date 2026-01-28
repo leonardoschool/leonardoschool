@@ -16,6 +16,7 @@ import { Spinner } from '@/components/ui/loaders';
 import { Portal } from '@/components/ui/Portal';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
+import { useFocusAwarePolling } from '@/lib/hooks/useWindowFocus';
 import {
   MessageSquare,
   Send,
@@ -103,8 +104,8 @@ export default function MessagesPageContent({ basePath: _basePath, userRole }: M
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
   
-  // Polling interval for real-time updates (15 seconds - balanced for cost efficiency)
-  const POLLING_INTERVAL = 15 * 1000;
+  // Focus-aware polling - 30 seconds, disabled when tab not visible
+  const pollingInterval = useFocusAwarePolling(30 * 1000, true);
   
   // Fetch conversations
   const { 
@@ -115,7 +116,7 @@ export default function MessagesPageContent({ basePath: _basePath, userRole }: M
     filter,
     pageSize: 50,
   }, {
-    refetchInterval: POLLING_INTERVAL,
+    refetchInterval: pollingInterval,
   });
   
   // Fetch messages for selected conversation
@@ -127,7 +128,7 @@ export default function MessagesPageContent({ basePath: _basePath, userRole }: M
     { conversationId: selectedConversationId! },
     { 
       enabled: !!selectedConversationId,
-      refetchInterval: POLLING_INTERVAL,
+      refetchInterval: pollingInterval,
     }
   );
   
