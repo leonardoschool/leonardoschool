@@ -2,8 +2,29 @@
 ## Leonardo School - Piano Completo di Ottimizzazione
 
 **Data:** 28 Gennaio 2026  
-**Versione:** 1.0  
-**Stato:** Fase 1 Completata ✅
+**Versione:** 2.0  
+**Stato:** Fase 1-5 Completate ✅
+
+---
+
+## 🚀 Quick Setup (Variabili d'Ambiente FCM)
+
+Per abilitare le push notifications web, aggiungi al tuo `.env`:
+
+```bash
+# Firebase Cloud Messaging - VAPID Key
+# Ottieni da: Firebase Console → Project Settings → Cloud Messaging → Web Push certificates
+# Clicca "Generate key pair" se non esiste
+NEXT_PUBLIC_FIREBASE_VAPID_KEY="BLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+```
+
+**Come ottenere la VAPID key:**
+1. Vai su [Firebase Console](https://console.firebase.google.com)
+2. Seleziona il progetto Leonardo School
+3. Impostazioni progetto (ingranaggio) → Cloud Messaging
+4. Scorri fino a "Web Push certificates"
+5. Clicca "Generate key pair" se vuoto
+6. Copia la chiave pubblica (Key pair)
 
 ---
 

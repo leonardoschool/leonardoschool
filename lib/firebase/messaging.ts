@@ -94,6 +94,7 @@ export async function requestNotificationPermission(): Promise<string | null> {
 
 /**
  * Registra il service worker per notifiche background
+ * Usa l'endpoint dinamico che inietta le variabili d'ambiente
  */
 async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (!('serviceWorker' in navigator)) {
@@ -102,7 +103,8 @@ async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null
   }
 
   try {
-    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+    // Use dynamic service worker endpoint that injects environment variables
+    const registration = await navigator.serviceWorker.register('/api/firebase-messaging-sw', {
       scope: '/',
     });
     console.log('[FCM] Service worker registered:', registration.scope);
