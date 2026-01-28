@@ -5,7 +5,7 @@
 
 import { PrismaClient, Simulation, User } from '@prisma/client';
 import { sendSimulationInvitationEmail, SimulationInviteData, InviteeData } from '@/lib/email/eventEmails';
-import { notifications } from '@/lib/notifications';
+import { notifications } from '@/lib/notifications/notificationHelpers';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://leonardoschool.it';
 
@@ -402,6 +402,110 @@ export async function notifySimulationCreated(
     );
   } catch (error) {
     console.error('Error in notifySimulationCreated:', error);
+    result.errors.push(error instanceof Error ? error.message : 'Errore sconosciuto');
+    return result;
+  }
+}
+
+/**
+ * Notify only specific new assignments (not all assignments for a simulation)
+ * Use this when adding new assignments to an existing simulation
+ */
+export async function notifyNewAssignments(
+  simulationId: string,
+  newAssignments: Array<{ studentId?: string | null; groupId?: string | null }>,
+  prisma: PrismaClient
+): Promise<NotificationResult> {
+  const result: NotificationResult = {
+    calendarEventId: null,
+    emailsSent: 0,
+    errors: [],
+  };
+
+  if (newAssignments.length === 0) {
+    return result;
+  }
+
+  try {
+    // Fetch simulation details
+    const simulation = await prisma.simulation.findUnique({
+      where: { id: simulationId },
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        isOfficial: true,
+        startDate: true,
+        endDate: true,
+        durationMinutes: true,
+        createdBy: {
+          select: { name: true },
+        },
+      },
+    });
+
+    if (!simulation) {
+      result.errors.push('Simulazione non trovata');
+      return result;
+    }
+
+    // Get user IDs for only the new assignments
+    const inviteeUserIds = await getAssignedStudentUserIds(prisma, newAssignments);
+    
+    if (inviteeUserIds.length === 0) {
+      return result;
+    }
+
+    // Send in-app notifications to only the new assignees
+    await notifications.simulationAssigned(prisma, {
+      assignedUserIds: inviteeUserIds,
+      simulationId: simulation.id,
+      simulationTitle: simulation.title,
+    });
+
+    // Send email notifications to only the new assignees (if dates are set)
+    if (simulation.startDate) {
+      const users = await prisma.user.findMany({
+        where: { id: { in: inviteeUserIds } },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      });
+
+      const invitees: InviteeData[] = users.map(u => ({
+        userId: u.id,
+        email: u.email,
+        name: u.name || 'Studente',
+      }));
+
+      if (invitees.length > 0) {
+        const emailData: SimulationInviteData = {
+          id: simulation.id,
+          title: simulation.title,
+          type: simulation.type,
+          isOfficial: simulation.isOfficial,
+          startDate: simulation.startDate,
+          endDate: simulation.endDate || undefined,
+          durationMinutes: simulation.durationMinutes || 60,
+          totalQuestions: 0, // Not available in this context
+          correctPoints: 0,
+          wrongPoints: 0,
+          blankPoints: 0,
+          createdByName: simulation.createdBy?.name || 'Leonardo School',
+          platformUrl: `${BASE_URL}/simulazioni`,
+        };
+
+        const emailResult = await sendSimulationInvitationEmail(emailData, invitees);
+        result.emailsSent = emailResult.sentCount;
+        result.errors = emailResult.errors;
+      }
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Error in notifyNewAssignments:', error);
     result.errors.push(error instanceof Error ? error.message : 'Errore sconosciuto');
     return result;
   }

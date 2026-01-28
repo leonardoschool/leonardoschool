@@ -311,15 +311,149 @@ describe('errorHandler', () => {
       { code: 'VALIDATION_ERROR', expectedTitle: 'Dati non validi' },
     ];
 
-    it.each(italianErrors)(
-      'should have Italian title for $code',
-      ({ code, expectedTitle }) => {
+    italianErrors.forEach(({ code, expectedTitle }) => {
+      it(`should have Italian title for ${code}`, () => {
         const error = { code };
         const result = parseError(error);
-
         expect(result.title).toBe(expectedTitle);
-      }
-    );
+      });
+    });
+  });
+
+  describe('Zod message translation edge cases', () => {
+    describe('regex pattern matching', () => {
+      it('should translate "must be greater than or equal to" with number extraction', () => {
+        const error = {
+          data: {
+            zodError: [
+              { path: ['age'], message: 'Number must be greater than or equal to 18' },
+            ],
+          },
+        };
+        const result = parseError(error);
+
+        expect(result.message).toContain('age');
+        expect(result.message).toContain('18');
+        // Partial translation: 'greater than' gets translated, but 'or equal to' remains
+        expect(result.message).toContain('maggiore di');
+      });
+
+      it('should translate "must be less than or equal to" with number extraction', () => {
+        const error = {
+          data: {
+            zodError: [
+              { path: ['score'], message: 'Number must be less than or equal to 100' },
+            ],
+          },
+        };
+        const result = parseError(error);
+
+        expect(result.message).toContain('score');
+        expect(result.message).toContain('100');
+        // Partial translation: 'less than' gets translated, but 'or equal to' remains
+        expect(result.message).toContain('minore di');
+      });
+
+      it('should handle complex nested paths in Zod errors', () => {
+        const error = {
+          data: {
+            zodError: [
+              { path: ['user', 'profile', 'email'], message: 'Invalid email' },
+            ],
+          },
+        };
+        const result = parseError(error);
+
+        expect(result.message).toContain('user → profile → email');
+      });
+
+      it('should handle empty path in Zod errors', () => {
+        const error = {
+          data: {
+            zodError: [
+              { path: [], message: 'Invalid input' },
+            ],
+          },
+        };
+        const result = parseError(error);
+
+        expect(result.message).toContain('campo');
+      });
+
+      it('should fallback to original message with field name for unknown patterns', () => {
+        const error = {
+          data: {
+            zodError: [
+              { path: ['custom'], message: 'Some unknown validation error' },
+            ],
+          },
+        };
+        const result = parseError(error);
+
+        expect(result.message).toContain('custom');
+        expect(result.message).toContain('Some unknown validation error');
+      });
+    });
+
+    describe('all translation patterns', () => {
+      const translations = [
+        { input: 'Required', expected: 'Campo obbligatorio' },
+        { input: 'Expected string, received number', expected: 'Deve essere un testo' },
+        { input: 'Expected number, received string', expected: 'Deve essere un numero' },
+        { input: 'Expected boolean, received string', expected: 'Deve essere vero o falso' },
+        { input: 'Invalid email', expected: 'Email non valida' },
+        { input: 'String must contain at least 8 characters', expected: 'Deve contenere almeno' },
+        { input: 'String must contain at most 100 characters', expected: 'Deve contenere al massimo' },
+        { input: 'Number must be greater than 0', expected: 'Deve essere maggiore di' },
+        { input: 'Number must be less than 100', expected: 'Deve essere minore di' },
+        { input: 'Invalid input', expected: 'Input non valido' },
+        { input: 'Invalid', expected: 'Non valido' },
+      ];
+
+      translations.forEach(({ input, expected }) => {
+        it(`should translate "${input.substring(0, 30)}..."`, () => {
+          const error = {
+            data: {
+              zodError: [
+                { path: ['field'], message: input },
+              ],
+            },
+          };
+          const result = parseError(error);
+
+          expect(result.message).toContain(expected);
+        });
+      });
+    });
+
+    describe('numeric pattern edge cases', () => {
+      it('should handle multi-digit numbers in greater than or equal', () => {
+        const error = {
+          data: {
+            zodError: [
+              { path: ['amount'], message: 'Number must be greater than or equal to 1000' },
+            ],
+          },
+        };
+        const result = parseError(error);
+
+        expect(result.message).toContain('1000');
+      });
+
+      it('should handle decimal numbers if present', () => {
+        const error = {
+          data: {
+            zodError: [
+              { path: ['price'], message: 'Number must be less than or equal to 99.99' },
+            ],
+          },
+        };
+        const result = parseError(error);
+
+        // Should extract first number group
+        expect(result.message).toMatch(/\d+/);
+      });
+    });
 
     it('should have Italian fallback message for unknown errors', () => {
       const result = parseError({});

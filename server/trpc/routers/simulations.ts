@@ -14,14 +14,40 @@ import {
   bulkAssignmentSchema,
 } from '@/lib/validations/simulationValidation';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { notifySimulationCreated } from '@/server/services/simulationNotificationService';
+import { notifySimulationCreated, notifyNewAssignments } from '@/server/services/simulationNotificationService';
 import * as notificationService from '@/server/services/notificationService';
-import { notifications } from '@/lib/notifications';
+import { notifications } from '@/lib/notifications/notificationHelpers';
 import { createLogger } from '@/lib/utils/logger';
 import { stripHtml } from '@/lib/utils/sanitizeHtml';
 import { secureShuffleArray } from '@/lib/utils';
 
 const log = createLogger('Simulations');
+
+/**
+ * Auto-close an expired assignment (called on-demand when student accesses)
+ * This ensures assignments are closed in real-time without depending on cron jobs
+ */
+async function autoCloseExpiredAssignment(
+  prisma: PrismaClient,
+  assignmentId: string,
+  endDate: Date | null
+): Promise<boolean> {
+  if (!endDate || endDate >= new Date()) {
+    return false; // Not expired
+  }
+  
+  try {
+    await prisma.simulationAssignment.update({
+      where: { id: assignmentId },
+      data: { status: 'CLOSED' },
+    });
+    log.info('Auto-closed expired assignment', { assignmentId, endDate: endDate.toISOString() });
+    return true;
+  } catch (error) {
+    log.warn('Failed to auto-close assignment', { assignmentId, error });
+    return false;
+  }
+}
 
 // Type definitions for calendar event creation
 interface CalendarEventData {
@@ -2507,10 +2533,16 @@ export const simulationsRouter = router({
         return results;
       });
 
-      // Send notifications for newly added assignments
+      // Send notifications for newly added assignments ONLY (not all assignments)
       if (created.length > 0) {
+        // Extract studentId and groupId from created assignments
+        const newAssignments = created.map(a => ({
+          studentId: a.studentId,
+          groupId: a.groupId,
+        }));
+        
         // Fire and forget - don't block the response
-        notifySimulationCreated(simulationId, ctx.prisma).catch((error) => {
+        notifyNewAssignments(simulationId, newAssignments, ctx.prisma).catch((error) => {
           log.error('Failed to send notifications for new assignments:', error);
         });
       }
@@ -3050,6 +3082,10 @@ export const simulationsRouter = router({
         hasActiveVirtualRoom
       );
       if (!dateAccess.allowed) {
+        // Auto-close expired assignment on-demand (no need to wait for cron)
+        if (assignment && effectiveEndDate && effectiveEndDate < now && assignment.status === 'ACTIVE') {
+          await autoCloseExpiredAssignment(ctx.prisma, assignment.id, effectiveEndDate);
+        }
         throw new TRPCError({ code: 'BAD_REQUEST', message: dateAccess.errorMessage ?? 'Accesso non consentito' });
       }
 

@@ -345,15 +345,36 @@ export default function VirtualRoomPage() {
     };
   }, [sseData, sseReconnect]);
 
+  // Track student session status for dynamic polling
+  const [studentSessionStatus, setStudentSessionStatus] = useState<'WAITING' | 'STARTED' | 'COMPLETED' | null>(null);
+
+  // Dynamic polling interval for students:
+  // - WAITING: 3 seconds (reduced from 1s, FCM will notify on start)
+  // - STARTED: 1 second (need fast updates for timer accuracy)
+  // - COMPLETED: disabled
+  const studentPollingInterval = useMemo(() => {
+    if (!isStudent) return false;
+    if (studentSessionStatus === 'COMPLETED') return false;
+    if (studentSessionStatus === 'STARTED') return 1000; // 1 second during active simulation
+    return 3000; // 3 seconds during waiting (was 1s)
+  }, [isStudent, studentSessionStatus]);
+
   // Get student session status (polling) - Student only - now uses assignmentId
   const studentStatus = trpc.virtualRoom.getStudentSessionStatus.useQuery(
     { assignmentId },
     {
       enabled: isStudent,
-      refetchInterval: 1000, // Poll every 1 second for students
+      refetchInterval: studentPollingInterval, // Dynamic: 3s waiting, 1s during simulation
       staleTime: 800,
     }
   );
+
+  // Update student session status for dynamic polling
+  useEffect(() => {
+    if (studentStatus.data?.hasSession && 'status' in studentStatus.data) {
+      setStudentSessionStatus(studentStatus.data.status as 'WAITING' | 'STARTED' | 'COMPLETED');
+    }
+  }, [studentStatus.data]);
 
   // Sync student status data and handle session start
   useEffect(() => {

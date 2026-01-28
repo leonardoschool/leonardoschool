@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import Button from '@/components/ui/Button';
 import { colors } from '@/lib/theme/colors';
+import { useFocusAwarePolling } from '@/lib/hooks/useWindowFocus';
 import { 
   MessageSquare, 
   X, 
@@ -40,13 +41,16 @@ export default function InTestMessaging({
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
 
-  // Fetch messages - fast polling for near real-time
+  // Focus-aware polling - 3 seconds for chat during test, disabled when tab not visible
+  const pollingInterval = useFocusAwarePolling(3000, !!participantId);
+
+  // Fetch messages - polling for near real-time
   const messagesQuery = trpc.virtualRoom.getMessages.useQuery(
     { participantId },
     { 
       enabled: !!participantId,
-      refetchInterval: 500, // Poll every 500ms for near real-time
-      staleTime: 400,
+      refetchInterval: pollingInterval,
+      staleTime: 2500,
     }
   );
 

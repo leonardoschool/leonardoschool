@@ -555,7 +555,7 @@ describe('Messages Router', () => {
     describe('notification handling', () => {
       it('should create notification for recipient', async () => {
         // notifications.messageReceived should be called
-        const { notifications } = await import('@/lib/notifications');
+        const { notifications } = await import('@/lib/notifications/notificationHelpers');
         expect(notifications.messageReceived).toBeDefined();
       });
     });

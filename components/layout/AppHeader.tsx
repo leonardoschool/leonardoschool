@@ -8,6 +8,9 @@ import { trpc } from '@/lib/trpc/client';
 import { firebaseAuth } from '@/lib/firebase/auth';
 import { colors } from '@/lib/theme/colors';
 import { playNotificationSound } from '@/lib/utils/notificationSound';
+import { useFocusAwarePolling } from '@/lib/hooks/useWindowFocus';
+import { useFCMNotifications } from '@/lib/hooks/useFCMNotifications';
+import { NotificationPermissionBanner } from '@/components/ui/NotificationPermissionBanner';
 import {
   Bell,
   Menu,
@@ -39,8 +42,10 @@ import {
 } from './appHeaderParts';
 import type { Theme, NotificationData } from './appHeaderParts';
 
-// Polling interval for real-time updates (30 seconds)
-const POLLING_INTERVAL = 30 * 1000;
+// Polling interval for real-time updates (120 seconds - optimized for cost efficiency)
+// When FCM is active, polling is used only as fallback
+// Polling is automatically disabled when tab is not focused
+const POLLING_INTERVAL = 120 * 1000;
 
 export default function AppHeader() {
   const router = useRouter();
@@ -61,6 +66,15 @@ export default function AppHeader() {
 
   // Get current user
   const { data: user } = trpc.auth.me.useQuery();
+
+  // FCM push notifications - invalidates queries on new notifications
+  // This reduces polling dependency significantly
+  const { permissionGranted: hasFCM } = useFCMNotifications();
+
+  // Focus-aware polling - stops polling when tab is not active to save serverless invocations
+  // When FCM is active, polling is only a fallback (every 5 min instead of 2 min)
+  const pollingIntervalMs = hasFCM ? POLLING_INTERVAL * 2.5 : POLLING_INTERVAL; // 5 min with FCM, 2 min without
+  const focusAwarePollingInterval = useFocusAwarePolling(pollingIntervalMs, !!user);
   
   // Get collaborator contract status
   const { data: collaboratorContract } = trpc.contracts.getMyCollaboratorContract.useQuery(
@@ -68,16 +82,16 @@ export default function AppHeader() {
     { 
       enabled: (user?.role as string) === 'COLLABORATOR', 
       retry: false,
-      refetchInterval: POLLING_INTERVAL,
+      refetchInterval: focusAwarePollingInterval,
     }
   );
   
-  // Get notifications
+  // Get notifications - FCM push updates this automatically
   const { data: notificationsData, refetch: refetchNotifications } = trpc.notifications.getNotifications.useQuery(
     { unreadOnly: true, pageSize: 10 },
     { 
       enabled: !!user,
-      refetchInterval: POLLING_INTERVAL,
+      refetchInterval: focusAwarePollingInterval,
     }
   );
   
@@ -101,19 +115,19 @@ export default function AppHeader() {
   // Stats for badges (admin only)
   const { data: jobApplicationsStats } = trpc.jobApplications.getStats.useQuery(
     undefined,
-    { enabled: user?.role === 'ADMIN', refetchInterval: POLLING_INTERVAL }
+    { enabled: user?.role === 'ADMIN', refetchInterval: focusAwarePollingInterval }
   );
   const { data: contactRequestsStats } = trpc.contactRequests.getStats.useQuery(
     undefined,
-    { enabled: user?.role === 'ADMIN', refetchInterval: POLLING_INTERVAL }
+    { enabled: user?.role === 'ADMIN', refetchInterval: focusAwarePollingInterval }
   );
   const { data: studentsPendingContract } = trpc.contracts.getStudentsPendingContract.useQuery(
     undefined,
-    { enabled: user?.role === 'ADMIN', refetchInterval: POLLING_INTERVAL }
+    { enabled: user?.role === 'ADMIN', refetchInterval: focusAwarePollingInterval }
   );
   const { data: unreadMessagesData } = trpc.messages.getUnreadCount.useQuery(
     undefined,
-    { enabled: !!user, refetchInterval: POLLING_INTERVAL }
+    { enabled: !!user, refetchInterval: focusAwarePollingInterval }
   );
   const unreadMessagesCount = unreadMessagesData?.unreadCount || 0;
 
@@ -219,7 +233,11 @@ export default function AppHeader() {
   };
 
   return (
-    <header className={`sticky top-0 z-50 ${colors.background.card} border-b ${colors.border.primary} shadow-sm`}>
+    <>
+      {/* Notification Permission Banner - manages its own visibility */}
+      <NotificationPermissionBanner />
+      
+      <header className={`sticky top-0 z-50 ${colors.background.card} border-b ${colors.border.primary} shadow-sm`}>
       <div className="w-full px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20 gap-3">
           {/* Hamburger Menu Button (Mobile/Tablet) */}
@@ -431,6 +449,7 @@ export default function AppHeader() {
         />
       )}
     </header>
+    </>
   );
 }
 

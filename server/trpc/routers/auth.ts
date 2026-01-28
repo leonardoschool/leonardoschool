@@ -2,7 +2,7 @@
 import { router, publicProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { notifications } from '@/lib/notifications';
+import { notifications } from '@/lib/notifications/notificationHelpers';
 import { generateMatricola } from '@/lib/utils/matricolaUtils';
 
 export const authRouter = router({

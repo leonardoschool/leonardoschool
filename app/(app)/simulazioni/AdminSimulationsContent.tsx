@@ -10,6 +10,7 @@ import CustomSelect from '@/components/ui/CustomSelect';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import { Portal } from '@/components/ui/Portal';
 import { StudentDetailModal } from '@/components/ui/StudentDetailModal';
+import { useFocusAwarePolling } from '@/lib/hooks/useWindowFocus';
 import Link from 'next/link';
 import {
   Plus,
@@ -92,10 +93,13 @@ export default function AdminSimulationsContent() {
   // Tab state
   const [activeTab, setActiveTab] = useState<TabType>('simulations');
 
+  // Focus-aware polling - 120 seconds for pending reviews badge, disabled when tab not visible
+  const pollingInterval = useFocusAwarePolling(120000, true);
+
   // Fetch pending open answers count for badge
   const { data: pendingReviewsData } = trpc.simulations.getResultsWithPendingReviews.useQuery(
     { limit: 1, offset: 0 },
-    { refetchInterval: 60000 } // Refetch every minute
+    { refetchInterval: pollingInterval }
   );
   const pendingReviewsCount = pendingReviewsData?.total ?? 0;
 

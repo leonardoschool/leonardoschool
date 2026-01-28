@@ -277,6 +277,9 @@ model User {
   
   // Push notifications
   expoPushToken String?   // Expo push notification token for mobile app
+  
+  // FCM tokens for web push notifications (multi-device support)
+  fcmTokens FCMToken[]
 
   // Relations
   student          Student?
@@ -315,6 +318,25 @@ model User {
   @@index([firebaseUid])
   @@index([email])
   @@map("users")
+}
+
+// FCM Token for web push notifications (multi-device support)
+model FCMToken {
+  id         String   @id @default(cuid())
+  token      String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceInfo String?  // User agent for device identification
+  platform   String?  // 'web', 'android', 'ios' - for analytics
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  lastUsedAt DateTime @default(now())
+  isActive   Boolean  @default(true)
+
+  @@index([userId])
+  @@index([token])
+  @@index([isActive])
+  @@map("fcm_tokens")
 }
 
 // ==================== STUDENTS ====================
@@ -1122,6 +1144,8 @@ model SimulationSessionParticipant {
   @@index([sessionId])
   @@index([studentId])
   @@index([isConnected])
+  @@index([sessionId, isConnected]) // Composite index for connected participants per session query
+  @@index([lastHeartbeat]) // For heartbeat timeout queries
   @@map("simulation_session_participants")
 }
 
@@ -1710,6 +1734,8 @@ model Notification {
   @@index([isUrgent])
   @@index([isArchived])
   @@index([groupKey])
+  @@index([userId, isRead]) // Composite index for unread notifications query (most frequent)
+  @@index([userId, isArchived, isRead]) // Composite for filtered notifications list
   @@map("notifications")
 }
 

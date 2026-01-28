@@ -3,6 +3,7 @@ import { router, protectedProcedure, studentProcedure, staffProcedure } from '..
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import * as notificationService from '@/server/services/notificationService';
+import { createCachedQuery, CACHE_TIMES } from '@/lib/cache/serverCache';
 
 export const materialsRouter = router({
   // ==================== MATERIAL CATEGORIES (containers for materials) ====================
@@ -1800,52 +1801,60 @@ export const materialsRouter = router({
 
   // ==================== STATS ====================
 
-  // Get material statistics (staff: admin + collaborator)
+  // Get material statistics (staff: admin + collaborator) - cached
   getStats: staffProcedure.query(async ({ ctx }) => {
-    const [
-      totalMaterials,
-      totalByType,
-      totalByVisibility,
-      topViewed,
-      topDownloaded,
-    ] = await Promise.all([
-      ctx.prisma.material.count({ where: { isActive: true } }),
-      ctx.prisma.material.groupBy({
-        by: ['type'],
-        _count: true,
-        where: { isActive: true },
-      }),
-      ctx.prisma.material.groupBy({
-        by: ['visibility'],
-        _count: true,
-        where: { isActive: true },
-      }),
-      ctx.prisma.material.findMany({
-        where: { isActive: true },
-        orderBy: { viewCount: 'desc' },
-        take: 5,
-        select: { id: true, title: true, viewCount: true, type: true },
-      }),
-      ctx.prisma.material.findMany({
-        where: { isActive: true },
-        orderBy: { downloadCount: 'desc' },
-        take: 5,
-        select: { id: true, title: true, downloadCount: true, type: true },
-      }),
-    ]);
+    const getCachedStats = createCachedQuery(
+      async () => {
+        const [
+          totalMaterials,
+          totalByType,
+          totalByVisibility,
+          topViewed,
+          topDownloaded,
+        ] = await Promise.all([
+          ctx.prisma.material.count({ where: { isActive: true } }),
+          ctx.prisma.material.groupBy({
+            by: ['type'],
+            _count: true,
+            where: { isActive: true },
+          }),
+          ctx.prisma.material.groupBy({
+            by: ['visibility'],
+            _count: true,
+            where: { isActive: true },
+          }),
+          ctx.prisma.material.findMany({
+            where: { isActive: true },
+            orderBy: { viewCount: 'desc' },
+            take: 5,
+            select: { id: true, title: true, viewCount: true, type: true },
+          }),
+          ctx.prisma.material.findMany({
+            where: { isActive: true },
+            orderBy: { downloadCount: 'desc' },
+            take: 5,
+            select: { id: true, title: true, downloadCount: true, type: true },
+          }),
+        ]);
 
-    return {
-      totalMaterials,
-      byType: totalByType.reduce((acc, item) => ({
-        ...acc,
-        [item.type]: item._count,
-      }), {} as Record<string, number>),
-      byVisibility: totalByVisibility.reduce((acc, item) => ({
-        ...acc,
-        [item.visibility]: item._count,
-      }), {} as Record<string, number>),
-      topViewed,
-      topDownloaded,
-    };
+        return {
+          totalMaterials,
+          byType: totalByType.reduce((acc, item) => ({
+            ...acc,
+            [item.type]: item._count,
+          }), {} as Record<string, number>),
+          byVisibility: totalByVisibility.reduce((acc, item) => ({
+            ...acc,
+            [item.visibility]: item._count,
+          }), {} as Record<string, number>),
+          topViewed,
+          topDownloaded,
+        };
+      },
+      ['materials', 'stats'],
+      { revalidate: CACHE_TIMES.MEDIUM }
+    );
+
+    return getCachedStats();
   }),
 });

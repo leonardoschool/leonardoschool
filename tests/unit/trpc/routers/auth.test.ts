@@ -17,6 +17,12 @@ vi.mock('@/lib/notifications', () => ({
   },
 }));
 
+vi.mock('@/lib/notifications/notificationHelpers', () => ({
+  notifications: {
+    newRegistration: vi.fn().mockResolvedValue({ success: true }),
+  },
+}));
+
 vi.mock('@/lib/utils/matricolaUtils', () => ({
   generateMatricola: vi.fn().mockResolvedValue('LS20260001'),
 }));
@@ -26,6 +32,7 @@ type MockPrismaClient = {
   user: {
     findUnique: Mock;
     findFirst: Mock;
+    findMany: Mock;
     create: Mock;
     update: Mock;
   };
@@ -43,6 +50,7 @@ function createMockPrisma(): MockPrismaClient {
     user: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
     },
@@ -251,7 +259,7 @@ describe('Auth Router', () => {
 
     describe('notification', () => {
       it('should send notification for new registration', async () => {
-        const { notifications } = await import('@/lib/notifications');
+        const { notifications } = await import('@/lib/notifications/notificationHelpers');
         
         await notifications.newRegistration(mockPrisma as unknown as Parameters<typeof notifications.newRegistration>[0], {
           userId: 'user-123',
