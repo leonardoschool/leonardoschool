@@ -726,7 +726,7 @@ describe('Simulations Router', () => {
     });
 
     describe('OPEN_TEXT questions', () => {
-      const openQuestion = {
+      const _openQuestion = {
         ...mockQuestion,
         question: {
           ...mockQuestion.question,
@@ -820,14 +820,14 @@ describe('Simulations Router', () => {
       });
 
       it('should return null score if no keywords provided', () => {
-        const keywords: Array<{ keyword: string; weight: number; isRequired: boolean }> = [];
-        const score = keywords.length > 0 ? 0 : null;
+        const _keywords: Array<{ keyword: string; weight: number; isRequired: boolean }> = [];
+        const score = _keywords.length > 0 ? 0 : null;
         
         expect(score).toBeNull();
       });
 
       it('should handle required keywords', () => {
-        const keywords = [
+        const _keywords = [
           { keyword: 'mitocondrio', weight: 1, isRequired: true },
         ];
         

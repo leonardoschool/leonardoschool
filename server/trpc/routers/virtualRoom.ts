@@ -4,6 +4,7 @@ import { router, staffProcedure, protectedProcedure } from '../init';
 import { TRPCError } from '@trpc/server';
 import { CheatingEventType, SessionMessageSender } from '@prisma/client';
 import { createLogger } from '@/lib/utils/logger';
+import { notifySimulationStarted, notifySessionKicked } from '@/server/services/fcmService';
 
 const log = createLogger('VirtualRoom');
 
@@ -218,6 +219,26 @@ export const virtualRoomRouter = router({
           startedAt: now,
         },
       });
+
+      // Send FCM push notification to all connected participants
+      // This allows students to use longer polling intervals (3s instead of 1s during waiting)
+      const connectedParticipants = await ctx.prisma.simulationSessionParticipant.findMany({
+        where: { sessionId: input.sessionId, isConnected: true },
+        include: { student: { include: { user: true } } },
+      });
+      
+      const participantUserIds = connectedParticipants
+        .map(p => p.student?.user?.id)
+        .filter((id): id is string => !!id);
+      
+      if (participantUserIds.length > 0) {
+        // Fire and forget - don't block the response
+        notifySimulationStarted(
+          participantUserIds,
+          session.simulation.title,
+          input.sessionId
+        ).catch(err => log.error('Failed to send FCM for simulation start', { error: err }));
+      }
 
       return {
         success: true,
@@ -785,6 +806,16 @@ export const virtualRoomRouter = router({
           isConnected: false,
         },
       });
+
+      // Send FCM push notification to kicked student
+      if (participant.student?.user?.id) {
+        const reason = input.reason || 'Sei stato espulso dalla sessione';
+        notifySessionKicked(
+          participant.student.user.id,
+          participant.session.id,
+          reason
+        ).catch(err => log.error('Failed to send FCM for kick notification', { error: err }));
+      }
 
       return { 
         success: true, 

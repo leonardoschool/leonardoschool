@@ -25,7 +25,7 @@ import {
   deleteNotificationsForEntity,
   archiveReadNotifications,
   getUnreadCount,
-} from '@/lib/notifications';
+} from '@/lib/notifications/notificationHelpers';
 
 // Re-export core functions for backward compatibility
 export {

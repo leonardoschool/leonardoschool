@@ -5,12 +5,15 @@
  * - Admin può contattare collaboratori e studenti
  * - Collaboratori possono contattare admin, altri collaboratori e studenti
  * - Studenti possono contattare admin e collaboratori
+ * 
+ * Push notifications sono inviate via FCM (web) e Expo Push (mobile).
  */
 
 import { z } from 'zod';
 import { router, protectedProcedure } from '../init';
 import { TRPCError } from '@trpc/server';
-import { notifications } from '@/lib/notifications';
+import { notifications } from '@/lib/notifications/notificationHelpers';
+import { notifyNewMessage } from '@/server/services/fcmService';
 
 // Schema for creating a new conversation
 const createConversationSchema = z.object({
@@ -464,16 +467,32 @@ export const messagesRouter = router({
         },
       });
       
-      // Create notifications for other participants
-      for (const participant of otherParticipants) {
-        await notifications.messageReceived(ctx.prisma, {
+      // Send notifications and FCM push in parallel for each participant
+      const notificationPromises = otherParticipants.map(async (participant) => {
+        // Create in-app notification (also sends Expo push for mobile)
+        const notifPromise = notifications.messageReceived(ctx.prisma, {
           recipientUserId: participant.userId,
           conversationId: input.conversationId,
           senderName: currentUser.name,
           messagePreview: input.content,
           recipientRole: participant.user.role,
         });
-      }
+
+        // Send FCM push for web (instant, separate from notification system)
+        const fcmPromise = notifyNewMessage(
+          participant.userId,
+          currentUser.name,
+          input.content,
+          input.conversationId
+        ).catch((err) => console.warn('[Messages] FCM push failed:', err));
+
+        return Promise.allSettled([notifPromise, fcmPromise]);
+      });
+
+      // Execute all notifications in parallel, don't block response
+      Promise.allSettled(notificationPromises).catch((err) => 
+        console.warn('[Messages] Failed to send some notifications:', err)
+      );
       
       return message;
     }),

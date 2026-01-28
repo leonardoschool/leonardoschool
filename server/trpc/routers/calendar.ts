@@ -22,7 +22,7 @@ import {
   type EventEmailData,
   type InviteeData,
 } from '@/lib/email/eventEmails';
-import { notifications, createBulkNotifications } from '@/lib/notifications';
+import { notifications, createBulkNotifications } from '@/lib/notifications/notificationHelpers';
 
 // ==================== CALENDAR EVENTS ====================
 

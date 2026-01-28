@@ -4,6 +4,7 @@
 import { router, protectedProcedure, adminProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import { createCachedQuery, CACHE_TIMES } from '@/lib/cache/serverCache';
 import {
   getNotificationsSchema,
   markNotificationsReadSchema,
@@ -526,49 +527,57 @@ export const notificationsRouter = router({
     }),
 
   /**
-   * Get notification statistics (admin only)
+   * Get notification statistics (admin only) - cached
    */
   getStats: adminProcedure
     .query(async ({ ctx }) => {
-      const now = new Date();
-      const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const getCachedStats = createCachedQuery(
+        async () => {
+          const now = new Date();
+          const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-      const [
-        totalNotifications,
-        unreadNotifications,
-        last24hCount,
-        last7dCount,
-        byType,
-        byChannel,
-      ] = await Promise.all([
-        ctx.prisma.notification.count(),
-        ctx.prisma.notification.count({ where: { isRead: false } }),
-        ctx.prisma.notification.count({ where: { createdAt: { gte: last24h } } }),
-        ctx.prisma.notification.count({ where: { createdAt: { gte: last7d } } }),
-        ctx.prisma.notification.groupBy({
-          by: ['type'],
-          _count: true,
-          orderBy: { _count: { type: 'desc' } },
-          take: 10,
-        }),
-        ctx.prisma.notification.groupBy({
-          by: ['channel'],
-          _count: true,
-        }),
-      ]);
+          const [
+            totalNotifications,
+            unreadNotifications,
+            last24hCount,
+            last7dCount,
+            byType,
+            byChannel,
+          ] = await Promise.all([
+            ctx.prisma.notification.count(),
+            ctx.prisma.notification.count({ where: { isRead: false } }),
+            ctx.prisma.notification.count({ where: { createdAt: { gte: last24h } } }),
+            ctx.prisma.notification.count({ where: { createdAt: { gte: last7d } } }),
+            ctx.prisma.notification.groupBy({
+              by: ['type'],
+              _count: true,
+              orderBy: { _count: { type: 'desc' } },
+              take: 10,
+            }),
+            ctx.prisma.notification.groupBy({
+              by: ['channel'],
+              _count: true,
+            }),
+          ]);
 
-      return {
-        totalNotifications,
-        unreadNotifications,
-        readRate: totalNotifications > 0 
-          ? Math.round(((totalNotifications - unreadNotifications) / totalNotifications) * 100) 
-          : 0,
-        last24hCount,
-        last7dCount,
-        byType: byType.map(t => ({ type: t.type, count: t._count })),
-        byChannel: byChannel.map(c => ({ channel: c.channel, count: c._count })),
-      };
+          return {
+            totalNotifications,
+            unreadNotifications,
+            readRate: totalNotifications > 0 
+              ? Math.round(((totalNotifications - unreadNotifications) / totalNotifications) * 100) 
+              : 0,
+            last24hCount,
+            last7dCount,
+            byType: byType.map(t => ({ type: t.type, count: t._count })),
+            byChannel: byChannel.map(c => ({ channel: c.channel, count: c._count })),
+          };
+        },
+        ['notifications', 'stats'],
+        { revalidate: CACHE_TIMES.SHORT } // 1 minute - stats can change frequently
+      );
+
+      return getCachedStats();
     }),
 
   /**
