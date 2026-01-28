@@ -23,6 +23,32 @@ import { secureShuffleArray } from '@/lib/utils';
 
 const log = createLogger('Simulations');
 
+/**
+ * Auto-close an expired assignment (called on-demand when student accesses)
+ * This ensures assignments are closed in real-time without depending on cron jobs
+ */
+async function autoCloseExpiredAssignment(
+  prisma: PrismaClient,
+  assignmentId: string,
+  endDate: Date | null
+): Promise<boolean> {
+  if (!endDate || endDate >= new Date()) {
+    return false; // Not expired
+  }
+  
+  try {
+    await prisma.simulationAssignment.update({
+      where: { id: assignmentId },
+      data: { status: 'CLOSED' },
+    });
+    log.info('Auto-closed expired assignment', { assignmentId, endDate: endDate.toISOString() });
+    return true;
+  } catch (error) {
+    log.warn('Failed to auto-close assignment', { assignmentId, error });
+    return false;
+  }
+}
+
 // Type definitions for calendar event creation
 interface CalendarEventData {
   title: string;
@@ -3050,6 +3076,10 @@ export const simulationsRouter = router({
         hasActiveVirtualRoom
       );
       if (!dateAccess.allowed) {
+        // Auto-close expired assignment on-demand (no need to wait for cron)
+        if (assignment && effectiveEndDate && effectiveEndDate < now && assignment.status === 'ACTIVE') {
+          await autoCloseExpiredAssignment(ctx.prisma, assignment.id, effectiveEndDate);
+        }
         throw new TRPCError({ code: 'BAD_REQUEST', message: dateAccess.errorMessage ?? 'Accesso non consentito' });
       }
 

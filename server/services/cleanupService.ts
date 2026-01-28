@@ -53,6 +53,15 @@ export interface CleanupOptions {
   messagesArchivedDays?: number;        // Default: 90 - Delete archived conversations older than X days
   messagesOldDays?: number;             // Default: 365 - Delete all conversations older than X days
   
+  // Session data (Virtual Room - these can grow fast!)
+  sessionEventsDays?: number;           // Default: 90 - Delete cheating events after X days
+  sessionMessagesDays?: number;         // Default: 30 - Delete session messages after X days
+  completedSessionsDays?: number;       // Default: 180 - Delete completed/cancelled sessions after X days
+  
+  // Calendar & Events
+  oldCalendarEventsDays?: number;       // Default: 365 - Delete old non-recurring events
+  oldStaffAbsencesDays?: number;        // Default: 365 - Delete old confirmed/rejected absences
+  
   // Dry run mode (log but don't delete)
   dryRun?: boolean;
 }
@@ -71,8 +80,62 @@ const DEFAULT_OPTIONS: Required<CleanupOptions> = {
   questionVersionsToKeep: 10,
   messagesArchivedDays: 90,
   messagesOldDays: 365,
+  // Session data (Virtual Room) - cleanup more aggressively as this grows fast
+  sessionEventsDays: 90,
+  sessionMessagesDays: 30,
+  completedSessionsDays: 180,
+  // Calendar & Events
+  oldCalendarEventsDays: 365,
+  oldStaffAbsencesDays: 365,
   dryRun: false,
 };
+
+// Type for cleanup task functions
+type CleanupTaskFn = (prisma: PrismaClient, opts: Required<CleanupOptions>) => Promise<number>;
+
+// Define all cleanup tasks with their names and functions
+interface CleanupTask {
+  name: string;
+  fn: CleanupTaskFn;
+}
+
+const CLEANUP_TASKS: CleanupTask[] = [
+  { name: 'notifications', fn: cleanupNotifications },
+  { name: 'adminNotifications', fn: cleanupAdminNotifications },
+  { name: 'alerts', fn: cleanupAlerts },
+  { name: 'contactRequests', fn: cleanupContactRequests },
+  { name: 'jobApplications', fn: cleanupJobApplications },
+  { name: 'questionFeedback', fn: cleanupQuestionFeedback },
+  { name: 'questionVersions', fn: cleanupQuestionVersions },
+  { name: 'messages', fn: cleanupMessages },
+  { name: 'sessionCheatingEvents', fn: cleanupSessionCheatingEvents },
+  { name: 'sessionMessages', fn: cleanupSessionMessages },
+  { name: 'simulationSessions', fn: cleanupSimulationSessions },
+  { name: 'calendarEvents', fn: cleanupOldCalendarEvents },
+  { name: 'staffAbsences', fn: cleanupOldStaffAbsences },
+];
+
+/**
+ * Execute a single cleanup task with error handling
+ */
+async function executeCleanupTask(
+  task: CleanupTask,
+  prisma: PrismaClient,
+  opts: Required<CleanupOptions>,
+  results: CleanupResult['results'],
+  errors: string[]
+): Promise<number> {
+  try {
+    const count = await task.fn(prisma, opts);
+    results[task.name] = { deleted: count };
+    return count;
+  } catch (error) {
+    const msg = `${task.name} cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    errors.push(msg);
+    results[task.name] = { deleted: 0, error: msg };
+    return 0;
+  }
+}
 
 /**
  * Run all cleanup tasks
@@ -92,92 +155,10 @@ export async function runCleanup(
     console.log('[Cleanup] DRY RUN MODE - No data will be deleted');
   }
 
-  // 1. Clean up Notifications
-  try {
-    const count = await cleanupNotifications(prisma, opts);
-    results.notifications = { deleted: count };
+  // Execute all cleanup tasks sequentially
+  for (const task of CLEANUP_TASKS) {
+    const count = await executeCleanupTask(task, prisma, opts, results, errors);
     totalDeleted += count;
-  } catch (error) {
-    const msg = `Notifications cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    errors.push(msg);
-    results.notifications = { deleted: 0, error: msg };
-  }
-
-  // 2. Clean up Admin Notifications (legacy)
-  try {
-    const count = await cleanupAdminNotifications(prisma, opts);
-    results.adminNotifications = { deleted: count };
-    totalDeleted += count;
-  } catch (error) {
-    const msg = `AdminNotifications cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    errors.push(msg);
-    results.adminNotifications = { deleted: 0, error: msg };
-  }
-
-  // 3. Clean up Alerts
-  try {
-    const count = await cleanupAlerts(prisma, opts);
-    results.alerts = { deleted: count };
-    totalDeleted += count;
-  } catch (error) {
-    const msg = `Alerts cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    errors.push(msg);
-    results.alerts = { deleted: 0, error: msg };
-  }
-
-  // 4. Clean up Contact Requests
-  try {
-    const count = await cleanupContactRequests(prisma, opts);
-    results.contactRequests = { deleted: count };
-    totalDeleted += count;
-  } catch (error) {
-    const msg = `ContactRequests cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    errors.push(msg);
-    results.contactRequests = { deleted: 0, error: msg };
-  }
-
-  // 5. Clean up Job Applications
-  try {
-    const count = await cleanupJobApplications(prisma, opts);
-    results.jobApplications = { deleted: count };
-    totalDeleted += count;
-  } catch (error) {
-    const msg = `JobApplications cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    errors.push(msg);
-    results.jobApplications = { deleted: 0, error: msg };
-  }
-
-  // 6. Clean up Question Feedback
-  try {
-    const count = await cleanupQuestionFeedback(prisma, opts);
-    results.questionFeedback = { deleted: count };
-    totalDeleted += count;
-  } catch (error) {
-    const msg = `QuestionFeedback cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    errors.push(msg);
-    results.questionFeedback = { deleted: 0, error: msg };
-  }
-
-  // 7. Clean up Question Versions (keep last N)
-  try {
-    const count = await cleanupQuestionVersions(prisma, opts);
-    results.questionVersions = { deleted: count };
-    totalDeleted += count;
-  } catch (error) {
-    const msg = `QuestionVersions cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    errors.push(msg);
-    results.questionVersions = { deleted: 0, error: msg };
-  }
-
-  // 8. Clean up Messages (archived and old conversations)
-  try {
-    const count = await cleanupMessages(prisma, opts);
-    results.messages = { deleted: count };
-    totalDeleted += count;
-  } catch (error) {
-    const msg = `Messages cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    errors.push(msg);
-    results.messages = { deleted: 0, error: msg };
   }
 
   const duration = Date.now() - startTime;
@@ -513,6 +494,187 @@ async function cleanupMessages(
   return result;
 }
 
+/**
+ * Clean up session cheating events from completed sessions
+ * These can grow very fast during simulations
+ */
+async function cleanupSessionCheatingEvents(
+  prisma: PrismaClient,
+  opts: Required<CleanupOptions>
+): Promise<number> {
+  const cutoff = new Date(Date.now() - opts.sessionEventsDays * 24 * 60 * 60 * 1000);
+
+  if (opts.dryRun) {
+    const count = await prisma.sessionCheatingEvent.count({
+      where: {
+        createdAt: { lt: cutoff },
+      },
+    });
+    console.log(`[Cleanup] Would delete ${count} session cheating events`);
+    return 0;
+  }
+
+  const result = await prisma.sessionCheatingEvent.deleteMany({
+    where: {
+      createdAt: { lt: cutoff },
+    },
+  });
+
+  console.log(`[Cleanup] Deleted ${result.count} session cheating events`);
+  return result.count;
+}
+
+/**
+ * Clean up session messages from Virtual Room
+ * These are transient messages during simulation and can be cleaned up quickly
+ */
+async function cleanupSessionMessages(
+  prisma: PrismaClient,
+  opts: Required<CleanupOptions>
+): Promise<number> {
+  const cutoff = new Date(Date.now() - opts.sessionMessagesDays * 24 * 60 * 60 * 1000);
+
+  if (opts.dryRun) {
+    const count = await prisma.sessionMessage.count({
+      where: {
+        createdAt: { lt: cutoff },
+      },
+    });
+    console.log(`[Cleanup] Would delete ${count} session messages`);
+    return 0;
+  }
+
+  const result = await prisma.sessionMessage.deleteMany({
+    where: {
+      createdAt: { lt: cutoff },
+    },
+  });
+
+  console.log(`[Cleanup] Deleted ${result.count} session messages`);
+  return result.count;
+}
+
+/**
+ * Clean up completed/cancelled simulation sessions
+ * The participants and related data cascade delete
+ */
+async function cleanupSimulationSessions(
+  prisma: PrismaClient,
+  opts: Required<CleanupOptions>
+): Promise<number> {
+  const cutoff = new Date(Date.now() - opts.completedSessionsDays * 24 * 60 * 60 * 1000);
+
+  if (opts.dryRun) {
+    const count = await prisma.simulationSession.count({
+      where: {
+        status: { in: ['COMPLETED', 'CANCELLED'] },
+        updatedAt: { lt: cutoff },
+      },
+    });
+    console.log(`[Cleanup] Would delete ${count} simulation sessions`);
+    return 0;
+  }
+
+  // First count participants that will be deleted (for logging)
+  const participantCount = await prisma.simulationSessionParticipant.count({
+    where: {
+      session: {
+        status: { in: ['COMPLETED', 'CANCELLED'] },
+        updatedAt: { lt: cutoff },
+      },
+    },
+  });
+
+  const result = await prisma.simulationSession.deleteMany({
+    where: {
+      status: { in: ['COMPLETED', 'CANCELLED'] },
+      updatedAt: { lt: cutoff },
+    },
+  });
+
+  console.log(`[Cleanup] Deleted ${result.count} simulation sessions (${participantCount} participants cascaded)`);
+  return result.count;
+}
+
+/**
+ * Clean up old calendar events that are past and not recurring
+ * Keeps recurring parent events but cleans up old single events
+ */
+async function cleanupOldCalendarEvents(
+  prisma: PrismaClient,
+  opts: Required<CleanupOptions>
+): Promise<number> {
+  const cutoff = new Date(Date.now() - opts.oldCalendarEventsDays * 24 * 60 * 60 * 1000);
+
+  if (opts.dryRun) {
+    const count = await prisma.calendarEvent.count({
+      where: {
+        endDate: { lt: cutoff },
+        isRecurring: false,
+        parentEventId: null, // Not a child of recurring event
+        simulation: null, // Not linked to a simulation (those should be kept longer)
+      },
+    });
+    console.log(`[Cleanup] Would delete ${count} old calendar events`);
+    return 0;
+  }
+
+  // Delete invitations first (cascade should handle this, but be explicit)
+  await prisma.eventInvitation.deleteMany({
+    where: {
+      event: {
+        endDate: { lt: cutoff },
+        isRecurring: false,
+        parentEventId: null,
+        simulation: null,
+      },
+    },
+  });
+
+  const result = await prisma.calendarEvent.deleteMany({
+    where: {
+      endDate: { lt: cutoff },
+      isRecurring: false,
+      parentEventId: null,
+      simulation: null,
+    },
+  });
+
+  console.log(`[Cleanup] Deleted ${result.count} old calendar events`);
+  return result.count;
+}
+
+/**
+ * Clean up old staff absences that have been resolved
+ */
+async function cleanupOldStaffAbsences(
+  prisma: PrismaClient,
+  opts: Required<CleanupOptions>
+): Promise<number> {
+  const cutoff = new Date(Date.now() - opts.oldStaffAbsencesDays * 24 * 60 * 60 * 1000);
+
+  if (opts.dryRun) {
+    const count = await prisma.staffAbsence.count({
+      where: {
+        status: { in: ['CONFIRMED', 'REJECTED', 'CANCELLED'] },
+        endDate: { lt: cutoff },
+      },
+    });
+    console.log(`[Cleanup] Would delete ${count} old staff absences`);
+    return 0;
+  }
+
+  const result = await prisma.staffAbsence.deleteMany({
+    where: {
+      status: { in: ['CONFIRMED', 'REJECTED', 'CANCELLED'] },
+      endDate: { lt: cutoff },
+    },
+  });
+
+  console.log(`[Cleanup] Deleted ${result.count} old staff absences`);
+  return result.count;
+}
+
 // ==================== Utility Functions ====================
 
 /**
@@ -532,6 +694,11 @@ export async function getDatabaseStats(prisma: PrismaClient): Promise<{
     questionVersions,
     messages,
     simulationResults,
+    sessionCheatingEvents,
+    sessionMessages,
+    simulationSessions,
+    calendarEvents,
+    staffAbsences,
   ] = await Promise.all([
     prisma.notification.count(),
     prisma.adminNotification.count(),
@@ -542,12 +709,19 @@ export async function getDatabaseStats(prisma: PrismaClient): Promise<{
     prisma.questionVersion.count(),
     prisma.message.count(),
     prisma.simulationResult.count(),
+    prisma.sessionCheatingEvent.count(),
+    prisma.sessionMessage.count(),
+    prisma.simulationSession.count(),
+    prisma.calendarEvent.count(),
+    prisma.staffAbsence.count(),
   ]);
 
   // Estimate cleanable (items that match default cleanup criteria)
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+  const oneHundredEightyDaysAgo = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+  const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
 
   const [
     cleanableNotifications,
@@ -555,6 +729,11 @@ export async function getDatabaseStats(prisma: PrismaClient): Promise<{
     cleanableAlerts,
     cleanableContactRequests,
     cleanableFeedback,
+    cleanableSessionEvents,
+    cleanableSessionMessages,
+    cleanableSessions,
+    cleanableCalendarEvents,
+    cleanableAbsences,
   ] = await Promise.all([
     prisma.notification.count({
       where: {
@@ -589,6 +768,36 @@ export async function getDatabaseStats(prisma: PrismaClient): Promise<{
         createdAt: { lt: ninetyDaysAgo },
       },
     }),
+    prisma.sessionCheatingEvent.count({
+      where: {
+        createdAt: { lt: ninetyDaysAgo },
+      },
+    }),
+    prisma.sessionMessage.count({
+      where: {
+        createdAt: { lt: thirtyDaysAgo },
+      },
+    }),
+    prisma.simulationSession.count({
+      where: {
+        status: { in: ['COMPLETED', 'CANCELLED'] },
+        updatedAt: { lt: oneHundredEightyDaysAgo },
+      },
+    }),
+    prisma.calendarEvent.count({
+      where: {
+        endDate: { lt: oneYearAgo },
+        isRecurring: false,
+        parentEventId: null,
+        simulation: null,
+      },
+    }),
+    prisma.staffAbsence.count({
+      where: {
+        status: { in: ['CONFIRMED', 'REJECTED', 'CANCELLED'] },
+        endDate: { lt: oneYearAgo },
+      },
+    }),
   ]);
 
   return {
@@ -602,6 +811,11 @@ export async function getDatabaseStats(prisma: PrismaClient): Promise<{
       questionVersions,
       messages,
       simulationResults,
+      sessionCheatingEvents,
+      sessionMessages,
+      simulationSessions,
+      calendarEvents,
+      staffAbsences,
     },
     estimatedCleanable: {
       notifications: cleanableNotifications,
@@ -609,6 +823,11 @@ export async function getDatabaseStats(prisma: PrismaClient): Promise<{
       alerts: cleanableAlerts,
       contactRequests: cleanableContactRequests,
       questionFeedback: cleanableFeedback,
+      sessionCheatingEvents: cleanableSessionEvents,
+      sessionMessages: cleanableSessionMessages,
+      simulationSessions: cleanableSessions,
+      calendarEvents: cleanableCalendarEvents,
+      staffAbsences: cleanableAbsences,
     },
   };
 }

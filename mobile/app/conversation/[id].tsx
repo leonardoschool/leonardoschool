@@ -58,8 +58,8 @@ export default function ConversationDetailScreen() {
     { conversationId: id || '' },
     { 
       enabled: !!id && !!user,
-      refetchInterval: 10000, // Poll every 10 seconds
-      staleTime: 0, // Always consider data stale
+      refetchInterval: 15000, // Poll every 15 seconds - balanced for cost efficiency
+      staleTime: 5000,
       refetchOnMount: 'always', // Always refetch when component mounts
       refetchOnWindowFocus: true, // Refetch when app comes to foreground
     }

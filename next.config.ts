@@ -42,6 +42,26 @@ const nextConfig: NextConfig = {
     ];
   },
   
+  // Image optimization settings
+  images: {
+    // Domains allowed for next/image optimization
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'firebasestorage.googleapis.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'storage.googleapis.com',
+      },
+    ],
+    // Reduce image optimization calls (saves Vercel quota)
+    minimumCacheTTL: 60 * 60 * 24 * 30, // Cache optimized images for 30 days
+    // Limit image sizes to reduce processing
+    deviceSizes: [640, 750, 828, 1080, 1200],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256],
+  },
+  
   // Reduce noisy logs in development
   logging: {
     fetches: {

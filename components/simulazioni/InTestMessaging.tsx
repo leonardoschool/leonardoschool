@@ -40,13 +40,13 @@ export default function InTestMessaging({
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
 
-  // Fetch messages - fast polling for near real-time
+  // Fetch messages - polling for near real-time (2 seconds for good balance)
   const messagesQuery = trpc.virtualRoom.getMessages.useQuery(
     { participantId },
     { 
       enabled: !!participantId,
-      refetchInterval: 500, // Poll every 500ms for near real-time
-      staleTime: 400,
+      refetchInterval: 2000, // Poll every 2 seconds - still responsive, 4x less queries
+      staleTime: 1500,
     }
   );
 

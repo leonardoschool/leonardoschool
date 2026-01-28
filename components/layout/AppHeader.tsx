@@ -39,8 +39,8 @@ import {
 } from './appHeaderParts';
 import type { Theme, NotificationData } from './appHeaderParts';
 
-// Polling interval for real-time updates (30 seconds)
-const POLLING_INTERVAL = 30 * 1000;
+// Polling interval for real-time updates (60 seconds - balanced for cost efficiency)
+const POLLING_INTERVAL = 60 * 1000;
 
 export default function AppHeader() {
   const router = useRouter();

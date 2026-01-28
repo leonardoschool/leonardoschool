@@ -252,13 +252,13 @@ export default function InTestMessaging({
     };
   }, []);
 
-  // Fetch messages - fast polling for near real-time
+  // Fetch messages - polling for near real-time (2 seconds for good balance)
   const messagesQuery = trpc.virtualRoom.getMessages.useQuery(
     { participantId },
     {
       enabled: !!participantId && isOpen,
-      refetchInterval: isOpen ? 500 : false,
-      staleTime: 400,
+      refetchInterval: isOpen ? 2000 : false, // 2 seconds - still responsive, 4x less queries
+      staleTime: 1500,
     }
   );
 

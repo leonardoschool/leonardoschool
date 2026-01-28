@@ -103,8 +103,8 @@ export default function MessagesPageContent({ basePath: _basePath, userRole }: M
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
   
-  // Polling interval for real-time updates (10 seconds)
-  const POLLING_INTERVAL = 10 * 1000;
+  // Polling interval for real-time updates (15 seconds - balanced for cost efficiency)
+  const POLLING_INTERVAL = 15 * 1000;
   
   // Fetch conversations
   const { 
