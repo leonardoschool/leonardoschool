@@ -550,7 +550,7 @@ describe('Calendar Router', () => {
       });
 
       it('should create in-app notifications for invitees', async () => {
-        const { createBulkNotifications } = await import('@/lib/notifications');
+        const { createBulkNotifications } = await import('@/lib/notifications/notificationHelpers');
         expect(createBulkNotifications).toBeDefined();
       });
     });

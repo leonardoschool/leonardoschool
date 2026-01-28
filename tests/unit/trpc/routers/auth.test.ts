@@ -251,7 +251,7 @@ describe('Auth Router', () => {
 
     describe('notification', () => {
       it('should send notification for new registration', async () => {
-        const { notifications } = await import('@/lib/notifications');
+        const { notifications } = await import('@/lib/notifications/notificationHelpers');
         
         await notifications.newRegistration(mockPrisma as unknown as Parameters<typeof notifications.newRegistration>[0], {
           userId: 'user-123',

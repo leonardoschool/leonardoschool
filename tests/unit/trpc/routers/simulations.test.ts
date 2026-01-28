@@ -399,7 +399,7 @@ describe('Simulations Router', () => {
         
         const now = new Date();
         const hasActiveVirtualRoom = false;
-        const isAssignmentActive = true;
+        const _isAssignmentActive = true;
         
         // Logic: effectiveStartDate > now && !hasActiveVirtualRoom
         const shouldBlock = futureStart > now && !hasActiveVirtualRoom;
@@ -434,7 +434,7 @@ describe('Simulations Router', () => {
       it('should allow access if startDate equals now', () => {
         const now = new Date();
         const effectiveStartDate = new Date(now);
-        const hasActiveVirtualRoom = false;
+        const _hasActiveVirtualRoom = false;
         
         // Boundary: effectiveStartDate > now should be false
         const shouldBlock = effectiveStartDate > now;
@@ -484,7 +484,7 @@ describe('Simulations Router', () => {
       it('should allow access if endDate equals now', () => {
         const now = new Date();
         const effectiveEndDate = new Date(now);
-        const isAssignmentActive = false;
+        const _isAssignmentActive = false;
         
         // Boundary: effectiveEndDate < now should be false
         const shouldBlock = effectiveEndDate < now;
@@ -612,7 +612,7 @@ describe('Simulations Router', () => {
       it('should handle maxAttempts = 1 (single attempt allowed)', () => {
         const maxAttempts = 1;
         const completedAttempts = 1;
-        const hasInProgress = false;
+        const _hasInProgress = false;
         
         const shouldBlock = completedAttempts >= maxAttempts;
         
@@ -675,7 +675,7 @@ describe('Simulations Router', () => {
       });
 
       it('should handle blank answer (no answer)', () => {
-        const studentAnswer = undefined;
+        const _studentAnswer = undefined;
         const earnedPoints = mockConfig.blankPoints;
         
         expect(earnedPoints).toBe(0);

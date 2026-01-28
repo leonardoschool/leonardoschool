@@ -350,7 +350,7 @@ export async function handleContactRequest(options: HandleContactRequestOptions)
         });
         
         // Create admin notifications for new job application using the new unified system
-        const { notifications } = await import('@/lib/notifications');
+        const { notifications } = await import('@/lib/notifications/notificationHelpers');
         await notifications.jobApplication(prisma, {
           applicationId: jobApplication.id,
           applicantName: data.name,
@@ -377,7 +377,7 @@ export async function handleContactRequest(options: HandleContactRequestOptions)
         });
         
         // Create admin notifications for new contact request using the new unified system
-        const { notifications } = await import('@/lib/notifications');
+        const { notifications } = await import('@/lib/notifications/notificationHelpers');
         await notifications.contactRequest(prisma, {
           requestId: contactRequest.id,
           senderName: data.name,

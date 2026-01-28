@@ -470,33 +470,35 @@ export async function notifyNewAssignments(
         select: {
           id: true,
           email: true,
-          displayName: true,
-          firstName: true,
-          lastName: true,
+          name: true,
         },
       });
 
       const invitees: InviteeData[] = users.map(u => ({
         userId: u.id,
         email: u.email,
-        name: u.displayName || `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Studente',
+        name: u.name || 'Studente',
       }));
 
       if (invitees.length > 0) {
         const emailData: SimulationInviteData = {
-          simulationTitle: simulation.title,
-          simulationType: simulation.type,
+          id: simulation.id,
+          title: simulation.title,
+          type: simulation.type,
           isOfficial: simulation.isOfficial,
           startDate: simulation.startDate,
           endDate: simulation.endDate || undefined,
           durationMinutes: simulation.durationMinutes || 60,
-          organizerName: simulation.createdBy?.name || 'Leonardo School',
-          eventUrl: `${BASE_URL}/simulazioni`,
-          invitees,
+          totalQuestions: 0, // Not available in this context
+          correctPoints: 0,
+          wrongPoints: 0,
+          blankPoints: 0,
+          createdByName: simulation.createdBy?.name || 'Leonardo School',
+          platformUrl: `${BASE_URL}/simulazioni`,
         };
 
-        const emailResult = await sendSimulationInvitationEmail(emailData);
-        result.emailsSent = emailResult.sent;
+        const emailResult = await sendSimulationInvitationEmail(emailData, invitees);
+        result.emailsSent = emailResult.sentCount;
         result.errors = emailResult.errors;
       }
     }

@@ -236,6 +236,7 @@ export const virtualRoomRouter = router({
         notifySimulationStarted(
           participantUserIds,
           session.simulation.title,
+          session.assignmentId,
           input.sessionId
         ).catch(err => log.error('Failed to send FCM for simulation start', { error: err }));
       }
@@ -812,7 +813,6 @@ export const virtualRoomRouter = router({
         const reason = input.reason || 'Sei stato espulso dalla sessione';
         notifySessionKicked(
           participant.student.user.id,
-          participant.session.id,
           reason
         ).catch(err => log.error('Failed to send FCM for kick notification', { error: err }));
       }
