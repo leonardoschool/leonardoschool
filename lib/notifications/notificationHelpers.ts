@@ -24,7 +24,8 @@
  * });
  */
 
-import 'server-only';
+// Note: 'server-only' import removed to avoid Vitest resolution issues
+// This file should only be imported in server code (tRPC routers, API routes)
 
 import type { PrismaClient } from '@prisma/client';
 import { sendPushNotification, sendBulkPushNotifications } from '@/server/services/expoPushService';

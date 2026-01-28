@@ -17,6 +17,12 @@ vi.mock('@/lib/notifications', () => ({
   },
 }));
 
+vi.mock('@/lib/notifications/notificationHelpers', () => ({
+  notifications: {
+    newRegistration: vi.fn().mockResolvedValue({ success: true }),
+  },
+}));
+
 vi.mock('@/lib/utils/matricolaUtils', () => ({
   generateMatricola: vi.fn().mockResolvedValue('LS20260001'),
 }));
@@ -26,6 +32,7 @@ type MockPrismaClient = {
   user: {
     findUnique: Mock;
     findFirst: Mock;
+    findMany: Mock;
     create: Mock;
     update: Mock;
   };
@@ -43,6 +50,7 @@ function createMockPrisma(): MockPrismaClient {
     user: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
     },
