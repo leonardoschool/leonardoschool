@@ -16,6 +16,7 @@ import { questionTagsRouter } from './questionTags';
 import { calendarRouter } from './calendar';
 import { messagesRouter } from './messages';
 import { virtualRoomRouter } from './virtualRoom';
+import { fcmRouter } from './fcm';
 
 export const appRouter = router({
   auth: authRouter,
@@ -34,6 +35,7 @@ export const appRouter = router({
   calendar: calendarRouter,
   messages: messagesRouter,
   virtualRoom: virtualRoomRouter,
+  fcm: fcmRouter,
 });
 
 // Export type definition of API

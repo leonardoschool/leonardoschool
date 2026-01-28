@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { adminProcedure, protectedProcedure, router, staffProcedure } from '../init';
 import { notifications } from '@/lib/notifications';
+import { createCachedQuery, CACHE_TIMES } from '@/lib/cache/serverCache';
 
 // Group Types
 const GroupTypeEnum = z.enum(['STUDENTS', 'COLLABORATORS', 'MIXED']);
@@ -967,33 +968,41 @@ export const groupsRouter = router({
       }
     }),
 
-  // Get stats for groups
+  // Get stats for groups (cached)
   getStats: staffProcedure.query(async ({ ctx }) => {
-    const [total, byType, activeGroups] = await Promise.all([
-      ctx.prisma.group.count(),
-      ctx.prisma.group.groupBy({
-        by: ['type'],
-        _count: true,
-        where: { isActive: true },
-      }),
-      ctx.prisma.group.count({ where: { isActive: true } }),
-    ]);
+    const getCachedStats = createCachedQuery(
+      async () => {
+        const [total, byType, activeGroups] = await Promise.all([
+          ctx.prisma.group.count(),
+          ctx.prisma.group.groupBy({
+            by: ['type'],
+            _count: true,
+            where: { isActive: true },
+          }),
+          ctx.prisma.group.count({ where: { isActive: true } }),
+        ]);
 
-    const totalMembers = await ctx.prisma.groupMember.count();
+        const totalMembers = await ctx.prisma.groupMember.count();
 
-    return {
-      total,
-      active: activeGroups,
-      inactive: total - activeGroups,
-      totalMembers,
-      byType: byType.reduce(
-        (acc, item) => {
-          acc[item.type] = item._count;
-          return acc;
-        },
-        {} as Record<string, number>
-      ),
-    };
+        return {
+          total,
+          active: activeGroups,
+          inactive: total - activeGroups,
+          totalMembers,
+          byType: byType.reduce(
+            (acc, item) => {
+              acc[item.type] = item._count;
+              return acc;
+            },
+            {} as Record<string, number>
+          ),
+        };
+      },
+      ['groups', 'stats'],
+      { revalidate: CACHE_TIMES.MEDIUM }
+    );
+    
+    return getCachedStats();
   }),
 
   // Get groups managed by the current collaborator (as referent or member)

@@ -9,6 +9,7 @@ import { firebaseAuth } from '@/lib/firebase/auth';
 import { colors } from '@/lib/theme/colors';
 import { playNotificationSound } from '@/lib/utils/notificationSound';
 import { useFocusAwarePolling } from '@/lib/hooks/useWindowFocus';
+import { useFCMNotifications } from '@/lib/hooks/useFCMNotifications';
 import {
   Bell,
   Menu,
@@ -41,6 +42,7 @@ import {
 import type { Theme, NotificationData } from './appHeaderParts';
 
 // Polling interval for real-time updates (120 seconds - optimized for cost efficiency)
+// When FCM is active, polling is used only as fallback
 // Polling is automatically disabled when tab is not focused
 const POLLING_INTERVAL = 120 * 1000;
 
@@ -64,8 +66,14 @@ export default function AppHeader() {
   // Get current user
   const { data: user } = trpc.auth.me.useQuery();
 
+  // FCM push notifications - invalidates queries on new notifications
+  // This reduces polling dependency significantly
+  const { permissionGranted: hasFCM } = useFCMNotifications();
+
   // Focus-aware polling - stops polling when tab is not active to save serverless invocations
-  const focusAwarePollingInterval = useFocusAwarePolling(POLLING_INTERVAL, !!user);
+  // When FCM is active, polling is only a fallback (every 5 min instead of 2 min)
+  const pollingIntervalMs = hasFCM ? POLLING_INTERVAL * 2.5 : POLLING_INTERVAL; // 5 min with FCM, 2 min without
+  const focusAwarePollingInterval = useFocusAwarePolling(pollingIntervalMs, !!user);
   
   // Get collaborator contract status
   const { data: collaboratorContract } = trpc.contracts.getMyCollaboratorContract.useQuery(
@@ -77,7 +85,7 @@ export default function AppHeader() {
     }
   );
   
-  // Get notifications
+  // Get notifications - FCM push updates this automatically
   const { data: notificationsData, refetch: refetchNotifications } = trpc.notifications.getNotifications.useQuery(
     { unreadOnly: true, pageSize: 10 },
     { 

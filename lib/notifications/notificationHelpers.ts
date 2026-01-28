@@ -7,6 +7,8 @@
  * Usa queste funzioni invece di creare notifiche direttamente con Prisma
  * per garantire consistenza in tutta l'applicazione.
  * 
+ * Supporta sia Expo Push (mobile) che FCM (web).
+ * 
  * @example
  * import { notifications } from '@/lib/notifications/notificationHelpers';
  * 
@@ -20,6 +22,7 @@
 
 import type { PrismaClient } from '@prisma/client';
 import { sendPushNotification, sendBulkPushNotifications } from '@/server/services/expoPushService';
+import { notifySystemNotification } from '@/server/services/fcmService';
 import { 
   getNotificationConfig, 
   getNotificationRoute,
@@ -76,7 +79,9 @@ interface BulkNotificationResult {
 
 /**
  * Crea una notifica per un singolo utente
- * Invia automaticamente anche una push notification se l'utente ha un token registrato
+ * Invia automaticamente push notification via:
+ * - Expo Push (mobile app)
+ * - FCM (web browser)
  */
 export async function createNotification(
   prisma: PrismaClient,
@@ -101,29 +106,47 @@ export async function createNotification(
       },
     });
 
-    // Send push notification if user has a registered token
+    // Send push notifications in parallel (Expo for mobile, FCM for web)
+    const pushPromises: Promise<unknown>[] = [];
+    
     try {
       const user = await prisma.user.findUnique({
         where: { id: params.userId },
         select: { expoPushToken: true },
       });
 
+      // Expo Push for mobile
       if (user?.expoPushToken) {
-        await sendPushNotification(
-          user.expoPushToken,
-          params.title,
-          params.message,
-          {
-            type: params.type,
-            notificationId: notification.id,
-            linkUrl: params.linkUrl,
-            linkEntityId: params.linkEntityId,
-          }
+        pushPromises.push(
+          sendPushNotification(
+            user.expoPushToken,
+            params.title,
+            params.message,
+            {
+              type: params.type,
+              notificationId: notification.id,
+              linkUrl: params.linkUrl,
+              linkEntityId: params.linkEntityId,
+            }
+          ).catch((err) => console.warn('[Notifications] Expo push failed:', err))
         );
       }
+
+      // FCM Push for web browsers
+      pushPromises.push(
+        notifySystemNotification(
+          params.userId,
+          params.title,
+          params.message,
+          notification.id
+        ).catch((err) => console.warn('[Notifications] FCM push failed:', err))
+      );
+
+      // Execute all push notifications in parallel, don't block on failures
+      await Promise.allSettled(pushPromises);
     } catch (pushError) {
       // Log but don't fail the notification creation
-      console.warn('[Notifications] Failed to send push notification:', pushError);
+      console.warn('[Notifications] Failed to send push notifications:', pushError);
     }
 
     return { success: true, notificationId: notification.id };
@@ -147,7 +170,8 @@ export async function createBulkNotifications(
   try {
     const config = getNotificationConfig(params.type);
     
-    await prisma.notification.createMany({
+    // Create notifications in database
+    const notifications = await prisma.notification.createManyAndReturn({
       data: params.userIds.map((userId) => ({
         userId,
         type: params.type,
@@ -161,10 +185,12 @@ export async function createBulkNotifications(
         groupKey: params.groupKey,
         expiresAt: params.expiresAt,
       })),
+      select: { id: true, userId: true },
     });
 
-    // Send push notifications to users with registered tokens
+    // Send push notifications (Expo for mobile, FCM for web)
     try {
+      // Expo Push for mobile users with tokens
       const usersWithTokens = await prisma.user.findMany({
         where: { 
           id: { in: params.userIds },
@@ -187,11 +213,23 @@ export async function createBulkNotifications(
 
         const result = await sendBulkPushNotifications(pushMessages);
         
-        // Log invalid tokens for manual cleanup if needed
         if (result.invalidTokens.length > 0) {
-          console.log(`[Notifications] ${result.invalidTokens.length} invalid push tokens detected`);
+          console.log(`[Notifications] ${result.invalidTokens.length} invalid Expo push tokens detected`);
         }
       }
+
+      // FCM Push for web users - send in parallel, don't block
+      const { sendPushNotificationToUsers } = await import('@/server/services/fcmService');
+      
+      await sendPushNotificationToUsers(
+        params.userIds,
+        { title: params.title, body: params.message },
+        { 
+          type: 'NOTIFICATION',
+          notificationId: notifications[0]?.id || '', // Use first notification ID as reference
+        }
+      ).catch((err) => console.warn('[Notifications] FCM bulk push failed:', err));
+
     } catch (pushError) {
       console.warn('[Notifications] Failed to send bulk push notifications:', pushError);
     }
