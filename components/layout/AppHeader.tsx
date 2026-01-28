@@ -10,6 +10,7 @@ import { colors } from '@/lib/theme/colors';
 import { playNotificationSound } from '@/lib/utils/notificationSound';
 import { useFocusAwarePolling } from '@/lib/hooks/useWindowFocus';
 import { useFCMNotifications } from '@/lib/hooks/useFCMNotifications';
+import { NotificationPermissionBanner } from '@/components/ui/NotificationPermissionBanner';
 import {
   Bell,
   Menu,
@@ -232,7 +233,11 @@ export default function AppHeader() {
   };
 
   return (
-    <header className={`sticky top-0 z-50 ${colors.background.card} border-b ${colors.border.primary} shadow-sm`}>
+    <>
+      {/* Notification Permission Banner - manages its own visibility */}
+      <NotificationPermissionBanner />
+      
+      <header className={`sticky top-0 z-50 ${colors.background.card} border-b ${colors.border.primary} shadow-sm`}>
       <div className="w-full px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20 gap-3">
           {/* Hamburger Menu Button (Mobile/Tablet) */}
@@ -444,6 +449,7 @@ export default function AppHeader() {
         />
       )}
     </header>
+    </>
   );
 }
 

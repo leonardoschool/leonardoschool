@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { adminProcedure, protectedProcedure, router, staffProcedure } from '../init';
-import { notifications } from '@/lib/notifications';
+import { notifications } from '@/lib/notifications/notificationHelpers';
 import { createCachedQuery, CACHE_TIMES } from '@/lib/cache/serverCache';
 
 // Group Types

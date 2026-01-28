@@ -54,8 +54,16 @@ export async function requestNotificationPermission(): Promise<string | null> {
       return null;
     }
 
-    // Richiedi permessi
-    const permission = await Notification.requestPermission();
+    // Check current permission status first
+    console.log('[FCM] Current notification permission:', Notification.permission);
+
+    // Se già granted, non richiedere di nuovo (evita popup)
+    let permission = Notification.permission;
+    if (permission !== 'granted') {
+      permission = await Notification.requestPermission();
+      console.log('[FCM] Permission after request:', permission);
+    }
+    
     if (permission !== 'granted') {
       console.log('[FCM] Notification permission denied');
       return null;
@@ -63,7 +71,10 @@ export async function requestNotificationPermission(): Promise<string | null> {
 
     // Inizializza messaging se non già fatto
     const msg = await initializeMessaging();
-    if (!msg) return null;
+    if (!msg) {
+      console.error('[FCM] Failed to initialize messaging');
+      return null;
+    }
 
     // Registra service worker
     const registration = await registerServiceWorker();
@@ -103,11 +114,46 @@ async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null
   }
 
   try {
+    // Check for existing registration first
+    const existingRegistration = await navigator.serviceWorker.getRegistration('/');
+    if (existingRegistration?.active) {
+      console.log('[FCM] Using existing service worker registration');
+      return existingRegistration;
+    }
+
     // Use dynamic service worker endpoint that injects environment variables
     const registration = await navigator.serviceWorker.register('/api/firebase-messaging-sw', {
       scope: '/',
     });
     console.log('[FCM] Service worker registered:', registration.scope);
+    
+    // Wait for the service worker to be ready (installing -> waiting -> active)
+    if (registration.installing) {
+      console.log('[FCM] Waiting for service worker to activate...');
+      await new Promise<void>((resolve) => {
+        registration.installing!.addEventListener('statechange', function handler(e) {
+          if ((e.target as ServiceWorker).state === 'activated') {
+            registration.installing?.removeEventListener('statechange', handler);
+            resolve();
+          }
+        });
+      });
+    } else if (registration.waiting) {
+      console.log('[FCM] Waiting for service worker to activate from waiting state...');
+      await new Promise<void>((resolve) => {
+        registration.waiting!.addEventListener('statechange', function handler(e) {
+          if ((e.target as ServiceWorker).state === 'activated') {
+            registration.waiting?.removeEventListener('statechange', handler);
+            resolve();
+          }
+        });
+      });
+    }
+    
+    // Ensure service worker is ready
+    await navigator.serviceWorker.ready;
+    console.log('[FCM] Service worker is now active');
+    
     return registration;
   } catch (error) {
     console.error('[FCM] Service worker registration failed:', error);

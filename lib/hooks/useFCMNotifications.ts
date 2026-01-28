@@ -58,7 +58,7 @@ export interface UseFCMNotificationsReturn {
 export function useFCMNotifications(
   options: UseFCMNotificationsOptions = {}
 ): UseFCMNotificationsReturn {
-  const { onMessage, autoRequestPermission = false } = options;
+  const { onMessage } = options;
 
   const [permissionGranted, setPermissionGranted] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
@@ -69,6 +69,7 @@ export function useFCMNotifications(
 
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const tokenRef = useRef<string | null>(null);
+  const isRegisteringRef = useRef(false); // Prevent multiple registrations
 
   const utils = trpc.useUtils();
   const registerTokenMutation = trpc.fcm.registerToken.useMutation();
@@ -136,6 +137,13 @@ export function useFCMNotifications(
    * Richiedi permessi e registra token
    */
   const requestPermission = useCallback(async (): Promise<boolean> => {
+    // Prevent concurrent registrations
+    if (isRegisteringRef.current) {
+      console.log('[FCM Hook] Registration already in progress, skipping');
+      return hasToken;
+    }
+    
+    isRegisteringRef.current = true;
     setIsLoading(true);
     setError(null);
 
@@ -146,6 +154,7 @@ export function useFCMNotifications(
         setPermissionGranted(false);
         setPermissionStatus(Notification.permission);
         setIsLoading(false);
+        isRegisteringRef.current = false;
         return false;
       }
 
@@ -170,57 +179,79 @@ export function useFCMNotifications(
 
       console.log('[FCM Hook] Token registered successfully');
       setIsLoading(false);
+      isRegisteringRef.current = false;
       return true;
     } catch (err) {
       console.error('[FCM Hook] Error requesting permission:', err);
       setError(err instanceof Error ? err.message : 'Errore durante la richiesta permessi');
       setIsLoading(false);
+      isRegisteringRef.current = false;
       return false;
     }
-  }, [registerTokenMutation, handleForegroundMessage]);
+  }, [registerTokenMutation, handleForegroundMessage, hasToken]);
 
   /**
    * Check iniziale supporto e stato permessi
    */
   useEffect(() => {
+    // Run only once on mount
+    let mounted = true;
+    
     const checkStatus = async () => {
       const status = await checkNotificationStatus();
+      
+      if (!mounted) return;
+      
       setIsSupported(status.supported);
       setPermissionStatus(status.permission);
       setPermissionGranted(status.permission === 'granted');
 
-      // Se già granted, setup listener
-      if (status.permission === 'granted' && status.supported) {
-        // Richiedi token (rinnova se necessario)
-        if (autoRequestPermission) {
-          await requestPermission();
-        }
+      // Se già granted e non abbiamo già un token, registra automaticamente
+      if (status.permission === 'granted' && status.supported && !tokenRef.current) {
+        console.log('[FCM Hook] Permission already granted, registering token...');
+        await requestPermission();
       }
 
-      setIsLoading(false);
+      if (mounted) {
+        setIsLoading(false);
+      }
     };
 
     checkStatus();
 
     // Cleanup
     return () => {
+      mounted = false;
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
       }
     };
-  }, [autoRequestPermission, requestPermission]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once on mount
 
   /**
    * Listener per messaggi dal service worker (click su notifica)
+   * Invalida le query per aggiornare UI quando l'utente clicca su notifica
    */
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.serviceWorker) return;
 
     const handleSWMessage = (event: MessageEvent) => {
       if (event.data?.type === 'NOTIFICATION_CLICK') {
-        console.log('[FCM Hook] Notification clicked, navigating to:', event.data.url);
-        // La navigazione è gestita dal service worker, qui possiamo fare altre azioni
-        // es. tracciare analytics
+        console.log('[FCM Hook] Notification clicked from SW:', event.data);
+        
+        // Invalida le query in base al tipo di notifica
+        const data = event.data.data || {};
+        if (data.type === 'NEW_MESSAGE') {
+          utils.messages.getConversations.invalidate();
+          utils.messages.getUnreadCount.invalidate();
+          if (data.conversationId) {
+            utils.messages.getMessages.invalidate({ conversationId: data.conversationId });
+          }
+        } else {
+          // Per tutte le altre notifiche, aggiorna la lista notifiche
+          utils.notifications.getNotifications.invalidate();
+        }
       }
     };
 
@@ -229,7 +260,30 @@ export function useFCMNotifications(
     return () => {
       navigator.serviceWorker.removeEventListener('message', handleSWMessage);
     };
-  }, []);
+  }, [utils]);
+
+  /**
+   * Invalida le notifiche quando la pagina torna visibile
+   * Questo gestisce il caso in cui l'utente ha visto il banner ma non ci ha cliccato
+   */
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && hasToken) {
+        // Refresh notifiche quando la pagina torna visibile
+        // Questo cattura le notifiche arrivate mentre la pagina era in background
+        utils.notifications.getNotifications.invalidate();
+        utils.messages.getUnreadCount.invalidate();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [utils, hasToken]);
 
   return {
     permissionGranted,

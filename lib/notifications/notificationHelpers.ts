@@ -1,6 +1,10 @@
 /**
  * Notification Helpers - Funzioni standardizzate per la creazione di notifiche
  * 
+ * IMPORTANT: This file contains server-only code (Prisma, FCM, Expo Push).
+ * Do NOT import this file in client components.
+ * For client-side utilities, use notificationConfig.ts instead.
+ * 
  * Questo file fornisce un'API semplificata per creare notifiche
  * con link, parametri e comportamenti corretti.
  * 
@@ -20,9 +24,11 @@
  * });
  */
 
+import 'server-only';
+
 import type { PrismaClient } from '@prisma/client';
 import { sendPushNotification, sendBulkPushNotifications } from '@/server/services/expoPushService';
-import { notifySystemNotification } from '@/server/services/fcmService';
+// FCM import is dynamic to avoid importing firebase-admin in client bundles
 import { 
   getNotificationConfig, 
   getNotificationRoute,
@@ -132,13 +138,15 @@ export async function createNotification(
         );
       }
 
-      // FCM Push for web browsers
+      // FCM Push for web browsers (dynamic import to avoid bundling firebase-admin in client)
       pushPromises.push(
-        notifySystemNotification(
-          params.userId,
-          params.title,
-          params.message,
-          notification.id
+        import('@/server/services/fcmService').then(({ notifySystemNotification }) =>
+          notifySystemNotification(
+            params.userId,
+            params.title,
+            params.message,
+            notification.id
+          )
         ).catch((err) => console.warn('[Notifications] FCM push failed:', err))
       );
 

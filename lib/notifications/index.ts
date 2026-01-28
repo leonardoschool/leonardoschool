@@ -2,18 +2,19 @@
  * Notifications Module - Sistema di notifiche centralizzato
  * 
  * @example
- * // Per creare notifiche (lato server)
- * import { notifications } from '@/lib/notifications';
- * 
- * await notifications.contractSigned(prisma, { ... });
- * 
- * // Per la configurazione UI (lato client)
+ * // Per la configurazione UI (lato client) - SAFE
  * import { getNotificationConfig, getNotificationRoute } from '@/lib/notifications';
  * 
  * const config = getNotificationConfig('CONTRACT_SIGNED');
+ * 
+ * // Per creare notifiche (SOLO lato server)
+ * // Import direttamente da notificationHelpers per evitare bundling client
+ * import { notifications } from '@/lib/notifications/notificationHelpers';
+ * 
+ * await notifications.contractSigned(prisma, { ... });
  */
 
-// Export configuration utilities
+// Export configuration utilities - SAFE FOR CLIENT
 export {
   notificationConfigs,
   getNotificationConfig,
@@ -28,16 +29,6 @@ export {
   type RouteParams,
 } from './notificationConfig';
 
-// Export notification creation helpers
-export {
-  notifications,
-  createNotification,
-  createBulkNotifications,
-  notifyByRole,
-  notifyAdmins,
-  notifyStaff,
-  buildNotificationLink,
-  deleteNotificationsForEntity,
-  archiveReadNotifications,
-  getUnreadCount,
-} from './notificationHelpers';
+// NOTE: Server-only exports (notifications, createNotification, etc.)
+// are NOT re-exported here to prevent client bundling issues.
+// Import them directly from '@/lib/notifications/notificationHelpers' in server code.

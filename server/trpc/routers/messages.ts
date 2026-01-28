@@ -12,7 +12,7 @@
 import { z } from 'zod';
 import { router, protectedProcedure } from '../init';
 import { TRPCError } from '@trpc/server';
-import { notifications } from '@/lib/notifications';
+import { notifications } from '@/lib/notifications/notificationHelpers';
 import { notifyNewMessage } from '@/server/services/fcmService';
 
 // Schema for creating a new conversation

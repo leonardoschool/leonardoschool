@@ -14,9 +14,9 @@ import {
   bulkAssignmentSchema,
 } from '@/lib/validations/simulationValidation';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { notifySimulationCreated } from '@/server/services/simulationNotificationService';
+import { notifySimulationCreated, notifyNewAssignments } from '@/server/services/simulationNotificationService';
 import * as notificationService from '@/server/services/notificationService';
-import { notifications } from '@/lib/notifications';
+import { notifications } from '@/lib/notifications/notificationHelpers';
 import { createLogger } from '@/lib/utils/logger';
 import { stripHtml } from '@/lib/utils/sanitizeHtml';
 import { secureShuffleArray } from '@/lib/utils';
@@ -2533,10 +2533,16 @@ export const simulationsRouter = router({
         return results;
       });
 
-      // Send notifications for newly added assignments
+      // Send notifications for newly added assignments ONLY (not all assignments)
       if (created.length > 0) {
+        // Extract studentId and groupId from created assignments
+        const newAssignments = created.map(a => ({
+          studentId: a.studentId,
+          groupId: a.groupId,
+        }));
+        
         // Fire and forget - don't block the response
-        notifySimulationCreated(simulationId, ctx.prisma).catch((error) => {
+        notifyNewAssignments(simulationId, newAssignments, ctx.prisma).catch((error) => {
           log.error('Failed to send notifications for new assignments:', error);
         });
       }

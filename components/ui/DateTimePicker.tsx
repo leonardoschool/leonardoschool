@@ -252,14 +252,16 @@ export default function DateTimePicker({
           {value ? formatDisplayValue() : placeholder}
         </span>
         {value && !disabled && (
-          <button
-            type="button"
+          <span
+            role="button"
+            tabIndex={0}
             onClick={handleClear}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleClear(e as unknown as React.MouseEvent); }}
             className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 ${colors.text.muted} cursor-pointer`}
             aria-label="Cancella data"
           >
             <X className="w-4 h-4" />
-          </button>
+          </span>
         )}
       </button>
 
