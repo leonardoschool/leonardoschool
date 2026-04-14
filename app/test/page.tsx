@@ -138,7 +138,7 @@ type PrivateUniversity = {
 const privateUniversities: PrivateUniversity[] = [
   {
     id: 'humat',
-    testName: 'Test HUMAT',
+    testName: 'HUMAT',
     universityName: 'Humanitas University',
     image: '/images/hunimed.png',
     links: [
