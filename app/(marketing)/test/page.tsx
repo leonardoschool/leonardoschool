@@ -2,6 +2,7 @@ import Image from 'next/image';
 import TestCard from '@/components/ui/TestCard';
 import { TestCard as TestCardType } from '@/types';
 import { Metadata } from 'next';
+import Image from 'next/image';
 
 export const metadata: Metadata = {
   title: 'Test di ammissione | Leonardo School',
@@ -126,6 +127,131 @@ const allTests: TestCardType[] = [
   },
 ];
 
+type PrivateUniversity = {
+  id: string;
+  testName: string;
+  universityName: string;
+  image: string;
+  imageRounded?: boolean;
+  links: Array<{ label: string; url: string }>;
+};
+
+const privateUniversities: PrivateUniversity[] = [
+  {
+    id: 'humat',
+    testName: 'HUMAT',
+    universityName: 'Humanitas University',
+    image: '/images/hunimed.png',
+    links: [
+      { label: 'Medicine and Surgery', url: 'https://www.hunimed.eu/it/iscriviti-med-schools' },
+      { label: 'Professioni Sanitarie', url: 'https://www.hunimed.eu/it/iscriviti-professioni-sanitarie' },
+    ],
+  },
+  {
+    id: 'ucbm',
+    testName: 'Test UBCM',
+    universityName: 'Universita Campus Bio-Medico di Roma',
+    image: '/images/ucbm.png',
+    links: [
+      { label: 'Medicina e Chirurgia', url: 'https://www.unicampus.it/ammissioni-trasferim/medicina-e-chirurgia-a-a-2026-2027/' },
+      { label: 'Odontoiatria e Protesi Dentaria', url: 'https://www.unicampus.it/ammissioni-trasferim/odontoiatria-e-protesi-dentaria-a-a-2026-2027/' },
+      { label: 'Medicine and Surgery', url: 'https://www.unicampus.it/ammissioni-trasferim/medicine-and-surgery-a-a-2026-2027-cittadini-italiani-europei-ed-equiparati/' },
+      { label: 'Medicine and Surgery "MedTech"', url: 'https://www.unicampus.it/ammissioni-trasferim/medicine-and-surgery-medtech-a-a-2026-2027-cittadini-italiani-europei-ed-equiparati/' },
+    ],
+  },
+  {
+    id: 'unicamillus',
+    testName: 'Test UniCamillus',
+    universityName: 'Saint Camillus International University of Health and Medical Sciences',
+    image: '/images/uniCamillus.png',
+    links: [
+      { label: 'Medicina e Chirurgia', url: 'https://unicamillus.org/servizi/bandi-di-ammissione/' },
+      { label: 'Odontoiatria e Protesi Dentaria', url: 'https://unicamillus.org/servizi/bandi-di-ammissione/' },
+      { label: 'Medicine and Surgery', url: 'https://unicamillus.org/servizi/bandi-di-ammissione/' },
+      { label: 'Professioni Sanitarie', url: 'https://unicamillus.org/servizi/bandi-di-ammissione/' },
+    ],
+  },
+  {
+    id: 'unicatt',
+    testName: 'Test UniCatt',
+    universityName: 'Universita Cattolica del Sacro Cuore',
+    image: '/images/unicatt.png',
+    links: [
+      { label: 'Medicina e Chirurgia - Odontoiatria e Protesi Dentaria', url: 'https://www.unicatt.it/corsi/triennale/medicina-e-chirurgia-roma/ammissioni-e-iscrizioni.html' },
+      { label: 'Medicine and Surgery - Dentistry and Dental Prosthodontics', url: 'https://www.unicatt.it/en/programmes/undergraduate-and-integrated-degree-programmes/medicine-and-surgery-it-rome/admissions-and-enrolment.html' },
+    ],
+  },
+  {
+    id: 'unilink',
+    testName: 'Test UniLink',
+    universityName: 'Link Campus University',
+    image: '/images/unilink.png',
+    links: [
+      { label: 'Medicina e Chirurgia', url: 'https://www.unilink.it/cds/medicina-e-chirurgia-lm-41-aa-26-27-roma' },
+      { label: 'Odontoiatria e Protesi Dentaria', url: 'https://www.unilink.it/cds/odontoiatria-lm-46-aa-26-27-tutte-le-sedi' },
+      { label: 'Professioni Sanitarie', url: 'https://www.unilink.it/cds/medicina-e-chirurgia-lm-41-aa-26-27-roma' },
+      { label: 'Scienze della Formazione Primaria', url: 'https://www.unilink.it/cds/scienze-formazione-primaria-lm-85-bis-aa-26-27-roma' },
+    ],
+  },
+  {
+    id: 'unisr',
+    testName: 'Test UniSR',
+    universityName: 'Universita Vita-Salute San Raffaele',
+    image: '/images/uniSR.jpeg',
+    imageRounded: true,
+    links: [
+      { label: 'Medicina e Chirurgia', url: 'https://www.unisr.it/servizi/ammissioni/medicina-chirurgia' },
+      { label: 'Odontoiatria e Protesi Dentaria', url: 'https://www.unisr.it/servizi/ammissioni/odontoiatria' },
+      { label: 'Medicine and Surgery', url: 'https://www.unisr.it/servizi/ammissioni/international-medical-doctor-program' },
+      { label: 'Professioni Sanitarie', url: 'https://www.unisr.it/servizi/ammissioni/professioni-sanitarie' },
+    ],
+  },
+  {
+    id: 'uer',
+    testName: 'Test UER',
+    universityName: 'Universita Europea di Roma',
+    image: '/images/uniUer.png',
+    imageRounded: true,
+    links: [
+      { label: 'Medicina e Chirurgia', url: 'https://www.uer.it/medicina/ammissioni-26-27' },
+    ],
+  },
+  {
+    id: 'lum',
+    testName: 'Test LUM',
+    universityName: 'Libera Universita Mediterranea "Giuseppe Degennaro"',
+    image: '/images/uniLum.jpeg',
+    imageRounded: true,
+    links: [
+      { label: 'Medicina e Chirurgia', url: 'https://www.lum.it/medicina/ammissioni-26-27' },
+      { label: 'Odontoiatria e Protesi Dentaria', url: 'https://www.lum.it/procedure-di-ammissione-corso-di-laurea-magistrale-in-odontoiatria-e-protesi-dentaria-lm-46r/' },
+      { label: 'Infermieristica', url: 'https://www.lum.it/procedure-di-ammissione-corso-di-laurea-in-infermieristica-l-snt1/' },
+      { label: 'Fisioterapia', url: 'https://www.lum.it/laurea-triennale-fisioterapia/' },
+    ],
+  },
+  {
+    id: 'uke',
+    testName: 'Test UKE',
+    universityName: 'Universita degli Studi di Enna "Kore"',
+    image: '/images/uniUke.jpeg',
+    imageRounded: true,
+    links: [
+      { label: 'Medicina e Chirurgia', url: 'https://uke.it/ateneo/news-it/medicina-test-di-ammissione-uke-a-a-2026-2027-bando-e-sedi' },
+      { label: 'Professioni Sanitarie', url: 'https://uke.it/ateneo/news-it/professioni-sanitarie-test-di-ammissione-prova-straordinaria-di-selezione' },
+      { label: 'Architettura', url: 'https://uke.it/ateneo/news-it/architettura-test-di-ammissione-ii-tornata-a-a-2025-26' },
+      { label: 'Scienze della Formazione Primaria', url: 'https://uke.it/ateneo/news-it/scienze-della-formazione-primaria-test-di-ammissione-prova-straordinaria-di-selezione' },
+    ],
+  },
+];
+
+function sortUniversitiesAlphabetically(universities: PrivateUniversity[]): PrivateUniversity[] {
+  return [...universities].sort((a, b) =>
+    a.universityName.localeCompare(b.universityName, 'it', { sensitivity: 'base' })
+  );
+}
+
+const sortedPrivateUniversities = sortUniversitiesAlphabetically(privateUniversities);
+
 export default function TestPage() {
   return (
     <div className="min-h-screen bg-gray-50">
@@ -175,137 +301,39 @@ export default function TestPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
-              {/* Hunimed */}
-              <div className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100">
-                <div className="flex justify-center mb-6">
-                  <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
-                    <Image src="/images/hunimed.png" alt="Hunimed" width={56} height={56} className="object-contain" />
+              {sortedPrivateUniversities.map((university) => (
+                <div
+                  key={university.id}
+                  className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100"
+                >
+                  <div className="flex justify-center mb-6">
+                    <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
+                      <Image
+                        src={university.image}
+                        alt={university.testName}
+                        width={56}
+                        height={56}
+                        className={`w-14 h-14 object-contain ${university.imageRounded ? 'rounded-full' : ''}`}
+                      />
+                    </div>
+                  </div>
+                  <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">{university.testName}</h3>
+                  <p className="text-sm text-gray-600 mb-6 text-center">{university.universityName}</p>
+                  <div className="space-y-2">
+                    {university.links.map((link) => (
+                      <a
+                        key={`${university.id}-${link.label}`}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors"
+                      >
+                        <span className="text-red-600 mr-2">›</span> {link.label}
+                      </a>
+                    ))}
                   </div>
                 </div>
-                <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test Hunimed</h3>
-                <p className="text-sm text-gray-600 mb-6 text-center">Humanitas University</p>
-                <div className="space-y-2">
-                  <a href="https://www.hunimed.eu/wp-content/uploads/2025/11/2026_MEDEU_Bando_ITA-1.pdf" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicine and Surgery
-                  </a>
-                  <a href="https://www.hunimed.eu/wp-content/uploads/2025/06/2025_Professioni-Sanitarie.pdf" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Professioni Sanitarie
-                  </a>
-                </div>
-              </div>
-
-              {/* UCBM */}
-              <div className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100">
-                <div className="flex justify-center mb-6">
-                  <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
-                    <Image src="/images/ucbm.png" alt="UCBM" width={56} height={56} className="object-contain" />
-                  </div>
-                </div>
-                <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test UBCM</h3>
-                <p className="text-sm text-gray-600 mb-6 text-center">Università Campus Bio-Medico di Roma</p>
-                <div className="space-y-2">
-                  <a href="https://www.unicampus.it/ammissioni-trasferim/medicina-e-chirurgia-a-a-2026-2027/" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicina e Chirurgia
-                  </a>
-                  <a href="https://www.unicampus.it/ammissioni-trasferim/odontoiatria-e-protesi-dentaria-a-a-2026-2027/" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Odontoiatria e Protesi Dentaria
-                  </a>
-                  <a href="https://www.unicampus.it/ammissioni-trasferim/medicine-and-surgery-a-a-2026-2027-cittadini-italiani-europei-ed-equiparati/" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicine and Surgery
-                  </a>
-                  <a href="https://www.unicampus.it/ammissioni-trasferim/medicine-and-surgery-medtech-a-a-2026-2027-cittadini-italiani-europei-ed-equiparati/" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicine and Surgery &quot;MedTech&quot;
-                  </a>
-                </div>
-              </div>
-
-              {/* UniCamillus */}
-              <div className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100">
-                <div className="flex justify-center mb-6">
-                  <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
-                    <Image src="/images/uniCamillus.png" alt="UniCamillus" width={56} height={56} className="object-contain" />
-                  </div>
-                </div>
-                <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test UniCamillus</h3>
-                <p className="text-sm text-gray-600 mb-6 text-center">Saint Camillus International University</p>
-                <div className="space-y-2">
-                  <a href="https://unicamillus.org/wp-content/uploads/bandi_ammissione/2025-2026/dr_545_bando_medicina_italiano_eu_2025-2026_ottobre_2025.pdf?x46727" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicina e Chirurgia
-                  </a>
-                  <a href="https://unicamillus.org/wp-content/uploads/bandi_ammissione/2025-2026/dr_546_bando_odontoiatria_eu_2025-2026_roma_ottobre_2025.pdf?x46727" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Odontoiatria e Protesi Dentaria
-                  </a>
-                  <a href="https://unicamillus.org/wp-content/uploads/bandi_ammissione/2025-2026/dr_544_bando_medicina_inglese_eu_2025-2026_roma_ottobre_2025.pdf?x46727" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicine and Surgery
-                  </a>
-                  <a href="https://unicamillus.org/wp-content/uploads/bandi_ammissione/2025-2026/dr-559_bando_oste_biom_ue_ottobre_2025-2026.pdf?x46727" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Professioni Sanitarie
-                  </a>
-                </div>
-              </div>
-
-              {/* UniCatt */}
-              <div className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100">
-                <div className="flex justify-center mb-6">
-                  <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
-                    <Image src="/images/unicatt.png" alt="UniCatt" width={56} height={56} className="object-contain" />
-                  </div>
-                </div>
-                <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test UniCatt</h3>
-                <p className="text-sm text-gray-600 mb-6 text-center">Università Cattolica del Sacro Cuore</p>
-                <div className="space-y-2">
-                  <a href="https://www.unicatt.it/corsi/triennale/medicina-e-chirurgia-roma/ammissioni-e-iscrizioni.html" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicina e Chirurgia – Odontoiatria e Protesi Dentaria
-                  </a>
-                  <a href="https://www.unicatt.it/en/programmes/undergraduate-and-integrated-degree-programmes/medicine-and-surgery-it-rome/admissions-and-enrolment.html" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicine and Surgery – Dentistry and Dental Prosthodontics
-                  </a>
-                </div>
-              </div>
-
-              {/* UniLink */}
-              <div className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100">
-                <div className="flex justify-center mb-6">
-                  <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
-                    <Image src="/images/unilink.png" alt="UniLink" width={56} height={56} className="object-contain" />
-                  </div>
-                </div>
-                <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test UniLink</h3>
-                <p className="text-sm text-gray-600 mb-6 text-center">Link Campus University</p>
-                <div className="space-y-2">
-                  <a href="https://www.unilink.it/fileadmin/user_upload/offerta_formativa/18-12_BandoMED-ODONTO_25-26_tutte_le_sedi.pdf" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicina e Chirurgia – Odontoiatria e Protesi Dentaria
-                  </a>
-                  <a href="https://www2.unilink.it/test-ammissione.asp" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Professioni Sanitarie
-                  </a>
-                </div>
-              </div>
-
-              {/* UniSR */}
-              <div className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 p-8 border-2 border-gray-100">
-                <div className="flex justify-center mb-6">
-                  <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center shadow-lg">
-                    <Image src="/images/uniSR.jpeg" alt="UniSR" width={56} height={56} className="object-contain rounded-full" />
-                  </div>
-                </div>
-                <h3 className="text-2xl font-black text-gray-900 mb-3 text-center">Test UniSR</h3>
-                <p className="text-sm text-gray-600 mb-6 text-center">Università Vita-Salute San Raffaele</p>
-                <div className="space-y-2">
-                  <a href="https://www.unisr.it/servizi/ammissioni/medicina-chirurgia" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicina e Chirurgia
-                  </a>
-                  <a href="https://www.unisr.it/servizi/ammissioni/odontoiatria" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Odontoiatria e Protesi Dentaria
-                  </a>
-                  <a href="https://www.unisr.it/servizi/ammissioni/international-medical-doctor-program" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Medicine and Surgery
-                  </a>
-                  <a href="https://www.unisr.it/servizi/ammissioni/professioni-sanitarie" target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-700 hover:text-red-600 transition-colors">
-                    <span className="text-red-600 mr-2">›</span> Professioni Sanitarie
-                  </a>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </div>
