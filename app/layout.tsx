@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Preloader from "@/components/ui/Preloader";
-import CookieBanner from "@/components/ui/CookieBanner";
 import { ToastProvider } from "@/components/ui/Toast";
 import { SITE_NAME, SITE_DESCRIPTION, SITE_KEYWORDS } from "@/lib/constants";
 import { Analytics } from '@vercel/analytics/next';
@@ -109,7 +108,6 @@ export default function RootLayout({
           <ToastProvider>
             <Preloader />
             {children}
-            <CookieBanner />
             <Analytics />
           </ToastProvider>
         </TRPCProvider>
