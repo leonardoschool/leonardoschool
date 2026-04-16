@@ -2,7 +2,6 @@ import Image from 'next/image';
 import TestCard from '@/components/ui/TestCard';
 import { TestCard as TestCardType } from '@/types';
 import { Metadata } from 'next';
-import Image from 'next/image';
 
 export const metadata: Metadata = {
   title: 'Test di ammissione | Leonardo School',
