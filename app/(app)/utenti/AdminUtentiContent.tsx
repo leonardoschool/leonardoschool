@@ -463,7 +463,7 @@ function AssignContractModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onAssign: (data: { templateId: string; customContent?: string; customPrice?: number; adminNotes?: string; expiresInDays: number; canDownload: boolean }) => void;
+  onAssign: (data: { templateId: string; customContent?: string; customPrice?: number; adminNotes?: string; expiresInDays: number; canDownload: boolean; startDate?: string; endDate?: string; compensation?: number }) => void;
   templates: any[];
   isLoading: boolean;
   targetId: string;
@@ -478,6 +478,19 @@ function AssignContractModal({
   const [showPreview, setShowPreview] = useState(false);
   const [templateFilter, setTemplateFilter] = useState<'ALL' | 'STUDENT' | 'COLLABORATOR'>(targetType);
   const [canDownload, setCanDownload] = useState(false);
+  const [startDate, setStartDate] = useState<string>(''); // yyyy-MM-dd
+  const [endDate, setEndDate] = useState<string>(''); // yyyy-MM-dd
+  const [compensation, setCompensation] = useState<string>('');
+
+  const selectedTemplateData = templates?.find((t) => t.id === selectedTemplate);
+  const isCollaboratorTemplate = selectedTemplateData?.targetRole === 'COLLABORATOR';
+
+  // Convert yyyy-MM-dd input to ISO datetime string for the server
+  const toIsoDate = (value: string): string | undefined => {
+    if (!value) return undefined;
+    const d = new Date(`${value}T00:00:00.000Z`);
+    return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+  };
 
   // Filter templates based on selected filter
   const filteredTemplates = templates?.filter(t => 
@@ -489,6 +502,11 @@ function AssignContractModal({
     {
       templateId: selectedTemplate!,
       ...(targetType === 'STUDENT' ? { studentId: targetId } : { collaboratorId: targetId }),
+      ...(toIsoDate(startDate) ? { startDate: toIsoDate(startDate)! } : {}),
+      ...(toIsoDate(endDate) ? { endDate: toIsoDate(endDate)! } : {}),
+      ...(compensation && !Number.isNaN(parseFloat(compensation))
+        ? { compensation: parseFloat(compensation) }
+        : {}),
     },
     { enabled: !!selectedTemplate && !!targetId && step === 'customize' }
   );
@@ -504,6 +522,9 @@ function AssignContractModal({
     setExpiresInDays(7);
     setShowPreview(false);
     setCanDownload(false);
+    setStartDate('');
+    setEndDate('');
+    setCompensation('');
   };
 
   // Handle close with reset
@@ -541,10 +562,16 @@ function AssignContractModal({
     setSelectedTemplate(null);
     setCustomContent('');
     setCustomPrice('');
+    setStartDate('');
+    setEndDate('');
+    setCompensation('');
   };
 
   const handleAssign = () => {
     if (!selectedTemplate) return;
+    const isoStart = toIsoDate(startDate);
+    const isoEnd = toIsoDate(endDate);
+    const compNum = compensation ? parseFloat(compensation) : NaN;
     onAssign({
       templateId: selectedTemplate,
       customContent: customContent || undefined,
@@ -552,6 +579,9 @@ function AssignContractModal({
       adminNotes: adminNotes || undefined,
       expiresInDays,
       canDownload,
+      ...(isoStart ? { startDate: isoStart } : {}),
+      ...(isoEnd ? { endDate: isoEnd } : {}),
+      ...(!Number.isNaN(compNum) ? { compensation: compNum } : {}),
     });
   };
 
@@ -800,6 +830,57 @@ function AssignContractModal({
                       />
                     </div>
                   </div>
+
+                  {/* Collaborator-specific placeholder fields */}
+                  {isCollaboratorTemplate && (
+                    <div className={`p-4 rounded-xl border ${colors.border.primary} ${colors.background.secondary}`}>
+                      <h4 className={`font-semibold mb-3 flex items-center gap-2 ${colors.text.primary}`}>
+                        <FileEdit className="w-4 h-4" />
+                        Dati collaborazione (auto-popolati nel contratto)
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className={`block text-sm font-medium mb-2 ${colors.text.primary}`}>
+                            Data inizio
+                          </label>
+                          <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.text.primary} ${colors.border.primary} border focus:ring-2 focus:ring-red-500`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`block text-sm font-medium mb-2 ${colors.text.primary}`}>
+                            Data fine
+                          </label>
+                          <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.text.primary} ${colors.border.primary} border focus:ring-2 focus:ring-red-500`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`block text-sm font-medium mb-2 ${colors.text.primary}`}>
+                            Compenso (€)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={compensation}
+                            onChange={(e) => setCompensation(e.target.value)}
+                            placeholder="Es: 1500.00"
+                            className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.text.primary} ${colors.border.primary} border focus:ring-2 focus:ring-red-500`}
+                          />
+                        </div>
+                      </div>
+                      <p className={`text-xs ${colors.text.muted} mt-2`}>
+                        Sostituiscono i placeholder {'{{DATA_INIZIO}}'}, {'{{DATA_FINE}}'} e {'{{COMPENSO}}'} nel contratto.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Admin Notes */}
                   <div>
@@ -1427,27 +1508,31 @@ export default function AdminUtentiContent() {
     adminNotes?: string; 
     expiresInDays: number;
     canDownload: boolean;
+    startDate?: string;
+    endDate?: string;
+    compensation?: number;
   }) => {
     if (contractModal.targetId) {
+      const commonPayload = {
+        templateId: data.templateId,
+        expiresInDays: data.expiresInDays,
+        customContent: data.customContent,
+        customPrice: data.customPrice,
+        adminNotes: data.adminNotes,
+        canDownload: data.canDownload,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        compensation: data.compensation,
+      };
       if (contractModal.targetType === 'COLLABORATOR') {
         assignContractMutation.mutate({
           collaboratorId: contractModal.targetId,
-          templateId: data.templateId,
-          expiresInDays: data.expiresInDays,
-          customContent: data.customContent,
-          customPrice: data.customPrice,
-          adminNotes: data.adminNotes,
-          canDownload: data.canDownload,
+          ...commonPayload,
         });
       } else {
         assignContractMutation.mutate({
           studentId: contractModal.targetId,
-          templateId: data.templateId,
-          expiresInDays: data.expiresInDays,
-          customContent: data.customContent,
-          customPrice: data.customPrice,
-          adminNotes: data.adminNotes,
-          canDownload: data.canDownload,
+          ...commonPayload,
         });
       }
     }

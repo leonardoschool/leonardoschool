@@ -226,6 +226,9 @@ export const contractsRouter = router({
       templateId: z.string(),
       studentId: z.string().optional(),
       collaboratorId: z.string().optional(),
+      startDate: z.string().datetime().optional(),
+      endDate: z.string().datetime().optional(),
+      compensation: z.number().optional(),
     }).refine(
       (data) => data.studentId || data.collaboratorId,
       { message: 'Devi specificare studentId o collaboratorId' }
@@ -271,7 +274,12 @@ export const contractsRouter = router({
       }
 
       // Generate preview content
-      const previewContent = generateContractContent(template.content, targetUser, targetUser.user);
+      const previewExtras = {
+        startDate: input.startDate ? new Date(input.startDate) : null,
+        endDate: input.endDate ? new Date(input.endDate) : null,
+        compensation: input.compensation ?? null,
+      };
+      const previewContent = generateContractContent(template.content, targetUser, targetUser.user, previewExtras);
 
       return {
         template: {
@@ -311,6 +319,9 @@ export const contractsRouter = router({
         customContent: z.string().optional(), // Admin can customize the contract content
         customPrice: z.number().optional(), // Admin can override the price
         canDownload: z.boolean().default(false), // If true, user can download the signed contract
+        startDate: z.string().datetime().optional(), // For collaborator templates {{DATA_INIZIO}}
+        endDate: z.string().datetime().optional(), // For collaborator templates {{DATA_FINE}}
+        compensation: z.number().optional(), // For collaborator templates {{COMPENSO}}
       }).refine(
         (data) => data.studentId || data.collaboratorId,
         { message: 'Devi specificare studentId o collaboratorId' }
@@ -331,7 +342,12 @@ export const contractsRouter = router({
       const contentSnapshot = prepareContractContent(
         input.customContent,
         template.content,
-        targetUser
+        targetUser,
+        {
+          startDate: input.startDate ? new Date(input.startDate) : null,
+          endDate: input.endDate ? new Date(input.endDate) : null,
+          compensation: input.compensation ?? null,
+        }
       );
       
       // Use custom price if provided, otherwise use template price
@@ -1421,7 +1437,12 @@ async function getContractTarget(
 function prepareContractContent(
   customContent: string | undefined,
   templateContent: string,
-  targetUser: StudentWithUser | CollaboratorWithUser
+  targetUser: StudentWithUser | CollaboratorWithUser,
+  extras?: {
+    startDate?: Date | null;
+    endDate?: Date | null;
+    compensation?: number | null;
+  }
 ): string {
   if (customContent) {
     const lengthValidation = validateContentLength(customContent);
@@ -1433,7 +1454,7 @@ function prepareContractContent(
     }
     return sanitizeHtml(customContent);
   }
-  return generateContractContent(templateContent, targetUser, targetUser.user);
+  return generateContractContent(templateContent, targetUser, targetUser.user, extras);
 }
 
 /**
@@ -1646,6 +1667,11 @@ function generateContractContent(
   user: {
     name: string;
     email: string;
+  },
+  extras?: {
+    startDate?: Date | null;
+    endDate?: Date | null;
+    compensation?: number | null;
   }
 ): string {
   const today = new Date();
@@ -1655,13 +1681,25 @@ function generateContractContent(
     year: 'numeric',
   });
 
-  const formattedBirthDate = student.dateOfBirth
-    ? student.dateOfBirth.toLocaleDateString('it-IT', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-      })
-    : '';
+  const formatItalianDate = (d: Date | null | undefined) =>
+    d
+      ? d.toLocaleDateString('it-IT', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        })
+      : '';
+
+  const formattedBirthDate = formatItalianDate(student.dateOfBirth);
+  const formattedStartDate = formatItalianDate(extras?.startDate ?? null);
+  const formattedEndDate = formatItalianDate(extras?.endDate ?? null);
+  const formattedCompensation =
+    extras?.compensation != null && !Number.isNaN(extras.compensation)
+      ? extras.compensation.toLocaleString('it-IT', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
+      : '';
 
   const sanitizedAddressParts = [
     sanitizeText(student.address),
@@ -1684,5 +1722,8 @@ function generateContractContent(
     .replaceAll('{{PROVINCIA}}', sanitizeText(student.province))
     .replaceAll('{{CAP}}', sanitizeText(student.postalCode))
     .replaceAll('{{DATA_ODIERNA}}', sanitizeText(formattedDate))
-    .replaceAll('{{ANNO}}', today.getFullYear().toString());
+    .replaceAll('{{ANNO}}', today.getFullYear().toString())
+    .replaceAll('{{DATA_INIZIO}}', sanitizeText(formattedStartDate))
+    .replaceAll('{{DATA_FINE}}', sanitizeText(formattedEndDate))
+    .replaceAll('{{COMPENSO}}', sanitizeText(formattedCompensation));
 }
