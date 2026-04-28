@@ -58,8 +58,8 @@ const STEPS = [
   { id: 'review', title: 'Riepilogo', icon: Eye },
 ];
 
-// Type options
-const typeOptions: { value: SimulationType; label: string; description: string; icon: React.ReactNode; badge?: string }[] = [
+// Type options - PRIMARY: 3 main modes (Ufficiale / Esercitazione / Personalizzata)
+const primaryTypeOptions: { value: SimulationType; label: string; description: string; icon: React.ReactNode; badge?: string }[] = [
   {
     value: 'OFFICIAL',
     label: 'Simulazione Ufficiale',
@@ -79,6 +79,10 @@ const typeOptions: { value: SimulationType; label: string; description: string; 
     description: 'Configurazione completamente personalizzabile per ogni parametro.',
     icon: <Settings className="w-6 h-6" />,
   },
+];
+
+// Type options - SECONDARY: extra modes shown below the 3 primary cards
+const secondaryTypeOptions: { value: SimulationType; label: string; description: string; icon: React.ReactNode; badge?: string }[] = [
   {
     value: 'QUICK_QUIZ',
     label: 'Quiz Veloce',
@@ -86,6 +90,8 @@ const typeOptions: { value: SimulationType; label: string; description: string; 
     icon: <Zap className="w-6 h-6" />,
   },
 ];
+
+const typeOptions = [...primaryTypeOptions, ...secondaryTypeOptions];
 
 // Paper-based option shown separately
 const paperBasedOption = {
@@ -1187,8 +1193,11 @@ export default function NewSimulationPage() {
           <div className="space-y-6">
             <div>
               <h2 className={`text-xl font-semibold ${colors.text.primary}`}>
-                Seleziona il tipo di simulazione
+                Seleziona la modalità di creazione
               </h2>
+              <p className={`mt-1 text-sm ${colors.text.muted}`}>
+                Scegli una delle tre modalità principali in base allo scopo della simulazione.
+              </p>
               {userRole === 'COLLABORATOR' && (
                 <p className={`mt-2 text-sm ${colors.text.muted} flex items-start gap-2`}>
                   <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
@@ -1196,8 +1205,8 @@ export default function NewSimulationPage() {
                 </p>
               )}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {typeOptions.map((option) => (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {primaryTypeOptions.map((option) => (
                 <button
                   key={option.value}
                   onClick={() => applyPreset(option.value)}
@@ -1224,6 +1233,42 @@ export default function NewSimulationPage() {
                 </button>
               ))}
             </div>
+
+            {/* Secondary options (Quick Quiz, etc.) */}
+            {secondaryTypeOptions.length > 0 && (
+              <div className="space-y-2">
+                <p className={`text-xs font-medium uppercase tracking-wide ${colors.text.muted}`}>
+                  Altre modalità
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {secondaryTypeOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => applyPreset(option.value)}
+                      className={`p-4 rounded-xl border-2 text-left transition-all relative ${
+                        simulationType === option.value && !isPaperBased
+                          ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
+                          : `border-gray-200 dark:border-gray-700 ${colors.background.hover}`
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                          simulationType === option.value && !isPaperBased
+                            ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
+                            : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                        }`}>
+                          {option.icon}
+                        </div>
+                        <div className="flex-1">
+                          <h3 className={`font-semibold ${colors.text.primary}`}>{option.label}</h3>
+                          <p className={`mt-1 text-sm ${colors.text.muted}`}>{option.description}</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             
             {/* Paper-based option */}
             <div className={`mt-6 p-4 rounded-xl border-2 ${
