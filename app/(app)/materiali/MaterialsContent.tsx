@@ -50,6 +50,10 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { firebaseStorage } from '@/lib/firebase/storage';
+import {
+  validateMaterialFileSize,
+  type MaterialFileType,
+} from '@/lib/validations/fileValidation';
 
 // ==================== TYPES ====================
 
@@ -495,6 +499,18 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
     const file = event.target.files?.[0];
     if (!file) return;
 
+    if (materialFormData.type !== 'LINK') {
+      const sizeError = validateMaterialFileSize(
+        file,
+        materialFormData.type as MaterialFileType
+      );
+      if (sizeError) {
+        showError('File troppo grande', sizeError);
+        event.target.value = '';
+        return;
+      }
+    }
+
     setUploading(true);
     setUploadProgress(0);
 
@@ -523,9 +539,30 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
   // Multi-file upload handler
   const handleMultiFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
-    if (files.length > 0) {
-      setMultiUploadFiles(files);
+    if (files.length === 0) return;
+
+    if (multiUploadData.type !== 'LINK') {
+      const fileType = multiUploadData.type as MaterialFileType;
+      const errors: string[] = [];
+      const validFiles: File[] = [];
+      for (const f of files) {
+        const err = validateMaterialFileSize(f, fileType);
+        if (err) errors.push(err);
+        else validFiles.push(f);
+      }
+      if (errors.length > 0) {
+        showError('File troppo grandi', errors.join('\n'));
+      }
+      if (validFiles.length === 0) {
+        event.target.value = '';
+        return;
+      }
+      setMultiUploadFiles(validFiles);
+      event.target.value = '';
+      return;
     }
+
+    setMultiUploadFiles(files);
   };
 
   const handleMultiUpload = async () => {

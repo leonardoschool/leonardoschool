@@ -6,6 +6,10 @@ import { Portal } from '@/components/ui/Portal';
 import { X, Upload, Link as LinkIcon, Save, FileText, Video, File } from 'lucide-react';
 import { colors } from '@/lib/theme/colors';
 import { firebaseStorage } from '@/lib/firebase/storage';
+import {
+  validateMaterialFileSize,
+  type MaterialFileType,
+} from '@/lib/validations/fileValidation';
 import { useToast } from '@/components/ui/Toast';
 import CustomSelect from '@/components/ui/CustomSelect';
 import Checkbox from '@/components/ui/Checkbox';
@@ -153,9 +157,19 @@ export function EditMaterialModal({
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setUploadFile(file);
+    if (!file) return;
+    if (formData.type !== 'LINK') {
+      const sizeError = validateMaterialFileSize(
+        file,
+        formData.type as MaterialFileType
+      );
+      if (sizeError) {
+        showError('File troppo grande', sizeError);
+        e.target.value = '';
+        return;
+      }
     }
+    setUploadFile(file);
   };
 
   const TypeIcon = typeIcons[formData.type];

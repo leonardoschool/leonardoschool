@@ -1092,7 +1092,7 @@ export const materialsRouter = router({
       type: z.enum(['PDF', 'VIDEO', 'LINK', 'DOCUMENT']),
       fileUrl: z.string().optional(),
       fileName: z.string().optional(),
-      fileSize: z.number().optional(),
+      fileSize: z.number().int().min(0).max(500 * 1024 * 1024).optional(),
       externalUrl: z.string().optional(),
       thumbnailUrl: z.string().optional(),
       visibility: z.enum(['NONE', 'ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).default('NONE'),
@@ -1222,7 +1222,7 @@ export const materialsRouter = router({
         type: z.enum(['PDF', 'VIDEO', 'LINK', 'DOCUMENT']),
         fileUrl: z.string().optional(),
         fileName: z.string().optional(),
-        fileSize: z.number().optional(),
+        fileSize: z.number().int().min(0).max(500 * 1024 * 1024).optional(),
         externalUrl: z.string().optional(),
       })).min(1).max(20), // Max 20 files at once
     }))
@@ -1322,7 +1322,7 @@ export const materialsRouter = router({
       type: z.enum(['PDF', 'VIDEO', 'LINK', 'DOCUMENT']).optional(),
       fileUrl: z.string().optional().nullable(),
       fileName: z.string().optional().nullable(),
-      fileSize: z.number().optional().nullable(),
+      fileSize: z.number().int().min(0).max(500 * 1024 * 1024).optional().nullable(),
       externalUrl: z.string().optional().nullable(),
       thumbnailUrl: z.string().optional().nullable(),
       visibility: z.enum(['NONE', 'ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).optional(),
