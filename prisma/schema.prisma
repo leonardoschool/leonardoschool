@@ -1317,6 +1317,9 @@ model CalendarEvent {
   cancelledById String?
   cancelReason  String?   @db.Text
 
+  // Custom tag (admin-managed) - es. "Lezione Biologia", "Lezione Fisica"
+  tagId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1328,6 +1331,7 @@ model CalendarEvent {
   attendances   Attendance[]
   simulation    Simulation?       @relation("SimulationCalendarEvent")
   staffAbsences StaffAbsence[] // Assenze correlate a questo evento
+  tag           CalendarEventTag? @relation(fields: [tagId], references: [id], onDelete: SetNull)
 
   @@index([type])
   @@index([startDate])
@@ -1336,7 +1340,27 @@ model CalendarEvent {
   @@index([isPublic])
   @@index([isCancelled])
   @@index([parentEventId])
+  @@index([tagId])
   @@map("calendar_events")
+}
+
+// Custom calendar event tags (admin-managed) — used to label events
+// independently from the predefined `EventType` enum.
+// Esempio: "Lezione Biologia", "Lezione Fisica", "Corso Estivo"
+model CalendarEventTag {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  color       String   @default("#6366F1") // hex color
+  description String?  @db.Text
+  isActive    Boolean  @default(true)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  events CalendarEvent[]
+
+  @@index([isActive])
+  @@map("calendar_event_tags")
 }
 
 // Event invitations (who is invited to an event)

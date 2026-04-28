@@ -16,6 +16,8 @@ import DatePicker from '@/components/ui/DatePicker';
 import Checkbox from '@/components/ui/Checkbox';
 import { UserInfoModal } from '@/components/ui/UserInfoModal';
 import { GroupInfoModal } from '@/components/ui/GroupInfoModal';
+import CalendarEventTagsManagerModal from '@/components/admin/CalendarEventTagsManagerModal';
+import { exportCalendarToPdf } from '@/lib/utils/calendarPdfExport';
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -31,6 +33,8 @@ import {
   Eye,
   CheckSquare,
   Star,
+  Tag as TagIcon,
+  Download,
 } from 'lucide-react';
 
 // Event Form Modal
@@ -38,6 +42,7 @@ interface EventFormData {
   title: string;
   description: string;
   type: 'LESSON' | 'SIMULATION' | 'MEETING' | 'EXAM' | 'OTHER';
+  tagId: string; // empty string = no tag
   startDateTime: string; // ISO datetime-local format: "YYYY-MM-DDTHH:mm"
   endDateTime: string;   // ISO datetime-local format: "YYYY-MM-DDTHH:mm"
   isAllDay: boolean;
@@ -54,6 +59,7 @@ const defaultFormData: EventFormData = {
   title: '',
   description: '',
   type: 'OTHER',
+  tagId: '',
   startDateTime: '',
   endDateTime: '',
   isAllDay: false,
@@ -75,7 +81,10 @@ export default function AdminCalendarContent() {
   const [formData, setFormData] = useState<EventFormData>(defaultFormData);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
   const [filterType, setFilterType] = useState<string>('');
+  const [filterTagId, setFilterTagId] = useState<string>('');
+  const [filterGroupId, setFilterGroupId] = useState<string>('');
   const [showOnlyMine, setShowOnlyMine] = useState(false);
+  const [showTagsManager, setShowTagsManager] = useState(false);
 
   const utils = trpc.useUtils();
   const { handleMutationError } = useApiError();
@@ -116,9 +125,13 @@ export default function AdminCalendarContent() {
     startDate: dateRange.start,
     endDate: dateRange.end,
     type: filterType ? (filterType as CalendarEvent['type']) : undefined,
+    tagId: filterTagId || undefined,
+    groupId: filterGroupId || undefined,
     includeInvitations: true,
     includeCancelled: false,
   });
+
+  const { data: tagsData } = trpc.calendar.listTags.useQuery({ includeInactive: false });
 
   const { data: stats } = trpc.calendar.getStats.useQuery();
 
@@ -289,6 +302,7 @@ export default function AdminCalendarContent() {
           isCancelled: e.isCancelled || false,
           isMine,
           createdBy: e.createdBy,
+          tag: (e as { tag?: { id: string; name: string; color: string } | null }).tag ?? null,
           invitations: invitations?.map((inv) => ({
             id: inv.id,
             status: inv.status,
@@ -348,6 +362,7 @@ export default function AdminCalendarContent() {
       title: event.title,
       description: event.description || '',
       type: event.type,
+      tagId: event.tag?.id ?? '',
       startDateTime: formatDateTimeLocal(startDate),
       endDateTime: formatDateTimeLocal(endDate),
       isAllDay: event.isAllDay,
@@ -413,6 +428,7 @@ export default function AdminCalendarContent() {
       locationDetails: formData.locationDetails || undefined,
       onlineLink: formData.onlineLink || undefined,
       isPublic: formData.isPublic,
+      tagId: formData.tagId || null,
     };
 
     if (editingEventId) {
@@ -425,6 +441,46 @@ export default function AdminCalendarContent() {
         sendEmailInvites: formData.sendEmailInvites,
       });
     }
+  };
+
+  // Build a human-readable summary of the active filters for the PDF header
+  const handleExportPdf = () => {
+    const filterParts: string[] = [];
+    if (filterType) {
+      filterParts.push(`Tipo: ${eventTypeLabels[filterType as keyof typeof eventTypeLabels] ?? filterType}`);
+    }
+    if (filterTagId) {
+      const tag = tagsData?.find((t) => t.id === filterTagId);
+      if (tag) filterParts.push(`Tag: ${tag.name}`);
+    }
+    if (filterGroupId) {
+      const group = groupsData?.groups?.find((g) => g.id === filterGroupId);
+      if (group) filterParts.push(`Gruppo: ${group.name}`);
+    }
+    if (showOnlyMine) filterParts.push('Solo i miei eventi');
+    const rangeLabel = `${dateRange.start.toLocaleDateString('it-IT')} – ${dateRange.end.toLocaleDateString('it-IT')}`;
+    const subtitle = [rangeLabel, ...filterParts].join(' · ');
+
+    exportCalendarToPdf({
+      title: 'Calendario eventi',
+      subtitle,
+      typeLabels: eventTypeLabels,
+      events: events.map((e) => ({
+        id: e.id,
+        title: e.title,
+        description: e.description ?? null,
+        type: e.type,
+        startDate: new Date(e.startDate),
+        endDate: new Date(e.endDate),
+        isAllDay: e.isAllDay,
+        locationType: e.locationType,
+        locationDetails: e.locationDetails ?? null,
+        onlineLink: e.onlineLink ?? null,
+        isCancelled: e.isCancelled,
+        tag: e.tag ?? null,
+        invitations: e.invitations,
+      })),
+    });
   };
 
   return (
@@ -441,13 +497,31 @@ export default function AdminCalendarContent() {
           </p>
         </div>
 
-        <button
-          onClick={() => openAddEvent(new Date())}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${colors.primary.gradient} text-white`}
-        >
-          <Plus className="w-4 h-4" />
-          Nuovo Evento
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowTagsManager(true)}
+            className={`px-3 py-2 rounded-lg text-sm font-medium border ${colors.border.primary} ${colors.text.primary} hover:${colors.background.hover} transition-colors flex items-center gap-2`}
+            title="Gestisci tag personalizzati"
+          >
+            <TagIcon className="w-4 h-4" />
+            Tag
+          </button>
+          <button
+            onClick={handleExportPdf}
+            className={`px-3 py-2 rounded-lg text-sm font-medium border ${colors.border.primary} ${colors.text.primary} hover:${colors.background.hover} transition-colors flex items-center gap-2`}
+            title="Esporta gli eventi visibili in PDF (stampa)"
+          >
+            <Download className="w-4 h-4" />
+            Esporta PDF
+          </button>
+          <button
+            onClick={() => openAddEvent(new Date())}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${colors.primary.gradient} text-white`}
+          >
+            <Plus className="w-4 h-4" />
+            Nuovo Evento
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards - Clickable filters */}
@@ -568,6 +642,38 @@ export default function AdminCalendarContent() {
       </div>
       </div>
 
+      {/* Tag + Group filters */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className={`block text-xs font-medium mb-1 ${colors.text.secondary}`}>
+            Filtra per tag
+          </label>
+          <CustomSelect
+            value={filterTagId}
+            onChange={setFilterTagId}
+            placeholder="Tutti i tag"
+            options={[
+              { value: '', label: 'Tutti i tag' },
+              ...((tagsData ?? []).map((t) => ({ value: t.id, label: t.name }))),
+            ]}
+          />
+        </div>
+        <div>
+          <label className={`block text-xs font-medium mb-1 ${colors.text.secondary}`}>
+            Filtra per gruppo
+          </label>
+          <CustomSelect
+            value={filterGroupId}
+            onChange={setFilterGroupId}
+            placeholder="Tutti i gruppi"
+            options={[
+              { value: '', label: 'Tutti i gruppi' },
+              ...((groupsData?.groups ?? []).map((g) => ({ value: g.id, label: g.name }))),
+            ]}
+          />
+        </div>
+      </div>
+
       {/* Calendar */}
       <Calendar
         events={events}
@@ -634,6 +740,25 @@ export default function AdminCalendarContent() {
                   onChange={(value) => setFormData((prev) => ({ ...prev, type: value as EventFormData['type'] }))}
                   options={Object.entries(eventTypeLabels).map(([value, label]) => ({ value, label }))}
                 />
+              </div>
+
+              {/* Custom Tag */}
+              <div>
+                <label className={`block text-sm font-medium ${colors.text.primary} mb-1`}>
+                  Tag personalizzato
+                </label>
+                <CustomSelect
+                  value={formData.tagId}
+                  onChange={(value) => setFormData((prev) => ({ ...prev, tagId: value }))}
+                  placeholder="Nessun tag"
+                  options={[
+                    { value: '', label: 'Nessun tag' },
+                    ...((tagsData ?? []).map((t) => ({ value: t.id, label: t.name }))),
+                  ]}
+                />
+                <p className={`mt-1 text-xs ${colors.text.secondary}`}>
+                  Tag aggiuntivo gestito dall&apos;admin (es. &quot;Lezione Biologia&quot;).
+                </p>
               </div>
 
               {/* All Day Toggle */}
@@ -1069,6 +1194,12 @@ export default function AdminCalendarContent() {
           onClose={() => setStatsModal(null)}
         />
       )}
+
+      {/* Tags Manager Modal */}
+      <CalendarEventTagsManagerModal
+        isOpen={showTagsManager}
+        onClose={() => setShowTagsManager(false)}
+      />
     </div>
   );
 }

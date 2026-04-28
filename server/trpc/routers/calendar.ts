@@ -34,6 +34,8 @@ export const calendarRouter = router({
         startDate: z.date().optional(),
         endDate: z.date().optional(),
         type: z.nativeEnum(EventType).optional(),
+        tagId: z.string().optional(),
+        groupId: z.string().optional(),
         createdById: z.string().optional(),
         includeInvitations: z.boolean().optional().default(false),
         includeCancelled: z.boolean().optional().default(false),
@@ -43,7 +45,7 @@ export const calendarRouter = router({
       })
     )
     .query(async ({ ctx, input }) => {
-      const { startDate, endDate, type, createdById, includeInvitations, includeCancelled, onlyMyEvents, page, pageSize } = input;
+      const { startDate, endDate, type, tagId, groupId, createdById, includeInvitations, includeCancelled, onlyMyEvents, page, pageSize } = input;
 
       const where: Parameters<typeof ctx.prisma.calendarEvent.findMany>[0]['where'] = {};
 
@@ -58,6 +60,16 @@ export const calendarRouter = router({
       // Type filter
       if (type) {
         where.type = type;
+      }
+
+      // Tag filter (custom admin tag)
+      if (tagId) {
+        where.tagId = tagId;
+      }
+
+      // Group filter (events invited to a specific group)
+      if (groupId) {
+        where.invitations = { some: { groupId } };
       }
 
       // Creator filter
@@ -161,6 +173,9 @@ export const calendarRouter = router({
           include: {
             createdBy: {
               select: { id: true, name: true, email: true, role: true },
+            },
+            tag: {
+              select: { id: true, name: true, color: true },
             },
             invitations: includeInvitations
               ? {
@@ -304,6 +319,8 @@ export const calendarRouter = router({
         isRecurring: z.boolean().optional().default(false),
         recurrenceFrequency: z.nativeEnum(RecurrenceFrequency).optional(),
         recurrenceEndDate: z.date().optional(),
+        // Custom tag
+        tagId: z.string().optional().nullable(),
         // Invitations
         inviteUserIds: z.array(z.string()).optional(),
         inviteGroupIds: z.array(z.string()).optional(),
@@ -314,6 +331,7 @@ export const calendarRouter = router({
         inviteUserIds,
         inviteGroupIds,
         onlineLink,
+        tagId,
         ...eventData
       } = input;
 
@@ -344,6 +362,7 @@ export const calendarRouter = router({
           isRecurring: eventData.isRecurring,
           recurrenceFrequency: eventData.recurrenceFrequency,
           recurrenceEndDate: eventData.recurrenceEndDate,
+          ...(tagId ? { tag: { connect: { id: tagId } } } : {}),
           createdBy: { connect: { id: ctx.user.id } },
           invitations: {
             create: [
@@ -481,6 +500,7 @@ export const calendarRouter = router({
         isPublic: z.boolean().optional(),
         sendEmailReminders: z.boolean().optional(),
         reminderMinutes: z.number().min(5).max(10080).optional(),
+        tagId: z.string().optional().nullable(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -1562,4 +1582,111 @@ export const calendarRouter = router({
       myEventsCount,
     };
   }),
+
+  // ==================== CALENDAR EVENT TAGS (admin-managed) ====================
+
+  // List all tags (visible to any authenticated user so they can be shown
+  // in dropdowns / filters when viewing events)
+  listTags: protectedProcedure
+    .input(
+      z
+        .object({
+          includeInactive: z.boolean().optional().default(false),
+        })
+        .optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const includeInactive = input?.includeInactive ?? false;
+      const tags = await ctx.prisma.calendarEventTag.findMany({
+        where: includeInactive ? {} : { isActive: true },
+        orderBy: { name: 'asc' },
+      });
+      return tags;
+    }),
+
+  // Create a new tag (admin only)
+  createTag: adminProcedure
+    .input(
+      z.object({
+        name: z.string().trim().min(1).max(80),
+        color: z
+          .string()
+          .regex(/^#[0-9a-fA-F]{6}$/u, 'Colore non valido')
+          .default('#6366F1'),
+        description: z.string().max(500).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const exists = await ctx.prisma.calendarEventTag.findUnique({
+        where: { name: input.name },
+      });
+      if (exists) {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: 'Esiste già un tag con questo nome',
+        });
+      }
+      return ctx.prisma.calendarEventTag.create({
+        data: {
+          name: input.name,
+          color: input.color,
+          description: input.description,
+          createdById: ctx.user.id,
+        },
+      });
+    }),
+
+  // Update a tag (admin only)
+  updateTag: adminProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        name: z.string().trim().min(1).max(80).optional(),
+        color: z
+          .string()
+          .regex(/^#[0-9a-fA-F]{6}$/u, 'Colore non valido')
+          .optional(),
+        description: z.string().max(500).optional().nullable(),
+        isActive: z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...data } = input;
+      const existing = await ctx.prisma.calendarEventTag.findUnique({ where: { id } });
+      if (!existing) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Tag non trovato' });
+      }
+
+      // Ensure name uniqueness if renaming
+      if (data.name && data.name !== existing.name) {
+        const dup = await ctx.prisma.calendarEventTag.findUnique({
+          where: { name: data.name },
+        });
+        if (dup) {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'Esiste già un tag con questo nome',
+          });
+        }
+      }
+
+      return ctx.prisma.calendarEventTag.update({
+        where: { id },
+        data,
+      });
+    }),
+
+  // Delete a tag (admin only). Linked events keep tagId=null thanks to onDelete: SetNull.
+  deleteTag: adminProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.prisma.calendarEventTag.findUnique({
+        where: { id: input.id },
+      });
+      if (!existing) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Tag non trovato' });
+      }
+      await ctx.prisma.calendarEventTag.delete({ where: { id: input.id } });
+      return { success: true };
+    }),
 });

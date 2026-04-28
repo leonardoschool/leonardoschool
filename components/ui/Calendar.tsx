@@ -45,6 +45,8 @@ export interface CalendarEvent {
     id: string;
     name: string;
   };
+  /** Custom admin tag (es. "Lezione Biologia") */
+  tag?: { id: string; name: string; color: string } | null;
   invitations?: EventInvitation[];
   _count?: {
     invitations: number;
