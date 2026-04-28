@@ -3928,9 +3928,15 @@ export const simulationsRouter = router({
       includeOpenQuestions: z.boolean().default(false),
       openQuestionCorrection: z.enum(['self', 'staff']).default('self'),
       requestCorrectionFromId: z.string().optional(),
+      // Scoring overrides (default 1 / 0 / 0). Allow any number to support templates like TOLC (1 / -0.25 / 0).
+      correctPoints: z.number().default(1),
+      wrongPoints: z.number().default(0),
+      blankPoints: z.number().default(0),
+      // Optional template label for analytics/debug, no business logic attached.
+      testTemplate: z.string().max(40).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { questionIds, durationMinutes, includeOpenQuestions, openQuestionCorrection, requestCorrectionFromId } = input;
+      const { questionIds, durationMinutes, includeOpenQuestions, openQuestionCorrection, requestCorrectionFromId, correctPoints, wrongPoints, blankPoints, testTemplate } = input;
 
       // Validate questions exist
       const questions = await ctx.prisma.question.findMany({
@@ -4012,6 +4018,8 @@ export const simulationsRouter = router({
         data: {
           title: `Autoesercitazione ${titleSubject} - ${new Date().toLocaleDateString('it-IT')}`,
           description: `Esercitazione autogenerata con ${finalQuestions.length} domande.${
+            testTemplate ? ` Template: ${testTemplate}.` : ''
+          }${
             openQuestionCorrection === 'staff' ? ' Correzione domande aperte richiesta a docente.' : ''
           }`,
           type: 'QUICK_QUIZ',
@@ -4027,9 +4035,9 @@ export const simulationsRouter = router({
           allowReview: true,
           randomizeOrder: true,
           randomizeAnswers: true,
-          correctPoints: 1,
-          wrongPoints: 0,
-          blankPoints: 0,
+          correctPoints,
+          wrongPoints,
+          blankPoints,
           isRepeatable: true,
           maxAttempts: null,
           questions: {

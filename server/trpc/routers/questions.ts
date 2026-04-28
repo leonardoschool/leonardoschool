@@ -348,7 +348,9 @@ function normalizeDistributionTotal(
  */
 function buildSmartRandomBaseWhere(
   excludeQuestionIds?: string[],
-  tagIds?: string[]
+  tagIds?: string[],
+  topicIds?: string[],
+  subTopicIds?: string[]
 ): Record<string, unknown> {
   const baseWhere: Record<string, unknown> = {
     status: 'PUBLISHED',
@@ -364,6 +366,14 @@ function buildSmartRandomBaseWhere(
         tagId: { in: tagIds },
       },
     };
+  }
+
+  if (topicIds && topicIds.length > 0) {
+    baseWhere.topicId = { in: topicIds };
+  }
+
+  if (subTopicIds && subTopicIds.length > 0) {
+    baseWhere.subTopicId = { in: subTopicIds };
   }
 
   return baseWhere;
@@ -2341,6 +2351,8 @@ export const questionsRouter = router({
         maximizeTopicCoverage,
         preferRecentQuestions,
         tagIds,
+        topicIds,
+        subTopicIds,
         excludeQuestionIds,
       } = input;
 
@@ -2377,7 +2389,12 @@ export const questionsRouter = router({
       const difficultyRatios = getDifficultyRatios(difficultyMix);
 
       // Step 4: Build base query for available questions using helper
-      const baseWhere = buildSmartRandomBaseWhere(excludeQuestionIds, tagIds);
+      const baseWhere = buildSmartRandomBaseWhere(
+        excludeQuestionIds ?? undefined,
+        tagIds ?? undefined,
+        topicIds ?? undefined,
+        subTopicIds ?? undefined,
+      );
 
       // Build selection config
       const selectionConfig: SelectionConfig = {

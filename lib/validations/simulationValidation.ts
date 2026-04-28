@@ -528,6 +528,10 @@ export const smartRandomGenerationSchema = z.object({
   // Optional tag filters (if user wants to limit to specific tags)
   tagIds: z.array(z.string()).optional().nullable(),
   
+  // Optional topic / sub-topic filters (limit to specific argomenti/sotto-argomenti)
+  topicIds: z.array(z.string()).optional().nullable(),
+  subTopicIds: z.array(z.string()).optional().nullable(),
+  
   // Exclude specific questions
   excludeQuestionIds: z.array(z.string()).optional().nullable(),
 });
