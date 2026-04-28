@@ -815,7 +815,7 @@ export default function AdminQuestionsContent() {
                   Domanda
                 </th>
                 <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden lg:table-cell min-w-[120px]`}>
-                  Creatore
+                  Anno / Fonte
                 </th>
                 <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden md:table-cell min-w-[140px]`}>
                   Materia
@@ -888,27 +888,26 @@ export default function AdminQuestionsContent() {
                     </td>
                     <td className="px-3 py-3 hidden lg:table-cell">
                       {(() => {
-                        if (question.createdBy) {
-                          return (
-                            <span 
-                              className={`text-sm ${colors.text.primary} truncate block max-w-[100px]`}
-                              title={question.createdBy.name}
-                            >
-                              {question.createdBy.name}
-                            </span>
-                          );
+                        const hasYear = Boolean(question.year);
+                        const hasSource = Boolean(question.source);
+                        if (!hasYear && !hasSource) {
+                          return <span className={`text-sm ${colors.text.muted}`}>-</span>;
                         }
-                        if (question.source) {
-                          return (
-                            <span 
-                              className={`text-sm ${colors.text.muted} truncate block max-w-[100px] italic`}
-                              title={`Importata: ${question.source}`}
-                            >
-                              {question.source}
-                            </span>
-                          );
-                        }
-                        return <span className={`text-sm ${colors.text.muted}`}>-</span>;
+                        return (
+                          <div className="flex flex-col">
+                            {hasYear && (
+                              <span className={`text-sm ${colors.text.primary}`}>{question.year}</span>
+                            )}
+                            {hasSource && (
+                              <span
+                                className={`text-xs ${colors.text.muted} truncate max-w-[100px]`}
+                                title={question.source ?? undefined}
+                              >
+                                {question.source}
+                              </span>
+                            )}
+                          </div>
+                        );
                       })()}
                     </td>
                     <td className="px-3 py-3 hidden md:table-cell">
