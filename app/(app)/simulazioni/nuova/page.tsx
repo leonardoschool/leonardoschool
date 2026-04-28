@@ -13,7 +13,7 @@ import Checkbox from '@/components/ui/Checkbox';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import { Modal } from '@/components/ui/Modal';
 import { previewSimulationPdf } from '@/lib/utils/simulationPdfGenerator';
-import { SimulationPreviewModal } from '@/components/simulazioni';
+import { SimulationPreviewModal, FillSectionModal, type PickedQuestion } from '@/components/simulazioni';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -44,6 +44,7 @@ import {
   Layers,
   Info,
   Monitor,
+  Wand2,
 } from 'lucide-react';
 import type { SimulationType, LocationType, SimulationSection } from '@/lib/validations/simulationValidation';
 import { SIMULATION_PRESETS } from '@/lib/validations/simulationValidation';
@@ -183,6 +184,7 @@ export default function NewSimulationPage() {
   const [sections, setSections] = useState<SimulationSection[]>([]);
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [newSectionName, setNewSectionName] = useState('');
+  const [fillSectionId, setFillSectionId] = useState<string | null>(null);
   
   // Questions
   const [selectedQuestions, setSelectedQuestions] = useState<SelectedQuestion[]>([]);
@@ -584,6 +586,58 @@ export default function NewSimulationPage() {
     });
 
     setSections(updatedSections);
+  };
+
+  /**
+   * Append a batch of randomly-picked questions to a section.
+   * Adds them to selectedQuestions (if not already there) and assigns them
+   * exclusively to the target section.
+   */
+  const applyPickedQuestionsToSection = (
+    sectionId: string,
+    picked: PickedQuestion[]
+  ) => {
+    if (picked.length === 0) return;
+
+    // 1. Append to selectedQuestions (avoid duplicates)
+    setSelectedQuestions((prev) => {
+      const existingIds = new Set(prev.map((q) => q.questionId));
+      const toAdd = picked
+        .filter((q) => !existingIds.has(q.id))
+        .map<SelectedQuestion>((q, i) => ({
+          questionId: q.id,
+          order: prev.length + i,
+          question: {
+            id: q.id,
+            text: q.text,
+            type: q.type,
+            difficulty: q.difficulty,
+            subject: q.subject
+              ? { name: q.subject.name, color: q.subject.color }
+              : undefined,
+            topic: q.topic ? { name: q.topic.name } : undefined,
+          },
+        }));
+      return [...prev, ...toAdd];
+    });
+
+    // 2. Assign to section (remove from other sections first to keep exclusive)
+    const pickedIds = picked.map((p) => p.id);
+    setSections((prev) =>
+      prev.map((s) => {
+        if (s.id === sectionId) {
+          const merged = Array.from(
+            new Set([...(s.questionIds || []), ...pickedIds])
+          );
+          return { ...s, questionIds: merged, questionCount: merged.length };
+        }
+        // Remove these IDs from other sections to keep assignment exclusive
+        const cleaned = (s.questionIds || []).filter(
+          (id) => !pickedIds.includes(id)
+        );
+        return { ...s, questionIds: cleaned, questionCount: cleaned.length };
+      })
+    );
   };
 
   // eslint-disable-next-line sonarjs/no-unused-vars -- utility for section management
@@ -2188,6 +2242,15 @@ export default function NewSimulationPage() {
                               }`}>
                                 {sectionQuestions.length} domande
                               </span>
+                              <button
+                                type="button"
+                                onClick={() => setFillSectionId(section.id)}
+                                className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50 transition-colors"
+                                title="Riempi automaticamente questa sezione con domande casuali"
+                              >
+                                <Wand2 className="w-3.5 h-3.5" />
+                                Riempi
+                              </button>
                             </div>
                             {sectionQuestions.length === 0 ? (
                               <div className={`p-3 text-center ${colors.background.card}`}>
@@ -2828,6 +2891,23 @@ export default function NewSimulationPage() {
         randomizeOrder={randomizeOrder}
         randomizeAnswers={randomizeAnswers}
       />
+
+      {/* Fill Section Modal — bulk-fill a section with random questions */}
+      {fillSectionId && (() => {
+        const targetSection = sections.find((s) => s.id === fillSectionId);
+        if (!targetSection) return null;
+        return (
+          <FillSectionModal
+            isOpen={!!fillSectionId}
+            onClose={() => setFillSectionId(null)}
+            sectionName={targetSection.name}
+            defaultSubjectId={targetSection.subjectId}
+            defaultCount={targetSection.questionCount || 10}
+            excludeQuestionIds={selectedQuestions.map((q) => q.questionId)}
+            onPicked={(picked) => applyPickedQuestionsToSection(fillSectionId, picked)}
+          />
+        );
+      })()}
     </div>
   );
 }
