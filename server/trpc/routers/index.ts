@@ -11,6 +11,7 @@ import { contactRequestsRouter } from './contactRequests';
 import { groupsRouter } from './groups';
 import { questionsRouter } from './questions';
 import { simulationsRouter } from './simulations';
+import { simulationTemplatesRouter } from './simulationTemplates';
 import { notificationsRouter } from './notifications';
 import { questionTagsRouter } from './questionTags';
 import { calendarRouter } from './calendar';
@@ -30,6 +31,7 @@ export const appRouter = router({
   groups: groupsRouter,
   questions: questionsRouter,
   simulations: simulationsRouter,
+  simulationTemplates: simulationTemplatesRouter,
   notifications: notificationsRouter,
   questionTags: questionTagsRouter,
   calendar: calendarRouter,

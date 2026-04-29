@@ -1,9 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
-import { secureShuffleArray } from '@/lib/utils';
 import { stripHtml } from '@/lib/utils/sanitizeHtml';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
@@ -14,7 +13,7 @@ import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import { Modal } from '@/components/ui/Modal';
 import { previewSimulationPdf } from '@/lib/utils/simulationPdfGenerator';
 import { SimulationPreviewModal, FillSectionModal, type PickedQuestion } from '@/components/simulazioni';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { isStaff } from '@/lib/permissions';
@@ -29,7 +28,6 @@ import {
   X,
   Award,
   FileText,
-  Zap,
   BookOpen,
   ChevronDown,
   ChevronUp,
@@ -48,17 +46,26 @@ import {
 } from 'lucide-react';
 import type { SimulationType, LocationType, SimulationSection } from '@/lib/validations/simulationValidation';
 import { SIMULATION_PRESETS } from '@/lib/validations/simulationValidation';
-import type { SmartRandomPreset, DifficultyMix } from '@/lib/validations/simulationValidation';
 
 // Step definitions (no assignments step - added post-creation)
-const STEPS = [
+const SIMULATION_STEPS = [
   { id: 'type', title: 'Tipo', icon: FileText },
   { id: 'config', title: 'Configurazione', icon: Settings },
   { id: 'questions', title: 'Domande', icon: Target },
   { id: 'review', title: 'Riepilogo', icon: Eye },
 ];
 
-// Type options - PRIMARY: 3 main modes (Ufficiale / Esercitazione / Personalizzata)
+const TEMPLATE_STEPS = [
+  { id: 'template', title: 'Template', icon: FileText },
+  { id: 'config', title: 'Impostazioni', icon: Settings },
+  { id: 'sections', title: 'Sezioni', icon: Target },
+  { id: 'review', title: 'Riepilogo', icon: Eye },
+];
+
+type CreationMode = 'simulation' | 'template';
+type QuestionTypeFilter = '' | 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT';
+
+// Type options - staff creation supports Ufficiale / Esercitazione
 const primaryTypeOptions: { value: SimulationType; label: string; description: string; icon: React.ReactNode; badge?: string }[] = [
   {
     value: 'OFFICIAL',
@@ -73,25 +80,9 @@ const primaryTypeOptions: { value: SimulationType; label: string; description: s
     description: 'Test di pratica. Gli studenti possono ripetere e vedere le risposte corrette.',
     icon: <BookOpen className="w-6 h-6" />,
   },
-  {
-    value: 'CUSTOM',
-    label: 'Personalizzata',
-    description: 'Configurazione completamente personalizzabile per ogni parametro.',
-    icon: <Settings className="w-6 h-6" />,
-  },
 ];
 
-// Type options - SECONDARY: extra modes shown below the 3 primary cards
-const secondaryTypeOptions: { value: SimulationType; label: string; description: string; icon: React.ReactNode; badge?: string }[] = [
-  {
-    value: 'QUICK_QUIZ',
-    label: 'Quiz Veloce',
-    description: 'Quiz rapido con domande casuali. Ideale per ripasso veloce.',
-    icon: <Zap className="w-6 h-6" />,
-  },
-];
-
-const typeOptions = [...primaryTypeOptions, ...secondaryTypeOptions];
+const typeOptions = primaryTypeOptions;
 
 // Paper-based option shown separately
 const paperBasedOption = {
@@ -124,6 +115,7 @@ interface SelectedQuestion {
 
 export default function NewSimulationPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
@@ -133,9 +125,15 @@ export default function NewSimulationPage() {
   // Check authorization
   const userRole = user?.role;
   const hasAccess = userRole && isStaff(userRole);
+  const creationMode: CreationMode = searchParams.get('mode') === 'template' ? 'template' : 'simulation';
+  const editId = creationMode === 'template' ? (searchParams.get('editId') ?? '') : '';
+  const isEditMode = !!editId;
+  const activeSteps = creationMode === 'template' ? TEMPLATE_STEPS : SIMULATION_STEPS;
 
   // Step state
   const [currentStep, setCurrentStep] = useState(0);
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
 
   // Form data
   const [simulationType, setSimulationType] = useState<SimulationType>('PRACTICE');
@@ -185,8 +183,8 @@ export default function NewSimulationPage() {
   const [logSuspiciousEvents, setLogSuspiciousEvents] = useState(false);
   
   // Sections (for TOLC-style)
-  const [hasSections, setHasSections] = useState(false);
-  const [sectionMode, setSectionMode] = useState<'auto' | 'manual'>('auto');
+  const [hasSections, setHasSections] = useState(() => creationMode === 'template');
+  const [sectionMode, setSectionMode] = useState<'auto' | 'manual'>(() => creationMode === 'template' ? 'manual' : 'auto');
   const [sections, setSections] = useState<SimulationSection[]>([]);
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [newSectionName, setNewSectionName] = useState('');
@@ -197,18 +195,8 @@ export default function NewSimulationPage() {
   const [questionSearchTerm, setQuestionSearchTerm] = useState('');
   const [questionSubjectFilter, setQuestionSubjectFilter] = useState('');
   const [questionDifficultyFilter, setQuestionDifficultyFilter] = useState('');
+  const [questionTypeFilter, setQuestionTypeFilter] = useState<QuestionTypeFilter>('');
   const [questionTagFilter, setQuestionTagFilter] = useState<string[]>([]);
-  const [selectionMode, setSelectionMode] = useState<'manual' | 'random' | 'smart'>('manual');
-  const [randomCount, setRandomCount] = useState(10);
-  
-  // Smart generation settings
-  const [smartTotalQuestions, setSmartTotalQuestions] = useState(50);
-  const [smartPreset, setSmartPreset] = useState<SmartRandomPreset>('BALANCED');
-  const [smartDifficultyMix, setSmartDifficultyMix] = useState<DifficultyMix>('BALANCED');
-  const [smartFocusSubjectId, setSmartFocusSubjectId] = useState<string>('');
-  const [smartAvoidRecentlyUsed, setSmartAvoidRecentlyUsed] = useState(true);
-  const [smartMaximizeTopicCoverage, setSmartMaximizeTopicCoverage] = useState(true);
-  const [smartIsGenerating, setSmartIsGenerating] = useState(false);
   
   // Question detail modal
   const [previewQuestion, setPreviewQuestion] = useState<string | null>(null);
@@ -219,6 +207,16 @@ export default function NewSimulationPage() {
   const [expandedAddSection, setExpandedAddSection] = useState<string | null>(null);
   // Questions checked inside the expanded section's add-panel
   const [bulkAssignSelectedIds, setBulkAssignSelectedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    setCurrentStep(0);
+    if (creationMode === 'template') {
+      setSelectedTemplateId('');
+      setHasSections(true);
+      setSectionMode('manual');
+      setRightPanelTab('sezioni');
+    }
+  }, [creationMode]);
 
   // Simulation preview modal (for students view)
   const [showSimulationPreview, setShowSimulationPreview] = useState(false);
@@ -248,6 +246,56 @@ export default function NewSimulationPage() {
   // Fetch data
   const { data: subjectsData } = trpc.questions.getSubjects.useQuery();
   const { data: tagCategoriesData } = trpc.questionTags.getCategories.useQuery({});
+  const { data: templatesData } = trpc.simulationTemplates.list.useQuery({
+    page: 1,
+    pageSize: 100,
+    status: 'PUBLISHED',
+    sortBy: 'title',
+    sortOrder: 'asc',
+  });
+
+  // Load existing template data when editing
+  const { data: editTemplateData, isLoading: editTemplateLoading } = trpc.simulationTemplates.get.useQuery(
+    { id: editId },
+    { enabled: isEditMode && !!editId }
+  );
+
+  // Pre-fill form when editing an existing template (run once when data arrives)
+  const [editFormApplied, setEditFormApplied] = useState(false);
+  useEffect(() => {
+    if (!isEditMode || !editTemplateData || editFormApplied) return;
+    const tpl = editTemplateData;
+    const rawSections = Array.isArray(tpl.sections) ? tpl.sections as Array<Partial<SimulationSection>> : [];
+    setTitle(tpl.title);
+    setDescription(tpl.description ?? '');
+    setDurationMinutes(tpl.durationMinutes);
+    setShowResults(tpl.showResults);
+    setShowCorrectAnswers(tpl.showCorrectAnswers);
+    setAllowReview(tpl.allowReview);
+    setRandomizeOrder(tpl.randomizeOrder);
+    setRandomizeAnswers(tpl.randomizeAnswers);
+    _setUseQuestionPoints(tpl.useQuestionPoints);
+    setCorrectPoints(tpl.correctPoints);
+    setWrongPoints(tpl.wrongPoints);
+    setBlankPoints(tpl.blankPoints);
+    setMaxScore(tpl.maxScore);
+    setPassingScore(tpl.passingScore);
+    setIsRepeatable(tpl.isRepeatable);
+    setMaxAttempts(tpl.maxAttempts);
+    setHasSections(true);
+    setSectionMode('manual');
+    setSections(rawSections.map((section, index) => ({
+      id: section.id ?? `section-${Date.now()}-${index}`,
+      name: section.name ?? `Sezione ${index + 1}`,
+      durationMinutes: section.durationMinutes ?? 10,
+      questionCount: section.questionCount ?? 0,
+      subjectId: section.subjectId ?? null,
+      questionIds: [],
+      order: section.order ?? index,
+    })));
+    setRightPanelTab('sezioni');
+    setEditFormApplied(true);
+  }, [isEditMode, editTemplateData, editFormApplied]);
 
   // Questions query - include tag filter
   const { data: questionsData, isLoading: questionsLoading } = trpc.questions.getQuestions.useQuery({
@@ -255,6 +303,7 @@ export default function NewSimulationPage() {
     pageSize: 100,
     search: questionSearchTerm || undefined,
     subjectId: questionSubjectFilter || undefined,
+    type: questionTypeFilter || undefined,
     difficulty: questionDifficultyFilter as 'EASY' | 'MEDIUM' | 'HARD' | undefined || undefined,
     status: 'PUBLISHED',
     tagIds: questionTagFilter.length > 0 ? questionTagFilter : undefined,
@@ -275,43 +324,21 @@ export default function NewSimulationPage() {
     onError: handleMutationError,
   });
 
-  // Smart random generation mutation
-  const smartRandomMutation = trpc.questions.generateSmartRandomQuestions.useMutation({
-    onSuccess: (data) => {
-      // Replace current questions with generated ones
-      setSelectedQuestions(data.questions);
-      setSmartIsGenerating(false);
-      
-      if (data.warning) {
-        showSuccess('Generazione completata', data.warning);
-      } else {
-        showSuccess(
-          'Generazione completata', 
-          `${data.achievedTotal} domande generate con successo!`
-        );
-      }
+  const createTemplateMutation = trpc.simulationTemplates.create.useMutation({
+    onSuccess: () => {
+      showSuccess('Template creato', 'Il template è stato salvato e può essere riutilizzato per nuove simulazioni.');
+      router.push('/simulazioni');
     },
-    onError: (error) => {
-      setSmartIsGenerating(false);
-      handleMutationError(error);
-    },
+    onError: handleMutationError,
   });
 
-  // Handle smart generation
-  const handleSmartGeneration = () => {
-    setSmartIsGenerating(true);
-    
-    smartRandomMutation.mutate({
-      totalQuestions: smartTotalQuestions,
-      preset: smartPreset,
-      focusSubjectId: smartPreset === 'SINGLE_SUBJECT' ? smartFocusSubjectId || undefined : undefined,
-      difficultyMix: smartDifficultyMix,
-      avoidRecentlyUsed: smartAvoidRecentlyUsed,
-      maximizeTopicCoverage: smartMaximizeTopicCoverage,
-      tagIds: questionTagFilter.length > 0 ? questionTagFilter : undefined,
-      excludeQuestionIds: selectedQuestions.map(q => q.questionId),
-    });
-  };
+  const updateTemplateMutation = trpc.simulationTemplates.update.useMutation({
+    onSuccess: () => {
+      showSuccess('Template aggiornato', 'Le modifiche al template sono state salvate.');
+      router.push('/simulazioni');
+    },
+    onError: handleMutationError,
+  });
 
   // Apply preset
   const applyPreset = (type: SimulationType) => {
@@ -404,6 +431,55 @@ export default function NewSimulationPage() {
       setHasSections(false);
     }
   };
+
+  const applyTemplateToForm = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    if (!templateId) {
+      setTitle('');
+      setDescription('');
+      applyPreset('PRACTICE');
+      setSections([]);
+      setSelectedQuestions([]);
+      setRightPanelTab('domande');
+      return;
+    }
+
+    const template = templatesData?.templates.find((item) => item.id === templateId);
+    if (!template) return;
+
+    const rawSections = Array.isArray(template.sections)
+      ? template.sections as Array<Partial<SimulationSection>>
+      : [];
+
+    setTitle(template.title);
+    setDescription(template.description ?? '');
+    setDurationMinutes(template.durationMinutes);
+    setShowResults(template.showResults);
+    setShowCorrectAnswers(template.showCorrectAnswers);
+    setAllowReview(template.allowReview);
+    setRandomizeOrder(template.randomizeOrder);
+    setRandomizeAnswers(template.randomizeAnswers);
+    setCorrectPoints(template.correctPoints);
+    setWrongPoints(template.wrongPoints);
+    setBlankPoints(template.blankPoints);
+    setMaxScore(template.maxScore);
+    setPassingScore(template.passingScore);
+    setIsRepeatable(template.isRepeatable);
+    setMaxAttempts(template.maxAttempts);
+    setHasSections(true);
+    setSectionMode('manual');
+    setSections(rawSections.map((section, index) => ({
+      id: section.id ?? `section-${Date.now()}-${index}`,
+      name: section.name ?? `Sezione ${index + 1}`,
+      durationMinutes: section.durationMinutes ?? 10,
+      questionCount: section.questionCount ?? 0,
+      subjectId: section.subjectId ?? null,
+      questionIds: [],
+      order: section.order ?? index,
+    })));
+    setSelectedQuestions([]);
+    setRightPanelTab('sezioni');
+  };
   
   // Toggle paper-based mode
   const togglePaperBased = () => {
@@ -487,35 +563,6 @@ export default function NewSimulationPage() {
     [newQuestions[index], newQuestions[newIndex]] = [newQuestions[newIndex], newQuestions[index]];
     newQuestions.forEach((q, i) => q.order = i);
     setSelectedQuestions(newQuestions);
-  };
-
-  // Add random questions from filtered results
-  const addRandomQuestions = (count: number) => {
-    if (!questionsData?.questions) return;
-    
-    // Filter out already selected questions
-    const availableQuestions = questionsData.questions.filter(
-      q => !selectedQuestions.some(sq => sq.questionId === q.id)
-    );
-    
-    // Shuffle and take requested count
-    const shuffled = secureShuffleArray(availableQuestions);
-    const toAdd = shuffled.slice(0, count);
-    
-    const newQuestions = toAdd.map((question, idx) => ({
-      questionId: question.id,
-      order: selectedQuestions.length + idx,
-      question: {
-        id: question.id,
-        text: question.text,
-        type: question.type,
-        difficulty: question.difficulty,
-        subject: question.subject ? { name: question.subject.name, color: question.subject.color } : undefined,
-        topic: question.topic ? { name: question.topic.name } : undefined,
-      },
-    }));
-    
-    setSelectedQuestions([...selectedQuestions, ...newQuestions]);
   };
 
   // Toggle tag filter
@@ -1109,10 +1156,13 @@ export default function NewSimulationPage() {
   const isStepValid = (step: number): boolean => {
     switch (step) {
       case 0: // Type
-        return !!simulationType;
+        return creationMode === 'template' || !!simulationType;
       case 1: // Config
         return !!title && durationMinutes >= 0;
       case 2: // Questions
+        if (creationMode === 'template') {
+          return sections.length > 0 && sections.every((section) => (section.questionCount || 0) > 0);
+        }
         return selectedQuestions.length > 0;
       case 3: // Review
         return true;
@@ -1125,6 +1175,61 @@ export default function NewSimulationPage() {
   const handleSubmit = async (_publishImmediately: boolean) => {
     setIsSaving(true);
     try {
+      if (creationMode === 'template') {
+        const templateSections = sections.map((section, index) => ({
+          ...section,
+          order: index,
+          questionIds: [],
+          questionCount: section.questionCount || 0,
+        }));
+
+        await (isEditMode && editId
+          ? updateTemplateMutation.mutateAsync({
+              id: editId,
+              title,
+              description: description || undefined,
+              durationMinutes,
+              totalQuestions: templateSections.reduce((sum, section) => sum + section.questionCount, 0),
+              showResults,
+              showCorrectAnswers,
+              allowReview,
+              randomizeOrder,
+              randomizeAnswers,
+              useQuestionPoints,
+              correctPoints,
+              wrongPoints,
+              blankPoints,
+              maxScore,
+              passingScore,
+              isRepeatable,
+              maxAttempts,
+              hasSections: true,
+              sections: templateSections,
+            })
+          : createTemplateMutation.mutateAsync({
+              title,
+              description: description || undefined,
+              durationMinutes,
+              totalQuestions: templateSections.reduce((sum, section) => sum + section.questionCount, 0),
+              showResults,
+              showCorrectAnswers,
+              allowReview,
+              randomizeOrder,
+              randomizeAnswers,
+              useQuestionPoints,
+              correctPoints,
+              wrongPoints,
+              blankPoints,
+              maxScore,
+              passingScore,
+              isRepeatable,
+              maxAttempts,
+              hasSections: true,
+              sections: templateSections,
+            }));
+        return;
+      }
+
       const isScheduled = false; // Scheduling handled during assignment now
       await createWithQuestionsMutation.mutateAsync({
         title,
@@ -1183,6 +1288,7 @@ export default function NewSimulationPage() {
           customPoints: q.customPoints,
           customNegativePoints: q.customNegativePoints,
         })),
+        sourceTemplateId: selectedTemplateId || undefined,
         assignments: [], // Assignments added post-creation
       });
     } finally {
@@ -1200,10 +1306,12 @@ export default function NewSimulationPage() {
           <div className="space-y-6">
             <div>
               <h2 className={`text-xl font-semibold ${colors.text.primary}`}>
-                Seleziona la modalità di creazione
+                {creationMode === 'template' ? 'Nuovo template' : 'Nuova simulazione'}
               </h2>
               <p className={`mt-1 text-sm ${colors.text.muted}`}>
-                Scegli una delle tre modalità principali in base allo scopo della simulazione.
+                {creationMode === 'template'
+                  ? 'Crea una struttura riutilizzabile con impostazioni e sezioni, senza legarla a ufficiale o esercitazione.'
+                  : 'Scegli il tipo della simulazione. Puoi partire da zero o usare un template già salvato.'}
               </p>
               {userRole === 'COLLABORATOR' && (
                 <p className={`mt-2 text-sm ${colors.text.muted} flex items-start gap-2`}>
@@ -1212,72 +1320,154 @@ export default function NewSimulationPage() {
                 </p>
               )}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {primaryTypeOptions.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => applyPreset(option.value)}
-                  className={`p-6 rounded-xl border-2 text-left transition-all relative ${
-                    simulationType === option.value && !isPaperBased
-                      ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
-                      : `border-gray-200 dark:border-gray-700 ${colors.background.hover}`
-                  }`}
-                >
-                  {option.badge && (
-                    <span className="absolute top-3 right-3 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-full">
-                      {option.badge}
-                    </span>
-                  )}
-                  <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-4 ${
-                    simulationType === option.value && !isPaperBased
-                      ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-                      : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-                  }`}>
-                    {option.icon}
-                  </div>
-                  <h3 className={`font-semibold ${colors.text.primary}`}>{option.label}</h3>
-                  <p className={`mt-1 text-sm ${colors.text.muted}`}>{option.description}</p>
-                </button>
-              ))}
-            </div>
 
-            {/* Secondary options (Quick Quiz, etc.) */}
-            {secondaryTypeOptions.length > 0 && (
-              <div className="space-y-2">
-                <p className={`text-xs font-medium uppercase tracking-wide ${colors.text.muted}`}>
-                  Altre modalità
-                </p>
+            {creationMode === 'simulation' && templatesData && templatesData.templates.length > 0 && (
+              <div className={`p-4 rounded-xl ${colors.background.secondary} border ${colors.border.light}`}>
+                <CustomSelect
+                  label="Parti da un template (opzionale)"
+                  value={selectedTemplateId}
+                  onChange={applyTemplateToForm}
+                  options={[
+                    { value: '', label: 'Parti da zero' },
+                    ...templatesData.templates.map((template) => ({
+                      value: template.id,
+                      label: `${template.title} (${template.totalQuestions} domande previste)`,
+                    })),
+                  ]}
+                  placeholder="Parti da zero"
+                />
+
+                {/* Template preview panel */}
+                {selectedTemplateId && (() => {
+                  const tpl = templatesData.templates.find((t) => t.id === selectedTemplateId);
+                  if (!tpl) return null;
+                  const rawSections = Array.isArray(tpl.sections)
+                    ? tpl.sections as Array<Partial<SimulationSection>>
+                    : [];
+                  const settingRows: { label: string; value: string }[] = [
+                    { label: 'Mostra risultati', value: tpl.showResults ? 'Sì' : 'No' },
+                    { label: 'Mostra risposte corrette', value: tpl.showCorrectAnswers ? 'Sì' : 'No' },
+                    { label: 'Revisione risposte', value: tpl.allowReview ? 'Sì' : 'No' },
+                    { label: 'Ordine casuale domande', value: tpl.randomizeOrder ? 'Sì' : 'No' },
+                    { label: 'Ordine casuale risposte', value: tpl.randomizeAnswers ? 'Sì' : 'No' },
+                    { label: 'Ripetibile', value: tpl.isRepeatable ? `Sì${tpl.maxAttempts ? ` (max ${tpl.maxAttempts})` : ''}` : 'No' },
+                    { label: 'Punti corretta', value: String(tpl.correctPoints) },
+                    { label: 'Punti errata', value: String(tpl.wrongPoints) },
+                    { label: 'Punti bianca', value: String(tpl.blankPoints) },
+                    ...(tpl.maxScore !== null ? [{ label: 'Punteggio massimo', value: String(tpl.maxScore) }] : []),
+                    ...(tpl.passingScore !== null ? [{ label: 'Punteggio sufficienza', value: String(tpl.passingScore) }] : []),
+                  ];
+                  return (
+                    <div className={`mt-4 pt-4 border-t ${colors.border.light}`}>
+                      <h4 className={`text-sm font-semibold ${colors.text.primary} mb-3 flex items-center gap-2`}>
+                        <Info className="w-4 h-4 text-blue-500" />
+                        Dettagli template
+                      </h4>
+
+                      {/* Stats row */}
+                      <div className="grid grid-cols-3 gap-3 mb-4">
+                        <div className={`p-3 rounded-lg ${colors.background.tertiary} text-center`}>
+                          <div className={`text-lg font-bold ${colors.text.primary}`}>{tpl.totalQuestions}</div>
+                          <div className={`text-xs ${colors.text.muted}`}>Domande</div>
+                        </div>
+                        <div className={`p-3 rounded-lg ${colors.background.tertiary} text-center`}>
+                          <div className={`text-lg font-bold ${colors.text.primary}`}>{tpl.durationMinutes}</div>
+                          <div className={`text-xs ${colors.text.muted}`}>Minuti totali</div>
+                        </div>
+                        <div className={`p-3 rounded-lg ${colors.background.tertiary} text-center`}>
+                          <div className={`text-lg font-bold ${colors.text.primary}`}>{rawSections.length}</div>
+                          <div className={`text-xs ${colors.text.muted}`}>Sezioni</div>
+                        </div>
+                      </div>
+
+                      {/* Settings grid */}
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 mb-4">
+                        {settingRows.map((row) => (
+                          <div key={row.label} className="flex items-center justify-between gap-2">
+                            <span className={`text-xs ${colors.text.muted}`}>{row.label}</span>
+                            <span className={`text-xs font-medium ${colors.text.secondary}`}>{row.value}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Sections list */}
+                      {rawSections.length > 0 && (
+                        <div>
+                          <p className={`text-xs font-semibold ${colors.text.muted} uppercase tracking-wide mb-2`}>Sezioni</p>
+                          <div className="space-y-1.5">
+                            {rawSections.map((section, i) => (
+                              <div key={section.id ?? i} className={`flex items-center justify-between px-3 py-2 rounded-lg ${colors.background.tertiary}`}>
+                                <div className="flex items-center gap-2">
+                                  <Layers className={`w-3.5 h-3.5 ${colors.text.muted}`} />
+                                  <span className={`text-sm ${colors.text.primary}`}>{section.name ?? `Sezione ${i + 1}`}</span>
+                                </div>
+                                <div className={`flex items-center gap-3 text-xs ${colors.text.muted}`}>
+                                  <span>{section.questionCount ?? 0} domande</span>
+                                  <span><Clock className="w-3 h-3 inline mr-0.5" />{section.durationMinutes ?? 0} min</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {tpl.description && (
+                        <p className={`mt-3 text-xs ${colors.text.muted} italic`}>{tpl.description}</p>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {creationMode === 'template' ? (
+              <div className={`p-4 rounded-xl ${colors.background.secondary} border ${colors.border.light} flex items-start gap-3`}>
+                <Info className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h3 className={`font-semibold ${colors.text.primary}`}>Template indipendente dal tipo</h3>
+                  <p className={`mt-1 text-sm ${colors.text.muted}`}>
+                    Ufficiale o esercitazione si sceglie solo quando crei la simulazione. Il template resta valido per entrambe.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <h3 className={`font-semibold ${colors.text.primary} mb-3`}>
+                  Tipo simulazione
+                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {secondaryTypeOptions.map((option) => (
+                  {primaryTypeOptions.map((option) => (
                     <button
                       key={option.value}
                       onClick={() => applyPreset(option.value)}
-                      className={`p-4 rounded-xl border-2 text-left transition-all relative ${
+                      className={`p-6 rounded-xl border-2 text-left transition-all relative ${
                         simulationType === option.value && !isPaperBased
                           ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
                           : `border-gray-200 dark:border-gray-700 ${colors.background.hover}`
                       }`}
                     >
-                      <div className="flex items-start gap-3">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                          simulationType === option.value && !isPaperBased
-                            ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-                            : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-                        }`}>
-                          {option.icon}
-                        </div>
-                        <div className="flex-1">
-                          <h3 className={`font-semibold ${colors.text.primary}`}>{option.label}</h3>
-                          <p className={`mt-1 text-sm ${colors.text.muted}`}>{option.description}</p>
-                        </div>
+                      {option.badge && (
+                        <span className="absolute top-3 right-3 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-full">
+                          {option.badge}
+                        </span>
+                      )}
+                      <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-4 ${
+                        simulationType === option.value && !isPaperBased
+                          ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
+                          : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                      }`}>
+                        {option.icon}
                       </div>
+                      <h3 className={`font-semibold ${colors.text.primary}`}>{option.label}</h3>
+                      <p className={`mt-1 text-sm ${colors.text.muted}`}>{option.description}</p>
                     </button>
                   ))}
-                </div>
+                  </div>
               </div>
             )}
             
             {/* Paper-based option */}
+            {creationMode === 'simulation' && (
             <div className={`mt-6 p-4 rounded-xl border-2 ${
               isPaperBased 
                 ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' 
@@ -1321,6 +1511,7 @@ export default function NewSimulationPage() {
                 </div>
               )}
             </div>
+            )}
             
             {/* Virtual Room + Anti-cheat info for official simulations */}
             {simulationType === 'OFFICIAL' && !isPaperBased && (
@@ -1362,7 +1553,7 @@ export default function NewSimulationPage() {
         return (
           <div className="space-y-8">
             <h2 className={`text-xl font-semibold ${colors.text.primary}`}>
-              Configurazione simulazione
+              {creationMode === 'template' ? 'Impostazioni template' : 'Configurazione simulazione'}
             </h2>
 
             {/* Basic info */}
@@ -1549,7 +1740,7 @@ export default function NewSimulationPage() {
             </div>
 
             {/* Anti-cheat settings (only for online simulations) */}
-            {!isPaperBased && (
+            {creationMode === 'simulation' && !isPaperBased && (
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Shield className="w-5 h-5 text-green-600 dark:text-green-400" />
@@ -1614,8 +1805,10 @@ export default function NewSimulationPage() {
                 <div className="flex items-start gap-3">
                   <Checkbox
                     id="hasSections"
-                    checked={hasSections}
+                    checked={creationMode === 'template' || hasSections}
+                    disabled={creationMode === 'template'}
                     onChange={(e) => {
+                      if (creationMode === 'template') return;
                       setHasSections(e.target.checked);
                       if (!e.target.checked) {
                         setSections([]);
@@ -1628,12 +1821,15 @@ export default function NewSimulationPage() {
                       Organizza in sezioni separate
                     </label>
                     <p className={`text-sm ${colors.text.muted} mt-1`}>
-                      Dividi la simulazione in sezioni con tempi e domande specifiche (es. Comprensione del testo, Biologia, Chimica...)
+                      {creationMode === 'template'
+                        ? 'I template salvano la struttura delle sezioni e il numero di domande previsto per ciascuna.'
+                        : 'Dividi la simulazione in sezioni con tempi e domande specifiche (es. Comprensione del testo, Biologia, Chimica...)'}
                     </p>
                     
-                    {hasSections && (
+                    {(creationMode === 'template' || hasSections) && (
                       <div className="mt-4 space-y-4">
                         {/* Section mode toggle */}
+                        {creationMode === 'simulation' && (
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => {
@@ -1659,17 +1855,20 @@ export default function NewSimulationPage() {
                             Manuale
                           </button>
                         </div>
+                        )}
 
-                        {sectionMode === 'auto' && (
+                        {creationMode === 'simulation' && sectionMode === 'auto' && (
                           <p className={`text-xs ${colors.text.muted} italic`}>
                             Le sezioni verranno create automaticamente in base alla materia di ciascuna domanda.
                           </p>
                         )}
 
-                        {sectionMode === 'manual' && (
+                        {(creationMode === 'template' || sectionMode === 'manual') && (
                           <div className="space-y-3">
                             <p className={`text-xs ${colors.text.muted} italic`}>
-                              Crea le sezioni qui e assegna le domande nel passo successivo.
+                              {creationMode === 'template'
+                                ? 'Crea le sezioni del template e indica quante domande dovrà contenere ciascuna.'
+                                : 'Crea le sezioni qui e assegna le domande nel passo successivo.'}
                             </p>
                             
                             {/* Add new section */}
@@ -1763,14 +1962,27 @@ export default function NewSimulationPage() {
                                       <span className={`text-xs ${colors.text.muted}`}>min</span>
                                     </div>
                                     
-                                    {/* Question count badge */}
-                                    <span className={`px-2 py-0.5 rounded text-xs ${
-                                      (section.questionIds?.length || 0) > 0 
-                                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                        : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
-                                    }`}>
-                                      {section.questionIds?.length || 0} domande
-                                    </span>
+                                    {creationMode === 'template' ? (
+                                      <div className="flex items-center gap-1">
+                                        <Target className="w-3 h-3 text-gray-400" />
+                                        <input
+                                          type="number"
+                                          value={section.questionCount || 0}
+                                          onChange={(e) => updateSection(section.id, { questionCount: parseInt(e.target.value) || 0 })}
+                                          className={`w-16 px-2 py-1 rounded border ${colors.border.input} ${colors.background.input} ${colors.text.primary} text-sm text-center`}
+                                          min="1"
+                                        />
+                                        <span className={`text-xs ${colors.text.muted}`}>domande</span>
+                                      </div>
+                                    ) : (
+                                      <span className={`px-2 py-0.5 rounded text-xs ${
+                                        (section.questionIds?.length || 0) > 0 
+                                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                          : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                                      }`}>
+                                        {section.questionIds?.length || 0} domande
+                                      </span>
+                                    )}
                                     
                                     {/* Remove button */}
                                     <button
@@ -1806,7 +2018,7 @@ export default function NewSimulationPage() {
                         )}
                         
                         {/* Show sections in paper PDF toggle - visible when paper mode is enabled */}
-                        {isPaperBased && (
+                        {creationMode === 'simulation' && isPaperBased && (
                           <div className={`mt-4 pt-4 border-t ${colors.border.light}`}>
                             <div className="flex items-start gap-3">
                               <Checkbox
@@ -1835,208 +2047,74 @@ export default function NewSimulationPage() {
         );
 
       case 2:
+        if (creationMode === 'template') {
+          const totalTemplateQuestions = sections.reduce((sum, section) => sum + (section.questionCount || 0), 0);
+
+          return (
+            <div className="space-y-6">
+              <div>
+                <h2 className={`text-xl font-semibold ${colors.text.primary}`}>
+                  Sezioni del template
+                </h2>
+                <p className={`mt-1 text-sm ${colors.text.muted}`}>
+                  Qui definisci solo la struttura: le domande verranno scelte quando creerai una simulazione da questo template.
+                </p>
+              </div>
+
+              <div className={`rounded-xl border ${colors.border.light} overflow-hidden`}>
+                <div className={`px-4 py-3 ${colors.background.secondary} border-b ${colors.border.light} flex items-center justify-between gap-3`}>
+                  <span className={`font-medium ${colors.text.primary}`}>{sections.length} sezioni</span>
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                    {totalTemplateQuestions} domande previste
+                  </span>
+                </div>
+
+                {sections.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <Layers className="w-12 h-12 mx-auto text-gray-400 mb-2" />
+                    <p className={colors.text.muted}>Nessuna sezione creata</p>
+                    <p className={`text-sm ${colors.text.muted}`}>Torna alla configurazione e aggiungi almeno una sezione.</p>
+                  </div>
+                ) : (
+                  <div className={`divide-y ${colors.border.light}`}>
+                    {sections.map((section, index) => (
+                      <div key={section.id} className={`px-4 py-3 ${colors.background.card} flex items-center gap-3`}>
+                        <span className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-blue-400">
+                          {index + 1}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className={`font-medium ${colors.text.primary} truncate`}>{section.name}</p>
+                          <p className={`text-xs ${colors.text.muted}`}>{section.durationMinutes} minuti</p>
+                        </div>
+                        <label className="flex items-center gap-2">
+                          <span className={`text-xs ${colors.text.muted}`}>Domande</span>
+                          <input
+                            type="number"
+                            value={section.questionCount || 0}
+                            onChange={(e) => updateSection(section.id, { questionCount: parseInt(e.target.value) || 0 })}
+                            min={1}
+                            className={`w-20 px-2 py-1.5 rounded-lg border ${colors.border.input} ${colors.background.input} ${colors.text.primary} text-sm text-center`}
+                          />
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        }
+
         return (
           <div className="space-y-6">
-            <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
               <h2 className={`text-xl font-semibold ${colors.text.primary}`}>
                 Seleziona le domande ({selectedQuestions.length} selezionate)
               </h2>
-              
-              {/* Selection mode toggle */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setSelectionMode('manual')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    selectionMode === 'manual' 
-                      ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' 
-                      : `${colors.background.secondary} ${colors.text.muted}`
-                  }`}
-                >
-                  Manuale
-                </button>
-                <button
-                  onClick={() => setSelectionMode('random')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    selectionMode === 'random' 
-                      ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' 
-                      : `${colors.background.secondary} ${colors.text.muted}`
-                  }`}
-                >
-                  Casuale
-                </button>
-                <button
-                  onClick={() => setSelectionMode('smart')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
-                    selectionMode === 'smart' 
-                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' 
-                      : `${colors.background.secondary} ${colors.text.muted}`
-                  }`}
-                >
-                  <Zap className="w-3.5 h-3.5" />
-                  Smart
-                </button>
-              </div>
+              <p className={`mt-1 text-sm ${colors.text.muted}`}>
+                Aggiungi le domande con i filtri a sinistra; se usi le sezioni, assegnale dal pannello a destra.
+              </p>
             </div>
-
-            {/* Smart generation panel */}
-            {selectionMode === 'smart' && (
-              <div className={`p-5 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800`}>
-                <div className="flex items-center gap-2 mb-4">
-                  <Zap className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                  <h3 className={`font-semibold text-purple-900 dark:text-purple-200`}>
-                    Generazione Intelligente
-                  </h3>
-                </div>
-                <p className={`text-sm text-purple-700 dark:text-purple-300 mb-5`}>
-                  L&apos;algoritmo creerà una simulazione bilanciata automaticamente, distribuendo le domande per materia, 
-                  difficoltà e argomenti. Perfetto per creare simulazioni realistiche in pochi secondi.
-                </p>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-                  {/* Number of questions */}
-                  <div>
-                    <label className={`block text-sm font-medium text-purple-900 dark:text-purple-200 mb-1.5`}>
-                      Numero di domande
-                    </label>
-                    <input
-                      type="number"
-                      value={smartTotalQuestions}
-                      onChange={(e) => setSmartTotalQuestions(Math.max(5, Math.min(100, parseInt(e.target.value) || 5)))}
-                      min={5}
-                      max={100}
-                      className={`w-full px-3 py-2 rounded-lg border border-purple-200 dark:border-purple-700 bg-white dark:bg-gray-800 ${colors.text.primary} text-sm`}
-                    />
-                  </div>
-
-                  {/* Preset selection */}
-                  <div>
-                    <CustomSelect
-                      label="Distribuzione materie"
-                      value={smartPreset}
-                      onChange={(value) => setSmartPreset(value as SmartRandomPreset)}
-                      options={[
-                        { value: 'PROPORTIONAL', label: 'Proporzionale (in base alle domande disponibili)' },
-                        { value: 'BALANCED', label: 'Bilanciata (equa tra materie)' },
-                        { value: 'SINGLE_SUBJECT', label: 'Singola materia' },
-                      ]}
-                      className="text-purple-900 dark:text-purple-200"
-                    />
-                  </div>
-
-                  {/* Focus subject (only for SINGLE_SUBJECT) */}
-                  {smartPreset === 'SINGLE_SUBJECT' && (
-                    <div>
-                      <CustomSelect
-                        label="Materia focus"
-                        value={smartFocusSubjectId}
-                        onChange={setSmartFocusSubjectId}
-                        options={[
-                          { value: '', label: 'Seleziona materia...' },
-                          ...(subjectsData?.map((s) => ({
-                            value: s.id,
-                            label: `${s.name} (${s._count?.questions || 0} domande)`,
-                          })) || []),
-                        ]}
-                        className="text-purple-900 dark:text-purple-200"
-                      />
-                    </div>
-                  )}
-
-                  {/* Difficulty mix */}
-                  <div>
-                    <CustomSelect
-                      label="Mix difficoltà"
-                      value={smartDifficultyMix}
-                      onChange={(value) => setSmartDifficultyMix(value as DifficultyMix)}
-                      options={[
-                        { value: 'BALANCED', label: 'Bilanciata (30% F, 50% M, 20% D)' },
-                        { value: 'EASY_FOCUS', label: 'Più facili (50% F, 40% M, 10% D)' },
-                        { value: 'HARD_FOCUS', label: 'Più difficili (10% F, 40% M, 50% D)' },
-                        { value: 'MEDIUM_ONLY', label: 'Solo medie' },
-                        { value: 'MIXED', label: 'Equa (33/34/33)' },
-                      ]}
-                      className="text-purple-900 dark:text-purple-200"
-                    />
-                  </div>
-                </div>
-
-                {/* Smart options */}
-                <div className="flex flex-wrap gap-4 mb-5">
-                  <Checkbox
-                    checked={smartAvoidRecentlyUsed}
-                    onChange={(e) => setSmartAvoidRecentlyUsed(e.target.checked)}
-                    label="Evita domande usate recentemente"
-                    className="text-purple-900 dark:text-purple-200"
-                  />
-                  <Checkbox
-                    checked={smartMaximizeTopicCoverage}
-                    onChange={(e) => setSmartMaximizeTopicCoverage(e.target.checked)}
-                    label="Massimizza copertura argomenti"
-                    className="text-purple-900 dark:text-purple-200"
-                  />
-                </div>
-
-                {/* Generate button */}
-                <button
-                  onClick={handleSmartGeneration}
-                  disabled={smartIsGenerating || (smartPreset === 'SINGLE_SUBJECT' && !smartFocusSubjectId)}
-                  className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-medium hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
-                >
-                  {smartIsGenerating ? (
-                    <>
-                      <Spinner size="sm" variant="white" />
-                      Generazione in corso...
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-5 h-5" />
-                      Genera {smartTotalQuestions} Domande Smart
-                    </>
-                  )}
-                </button>
-
-                {selectedQuestions.length > 0 && (
-                  <p className={`text-xs text-purple-600 dark:text-purple-400 mt-2 text-center`}>
-                    La generazione sostituirà le {selectedQuestions.length} domande attualmente selezionate
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Random selection panel */}
-            {selectionMode === 'random' && (
-              <div className={`p-4 rounded-xl ${colors.background.secondary} border ${colors.border.light}`}>
-                <div className="flex items-center gap-4 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <label className={`text-sm font-medium ${colors.text.secondary}`}>
-                      Aggiungi
-                    </label>
-                    <input
-                      type="number"
-                      value={randomCount}
-                      onChange={(e) => setRandomCount(Math.max(1, parseInt(e.target.value) || 1))}
-                      min={1}
-                      max={50}
-                      className={`w-20 px-3 py-1.5 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary} text-sm text-center`}
-                    />
-                    <label className={`text-sm font-medium ${colors.text.secondary}`}>
-                      domande casuali dai filtri attivi
-                    </label>
-                  </div>
-                  <button
-                    onClick={() => addRandomQuestions(randomCount)}
-                    disabled={!questionsData?.questions.length}
-                    className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <Plus className="w-4 h-4 inline mr-1" />
-                    Aggiungi
-                  </button>
-                </div>
-                <p className={`text-xs ${colors.text.muted} mt-2`}>
-                  Le domande saranno selezionate casualmente tra quelle che corrispondono ai filtri (materia, difficoltà, tag).
-                </p>
-              </div>
-            )}
 
             {/* Tag filters */}
             {tagCategoriesData && tagCategoriesData.length > 0 && (
@@ -2100,7 +2178,7 @@ export default function NewSimulationPage() {
                         className={`w-full pl-10 pr-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary} text-sm`}
                       />
                     </div>
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <div className="flex-1">
                         <CustomSelect
                           value={questionSubjectFilter}
@@ -2110,6 +2188,19 @@ export default function NewSimulationPage() {
                             ...(subjectsData?.map((s) => ({ value: s.id, label: s.name })) || []),
                           ]}
                           placeholder="Tutte le materie"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <CustomSelect
+                          value={questionTypeFilter}
+                          onChange={(value) => setQuestionTypeFilter(value as QuestionTypeFilter)}
+                          options={[
+                            { value: '', label: 'Tutte le tipologie' },
+                            { value: 'SINGLE_CHOICE', label: 'Risposta singola' },
+                            { value: 'MULTIPLE_CHOICE', label: 'Risposta multipla' },
+                            { value: 'OPEN_TEXT', label: 'Risposta aperta' },
+                          ]}
+                          placeholder="Tutte le tipologie"
                         />
                       </div>
                       <div className="flex-1">
@@ -2256,7 +2347,9 @@ export default function NewSimulationPage() {
                       <div className="p-8 text-center">
                         <Target className="w-12 h-12 mx-auto text-gray-400 mb-2" />
                         <p className={colors.text.muted}>Nessuna domanda selezionata</p>
-                        <p className={`text-sm ${colors.text.muted}`}>Aggiungi domande dalla lista a sinistra</p>
+                        <p className={`text-sm ${colors.text.muted}`}>
+                          La lista a sinistra serve solo per aggiunte manuali. Per casuale o smart usa la scheda Sezioni.
+                        </p>
                       </div>
                     ) : (
                       <div className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -2339,18 +2432,16 @@ export default function NewSimulationPage() {
                           Vai alla scheda <strong>Configurazione</strong> e aggiungi le sezioni, poi torna qui ad assegnare le domande.
                         </p>
                       </div>
-                    ) : selectedQuestions.length === 0 ? (
-                      <div className="p-8 text-center space-y-2">
-                        <Target className="w-12 h-12 mx-auto text-gray-400" />
-                        <p className={`font-medium ${colors.text.primary}`}>Nessuna domanda selezionata</p>
-                        <p className={`text-sm ${colors.text.muted}`}>
-                          Prima aggiungi le domande dal pannello a sinistra (Manuale, Casuale o Smart), poi torna qui per assegnarle alle sezioni.
-                        </p>
-                      </div>
                     ) : (
                       <>
                         {/* Progress banner */}
-                        {(() => {
+                        {selectedQuestions.length === 0 ? (
+                          <div className={`px-4 py-3 flex-shrink-0 border-b ${colors.border.light} bg-blue-50 dark:bg-blue-900/20`}>
+                            <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
+                              Usa “Casuale/Smart DB” su una sezione per pescare e assegnare domande automaticamente, oppure seleziona domande a sinistra per aggiungerle a mano.
+                            </p>
+                          </div>
+                        ) : (() => {
                           const unassignedCount = getUnassignedQuestions().length;
                           const assignedCount = selectedQuestions.length - unassignedCount;
                           return (
@@ -2450,16 +2541,16 @@ export default function NewSimulationPage() {
                                       ? 'Chiudi'
                                       : unassigned.length === 0
                                         ? 'Nessuna disponibile'
-                                        : `Aggiungi dalle selezionate (${unassigned.length})`}
+                                        : `Aggiungi manualmente (${unassigned.length})`}
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => setFillSectionId(section.id)}
                                     className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-400 dark:hover:bg-purple-900/50 transition-colors"
-                                    title="Pesca domande casuali dal database e aggiungile a questa sezione"
+                                    title="Pesca domande casuali o smart dal database e aggiungile a questa sezione"
                                   >
                                     <Wand2 className="w-3.5 h-3.5" />
-                                    Casuale DB
+                                    Casuale/Smart DB
                                   </button>
                                 </div>
 
@@ -2568,10 +2659,12 @@ export default function NewSimulationPage() {
         return (
           <div className="space-y-6">
             <h2 className={`text-xl font-semibold ${colors.text.primary}`}>
-              Riepilogo simulazione
+              {creationMode === 'template' ? 'Riepilogo template' : 'Riepilogo simulazione'}
             </h2>
             <p className={`text-sm ${colors.text.muted}`}>
-              Dopo la creazione potrai assegnare la simulazione a studenti, gruppi o classi dalla pagina di dettaglio.
+              {creationMode === 'template'
+                ? 'Il template sarà disponibile quando crei una nuova simulazione.'
+                : 'Dopo la creazione potrai assegnare la simulazione a studenti, gruppi o classi dalla pagina di dettaglio.'}
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2592,7 +2685,11 @@ export default function NewSimulationPage() {
                   </div>
                   <div className="flex justify-between">
                     <dt className={colors.text.muted}>Domande</dt>
-                    <dd className={`font-medium ${colors.text.primary}`}>{selectedQuestions.length}</dd>
+                    <dd className={`font-medium ${colors.text.primary}`}>
+                      {creationMode === 'template'
+                        ? sections.reduce((sum, section) => sum + (section.questionCount || 0), 0)
+                        : selectedQuestions.length}
+                    </dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className={colors.text.muted}>Durata</dt>
@@ -2600,11 +2697,13 @@ export default function NewSimulationPage() {
                       {durationMinutes > 0 ? `${durationMinutes} minuti` : 'Illimitata'}
                     </dd>
                   </div>
-                  {hasSections && (
+                  {(creationMode === 'template' || hasSections) && (
                     <div className="flex justify-between">
                       <dt className={colors.text.muted}>Sezioni</dt>
                       <dd className={`font-medium text-blue-600 dark:text-blue-400`}>
-                        {sectionMode === 'auto' ? 'Automatiche (per materia)' : `${sections.length} manuali`}
+                        {creationMode === 'template'
+                          ? `${sections.length} nel template`
+                          : sectionMode === 'auto' ? 'Automatiche (per materia)' : `${sections.length} manuali`}
                       </dd>
                     </div>
                   )}
@@ -2612,7 +2711,7 @@ export default function NewSimulationPage() {
               </div>
 
               {/* Sections detail (only for manual mode) */}
-              {hasSections && sectionMode === 'manual' && sections.length > 0 && (
+              {(creationMode === 'template' || (hasSections && sectionMode === 'manual')) && sections.length > 0 && (
                 <div className={`p-6 rounded-xl ${colors.background.secondary} md:col-span-2`}>
                   <h3 className={`font-medium ${colors.text.primary} mb-4 flex items-center gap-2`}>
                     <Layers className="w-4 h-4 text-blue-600" />
@@ -2636,17 +2735,17 @@ export default function NewSimulationPage() {
                             {section.durationMinutes} min
                           </span>
                           <span className={`px-1.5 py-0.5 rounded ${
-                            (section.questionIds?.length || 0) > 0 
+                            (creationMode === 'template' ? section.questionCount || 0 : section.questionIds?.length || 0) > 0 
                               ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                               : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
                           }`}>
-                            {section.questionIds?.length || 0} domande
+                            {creationMode === 'template' ? section.questionCount || 0 : section.questionIds?.length || 0} domande
                           </span>
                         </div>
                       </div>
                     ))}
                   </div>
-                  {getUnassignedQuestions().length > 0 && (
+                  {creationMode === 'simulation' && getUnassignedQuestions().length > 0 && (
                     <p className="mt-3 text-sm text-yellow-600 dark:text-yellow-400">
                       ⚠️ Attenzione: {getUnassignedQuestions().length} domande non assegnate a nessuna sezione
                     </p>
@@ -2683,21 +2782,23 @@ export default function NewSimulationPage() {
               <div className={`p-6 rounded-xl ${colors.background.secondary}`}>
                 <h3 className={`font-medium ${colors.text.primary} mb-4`}>Modalità e Sicurezza</h3>
                 <dl className="space-y-3">
-                  <div className="flex justify-between">
-                    <dt className={colors.text.muted}>Modalità Cartacea</dt>
-                    <dd className={`font-medium ${colors.text.primary}`}>
-                      {isPaperBased ? (
-                        <span className="flex items-center gap-1">
-                          <Printer className="w-4 h-4" /> Si
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1">
-                          No
-                        </span>
-                      )}
-                    </dd>
-                  </div>
-                  {!isPaperBased && (
+                  {creationMode === 'simulation' && (
+                    <div className="flex justify-between">
+                      <dt className={colors.text.muted}>Modalità Cartacea</dt>
+                      <dd className={`font-medium ${colors.text.primary}`}>
+                        {isPaperBased ? (
+                          <span className="flex items-center gap-1">
+                            <Printer className="w-4 h-4" /> Si
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            No
+                          </span>
+                        )}
+                      </dd>
+                    </div>
+                  )}
+                  {creationMode === 'simulation' && !isPaperBased && (
                     <div className="flex justify-between">
                       <dt className={colors.text.muted}>Anti-cheat</dt>
                       <dd className={`font-medium ${enableAntiCheat ? 'text-green-600 dark:text-green-400' : colors.text.muted}`}>
@@ -2709,13 +2810,13 @@ export default function NewSimulationPage() {
                       </dd>
                     </div>
                   )}
-                  {trackAttendance && (
+                  {creationMode === 'simulation' && trackAttendance && (
                     <div className="flex justify-between">
                       <dt className={colors.text.muted}>Presenze</dt>
                       <dd className={`font-medium text-green-600 dark:text-green-400`}>Tracciate</dd>
                     </div>
                   )}
-                  {locationType && (
+                  {creationMode === 'simulation' && locationType && (
                     <div className="flex justify-between">
                       <dt className={colors.text.muted}>Luogo</dt>
                       <dd className={`font-medium ${colors.text.primary}`}>
@@ -2729,7 +2830,7 @@ export default function NewSimulationPage() {
             </div>
 
             {/* Paper-based print button */}
-            {isPaperBased && (
+            {creationMode === 'simulation' && isPaperBased && (
               <div className={`mt-6`}>
                 <button
                   type="button"
@@ -2788,7 +2889,7 @@ export default function NewSimulationPage() {
             )}
 
             {/* Non-paper-based preview button */}
-            {!isPaperBased && (
+            {creationMode === 'simulation' && !isPaperBased && (
               <div className="mt-6">
                 <button
                   type="button"
@@ -2875,6 +2976,15 @@ export default function NewSimulationPage() {
     );
   }
 
+  // Show loader while loading an existing template for editing
+  if (isEditMode && editTemplateLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
@@ -2886,13 +2996,17 @@ export default function NewSimulationPage() {
           <ArrowLeft className="w-4 h-4" />
           Torna alle simulazioni
         </Link>
-        <h1 className={`text-2xl font-bold ${colors.text.primary}`}>Nuova Simulazione</h1>
+        <h1 className={`text-2xl font-bold ${colors.text.primary}`}>
+          {creationMode === 'template'
+            ? (isEditMode ? 'Modifica Template' : 'Nuovo Template')
+            : 'Nuova Simulazione'}
+        </h1>
       </div>
 
       {/* Steps indicator */}
       <div className="mb-8">
         <div className="flex items-center justify-between max-w-3xl mx-auto">
-          {STEPS.map((step, index) => {
+          {activeSteps.map((step, index) => {
             const StepIcon = step.icon;
             const isCompleted = index < currentStep;
             const isCurrent = index === currentStep;
@@ -2919,7 +3033,7 @@ export default function NewSimulationPage() {
                     {step.title}
                   </span>
                 </button>
-                {index < STEPS.length - 1 && (
+                {index < activeSteps.length - 1 && (
                   <div
                     className={`w-16 h-0.5 mx-2 ${
                       index < currentStep ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'
@@ -2949,23 +3063,27 @@ export default function NewSimulationPage() {
         </button>
 
         <div className="flex items-center gap-3">
-          {currentStep === STEPS.length - 1 ? (
+          {currentStep === activeSteps.length - 1 ? (
             <>
-              <button
-                onClick={() => handleSubmit(false)}
-                disabled={!isStepValid(currentStep) || isSaving}
-                className={`flex items-center gap-2 px-6 py-2 rounded-lg border ${colors.border.light} ${colors.text.secondary} disabled:opacity-50 disabled:cursor-not-allowed ${colors.background.hover}`}
-              >
-                <Save className="w-4 h-4" />
-                Salva come bozza
-              </button>
+              {creationMode === 'simulation' && (
+                <button
+                  onClick={() => handleSubmit(false)}
+                  disabled={!isStepValid(currentStep) || isSaving}
+                  className={`flex items-center gap-2 px-6 py-2 rounded-lg border ${colors.border.light} ${colors.text.secondary} disabled:opacity-50 disabled:cursor-not-allowed ${colors.background.hover}`}
+                >
+                  <Save className="w-4 h-4" />
+                  Salva come bozza
+                </button>
+              )}
               <button
                 onClick={() => handleSubmit(true)}
                 disabled={!isStepValid(currentStep) || isSaving}
                 className={`flex items-center gap-2 px-6 py-2 rounded-lg text-white ${colors.primary.bg} hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed`}
               >
-                {isSaving ? <Spinner size="sm" variant="white" /> : <Send className="w-4 h-4" />}
-                Crea Simulazione
+                {isSaving ? <Spinner size="sm" variant="white" /> : creationMode === 'template' ? <FileText className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+                {creationMode === 'template'
+                  ? (isEditMode ? 'Salva modifiche' : 'Crea Template')
+                  : 'Crea Simulazione'}
               </button>
             </>
           ) : (
@@ -3021,32 +3139,59 @@ export default function NewSimulationPage() {
               <RichTextRenderer text={questionDetail.text} />
             </div>
 
-            {/* Answers */}
-            <div className="space-y-2 mt-4">
-              <h4 className={`font-medium ${colors.text.primary}`}>Risposte:</h4>
-              {questionDetail.answers?.map((answer, idx) => (
-                <div 
-                  key={idx}
-                  className={`p-3 rounded-lg border ${
-                    answer.isCorrect 
-                      ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
-                      : `${colors.border.light} ${colors.background.secondary}`
-                  }`}
-                >
-                  <div className="flex items-start gap-2">
-                    <span className={`font-medium ${answer.isCorrect ? 'text-green-600 dark:text-green-400' : colors.text.secondary}`}>
-                      {String.fromCharCode(65 + idx)}.
-                    </span>
-                    <div className={`flex-1 ${answer.isCorrect ? 'text-green-700 dark:text-green-300' : colors.text.primary}`}>
-                      <RichTextRenderer text={answer.text} />
-                    </div>
-                    {answer.isCorrect && (
-                      <Check className="w-4 h-4 text-green-500 ml-auto flex-shrink-0" />
-                    )}
+            {questionDetail.type === 'OPEN_TEXT' ? (
+              <div className="space-y-2 mt-4">
+                <h4 className={`font-medium ${colors.text.primary}`}>Keywords di valutazione:</h4>
+                {questionDetail.keywords && questionDetail.keywords.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {questionDetail.keywords.map((keyword) => (
+                      <span
+                        key={keyword.id}
+                        className={`px-2 py-1 rounded-lg text-xs font-medium ${
+                          keyword.isRequired
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                            : `${colors.background.secondary} ${colors.text.secondary}`
+                        }`}
+                        title={keyword.synonyms.length > 0 ? `Sinonimi: ${keyword.synonyms.join(', ')}` : undefined}
+                      >
+                        {keyword.keyword}
+                        {keyword.isRequired && ' · obbligatoria'}
+                      </span>
+                    ))}
                   </div>
-                </div>
-              ))}
-            </div>
+                ) : (
+                  <p className={`text-sm ${colors.text.muted}`}>
+                    Nessuna keyword configurata per questa domanda aperta.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2 mt-4">
+                <h4 className={`font-medium ${colors.text.primary}`}>Risposte:</h4>
+                {questionDetail.answers?.map((answer, idx) => (
+                  <div 
+                    key={idx}
+                    className={`p-3 rounded-lg border ${
+                      answer.isCorrect 
+                        ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
+                        : `${colors.border.light} ${colors.background.secondary}`
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className={`font-medium ${answer.isCorrect ? 'text-green-600 dark:text-green-400' : colors.text.secondary}`}>
+                        {String.fromCharCode(65 + idx)}.
+                      </span>
+                      <div className={`flex-1 ${answer.isCorrect ? 'text-green-700 dark:text-green-300' : colors.text.primary}`}>
+                        <RichTextRenderer text={answer.text} />
+                      </div>
+                      {answer.isCorrect && (
+                        <Check className="w-4 h-4 text-green-500 ml-auto flex-shrink-0" />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </Modal>

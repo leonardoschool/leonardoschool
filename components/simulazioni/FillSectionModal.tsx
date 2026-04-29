@@ -19,6 +19,7 @@ import Checkbox from '@/components/ui/Checkbox';
 import { ButtonLoader } from '@/components/ui/loaders';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
+import type { DifficultyMix } from '@/lib/validations/simulationValidation';
 
 export interface PickedQuestion {
   id: string;
@@ -54,6 +55,21 @@ const DIFFICULTY_OPTIONS = [
   { value: 'HARD', label: 'Difficile' },
 ];
 
+const QUESTION_TYPE_OPTIONS = [
+  { value: '', label: 'Tutte le tipologie' },
+  { value: 'SINGLE_CHOICE', label: 'Risposta singola' },
+  { value: 'MULTIPLE_CHOICE', label: 'Risposta multipla' },
+  { value: 'OPEN_TEXT', label: 'Risposta aperta' },
+];
+
+const DIFFICULTY_MIX_OPTIONS = [
+  { value: 'BALANCED', label: 'Bilanciata' },
+  { value: 'EASY_FOCUS', label: 'Più facili' },
+  { value: 'HARD_FOCUS', label: 'Più difficili' },
+  { value: 'MEDIUM_ONLY', label: 'Solo medie' },
+  { value: 'MIXED', label: 'Equa' },
+];
+
 export default function FillSectionModal({
   isOpen,
   onClose,
@@ -67,20 +83,32 @@ export default function FillSectionModal({
   const { showSuccess, showError } = useToast();
 
   // Form state
+  const [mode, setMode] = useState<'random' | 'smart'>('random');
   const [count, setCount] = useState<string>(String(defaultCount));
   const [subjectId, setSubjectId] = useState<string>(defaultSubjectId ?? '');
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
   const [selectedSubTopicIds, setSelectedSubTopicIds] = useState<string[]>([]);
   const [difficulty, setDifficulty] = useState<string>('');
+  const [questionType, setQuestionType] = useState<string>('');
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [difficultyMix, setDifficultyMix] = useState<DifficultyMix>('BALANCED');
+  const [avoidRecentlyUsed, setAvoidRecentlyUsed] = useState(true);
+  const [maximizeTopicCoverage, setMaximizeTopicCoverage] = useState(true);
 
   // Reset form when opening
   useEffect(() => {
     if (isOpen) {
       setCount(String(defaultCount));
+      setMode('random');
       setSubjectId(defaultSubjectId ?? '');
       setSelectedTopicIds([]);
       setSelectedSubTopicIds([]);
       setDifficulty('');
+      setQuestionType('');
+      setSelectedTagIds([]);
+      setDifficultyMix('BALANCED');
+      setAvoidRecentlyUsed(true);
+      setMaximizeTopicCoverage(true);
     }
   }, [isOpen, defaultCount, defaultSubjectId]);
 
@@ -88,6 +116,11 @@ export default function FillSectionModal({
   const { data: subjects = [] } = trpc.questions.getSubjects.useQuery(undefined, {
     enabled: isOpen,
   });
+
+  const { data: tagCategories = [] } = trpc.questionTags.getCategories.useQuery(
+    {},
+    { enabled: isOpen }
+  );
 
   const { data: topics = EMPTY_TOPICS } = trpc.materials.getTopics.useQuery(
     { subjectId },
@@ -133,6 +166,12 @@ export default function FillSectionModal({
     onError: handleMutationError,
   });
 
+  const smartMutation = trpc.questions.generateSmartRandomQuestions.useMutation({
+    onError: handleMutationError,
+  });
+
+  const isPending = pickMutation.isPending || smartMutation.isPending;
+
   const toggleTopic = (id: string) => {
     setSelectedTopicIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -145,6 +184,12 @@ export default function FillSectionModal({
     );
   };
 
+  const toggleTag = (id: string) => {
+    setSelectedTagIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
   const handleSubmit = async () => {
     const parsedCount = parseInt(count, 10);
     if (isNaN(parsedCount) || parsedCount < 1) {
@@ -153,16 +198,54 @@ export default function FillSectionModal({
     }
 
     try {
-      const result = await pickMutation.mutateAsync({
-        count: parsedCount,
-        subjectId: subjectId || undefined,
-        topicIds: selectedTopicIds.length > 0 ? selectedTopicIds : undefined,
-        subTopicIds: selectedSubTopicIds.length > 0 ? selectedSubTopicIds : undefined,
-        difficulty: (difficulty || undefined) as 'EASY' | 'MEDIUM' | 'HARD' | undefined,
-        excludeQuestionIds,
-      });
+      const questions = mode === 'smart'
+        ? await (async () => {
+            if (parsedCount < 5) {
+              showError('Errore', 'La modalità smart richiede almeno 5 domande.');
+              return null;
+            }
 
-      if (result.questions.length === 0) {
+            const result = await smartMutation.mutateAsync({
+              totalQuestions: parsedCount,
+              preset: subjectId ? 'SINGLE_SUBJECT' : 'BALANCED',
+              focusSubjectId: subjectId || undefined,
+              difficultyMix,
+              avoidRecentlyUsed,
+              maximizeTopicCoverage,
+              tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+              type: (questionType || undefined) as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT' | undefined,
+              topicIds: selectedTopicIds.length > 0 ? selectedTopicIds : undefined,
+              subTopicIds: selectedSubTopicIds.length > 0 ? selectedSubTopicIds : undefined,
+              excludeQuestionIds,
+            });
+
+            return result.questions.map((item) => ({
+              id: item.question.id,
+              text: item.question.text,
+              type: item.question.type,
+              difficulty: item.question.difficulty,
+              subject: item.question.subject,
+              topic: item.question.topic,
+            }));
+          })()
+        : await (async () => {
+            const result = await pickMutation.mutateAsync({
+              count: parsedCount,
+              subjectId: subjectId || undefined,
+              type: (questionType || undefined) as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT' | undefined,
+              topicIds: selectedTopicIds.length > 0 ? selectedTopicIds : undefined,
+              subTopicIds: selectedSubTopicIds.length > 0 ? selectedSubTopicIds : undefined,
+              difficulty: (difficulty || undefined) as 'EASY' | 'MEDIUM' | 'HARD' | undefined,
+              tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+              excludeQuestionIds,
+            });
+
+            return result.questions;
+          })();
+
+      if (!questions) return;
+
+      if (questions.length === 0) {
         showError(
           'Nessuna domanda trovata',
           'Nessuna domanda corrisponde ai filtri scelti (escluse quelle già selezionate).'
@@ -170,12 +253,12 @@ export default function FillSectionModal({
         return;
       }
 
-      onPicked(result.questions as PickedQuestion[]);
+      onPicked(questions as PickedQuestion[]);
 
       const message =
-        result.found < result.requested
-          ? `Aggiunte ${result.found} domande (richieste: ${result.requested}).`
-          : `Aggiunte ${result.found} domande alla sezione.`;
+        questions.length < parsedCount
+          ? `Aggiunte ${questions.length} domande (richieste: ${parsedCount}).`
+          : `Aggiunte ${questions.length} domande alla sezione.`;
       showSuccess('Sezione riempita', message);
       onClose();
     } catch {
@@ -196,8 +279,8 @@ export default function FillSectionModal({
           <Button variant="secondary" onClick={onClose}>
             Annulla
           </Button>
-          <Button onClick={handleSubmit} disabled={pickMutation.isPending}>
-            <ButtonLoader loading={pickMutation.isPending} loadingText="Pesco...">
+          <Button onClick={handleSubmit} disabled={isPending}>
+            <ButtonLoader loading={isPending} loadingText="Pesco...">
               <Sparkles className="w-4 h-4 mr-1" />
               Riempi sezione
             </ButtonLoader>
@@ -206,6 +289,28 @@ export default function FillSectionModal({
       }
     >
       <div className="space-y-4">
+        <div>
+          <label className={`block text-sm font-medium ${colors.text.secondary} mb-2`}>
+            Modalità
+          </label>
+          <div className={`grid grid-cols-2 gap-2 rounded-lg ${colors.background.secondary} p-1 border ${colors.border.light}`}>
+            <button
+              type="button"
+              onClick={() => setMode('random')}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'random' ? `${colors.primary.bg} text-white` : `${colors.text.secondary} hover:${colors.background.hover}`}`}
+            >
+              Casuale
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('smart')}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'smart' ? `${colors.primary.bg} text-white` : `${colors.text.secondary} hover:${colors.background.hover}`}`}
+            >
+              Smart
+            </button>
+          </div>
+        </div>
+
         {/* Count */}
         <div>
           <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
@@ -235,6 +340,19 @@ export default function FillSectionModal({
             }}
             options={subjectOptions}
             placeholder="Tutte le materie"
+          />
+        </div>
+
+        {/* Question type */}
+        <div>
+          <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+            Tipologia domanda
+          </label>
+          <CustomSelect
+            value={questionType}
+            onChange={setQuestionType}
+            options={QUESTION_TYPE_OPTIONS}
+            placeholder="Tutte le tipologie"
           />
         </div>
 
@@ -297,24 +415,86 @@ export default function FillSectionModal({
           </div>
         )}
 
-        {/* Difficulty */}
-        <div>
-          <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-            Difficoltà
-          </label>
-          <CustomSelect
-            value={difficulty}
-            onChange={setDifficulty}
-            options={DIFFICULTY_OPTIONS}
-            placeholder="Tutte le difficoltà"
-          />
-        </div>
+        {mode === 'random' ? (
+          <div>
+            <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+              Difficoltà
+            </label>
+            <CustomSelect
+              value={difficulty}
+              onChange={setDifficulty}
+              options={DIFFICULTY_OPTIONS}
+              placeholder="Tutte le difficoltà"
+            />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <CustomSelect
+              label="Mix difficoltà"
+              value={difficultyMix}
+              onChange={(value) => setDifficultyMix(value as DifficultyMix)}
+              options={DIFFICULTY_MIX_OPTIONS}
+              placeholder="Bilanciata"
+            />
+            <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border ${colors.border.light} ${colors.background.secondary} p-3`}>
+              <Checkbox
+                checked={avoidRecentlyUsed}
+                onChange={(e) => setAvoidRecentlyUsed(e.target.checked)}
+                label="Evita già usate"
+              />
+              <Checkbox
+                checked={maximizeTopicCoverage}
+                onChange={(e) => setMaximizeTopicCoverage(e.target.checked)}
+                label="Copri più argomenti"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Tags */}
+        {tagCategories.length > 0 && (
+          <div>
+            <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+              Tag
+              <span className={`ml-2 text-xs font-normal ${colors.text.muted}`}>
+                ({selectedTagIds.length} selezionati)
+              </span>
+            </label>
+            <div className={`max-h-32 overflow-y-auto rounded-lg border ${colors.border.input} ${colors.background.input} p-2 space-y-2`}>
+              {tagCategories.map((category) => (
+                <div key={category.id}>
+                  <p className={`text-xs ${colors.text.muted} mb-1`}>{category.name}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {category.tags.map((tag) => {
+                      const selected = selectedTagIds.includes(tag.id);
+                      const hasColor = Boolean(tag.color);
+                      return (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          onClick={() => toggleTag(tag.id)}
+                          className={`px-2 py-1 rounded text-xs font-medium transition-colors ${selected ? 'ring-2 ring-offset-1 ring-blue-500' : ''} ${hasColor ? '' : `${colors.background.secondary} ${colors.text.secondary}`}`}
+                          style={hasColor ? {
+                            backgroundColor: `${tag.color}20`,
+                            color: tag.color,
+                          } : undefined}
+                        >
+                          {tag.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Info */}
         <div
           className={`text-xs ${colors.text.muted} p-2 rounded-lg ${colors.background.secondary} border ${colors.border.light}`}
         >
-          Le domande verranno pescate casualmente tra quelle{' '}
+          Le domande verranno pescate {mode === 'smart' ? 'in modo smart' : 'casualmente'} tra quelle{' '}
           <strong>pubblicate</strong> che corrispondono ai filtri, escludendo quelle{' '}
           <strong>già selezionate</strong> nella simulazione.
         </div>

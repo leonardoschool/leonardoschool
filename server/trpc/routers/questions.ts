@@ -349,6 +349,7 @@ function normalizeDistributionTotal(
 function buildSmartRandomBaseWhere(
   excludeQuestionIds?: string[],
   tagIds?: string[],
+  type?: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT',
   topicIds?: string[],
   subTopicIds?: string[]
 ): Record<string, unknown> {
@@ -366,6 +367,10 @@ function buildSmartRandomBaseWhere(
         tagId: { in: tagIds },
       },
     };
+  }
+
+  if (type) {
+    baseWhere.type = type;
   }
 
   if (topicIds && topicIds.length > 0) {
@@ -789,6 +794,7 @@ export const questionsRouter = router({
       z.object({
         count: z.number().int().min(1).max(200),
         subjectId: z.string().optional(),
+        type: z.enum(['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'OPEN_TEXT']).optional(),
         topicIds: z.array(z.string()).optional(),
         subTopicIds: z.array(z.string()).optional(),
         difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']).optional(),
@@ -802,6 +808,7 @@ export const questionsRouter = router({
       };
 
       if (input.subjectId) where.subjectId = input.subjectId;
+      if (input.type) where.type = input.type;
       if (input.difficulty) where.difficulty = input.difficulty;
       if (input.topicIds && input.topicIds.length > 0) {
         where.topicId = { in: input.topicIds };
@@ -2351,6 +2358,7 @@ export const questionsRouter = router({
         maximizeTopicCoverage,
         preferRecentQuestions,
         tagIds,
+        type,
         topicIds,
         subTopicIds,
         excludeQuestionIds,
@@ -2392,6 +2400,7 @@ export const questionsRouter = router({
       const baseWhere = buildSmartRandomBaseWhere(
         excludeQuestionIds ?? undefined,
         tagIds ?? undefined,
+        type ?? undefined,
         topicIds ?? undefined,
         subTopicIds ?? undefined,
       );

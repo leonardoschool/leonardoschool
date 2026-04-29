@@ -1908,6 +1908,7 @@ export const simulationsRouter = router({
           hasSections: simulationData.hasSections ?? false,
           sections: sectionsData ?? undefined,
           isScheduled: simulationData.isScheduled ?? false,
+          sourceTemplateId: simulationData.sourceTemplateId ?? undefined,
           enableAntiCheat: simulationData.enableAntiCheat ?? false,
           forceFullscreen: simulationData.forceFullscreen ?? false,
           blockTabChange: simulationData.blockTabChange ?? false,

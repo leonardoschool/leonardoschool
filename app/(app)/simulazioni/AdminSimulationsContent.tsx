@@ -39,8 +39,9 @@ import {
 } from 'lucide-react';
 import type { SimulationType, SimulationStatus } from '@/lib/validations/simulationValidation';
 import { SimulationAssignModal } from '@/components/ui/SimulationAssignModal';
+import TemplatesContent from './TemplatesContent';
 
-type TabType = 'simulations' | 'assignments';
+type TabType = 'simulations' | 'assignments' | 'templates';
 type AssignmentStatus = 'ACTIVE' | 'CLOSED';
 
 // Type labels
@@ -442,6 +443,13 @@ export default function AdminSimulationsContent() {
             )}
           </Link>
           <Link
+            href="/simulazioni/nuova?mode=template"
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border ${colors.border.light} ${colors.text.primary} hover:${colors.background.hover} transition-colors`}
+          >
+            <FileText className="w-4 h-4" />
+            Nuovo Template
+          </Link>
+          <Link
             href="/simulazioni/nuova"
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white ${colors.primary.bg} hover:opacity-90 transition-opacity`}
           >
@@ -474,6 +482,17 @@ export default function AdminSimulationsContent() {
         >
           <Calendar className="w-4 h-4" />
           Assegnazioni
+        </button>
+        <button
+          onClick={() => setActiveTab('templates')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+            activeTab === 'templates'
+              ? `${colors.primary.bg} text-white`
+              : `${colors.text.secondary} hover:${colors.background.hover}`
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          Template
         </button>
       </div>
 
@@ -1068,6 +1087,11 @@ export default function AdminSimulationsContent() {
             </>
           )}
         </div>
+      )}
+
+      {/* Tab: Templates */}
+      {activeTab === 'templates' && (
+        <TemplatesContent />
       )}
 
       {/* Action Menu - Desktop Dropdown / Mobile Bottom Sheet */}

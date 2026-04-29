@@ -290,6 +290,7 @@ model User {
 
   // Simulation relations
   simulationsCreated Simulation[]           @relation("SimulationCreatedBy")
+  simulationTemplatesCreated SimulationTemplate[] @relation("SimulationTemplateCreatedBy")
   assignmentsCreated SimulationAssignment[] @relation("AssignmentCreator")
 
   // Calendar & Event relations
@@ -917,6 +918,9 @@ model Simulation {
   difficultyDistribution Json? // {EASY: n, MEDIUM: n, HARD: n}
   topicIds               Json? // Array of topic IDs to include
 
+  // Template origin tracking
+  sourceTemplateId String? // Template this simulation was created from
+
   // Assignment - flexible targeting
   isPublic Boolean @default(false) // Available to all active students
 
@@ -925,7 +929,8 @@ model Simulation {
   updatedAt DateTime @updatedAt
 
   // Relations
-  createdBy     User?                  @relation("SimulationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy      User?               @relation("SimulationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  sourceTemplate SimulationTemplate? @relation("SimulationsFromTemplate", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
   questions     SimulationQuestion[]
   results       SimulationResult[]
   assignments   SimulationAssignment[] // Specific student/group assignments
@@ -943,7 +948,67 @@ model Simulation {
   @@index([isScheduled])
   @@index([isPaperBased])
   @@index([hasSections])
+  @@index([sourceTemplateId])
   @@map("simulations")
+}
+
+model SimulationTemplate {
+  id          String           @id @default(cuid())
+  title       String
+  description String?          @db.Text
+  type        SimulationType
+  status      SimulationStatus @default(DRAFT)
+
+  createdById String?
+  creatorRole String?
+  isOfficial  Boolean @default(false)
+
+  durationMinutes Int @default(0)
+  totalQuestions  Int @default(0)
+
+  showResults        Boolean @default(true)
+  showCorrectAnswers Boolean @default(true)
+  allowReview        Boolean @default(true)
+  randomizeOrder     Boolean @default(false)
+  randomizeAnswers   Boolean @default(false)
+
+  useQuestionPoints Boolean @default(false)
+  correctPoints     Float   @default(1.5)
+  wrongPoints       Float   @default(-0.4)
+  blankPoints       Float   @default(0.0)
+  maxScore          Float?
+  passingScore      Float?
+
+  isRepeatable Boolean @default(false)
+  maxAttempts  Int?
+
+  isPaperBased        Boolean @default(false)
+  paperInstructions   String? @db.Text
+  showSectionsInPaper Boolean @default(true)
+
+  trackAttendance Boolean @default(false)
+  locationType    String?
+  locationDetails String?
+
+  hasSections Boolean @default(true)
+  sections    Json?
+
+  enableAntiCheat     Boolean @default(false)
+  forceFullscreen     Boolean @default(false)
+  blockTabChange      Boolean @default(false)
+  blockCopyPaste      Boolean @default(false)
+  logSuspiciousEvents Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdBy          User?       @relation("SimulationTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  simulationsCreated Simulation[] @relation("SimulationsFromTemplate")
+
+  @@index([status])
+  @@index([type])
+  @@index([createdById])
+  @@map("simulation_templates")
 }
 
 // Flexible assignment to students, groups

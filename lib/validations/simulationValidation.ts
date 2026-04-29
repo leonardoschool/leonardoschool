@@ -163,9 +163,62 @@ const simulationBaseSchema = z.object({
 export const createSimulationWithQuestionsSchema = simulationBaseSchema.extend({
   questions: z.array(simulationQuestionSchema).min(1, 'Aggiungi almeno una domanda'),
   assignments: z.array(assignmentTargetSchema).optional().default([]),
+  sourceTemplateId: z.string().optional(),
 });
 
 export type CreateSimulationWithQuestionsInput = z.infer<typeof createSimulationWithQuestionsSchema>;
+
+// Schema for reusable simulation templates. Templates store settings and section targets,
+// but do not store selected questions.
+export const createSimulationTemplateSchema = simulationBaseSchema
+  .omit({
+    type: true,
+    isOfficial: true,
+    accessType: true,
+    isPaperBased: true,
+    paperInstructions: true,
+    showSectionsInPaper: true,
+    trackAttendance: true,
+    locationType: true,
+    locationDetails: true,
+    enableAntiCheat: true,
+    forceFullscreen: true,
+    blockTabChange: true,
+    blockCopyPaste: true,
+    logSuspiciousEvents: true,
+    visibility: true,
+    startDate: true,
+    endDate: true,
+    isScheduled: true,
+    subjectDistribution: true,
+    difficultyDistribution: true,
+    topicIds: true,
+    isPublic: true,
+  })
+  .extend({
+    hasSections: z.literal(true).default(true),
+    sections: z.array(simulationSectionSchema).min(1, 'Aggiungi almeno una sezione'),
+  });
+
+export type CreateSimulationTemplateInput = z.infer<typeof createSimulationTemplateSchema>;
+
+export const updateSimulationTemplateSchema = createSimulationTemplateSchema.partial().extend({
+  id: z.string().min(1, 'ID template obbligatorio'),
+  status: SimulationStatusEnum.optional(),
+});
+
+export type UpdateSimulationTemplateInput = z.infer<typeof updateSimulationTemplateSchema>;
+
+export const simulationTemplateFilterSchema = z.object({
+  page: z.number().int().min(1).default(1),
+  pageSize: z.number().int().min(1).max(100).default(20),
+  search: z.string().optional(),
+  status: SimulationStatusEnum.optional(),
+  sortBy: z.enum(['createdAt', 'title', 'totalQuestions', 'durationMinutes']).default('createdAt'),
+  sortOrder: z.enum(['asc', 'desc']).default('desc'),
+});
+
+export type SimulationTemplateFilterInput = z.infer<typeof simulationTemplateFilterSchema>;
 
 // Schema for creating simulation with automatic question selection
 export const createSimulationAutoSchema = simulationBaseSchema.extend({
@@ -527,6 +580,9 @@ export const smartRandomGenerationSchema = z.object({
   
   // Optional tag filters (if user wants to limit to specific tags)
   tagIds: z.array(z.string()).optional().nullable(),
+
+  // Optional question type filter
+  type: z.enum(['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'OPEN_TEXT']).optional().nullable(),
   
   // Optional topic / sub-topic filters (limit to specific argomenti/sotto-argomenti)
   topicIds: z.array(z.string()).optional().nullable(),
