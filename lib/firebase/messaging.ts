@@ -11,6 +11,16 @@ import { app } from './config';
 let messaging: Messaging | null = null;
 let isMessagingSupported = false;
 
+function isPushServiceUnavailableError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+
+  const { name, message } = error as { name?: unknown; message?: unknown };
+
+  return name === 'AbortError' &&
+    typeof message === 'string' &&
+    message.toLowerCase().includes('push service not available');
+}
+
 /**
  * Inizializza Firebase Cloud Messaging (solo browser)
  * Verifica supporto browser prima di inizializzare
@@ -98,6 +108,10 @@ export async function requestNotificationPermission(): Promise<string | null> {
     console.log('[FCM] Token obtained successfully');
     return token;
   } catch (error) {
+    if (isPushServiceUnavailableError(error)) {
+      return null;
+    }
+
     console.error('[FCM] Error getting token:', error);
     return null;
   }

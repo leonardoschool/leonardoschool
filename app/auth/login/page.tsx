@@ -262,6 +262,7 @@ export default function LoginPage() {
               className="object-contain transition-transform duration-500 group-hover:scale-105"
               width={200}
               height={200}
+              style={{ width: 'auto', height: 'auto' }}
               priority
             />
           </div>
@@ -286,6 +287,7 @@ export default function LoginPage() {
                 className="object-contain relative z-10"
                 width={120}
                 height={120}
+                style={{ width: 'auto', height: 'auto' }}
                 priority
               />
             </div>
