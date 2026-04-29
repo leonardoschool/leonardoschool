@@ -244,7 +244,7 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
             difficulty: sq.question.difficulty,
             subject: sq.question.subject,
             topic: sq.question.topic,
-            answers: sq.question.answers,
+            answers: sq.question.answers as unknown as { id: string; text: string; isCorrect: boolean; order: number }[],
             keywords: sq.question.keywords,
           },
         }));
@@ -299,7 +299,7 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
         difficulty: question.difficulty,
         subject: question.subject,
         topic: question.topic,
-        answers: question.answers,
+        answers: question.answers as unknown as { id: string; text: string; isCorrect: boolean; order: number }[],
         keywords: question.keywords,
       },
     };
@@ -593,7 +593,7 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                             </span>
                           )}
                         </div>
-                        {expandedPreviews.has(question.id) && renderAnswerPreview(question.type, question.answers, question.keywords)}
+                        {expandedPreviews.has(question.id) && renderAnswerPreview(question.type, question.answers as unknown as { id: string; text: string; isCorrect: boolean; order: number }[], question.keywords)}
                       </div>
                       {(() => {
                         const isChoice = question.type === 'SINGLE_CHOICE' || question.type === 'MULTIPLE_CHOICE';

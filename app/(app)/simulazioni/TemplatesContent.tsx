@@ -168,7 +168,8 @@ export default function TemplatesContent() {
 
   const updateStatusMutation = trpc.simulationTemplates.update.useMutation({
     onSuccess: (_, variables) => {
-      const label = variables.status === 'ARCHIVED' ? 'archiviato' : 'ripristinato';
+      const vars = variables as { status?: string } | undefined;
+      const label = vars?.status === 'ARCHIVED' ? 'archiviato' : 'ripristinato';
       showSuccess('Aggiornato', `Template ${label} con successo`);
       utils.simulationTemplates.list.invalidate();
       if (expandedId) utils.simulationTemplates.get.invalidate({ id: expandedId });
@@ -320,7 +321,7 @@ export default function TemplatesContent() {
           {/* Rows */}
           <div className="divide-y divide-gray-200 dark:divide-slate-700">
             {templates.map((template) => {
-              const sections = Array.isArray(template.sections) ? (template.sections as TemplateSection[]) : [];
+              const sections = Array.isArray(template.sections) ? (template.sections as unknown as TemplateSection[]) : [];
               const isExpanded = expandedId === template.id;
               const detail = isExpanded ? detailData : undefined;
 
@@ -469,13 +470,13 @@ export default function TemplatesContent() {
                             </div>
 
                             {/* Sections */}
-                            {Array.isArray(detail.sections) && (detail.sections as TemplateSection[]).length > 0 && (
+                            {Array.isArray(detail.sections) && (detail.sections as unknown as TemplateSection[]).length > 0 && (
                               <div>
                                 <h3 className={`text-sm font-semibold mb-3 ${colors.text.primary}`}>
-                                  Sezioni ({(detail.sections as TemplateSection[]).length})
+                                  Sezioni ({(detail.sections as unknown as TemplateSection[]).length})
                                 </h3>
                                 <div className="space-y-2">
-                                  {(detail.sections as TemplateSection[]).map((section, idx) => (
+                                  {(detail.sections as unknown as TemplateSection[]).map((section, idx) => (
                                     <div
                                       key={section.id ?? idx}
                                       className={`flex items-center justify-between px-3 py-2 rounded-lg border ${colors.border.light} ${colors.background.card}`}
@@ -623,7 +624,7 @@ export default function TemplatesContent() {
             {(() => {
               const template = templates.find(t => t.id === openMenuId);
               if (!template) return null;
-              const canAct = canEditOrDelete(template);
+              const canAct = canEditOrDelete(template as unknown as Template);
               return (
                 <div className="py-1">
                   {/* View detail */}

@@ -1927,7 +1927,7 @@ export const simulationsRouter = router({
           hasSections: simulationData.hasSections ?? false,
           sections: sectionsData ?? undefined,
           isScheduled: simulationData.isScheduled ?? false,
-          sourceTemplateId: simulationData.sourceTemplateId ?? undefined,
+          ...(simulationData.sourceTemplateId ? { sourceTemplate: { connect: { id: simulationData.sourceTemplateId } } } : {}),
           enableAntiCheat: simulationData.enableAntiCheat ?? false,
           forceFullscreen: simulationData.forceFullscreen ?? false,
           blockTabChange: simulationData.blockTabChange ?? false,
@@ -1960,7 +1960,7 @@ export const simulationsRouter = router({
       });
 
       // Send notifications to assigned students (calendar event + email with .ics)
-      if (simulation.assignments.length > 0) {
+      if (assignments.length > 0) {
         // Fire and forget - don't block the response
         notifySimulationCreated(simulation.id, ctx.prisma).catch((error) => {
           console.error('[Simulations] Failed to send notifications:', error);

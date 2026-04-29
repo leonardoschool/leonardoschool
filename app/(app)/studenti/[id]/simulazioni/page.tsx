@@ -842,9 +842,9 @@ function ChartsSection({ simulations, statistics }: Readonly<ChartsSectionProps>
                       borderRadius: '8px',
                       color: '#fff'
                     }}
-                    formatter={(value: number, _name: string, props: { payload: { fullName: string } }) => [
+                    formatter={(value: number, _name: string, props: { payload?: { fullName?: string } }) => [
                       `${value}%`, 
-                      props.payload.fullName
+                      props.payload?.fullName ?? ''
                     ]}
                   />
                 </RadarChart>
