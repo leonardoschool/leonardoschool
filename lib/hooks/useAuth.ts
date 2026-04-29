@@ -1,10 +1,66 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { onIdTokenChanged, User as FirebaseUser } from 'firebase/auth';
 import { auth } from '@/lib/firebase/config';
 import { trpc } from '@/lib/trpc/client';
 import { getIsLoggingOut } from '@/lib/firebase/auth';
+
+let lastSyncedUid: string | null = null;
+let syncInFlightUid: string | null = null;
+let syncInFlight: Promise<void> | null = null;
+let logoutInFlight: Promise<void> | null = null;
+
+async function syncAuthenticatedSession(user: FirebaseUser) {
+  if (lastSyncedUid === user.uid) return;
+  if (syncInFlight && syncInFlightUid === user.uid) return syncInFlight;
+
+  syncInFlightUid = user.uid;
+  syncInFlight = (async () => {
+    const token = await user.getIdToken();
+    const response = await fetch('/api/auth/me', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+      cache: 'no-store',
+    });
+
+    if (response.status === 404) {
+      console.warn('[useAuth] User not found in database, signing out...');
+      await auth.signOut();
+      await fetch('/api/auth/logout', { method: 'POST' });
+      lastSyncedUid = null;
+      globalThis.location.href = '/auth/login';
+      return;
+    }
+
+    if (!response.ok) {
+      throw new Error(`Auth session sync failed with status ${response.status}`);
+    }
+
+    lastSyncedUid = user.uid;
+  })().finally(() => {
+    if (syncInFlightUid === user.uid) {
+      syncInFlightUid = null;
+      syncInFlight = null;
+    }
+  });
+
+  return syncInFlight;
+}
+
+async function syncSignedOutSession() {
+  if (lastSyncedUid !== null && !getIsLoggingOut()) {
+    logoutInFlight ??= fetch('/api/auth/logout', { method: 'POST' })
+      .then(() => undefined)
+      .finally(() => {
+        logoutInFlight = null;
+      });
+    await logoutInFlight;
+  }
+
+  lastSyncedUid = null;
+}
 
 /**
  * Hook for Firebase auth state with cookie synchronization.
@@ -14,11 +70,11 @@ import { getIsLoggingOut } from '@/lib/firebase/auth';
 export function useAuth() {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const lastSyncedUid = useRef<string | null>(null);
 
   // Get user data from database
   const { data: dbUser, isLoading: isLoadingUser } = trpc.auth.me.useQuery(undefined, {
     enabled: !!firebaseUser,
+    staleTime: 60 * 1000,
   });
 
   useEffect(() => {
@@ -28,34 +84,9 @@ export function useAuth() {
       (async () => {
         try {
           if (user) {
-            // Only sync cookies if user changed (not on every token refresh)
-            if (lastSyncedUid.current !== user.uid) {
-              const token = await user.getIdToken();
-              const response = await fetch('/api/auth/me', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token }),
-                cache: 'no-store',
-              });
-              
-              // If user not found in database (404), sign out from Firebase
-              if (response.status === 404) {
-                console.warn('[useAuth] User not found in database, signing out...');
-                await auth.signOut();
-                await fetch('/api/auth/logout', { method: 'POST' });
-                lastSyncedUid.current = null;
-                globalThis.location.href = '/auth/login';
-                return;
-              }
-              
-              lastSyncedUid.current = user.uid;
-            }
+            await syncAuthenticatedSession(user);
           } else {
-            // Only call logout API if not already being handled by firebaseAuth.logout()
-            if (lastSyncedUid.current !== null && !getIsLoggingOut()) {
-              await fetch('/api/auth/logout', { method: 'POST' });
-            }
-            lastSyncedUid.current = null;
+            await syncSignedOutSession();
           }
         } catch (error) {
           console.error('[useAuth] Failed to synchronize auth session:', error);
