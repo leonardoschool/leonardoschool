@@ -2,8 +2,9 @@ export function sanitizeStudentOpenAnswerInput(value: string | null | undefined)
   if (!value) return '';
 
   return value
-    .replace(/<\s*\/?\s*[a-zA-Z][^>]*>/g, '')
-    .replace(/&lt;\s*\/?\s*[a-zA-Z][\s\S]*?&gt;/gi, '')
+    // eslint-disable-next-line sonarjs/slow-regex
+    .replace(/<[^>]*>/g, '')
+    .replace(/&lt;[^>]*&gt;/gi, '')
     .replace(/\$\$[\s\S]*?\$\$/g, '')
     .replace(/\$[^$]*\$/g, '')
     .replace(/\\\([\s\S]*?\\\)/g, '')

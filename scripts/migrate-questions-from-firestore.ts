@@ -342,7 +342,7 @@ function parseYearFromText(value?: string | null): number | null {
   const readable = resolveToReadable(value);
   if (!readable) return null;
 
-  const match = readable.match(/(?:^|[^0-9])((?:19|20)\d{2})(?:[^0-9]|$)/);
+  const match = readable.match(/(?:^|\D)((?:19|20)\d{2})(?:\D|$)/);
   if (!match) return null;
 
   const year = Number(match[1]);

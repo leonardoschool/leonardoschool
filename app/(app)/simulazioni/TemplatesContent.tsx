@@ -140,7 +140,7 @@ export default function TemplatesContent() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Fetch templates list
-  const { data, isLoading, refetch } = trpc.simulationTemplates.list.useQuery({
+  const { data, isLoading } = trpc.simulationTemplates.list.useQuery({
     page,
     pageSize,
     search: search || undefined,
@@ -200,14 +200,11 @@ export default function TemplatesContent() {
     const menuHeight = 200;
     const menuWidth = 200;
     const spaceBelow = window.innerHeight - rect.bottom;
-    const spaceRight = window.innerWidth - rect.right;
     const openUpward = spaceBelow < menuHeight && rect.top > menuHeight;
     const top = openUpward
       ? rect.top + window.scrollY - menuHeight - 4
       : rect.bottom + window.scrollY + 4;
-    const left = spaceRight < menuWidth + 16
-      ? rect.right + window.scrollX - menuWidth
-      : rect.right + window.scrollX - menuWidth;
+    const left = rect.right + window.scrollX - menuWidth;
     setMenuPosition({ top, left });
     setOpenMenuId(id);
   };

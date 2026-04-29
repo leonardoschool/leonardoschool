@@ -169,15 +169,16 @@ export function MiniCalendar({ events, isLoading }: MiniCalendarProps) {
   }, [events, selectedDay]);
 
   // Label for selected day
-  const selectedDayLabel = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    if (selectedDay.getTime() === today.getTime()) return 'Oggi';
-    if (selectedDay.getTime() === tomorrow.getTime()) return 'Domani';
-    return selectedDay.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
-  }, [selectedDay]);
+  const _today = new Date();
+  _today.setHours(0, 0, 0, 0);
+  const _tomorrow = new Date(_today);
+  _tomorrow.setDate(_tomorrow.getDate() + 1);
+  const selectedDayLabel =
+    selectedDay.getTime() === _today.getTime()
+      ? 'Oggi'
+      : selectedDay.getTime() === _tomorrow.getTime()
+        ? 'Domani'
+        : selectedDay.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
 
   const monthNames = [
     'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
