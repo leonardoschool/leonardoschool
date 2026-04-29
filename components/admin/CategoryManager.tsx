@@ -7,6 +7,7 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { Spinner, ButtonLoader } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
+import * as LucideIcons from 'lucide-react';
 import {
   FolderPlus,
   Folder,
@@ -36,6 +37,24 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
+/** Resolve any Lucide icon by name. Falls back to Folder.
+ * Icons in lucide-react are React.forwardRef objects (typeof === 'object'), not functions. */
+function getLucideIcon(name: string): LucideIcon {
+  if (!name) return Folder;
+  const iconsMap = LucideIcons as Record<string, unknown>;
+
+  const isValidIcon = (v: unknown): v is LucideIcon =>
+    v != null && (typeof v === 'function' || (typeof v === 'object' && '$$typeof' in (v as object)));
+
+  // Try exact match (user typed PascalCase like "Dna" or "BookOpen")
+  if (isValidIcon(iconsMap[name])) return iconsMap[name] as LucideIcon;
+  // Try capitalizing first letter (e.g. "dna" → "Dna")
+  const pascal = name.charAt(0).toUpperCase() + name.slice(1);
+  if (isValidIcon(iconsMap[pascal])) return iconsMap[pascal] as LucideIcon;
+
+  return Folder;
+}
+
 // Curated subset of Lucide icons available as quick-pick suggestions for folders
 const CATEGORY_ICON_SUGGESTIONS: { name: string; Icon: LucideIcon }[] = [
   { name: 'Folder', Icon: Folder },
@@ -50,10 +69,6 @@ const CATEGORY_ICON_SUGGESTIONS: { name: string; Icon: LucideIcon }[] = [
   { name: 'Bookmark', Icon: Bookmark },
   { name: 'Star', Icon: Star },
 ];
-
-const CATEGORY_ICON_MAP: Record<string, LucideIcon> = Object.fromEntries(
-  CATEGORY_ICON_SUGGESTIONS.map((s) => [s.name.toLowerCase(), s.Icon])
-);
 
 // ==================== TYPES ====================
 
@@ -441,7 +456,7 @@ export default function CategoryManager({ onClose: _onClose, role = 'ADMIN' }: C
                 </p>
                 <div className="flex items-stretch gap-2">
                   {(() => {
-                    const PreviewIcon = CATEGORY_ICON_MAP[(categoryFormData.icon || '').toLowerCase()] ?? Folder;
+                    const PreviewIcon = getLucideIcon(categoryFormData.icon || '');
                     return (
                       <div
                         className="flex items-center justify-center w-11 h-11 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/40 flex-shrink-0"
@@ -542,7 +557,7 @@ export default function CategoryManager({ onClose: _onClose, role = 'ADMIN' }: C
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="p-2.5 rounded-lg bg-gray-100 dark:bg-gray-700">
-                      <Folder className="h-5 w-5 text-amber-500 dark:text-amber-400" />
+                      {(() => { const CatIcon = getLucideIcon(category.icon ?? ''); return <CatIcon className="h-5 w-5 text-amber-500 dark:text-amber-400" />; })()}
                     </div>
                     <div>
                       <h4 className="font-medium text-gray-900 dark:text-gray-100">
