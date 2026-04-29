@@ -90,6 +90,7 @@ export function UserMenu({
           <div className="py-2">
             <Link
               href="/profilo"
+              prefetch={false}
               onClick={onClose}
               className={`flex items-center gap-3 px-4 py-2.5 text-sm ${colors.text.primary} ${colors.effects.hover.bgSubtle} transition-colors`}
             >
@@ -99,6 +100,7 @@ export function UserMenu({
             {collaboratorCanNavigate && (
               <Link
                 href="/impostazioni"
+                prefetch={false}
                 onClick={onClose}
                 className={`flex items-center gap-3 px-4 py-2.5 text-sm ${colors.text.primary} ${colors.effects.hover.bgSubtle} transition-colors`}
               >

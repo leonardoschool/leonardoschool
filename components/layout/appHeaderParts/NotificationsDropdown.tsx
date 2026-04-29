@@ -59,6 +59,7 @@ export function NotificationsDropdown({
             <h3 className={`font-semibold ${colors.text.primary}`}>Notifiche</h3>
             <Link 
               href="/notifiche" 
+              prefetch={false}
               className={`text-sm ${colors.primary.text} hover:underline`}
               onClick={onClose}
             >

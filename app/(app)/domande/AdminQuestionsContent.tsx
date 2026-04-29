@@ -10,6 +10,7 @@ import CustomSelect from '@/components/ui/CustomSelect';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import { Portal } from '@/components/ui/Portal';
 import Link from 'next/link';
+import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import {
   Plus,
   Search,
@@ -877,13 +878,13 @@ export default function AdminQuestionsContent() {
                       </button>
                     </td>
                     <td className="px-3 py-3">
-                      <div className="max-w-[300px]">
-                        <p 
-                          className={`font-medium ${colors.text.primary} truncate`}
+                      <div className="max-w-[300px] overflow-hidden">
+                        <div
+                          className={`font-medium ${colors.text.primary} line-clamp-2`}
                           title={question.text}
                         >
-                          {question.text}
-                        </p>
+                          <RichTextRenderer text={question.text} />
+                        </div>
                       </div>
                     </td>
                     <td className="px-3 py-3 hidden lg:table-cell">

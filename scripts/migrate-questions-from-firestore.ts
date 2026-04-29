@@ -304,6 +304,15 @@ function resolveQuestionHierarchy(
       }
     }
   }
+
+  // Alcune domande legacy hanno subject/argument vuoti ("*") ma section valorizzata.
+  // In quel caso usiamo section come fallback per evitare materie mancanti.
+  if (!result.subjectName && !isEmpty(rawSection)) {
+    const sectionInfo = findInSections(config.sections, rawSection!);
+    if (sectionInfo) {
+      result.subjectName = sectionInfo.title;
+    }
+  }
   
   // 2. Risolvi Argument (livello 3) → Topic/Argomento
   if (!isEmpty(rawArgument)) {
@@ -816,7 +825,7 @@ async function migrateQuestions(): Promise<void> {
         
         if (VERBOSE) {
           console.log(`   📚 Hierarchy resolved:`);
-          console.log(`      Section "${firestoreQuestion.section}" → Ignored for question categorization`);
+          console.log(`      Section "${firestoreQuestion.section}" → Fallback Subject when subject is empty`);
           console.log(`      Subject "${firestoreQuestion.subject}" → Subject: "${hierarchy.subjectName || '(vuoto)'}"`);
           console.log(`      Argument "${firestoreQuestion.argument}" → Topic: "${hierarchy.topicName || '(vuoto)'}"`);
           console.log(`      SubTopic → (vuoto)`);

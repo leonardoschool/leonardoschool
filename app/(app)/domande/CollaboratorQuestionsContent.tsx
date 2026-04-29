@@ -10,6 +10,7 @@ import CustomSelect from '@/components/ui/CustomSelect';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import { Portal } from '@/components/ui/Portal';
 import Link from 'next/link';
+import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import {
   Plus,
   Search,
@@ -531,9 +532,9 @@ export default function CollaboratorQuestionsContent() {
                   >
                     <td className="px-4 py-3">
                       <div className="max-w-sm">
-                        <p className={`font-medium ${colors.text.primary} line-clamp-2`}>
-                          {question.text}
-                        </p>
+                        <div className={`font-medium ${colors.text.primary} line-clamp-2 overflow-hidden`}>
+                          <RichTextRenderer text={question.text} />
+                        </div>
                         {question.legacyTags.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {question.legacyTags.slice(0, 3).map((tag) => (

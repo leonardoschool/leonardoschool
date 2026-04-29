@@ -72,6 +72,7 @@ export function NavDropdown({
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 onClick={onClose}
                 className={`w-full px-4 py-2.5 flex items-center justify-between text-sm transition-colors ${
                   isItemActive

@@ -328,6 +328,7 @@ export function AdminDashboard({ userName }: AdminDashboardProps) {
             </div>
             <Link
               href="/utenti"
+              prefetch={false}
               className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl ${colors.primary.gradient} text-white font-medium shadow-lg hover:shadow-xl transition-all`}
             >
               <Zap className="w-4 h-4" />
@@ -348,6 +349,7 @@ export function AdminDashboard({ userName }: AdminDashboardProps) {
             <Link
               key={stat.label}
               href={stat.href}
+              prefetch={false}
               className={`${colors.background.card} rounded-xl p-3 sm:p-4 lg:p-5 ${colors.effects.shadow.md} hover:shadow-lg transition-all group border ${colors.border.primary} hover:border-transparent`}
             >
               <div className="flex items-center gap-2 sm:gap-3">
@@ -375,6 +377,7 @@ export function AdminDashboard({ userName }: AdminDashboardProps) {
             </div>
             <Link 
               href="/utenti" 
+              prefetch={false}
               className={`text-sm ${colors.primary.text} ${colors.primary.textHover} flex items-center gap-1`}
             >
               Vedi tutti
@@ -387,6 +390,7 @@ export function AdminDashboard({ userName }: AdminDashboardProps) {
               <Link
                 key={action.label}
                 href={action.href}
+                prefetch={false}
                 className={`flex items-center justify-between p-3 rounded-xl ${colors.background.secondary} hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group`}
               >
                 <div className="flex items-center gap-3">
@@ -415,6 +419,7 @@ export function AdminDashboard({ userName }: AdminDashboardProps) {
               <Link
                 key={action.label}
                 href={action.href}
+                prefetch={false}
                 className={`flex items-center justify-between p-3 rounded-xl ${colors.background.secondary} hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group`}
               >
                 <div className="flex items-center gap-3">
@@ -457,6 +462,7 @@ export function AdminDashboard({ userName }: AdminDashboardProps) {
             <Link
               key={card.href}
               href={card.href}
+              prefetch={false}
               className={`${colors.background.card} p-5 rounded-xl ${colors.effects.shadow.md} hover:shadow-lg transition-all group border ${colors.border.primary} hover:border-transparent`}
             >
               <div className="flex items-start gap-4">
@@ -491,6 +497,7 @@ export function AdminDashboard({ userName }: AdminDashboardProps) {
             <Link
               key={card.href}
               href={card.href}
+              prefetch={false}
               className={`${colors.background.card} p-4 rounded-xl ${colors.effects.shadow.md} hover:shadow-lg transition-all group border ${colors.border.primary} hover:border-transparent`}
             >
               <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl ${card.color} flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
@@ -518,6 +525,7 @@ export function AdminDashboard({ userName }: AdminDashboardProps) {
             <Link
               key={card.href}
               href={card.href}
+              prefetch={false}
               className={`${colors.background.card} p-5 rounded-xl ${colors.effects.shadow.md} hover:shadow-lg transition-all group border ${colors.border.primary} hover:border-transparent`}
             >
               <div className="flex items-start gap-4">
