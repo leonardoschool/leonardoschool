@@ -80,17 +80,26 @@ for (const path of possiblePaths) {
 if (credentialsPath) {
   console.log(`📄 Loading Firebase credentials: ${credentialsPath.split('\\').pop()}`);
   serviceAccount = JSON.parse(readFileSync(credentialsPath, 'utf8'));
+} else if (process.env.FIREBASE_LEGACY_SERVICE_ACCOUNT_KEY) {
+  // Credenziali dedicate alla migrazione (vecchio progetto Firestore)
+  console.log('🔑 Loading legacy Firebase credentials from FIREBASE_LEGACY_SERVICE_ACCOUNT_KEY...');
+  serviceAccount = JSON.parse(process.env.FIREBASE_LEGACY_SERVICE_ACCOUNT_KEY);
 } else if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-  console.log('🔑 Loading Firebase credentials from environment variable...');
+  console.log('🔑 Loading Firebase credentials from FIREBASE_SERVICE_ACCOUNT_KEY...');
   serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
 } else {
-  console.error('❌ File leonardo-school-service-account.json not found!');
+  console.error('❌ Nessuna credenziale Firebase trovata!');
   console.error('');
-  console.error('   Download from Firebase Console:');
-  console.error('   1. Go to https://console.firebase.google.com/');
-  console.error('   2. Select "leonardo-school" project');
-  console.error('   3. Project Settings → Service Accounts → Generate new private key');
-  console.error('   4. Save as leonardo-school-service-account.json in project root');
+  console.error('   Le domande sono nel vecchio progetto Firestore "leonardo-school".');
+  console.error('   Aggiungi nel .env le credenziali del vecchio progetto:');
+  console.error('');
+  console.error("   FIREBASE_LEGACY_SERVICE_ACCOUNT_KEY='{\"type\":\"service_account\",\"project_id\":\"leonardo-school\",...}'");
+  console.error('');
+  console.error('   Oppure scarica il JSON da Firebase Console e salvalo come:');
+  console.error('   leonardo-school-service-account.json (nella root del progetto)');
+  console.error('');
+  console.error('   1. https://console.firebase.google.com/ → progetto "LeonardoSchool"');
+  console.error('   2. Impostazioni progetto → Account di servizio → Genera nuova chiave privata');
   process.exit(1);
 }
 
@@ -105,7 +114,13 @@ const adminApp = getApps().length === 0
   ? initializeApp({ credential: cert(serviceAccount as Parameters<typeof cert>[0]) })
   : getApps()[0];
 
-const firestore = getFirestore(adminApp);
+const FIRESTORE_DATABASE_ID = process.env.FIRESTORE_DATABASE_ID;
+if (FIRESTORE_DATABASE_ID) {
+  console.log(`🗄️  Firestore database: ${FIRESTORE_DATABASE_ID}`);
+}
+const firestore = FIRESTORE_DATABASE_ID
+  ? getFirestore(adminApp, FIRESTORE_DATABASE_ID)
+  : getFirestore(adminApp);
 
 // ===================== TYPES =====================
 
@@ -172,7 +187,8 @@ function isEmpty(value?: string | null): boolean {
   return trimmed === '' 
     || trimmed === '*' 
     || ['n/a', 'na', 'null', 'undefined', 'v...', 'v…'].includes(normalized)
-    || normalized.startsWith('vuot');
+    || normalized.startsWith('vuot')
+    || /^v\d+\.\d+/.test(normalized); // version tags (es. "v1.1.5 chi7") → ignorati
 }
 
 /**
@@ -336,6 +352,11 @@ function parseYearFromText(value?: string | null): number | null {
 function parseAuthorMetadata(rawAuthor?: string): ParsedQuestionMetadata {
   const readable = resolveToReadable(rawAuthor);
   if (!readable) return emptyQuestionMetadata();
+
+  // Se author è un codice miur (es. "miur_05_2024"), deleghiamo al parser database
+  if (isMiurDatabaseCode(readable)) {
+    return { source: null, year: parseYearFromText(readable) };
+  }
 
   const [sourcePart, ...yearParts] = readable.split(',');
   if (yearParts.length > 0) {
@@ -1340,8 +1361,19 @@ async function inspectFirestore(): Promise<void> {
       console.log('');
     }
   } catch (error) {
-    console.error('❌ Error inspecting Firestore:', error);
-    console.error(error);
+    const isNotFound = error instanceof Error && error.message.includes('5 NOT_FOUND');
+    if (isNotFound) {
+      console.error('❌ Firestore database not found (gRPC 5 NOT_FOUND)');
+      console.error('');
+      console.error('   This usually means the Firestore database has a custom name (not "(default)").');
+      console.error('   Fix: add FIRESTORE_DATABASE_ID=<nome-database> to your .env file.');
+      console.error('');
+      console.error('   How to find the database name:');
+      console.error(`   → https://console.firebase.google.com/project/${serviceAccount.project_id}/firestore`);
+      console.error('   Look at the database selector in the top-left of the Firestore page.');
+    } else {
+      console.error('❌ Error inspecting Firestore:', error);
+    }
   }
 }
 
