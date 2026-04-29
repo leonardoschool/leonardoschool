@@ -250,7 +250,7 @@ export default function AppHeader() {
           </button>
 
           {/* Logo */}
-          <Link href="/dashboard" className="flex items-center flex-shrink-0">
+          <Link href="/dashboard" prefetch={false} className="flex items-center flex-shrink-0">
             <div className="relative w-[10rem] h-[10rem] mt-3">
               <Image
                 src={`/images/logo-${effectiveLogoTheme}.png`}
@@ -269,6 +269,7 @@ export default function AppHeader() {
               {/* Dashboard Link */}
               <Link
                 href="/dashboard"
+                prefetch={false}
                 className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
                   pathname === '/dashboard'
                     ? `${colors.primary.softBg} ${colors.primary.text}`
@@ -324,6 +325,7 @@ export default function AppHeader() {
                   <Link
                     key={item.href}
                     href={item.href}
+                    prefetch={false}
                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
                       isActive
                         ? `${colors.primary.softBg} ${colors.primary.text}`
@@ -348,6 +350,7 @@ export default function AppHeader() {
                   <Link
                     key={item.href}
                     href={item.href}
+                    prefetch={false}
                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
                       isActive
                         ? `${colors.primary.softBg} ${colors.primary.text}`
@@ -377,6 +380,7 @@ export default function AppHeader() {
             {user && (
               <Link
                 href="/messaggi"
+                prefetch={false}
                 className={`p-1.5 sm:p-2 rounded-lg ${colors.effects.hover.bgSubtle} ${colors.icon.interactive} transition-colors relative`}
                 title="Messaggi"
               >
@@ -592,11 +596,11 @@ function MobileMenu({
       {/* Bottom Actions */}
       <div className={`p-4 border-t ${colors.border.primary} ${colors.background.card}`}>
         <div className="flex items-center gap-3">
-          <Link href="/profilo" onClick={onClose} className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl ${colors.background.secondary} ${colors.text.primary} transition-colors`}>
+          <Link href="/profilo" prefetch={false} onClick={onClose} className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl ${colors.background.secondary} ${colors.text.primary} transition-colors`}>
             <Eye className="w-5 h-5" />
             <span className="font-medium">Profilo</span>
           </Link>
-          <Link href="/impostazioni" onClick={onClose} className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl ${colors.background.secondary} ${colors.text.primary} transition-colors`}>
+          <Link href="/impostazioni" prefetch={false} onClick={onClose} className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl ${colors.background.secondary} ${colors.text.primary} transition-colors`}>
             <Settings className="w-5 h-5" />
             <span className="font-medium">Impostazioni</span>
           </Link>
@@ -658,6 +662,7 @@ function StaffMobileNav({
       {/* Dashboard Link */}
       <Link
         href="/dashboard"
+        prefetch={false}
         onClick={onClose}
         className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${
           pathname === '/dashboard'
@@ -723,6 +728,7 @@ function StaffMobileNav({
             <Link
               key={item.href}
               href={item.href}
+              prefetch={false}
               onClick={onClose}
               className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${
                 isActive ? `${colors.primary.gradient} text-white shadow-lg` : `${colors.background.card} ${colors.text.primary} hover:shadow-md`
@@ -739,6 +745,7 @@ function StaffMobileNav({
         {/* Messages Link */}
         <Link
           href="/messaggi"
+          prefetch={false}
           onClick={onClose}
           className={`flex items-center gap-4 p-4 rounded-2xl transition-all relative ${
             pathname === '/messaggi' ? `${colors.primary.gradient} text-white shadow-lg` : `${colors.background.card} ${colors.text.primary} hover:shadow-md`
@@ -821,6 +828,7 @@ function MobileExpandableSection({
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={false}
                   onClick={onClose}
                   className={`flex items-center justify-between px-4 py-3 rounded-xl transition-colors ${
                     isItemActive
@@ -873,6 +881,7 @@ function StudentMobileNav({
             <Link
               key={item.href}
               href={item.href}
+              prefetch={false}
               onClick={onClose}
               className={`flex flex-col items-center gap-2 p-4 rounded-2xl transition-all ${
                 isActive ? `${colors.primary.gradient} text-white shadow-lg` : `${colors.background.card} ${colors.text.primary} hover:shadow-md`
@@ -893,6 +902,7 @@ function StudentMobileNav({
         <div className="space-y-2">
           <Link
             href="/messaggi"
+            prefetch={false}
             onClick={onClose}
             className={`flex items-center justify-between p-3 rounded-xl transition-colors ${
               pathname === '/messaggi' ? `${colors.primary.softBg} ${colors.primary.text}` : `${colors.background.secondary} ${colors.text.primary}`
@@ -910,6 +920,7 @@ function StudentMobileNav({
           </Link>
           <Link
             href="/notifiche"
+            prefetch={false}
             onClick={onClose}
             className={`flex items-center justify-between p-3 rounded-xl transition-colors ${
               pathname === '/notifiche' ? `${colors.primary.softBg} ${colors.primary.text}` : `${colors.background.secondary} ${colors.text.primary}`
