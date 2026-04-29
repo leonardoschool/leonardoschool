@@ -75,6 +75,11 @@ interface MiniCalendarProps {
  */
 export function MiniCalendar({ events, isLoading }: MiniCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDay, setSelectedDay] = useState<Date>(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
 
   // Get calendar data for current month
   const calendarData = useMemo(() => {
@@ -150,20 +155,29 @@ export function MiniCalendar({ events, isLoading }: MiniCalendarProps) {
     return days;
   }, [currentDate, events]);
 
-  // Get upcoming events (next 7 days)
-  const upcomingEvents = useMemo(() => {
-    const now = new Date();
-    const weekFromNow = new Date();
-    weekFromNow.setDate(weekFromNow.getDate() + 7);
-
+  // Get events for the selected day
+  const eventsForSelectedDay = useMemo(() => {
     return events
       .filter((e) => {
-        const eventDate = new Date(e.startDate);
-        return eventDate >= now && eventDate <= weekFromNow;
+        const eventStart = new Date(e.startDate);
+        const eventEnd = new Date(e.endDate);
+        eventStart.setHours(0, 0, 0, 0);
+        eventEnd.setHours(23, 59, 59, 999);
+        return selectedDay >= eventStart && selectedDay <= eventEnd;
       })
-      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
-      .slice(0, 4);
-  }, [events]);
+      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+  }, [events, selectedDay]);
+
+  // Label for selected day
+  const selectedDayLabel = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    if (selectedDay.getTime() === today.getTime()) return 'Oggi';
+    if (selectedDay.getTime() === tomorrow.getTime()) return 'Domani';
+    return selectedDay.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+  }, [selectedDay]);
 
   const monthNames = [
     'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -266,22 +280,28 @@ export function MiniCalendar({ events, isLoading }: MiniCalendarProps) {
           {calendarData.map((day, index) => (
             <div
               key={index}
+              onClick={() => {
+                if (day.isCurrentMonth) setSelectedDay(day.date);
+              }}
               className={`
                 relative aspect-square flex items-center justify-center text-sm rounded-lg
                 ${day.isCurrentMonth ? colors.text.primary : colors.text.muted + ' opacity-40'}
                 ${day.isToday ? `${colors.primary.bg} text-white font-bold` : ''}
                 ${!day.isToday && day.isCurrentMonth ? colors.background.hover : ''}
-                transition-colors cursor-default
+                ${day.isCurrentMonth && !day.isToday && day.date.getTime() === selectedDay.getTime() ? 'ring-2 ring-offset-1 ring-red-500/60 dark:ring-red-400/60 dark:ring-offset-gray-900' : ''}
+                ${day.isToday && day.date.getTime() === selectedDay.getTime() ? 'ring-2 ring-offset-1 ring-white/60 dark:ring-offset-gray-900' : ''}
+                ${day.isCurrentMonth ? 'cursor-pointer' : 'cursor-default'}
+                transition-colors
               `}
             >
               {day.date.getDate()}
               {/* Event dots */}
-              {day.hasEvents && !day.isToday && (
+              {day.hasEvents && (
                 <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 flex gap-0.5">
                   {day.eventTypes.slice(0, 3).map((type, i) => (
                     <div
                       key={i}
-                      className={`w-1 h-1 rounded-full ${eventTypeColors[type]?.dot || 'bg-gray-400'}`}
+                      className={`w-1 h-1 rounded-full ${day.isToday ? 'bg-white/80' : eventTypeColors[type]?.dot || 'bg-gray-400'}`}
                     />
                   ))}
                 </div>
@@ -294,16 +314,16 @@ export function MiniCalendar({ events, isLoading }: MiniCalendarProps) {
       {/* Upcoming Events */}
       <div className={`px-5 py-4 border-t ${colors.border.primary}`}>
         <h4 className={`text-sm font-medium ${colors.text.secondary} mb-3`}>
-          Prossimi appuntamenti
+          {selectedDayLabel}
         </h4>
 
-        {upcomingEvents.length === 0 ? (
+        {eventsForSelectedDay.length === 0 ? (
           <p className={`text-sm ${colors.text.muted} text-center py-3`}>
             Nessun evento in programma
           </p>
         ) : (
           <div className="space-y-2">
-            {upcomingEvents.map((event) => (
+            {eventsForSelectedDay.map((event) => (
               <div
                 key={event.id}
                 className={`p-3 rounded-xl ${eventTypeColors[event.type]?.bg || 'bg-gray-100 dark:bg-gray-800'} transition-colors`}
