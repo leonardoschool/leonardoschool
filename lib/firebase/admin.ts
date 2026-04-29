@@ -44,6 +44,8 @@ function initAdmin() {
         credential: cert(serviceAccount),
         storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
       });
+      adminAuth = getAuth(adminApp);
+      adminStorage = getStorage(adminApp);
     } catch (error) {
       console.error('Failed to initialize Firebase Admin:', error);
       // Don't throw during build - just skip initialization
@@ -51,10 +53,15 @@ function initAdmin() {
     }
   } else {
     adminApp = getApps()[0]!;
+    try {
+      adminAuth = getAuth(adminApp);
+      adminStorage = getStorage(adminApp);
+    } catch (error) {
+      console.error('Failed to get Firebase Admin services:', error);
+      return;
+    }
   }
 
-  adminAuth = getAuth(adminApp);
-  adminStorage = getStorage(adminApp);
   initialized = true;
 }
 
