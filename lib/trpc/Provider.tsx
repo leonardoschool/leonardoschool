@@ -30,8 +30,9 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 5 * 1000, // 5 seconds
+        staleTime: 60 * 1000, // Avoid refetching the same data on every app-section navigation
         refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
         retry: (failureCount, error) => {
           // Don't retry on 401/403 errors
           const httpStatus = (error as { data?: { httpStatus?: number } })?.data?.httpStatus;
