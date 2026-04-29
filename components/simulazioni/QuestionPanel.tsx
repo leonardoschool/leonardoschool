@@ -7,9 +7,10 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { colors } from '@/lib/theme/colors';
-import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
+import { sanitizeStudentOpenAnswerInput } from '@/lib/utils/studentOpenAnswer';
 import { TextareaWithSymbols } from '@/components/ui/SymbolKeyboard';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
+import RichTextRenderer from '@/components/ui/RichTextRenderer';
 
 interface Answer {
   id: string;
@@ -98,9 +99,9 @@ export default function QuestionPanel({
 
         {/* Question text */}
         <div className={`p-6 rounded-xl ${colors.background.card} border ${colors.border.light} mb-6`}>
-          <div
+          <RichTextRenderer
+            text={question.question.text}
             className={`prose prose-sm max-w-none ${colors.text.primary}`}
-            dangerouslySetInnerHTML={{ __html: sanitizeHtml(question.question.text) }}
           />
           {question.question.textLatex && (
             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -158,6 +159,10 @@ interface OpenTextAnswerProps {
 }
 
 function OpenTextAnswer({ value, onChange }: OpenTextAnswerProps) {
+  const handleChange = (raw: string) => {
+    onChange(sanitizeStudentOpenAnswerInput(raw));
+  };
+
   return (
     <div className="space-y-3">
       <span className={`block text-sm font-medium ${colors.text.secondary} mb-2`}>
@@ -165,11 +170,11 @@ function OpenTextAnswer({ value, onChange }: OpenTextAnswerProps) {
       </span>
       <TextareaWithSymbols
         value={value}
-        onChange={onChange}
-        placeholder="Inserisci la tua risposta... Puoi usare formule LaTeX ($x^2$) e HTML (<sub>2</sub>)"
+        onChange={handleChange}
+        placeholder="Inserisci la tua risposta... Usa i simboli dalla tastiera qui sopra"
         rows={6}
-        showFormattingHelp={true}
-        showPreview={true}
+        showFormattingHelp={false}
+        showPreview={false}
       />
     </div>
   );
@@ -211,9 +216,9 @@ function MultipleChoiceAnswers({
             >
               {label}
             </span>
-            <div
+            <RichTextRenderer
+              text={answerOption.text}
               className={`flex-1 ${colors.text.primary}`}
-              dangerouslySetInnerHTML={{ __html: sanitizeHtml(answerOption.text) }}
             />
           </button>
         );

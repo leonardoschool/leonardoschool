@@ -14,10 +14,11 @@
  * images                     →  imageUrl (prima immagine) / imageStoragePath
  * options                    →  QuestionAnswer (relazione)
  * answers                    →  isCorrect in QuestionAnswer
- * database                   →  QuestionTagAssignment (tag)
- * section                    →  subjectId (mappato)
- * subject                    →  topicId (mappato)
- * argument                   →  subTopicId (mappato)
+ * database                   →  QuestionTagAssignment (tag) / source + year (se codificati)
+ * section                    →  non usato per la categorizzazione delle domande
+ * subject                    →  subjectId (materia, livello 2)
+ * argument                   →  topicId (argomento, livello 3)
+ * sotto-argomento            →  subTopicId vuoto (dato non presente nella vecchia app)
  * status                     →  status (enabled→PUBLISHED, disabled→ARCHIVED)
  * author                     →  source / legacyTags
  * severity                   →  difficulty (mappato)
@@ -79,17 +80,26 @@ for (const path of possiblePaths) {
 if (credentialsPath) {
   console.log(`📄 Loading Firebase credentials: ${credentialsPath.split('\\').pop()}`);
   serviceAccount = JSON.parse(readFileSync(credentialsPath, 'utf8'));
+} else if (process.env.FIREBASE_LEGACY_SERVICE_ACCOUNT_KEY) {
+  // Credenziali dedicate alla migrazione (vecchio progetto Firestore)
+  console.log('🔑 Loading legacy Firebase credentials from FIREBASE_LEGACY_SERVICE_ACCOUNT_KEY...');
+  serviceAccount = JSON.parse(process.env.FIREBASE_LEGACY_SERVICE_ACCOUNT_KEY);
 } else if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-  console.log('🔑 Loading Firebase credentials from environment variable...');
+  console.log('🔑 Loading Firebase credentials from FIREBASE_SERVICE_ACCOUNT_KEY...');
   serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
 } else {
-  console.error('❌ File leonardo-school-service-account.json not found!');
+  console.error('❌ Nessuna credenziale Firebase trovata!');
   console.error('');
-  console.error('   Download from Firebase Console:');
-  console.error('   1. Go to https://console.firebase.google.com/');
-  console.error('   2. Select "leonardo-school" project');
-  console.error('   3. Project Settings → Service Accounts → Generate new private key');
-  console.error('   4. Save as leonardo-school-service-account.json in project root');
+  console.error('   Le domande sono nel vecchio progetto Firestore "leonardo-school".');
+  console.error('   Aggiungi nel .env le credenziali del vecchio progetto:');
+  console.error('');
+  console.error("   FIREBASE_LEGACY_SERVICE_ACCOUNT_KEY='{\"type\":\"service_account\",\"project_id\":\"leonardo-school\",...}'");
+  console.error('');
+  console.error('   Oppure scarica il JSON da Firebase Console e salvalo come:');
+  console.error('   leonardo-school-service-account.json (nella root del progetto)');
+  console.error('');
+  console.error('   1. https://console.firebase.google.com/ → progetto "LeonardoSchool"');
+  console.error('   2. Impostazioni progetto → Account di servizio → Genera nuova chiave privata');
   process.exit(1);
 }
 
@@ -104,7 +114,13 @@ const adminApp = getApps().length === 0
   ? initializeApp({ credential: cert(serviceAccount as Parameters<typeof cert>[0]) })
   : getApps()[0];
 
-const firestore = getFirestore(adminApp);
+const FIRESTORE_DATABASE_ID = process.env.FIRESTORE_DATABASE_ID;
+if (FIRESTORE_DATABASE_ID) {
+  console.log(`🗄️  Firestore database: ${FIRESTORE_DATABASE_ID}`);
+}
+const firestore = FIRESTORE_DATABASE_ID
+  ? getFirestore(adminApp, FIRESTORE_DATABASE_ID)
+  : getFirestore(adminApp);
 
 // ===================== TYPES =====================
 
@@ -140,7 +156,6 @@ interface MigrationStats {
   errors: number;
   subjects: Map<string, number>;
   topics: Map<string, number>;
-  subTopics: Map<string, number>;
   databases: Map<string, number>;
   difficulties: Map<string, number>;
 }
@@ -168,7 +183,12 @@ interface SimulationConfigData {
 function isEmpty(value?: string | null): boolean {
   if (!value) return true;
   const trimmed = value.trim();
-  return trimmed === '' || trimmed === '*';
+  const normalized = trimmed.toLowerCase();
+  return trimmed === '' 
+    || trimmed === '*' 
+    || ['n/a', 'na', 'null', 'undefined', 'v...', 'v…'].includes(normalized)
+    || normalized.startsWith('vuot')
+    || /^v\d+\.\d+/.test(normalized); // version tags (es. "v1.1.5 chi7") → ignorati
 }
 
 /**
@@ -234,9 +254,12 @@ function findInSections(
 }
 
 /**
- * Risolve la gerarchia completa di una domanda
+ * Risolve la gerarchia completa di una domanda.
  * Firestore: section → subject → argument
- * PostgreSQL: subject → topic → subTopic
+ * PostgreSQL: subject → topic, con subTopic vuoto.
+ *
+ * La vecchia section resta disponibile per le simulazioni, ma non viene usata
+ * nell'organizzazione delle domande.
  */
 function resolveQuestionHierarchy(
   config: SimulationConfigData | null,
@@ -261,56 +284,122 @@ function resolveQuestionHierarchy(
   };
   
   if (!config?.sections) {
-    // Fallback: usa i valori grezzi se non c'è configurazione
-    result.subjectName = result.rawValues.section;
-    result.topicName = result.rawValues.subject;
-    result.subTopicName = result.rawValues.argument;
+    // Fallback: usa i valori grezzi di livello 2 e 3 se non c'è configurazione
+    result.subjectName = result.rawValues.subject;
+    result.topicName = result.rawValues.argument;
+    result.subTopicName = null;
     return result;
   }
   
-  // 1. Risolvi Section → Subject (materia)
-  if (!isEmpty(rawSection)) {
-    const sectionInfo = findInSections(config.sections, rawSection!);
-    if (sectionInfo) {
-      result.subjectName = sectionInfo.title;
+  // 1. Risolvi Subject (livello 2) → Subject/Materia
+  if (!isEmpty(rawSubject)) {
+    const subjectInfo = findInSections(config.sections, rawSubject!);
+    if (subjectInfo) {
+      result.subjectName = subjectInfo.title;
     } else {
-      // ID non trovato nella config, usa come fallback se non è una sigla e non è "*"
-      const cleaned = rawSection!.trim();
+      // ID non trovato, usa come fallback se non è una sigla e non è "*"
+      const cleaned = rawSubject!.trim();
       if (cleaned.length > 5 && cleaned !== '*') {
         result.subjectName = cleaned;
       }
     }
   }
   
-  // 2. Risolvi Subject → Topic (argomento)
-  if (!isEmpty(rawSubject)) {
-    const subjectInfo = findInSections(config.sections, rawSubject!);
-    if (subjectInfo) {
-      result.topicName = subjectInfo.title;
+  // 2. Risolvi Argument (livello 3) → Topic/Argomento
+  if (!isEmpty(rawArgument)) {
+    const argumentInfo = findInSections(config.sections, rawArgument!);
+    if (argumentInfo) {
+      result.topicName = argumentInfo.title;
     } else {
       // ID non trovato, usa come fallback se non è una sigla e non è "*"
-      const cleaned = rawSubject!.trim();
+      const cleaned = rawArgument!.trim();
       if (cleaned.length > 5 && cleaned !== '*') {
         result.topicName = cleaned;
       }
     }
   }
-  
-  // 3. Risolvi Argument → SubTopic (sotto-argomento)
-  if (!isEmpty(rawArgument)) {
-    const argumentInfo = findInSections(config.sections, rawArgument!);
-    if (argumentInfo) {
-      result.subTopicName = argumentInfo.title;
-    } else {
-      // ID non trovato, usa come fallback se non è una sigla e non è "*"
-      const cleaned = rawArgument!.trim();
-      if (cleaned.length > 5 && cleaned !== '*') {
-        result.subTopicName = cleaned;
-      }
-    }
-  }
+
+  result.subTopicName = null;
   
   return result;
+}
+
+interface ParsedQuestionMetadata {
+  source: string | null;
+  year: number | null;
+}
+
+function emptyQuestionMetadata(): ParsedQuestionMetadata {
+  return { source: null, year: null };
+}
+
+function isMiurDatabaseCode(value?: string | null): boolean {
+  const readable = resolveToReadable(value);
+  return readable?.toLowerCase().startsWith('miur_') ?? false;
+}
+
+function parseYearFromText(value?: string | null): number | null {
+  const readable = resolveToReadable(value);
+  if (!readable) return null;
+
+  const match = readable.match(/(?:^|\D)((?:19|20)\d{2})(?:\D|$)/);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  return year >= 1900 && year <= 2100 ? year : null;
+}
+
+function parseAuthorMetadata(rawAuthor?: string): ParsedQuestionMetadata {
+  const readable = resolveToReadable(rawAuthor);
+  if (!readable) return emptyQuestionMetadata();
+
+  // Se author è un codice miur (es. "miur_05_2024"), deleghiamo al parser database
+  if (isMiurDatabaseCode(readable)) {
+    return { source: null, year: parseYearFromText(readable) };
+  }
+
+  const [sourcePart, ...yearParts] = readable.split(',');
+  if (yearParts.length > 0) {
+    return {
+      source: resolveToReadable(sourcePart),
+      year: parseYearFromText(yearParts.join(',')),
+    };
+  }
+
+  const year = parseYearFromText(readable);
+  return {
+    source: readable === String(year) ? null : readable,
+    year,
+  };
+}
+
+function parseDatabaseMetadata(rawDatabase: string | undefined, databaseName: string | null): ParsedQuestionMetadata {
+  const readable = resolveToReadable(rawDatabase);
+  if (!readable) return emptyQuestionMetadata();
+
+  const year = parseYearFromText(readable);
+  if (isMiurDatabaseCode(readable)) {
+    return { source: 'CINECA', year };
+  }
+
+  return {
+    source: databaseName,
+    year,
+  };
+}
+
+function resolveQuestionMetadata(
+  rawAuthor: string | undefined,
+  rawDatabase: string | undefined,
+  databaseName: string | null
+): ParsedQuestionMetadata {
+  const authorMetadata = parseAuthorMetadata(rawAuthor);
+  const databaseMetadata = parseDatabaseMetadata(rawDatabase, databaseName);
+
+  return {
+    source: authorMetadata.source ?? databaseMetadata.source,
+    year: authorMetadata.year ?? databaseMetadata.year,
+  };
 }
 
 /**
@@ -318,6 +407,10 @@ function resolveQuestionHierarchy(
  */
 function resolveDatabaseName(config: SimulationConfigData | null, rawDatabase?: string): string | null {
   if (isEmpty(rawDatabase)) return null;
+
+  if (isMiurDatabaseCode(rawDatabase)) {
+    return 'CINECA';
+  }
   
   // Prova a cercare nella configurazione
   if (config?.databases && config.databases[rawDatabase!]) {
@@ -520,54 +613,6 @@ async function getOrCreateTopic(
 }
 
 /**
- * Ottiene o crea un subtopic basato sul nome leggibile e topicId
- */
-async function getOrCreateSubTopic(
-  subTopicName: string | null, 
-  topicId: string | null, 
-  subTopicsCache: Map<string, string>
-): Promise<string | null> {
-  if (!subTopicName || !topicId) return null;
-  
-  const normalizedName = subTopicName.trim();
-  const cacheKey = `${topicId}:${normalizedName}`;
-  
-  if (subTopicsCache.has(cacheKey)) {
-    return subTopicsCache.get(cacheKey)!;
-  }
-  
-  let subTopic = await prisma.subTopic.findFirst({
-    where: {
-      topicId: topicId,
-      OR: [
-        { name: { equals: normalizedName, mode: 'insensitive' } },
-        { name: { contains: normalizedName, mode: 'insensitive' } }
-      ]
-    }
-  });
-  
-  if (!subTopic && !DRY_RUN) {
-    subTopic = await prisma.subTopic.create({
-      data: {
-        name: normalizedName,
-        topicId: topicId,
-        description: `Sotto-argomento importato da Firestore`,
-        isActive: true,
-        order: 99
-      }
-    });
-    console.log(`   📑 Created new subTopic: ${subTopic.name}`);
-  }
-  
-  if (subTopic) {
-    subTopicsCache.set(cacheKey, subTopic.id);
-    return subTopic.id;
-  }
-  
-  return null;
-}
-
-/**
  * Ottiene o crea un tag per il database (già con nome leggibile)
  */
 async function getOrCreateDatabaseTag(
@@ -683,13 +728,11 @@ async function migrateQuestions(): Promise<void> {
     errors: 0,
     subjects: new Map(),
     topics: new Map(),
-    subTopics: new Map(),
     databases: new Map(),
     difficulties: new Map()
   };
   const subjectsCache = new Map<string, string>();
   const topicsCache = new Map<string, string>();
-  const subTopicsCache = new Map<string, string>();
   const tagsCache = new Map<string, string>();
   
   try {
@@ -773,15 +816,16 @@ async function migrateQuestions(): Promise<void> {
         
         if (VERBOSE) {
           console.log(`   📚 Hierarchy resolved:`);
-          console.log(`      Section "${firestoreQuestion.section}" → Subject: "${hierarchy.subjectName || '(vuoto)'}"`);
-          console.log(`      Subject "${firestoreQuestion.subject}" → Topic: "${hierarchy.topicName || '(vuoto)'}"`);
-          console.log(`      Argument "${firestoreQuestion.argument}" → SubTopic: "${hierarchy.subTopicName || '(vuoto)'}"`);
+          console.log(`      Section "${firestoreQuestion.section}" → Ignored for question categorization`);
+          console.log(`      Subject "${firestoreQuestion.subject}" → Subject: "${hierarchy.subjectName || '(vuoto)'}"`);
+          console.log(`      Argument "${firestoreQuestion.argument}" → Topic: "${hierarchy.topicName || '(vuoto)'}"`);
+          console.log(`      SubTopic → (vuoto)`);
         }
         
-        // 2. Crea/trova Subject, Topic, SubTopic nel database PostgreSQL
+        // 2. Crea/trova Subject e Topic nel database PostgreSQL
         const subjectId = await getOrCreateSubject(hierarchy.subjectName, subjectsCache);
         const topicId = await getOrCreateTopic(hierarchy.topicName, subjectId, topicsCache);
-        const subTopicId = await getOrCreateSubTopic(hierarchy.subTopicName, topicId, subTopicsCache);
+        const subTopicId = null;
         
         // 3. Aggiorna stats con i nomi leggibili
         if (hierarchy.subjectName) {
@@ -790,10 +834,6 @@ async function migrateQuestions(): Promise<void> {
         if (hierarchy.topicName) {
           stats.topics.set(hierarchy.topicName, (stats.topics.get(hierarchy.topicName) || 0) + 1);
         }
-        if (hierarchy.subTopicName) {
-          stats.subTopics.set(hierarchy.subTopicName, (stats.subTopics.get(hierarchy.subTopicName) || 0) + 1);
-        }
-        
         // 4. Risolvi la difficoltà
         const severityInfo = resolveSeverity(simulationConfig, firestoreQuestion.severity);
         const difficulty = severityInfo.level;
@@ -815,11 +855,11 @@ async function migrateQuestions(): Promise<void> {
           console.log(`   🗄️ Database "${firestoreQuestion.database}" → "${databaseName || '(non risolto)'}"`);
         }
         
-        // 6. Risolvi autore/fonte (gestisce "*" come vuoto)
-        const source = resolveToReadable(firestoreQuestion.author);
+        // 6. Risolvi fonte/anno da author e database (gestisce valori vuoti)
+        const metadata = resolveQuestionMetadata(firestoreQuestion.author, firestoreQuestion.database, databaseName);
         
-        if (VERBOSE && firestoreQuestion.author) {
-          console.log(`   👤 Author "${firestoreQuestion.author}" → "${source || '(vuoto)'}"`);
+        if (VERBOSE && (firestoreQuestion.author || firestoreQuestion.database)) {
+          console.log(`   👤 Author/Database → Source: "${metadata.source || '(vuoto)'}", Year: "${metadata.year || '(vuoto)'}"`);
         }
         
         // 7. Status e tipo domanda
@@ -844,7 +884,7 @@ async function migrateQuestions(): Promise<void> {
           type: questionType,
           status: status,
           
-          // Categorization - ora con tutti e 3 i livelli
+          // Categorization - section ignored, sub-topic left empty
           subjectId: subjectId,
           topicId: topicId,
           subTopicId: subTopicId,
@@ -856,14 +896,15 @@ async function migrateQuestions(): Promise<void> {
           // Explanations
           generalExplanation: cleanText(firestoreQuestion.comment) || null,
           
-          // Metadata - ora con valori leggibili
-          source: source,
+          // Metadata - valori leggibili e anno numerico
+          source: metadata.source,
+          year: metadata.year,
           externalId: firestoreQuestion.id,
           // Legacy tags con nomi leggibili invece di sigle
-          legacyTags: [
+          legacyTags: Array.from(new Set([
             databaseName,
-            source
-          ].filter(Boolean) as string[],
+            metadata.source
+          ].filter(Boolean) as string[])),
           
           // Scoring defaults
           points: 1.0,
@@ -997,16 +1038,7 @@ async function migrateQuestions(): Promise<void> {
       console.log(`   ... and ${stats.topics.size - 10} more topics`);
     }
     
-    console.log('\n📑 SubTopics (Sotto-argomenti) distribution (top 10):');
-    Array.from(stats.subTopics.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .forEach(([subTopic, count]) => {
-        console.log(`   - ${subTopic}: ${count} questions`);
-      });
-    if (stats.subTopics.size > 10) {
-      console.log(`   ... and ${stats.subTopics.size - 10} more sub-topics`);
-    }
+    console.log('\n📑 SubTopics (Sotto-argomenti): left empty for imported questions');
     
     console.log('\n🏷️ Databases distribution:');
     Array.from(stats.databases.entries())
@@ -1092,7 +1124,6 @@ async function previewMapping(): Promise<void> {
   const stats = {
     subjects: new Map<string, number>(),
     topics: new Map<string, number>(),
-    subTopics: new Map<string, number>(),
     databases: new Map<string, number>(),
     difficulties: new Map<string, number>(),
     unresolvedSections: new Set<string>(),
@@ -1121,25 +1152,20 @@ async function previewMapping(): Promise<void> {
     );
     
     console.log('   📊 HIERARCHY MAPPING:');
-    console.log(`      section: "${q.section || '(vuoto)'}" → Subject: "${hierarchy.subjectName || '⚠️ NON RISOLTO'}"`);
-    console.log(`      subject: "${q.subject || '(vuoto)'}" → Topic: "${hierarchy.topicName || '⚠️ NON RISOLTO'}"`);
-    console.log(`      argument: "${q.argument || '(vuoto)'}" → SubTopic: "${hierarchy.subTopicName || '⚠️ NON RISOLTO'}"`);
+    console.log(`      section: "${q.section || '(vuoto)'}" → Ignored for question categorization`);
+    console.log(`      subject: "${q.subject || '(vuoto)'}" → Subject: "${hierarchy.subjectName || '⚠️ NON RISOLTO'}"`);
+    console.log(`      argument: "${q.argument || '(vuoto)'}" → Topic: "${hierarchy.topicName || '⚠️ NON RISOLTO'}"`);
+    console.log(`      subTopic: (vuoto)`);
     
     // Track stats
     if (hierarchy.subjectName) {
       stats.subjects.set(hierarchy.subjectName, (stats.subjects.get(hierarchy.subjectName) || 0) + 1);
-    } else if (q.section && !isEmpty(q.section)) {
-      stats.unresolvedSections.add(q.section);
-    }
-    
-    if (hierarchy.topicName) {
-      stats.topics.set(hierarchy.topicName, (stats.topics.get(hierarchy.topicName) || 0) + 1);
     } else if (q.subject && !isEmpty(q.subject)) {
       stats.unresolvedSubjects.add(q.subject);
     }
     
-    if (hierarchy.subTopicName) {
-      stats.subTopics.set(hierarchy.subTopicName, (stats.subTopics.get(hierarchy.subTopicName) || 0) + 1);
+    if (hierarchy.topicName) {
+      stats.topics.set(hierarchy.topicName, (stats.topics.get(hierarchy.topicName) || 0) + 1);
     } else if (q.argument && !isEmpty(q.argument)) {
       stats.unresolvedArguments.add(q.argument);
     }
@@ -1162,9 +1188,9 @@ async function previewMapping(): Promise<void> {
       stats.difficulties.set(severityInfo.name, (stats.difficulties.get(severityInfo.name) || 0) + 1);
     }
     
-    // Author/Source mapping
-    const source = resolveToReadable(q.author);
-    console.log(`      author: "${q.author || '(vuoto)'}" → Source: "${source || '(vuoto)'}"`);
+    // Author/Database source and year mapping
+    const metadata = resolveQuestionMetadata(q.author, q.database, databaseName);
+    console.log(`      author/database → Source: "${metadata.source || '(vuoto)'}", Year: "${metadata.year || '(vuoto)'}"`);
     
     // Status mapping
     const status = mapStatus(q.status);
@@ -1198,12 +1224,7 @@ async function previewMapping(): Promise<void> {
       console.log(`   ✅ ${topic}: ${count} questions`);
     });
   
-  console.log('\n📑 SubTopics (Sotto-argomenti) that would be created:');
-  Array.from(stats.subTopics.entries())
-    .sort((a, b) => b[1] - a[1])
-    .forEach(([subTopic, count]) => {
-      console.log(`   ✅ ${subTopic}: ${count} questions`);
-    });
+  console.log('\n📑 SubTopics (Sotto-argomenti): left empty for imported questions');
   
   console.log('\n🏷️ Database Tags that would be created:');
   Array.from(stats.databases.entries())
@@ -1219,7 +1240,7 @@ async function previewMapping(): Promise<void> {
   
   // Warnings for unresolved values
   if (stats.unresolvedSections.size > 0) {
-    console.log('\n⚠️ UNRESOLVED SECTIONS (will be left empty):');
+    console.log('\n⚠️ SECTIONS IGNORED FOR QUESTION CATEGORIZATION:');
     stats.unresolvedSections.forEach(s => console.log(`   - "${s}"`));
   }
   
@@ -1340,8 +1361,19 @@ async function inspectFirestore(): Promise<void> {
       console.log('');
     }
   } catch (error) {
-    console.error('❌ Error inspecting Firestore:', error);
-    console.error(error);
+    const isNotFound = error instanceof Error && error.message.includes('5 NOT_FOUND');
+    if (isNotFound) {
+      console.error('❌ Firestore database not found (gRPC 5 NOT_FOUND)');
+      console.error('');
+      console.error('   This usually means the Firestore database has a custom name (not "(default)").');
+      console.error('   Fix: add FIRESTORE_DATABASE_ID=<nome-database> to your .env file.');
+      console.error('');
+      console.error('   How to find the database name:');
+      console.error(`   → https://console.firebase.google.com/project/${serviceAccount.project_id}/firestore`);
+      console.error('   Look at the database selector in the top-left of the Firestore page.');
+    } else {
+      console.error('❌ Error inspecting Firestore:', error);
+    }
   }
 }
 
@@ -1360,12 +1392,14 @@ Lo script funziona automaticamente:
 - Migra tutte le domande con la gerarchia corretta
 
 Il mapping intelligente converte:
-- section (es. "biology") → Subject (es. "Biologia")
-- subject (es. "biolg") → Topic (es. "Biologia")
-- argument (es. "3cznQ") → SubTopic (es. "Fondamenti di genetica")
+- section (es. "biology") → ignorata nella categorizzazione delle domande
+- subject/livello 2 (es. "biolg") → Subject/Materia (es. "Biologia")
+- argument/livello 3 (es. "3cznQ") → Topic/Argomento (es. "Fondamenti di genetica")
+- subTopic/sotto-argomento → vuoto (dato non presente nella vecchia app)
 - database (es. "k7JL") → Tag (es. "CISIA")
+- author/database (es. "M/O, 2020", "V, 2011", "miur_5_2024") → source/year
 - severity (es. "0") → Difficulty (es. "Facile" → EASY)
-- Valori "*" vengono trattati come vuoti
+- Valori "*", "N/A", "v..." e simili vengono trattati come vuoti
 
 Options:
   --limit=N     Migra solo N domande (per test)

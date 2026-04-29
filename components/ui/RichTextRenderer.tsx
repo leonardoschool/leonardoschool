@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import katex from 'katex';
 import DOMPurify from 'isomorphic-dompurify';
+import { normalizeStoredRichText, sanitizeLatexForKatex } from '@/lib/utils/latex';
 
 interface RichTextRendererProps {
   text: string;
@@ -23,13 +24,13 @@ export default function RichTextRenderer({ text, className = '' }: RichTextRende
   const renderedHtml = useMemo(() => {
     if (!text) return '';
 
-    let processed = text;
+    let processed = normalizeStoredRichText(text);
 
     // Process LaTeX environment blocks without delimiters: \begin{...}...\end{...}
     // These are rendered as display math
     processed = processed.replace(/\\begin\{(\w+)\}([\s\S]*?)\\end\{\1\}/g, (match, env, content) => {
       try {
-        const fullLatex = `\\begin{${env}}${content}\\end{${env}}`;
+        const fullLatex = sanitizeLatexForKatex(`\\begin{${env}}${content}\\end{${env}}`);
         return katex.renderToString(fullLatex, {
           throwOnError: false,
           displayMode: true,
@@ -43,7 +44,7 @@ export default function RichTextRenderer({ text, className = '' }: RichTextRende
     // Process display math first: \[ ... \] or $$ ... $$
     processed = processed.replace(/\\\[([\s\S]*?)\\\]/g, (_, latex) => {
       try {
-        return katex.renderToString(latex.trim(), {
+        return katex.renderToString(sanitizeLatexForKatex(latex.trim()), {
           throwOnError: false,
           displayMode: true,
           strict: false,
@@ -55,7 +56,7 @@ export default function RichTextRenderer({ text, className = '' }: RichTextRende
 
     processed = processed.replace(/\$\$([\s\S]*?)\$\$/g, (_, latex) => {
       try {
-        return katex.renderToString(latex.trim(), {
+        return katex.renderToString(sanitizeLatexForKatex(latex.trim()), {
           throwOnError: false,
           displayMode: true,
           strict: false,
@@ -68,7 +69,7 @@ export default function RichTextRenderer({ text, className = '' }: RichTextRende
     // Process inline math: \( ... \) or $ ... $
     processed = processed.replace(/\\\(([\s\S]*?)\\\)/g, (_, latex) => {
       try {
-        return katex.renderToString(latex.trim(), {
+        return katex.renderToString(sanitizeLatexForKatex(latex.trim()), {
           throwOnError: false,
           displayMode: false,
           strict: false,
@@ -81,7 +82,7 @@ export default function RichTextRenderer({ text, className = '' }: RichTextRende
     // Process single $ ... $ for inline math (be careful not to match $$)
     processed = processed.replace(/(?<!\$)\$(?!\$)(.*?)(?<!\$)\$(?!\$)/g, (_, latex) => {
       try {
-        return katex.renderToString(latex.trim(), {
+        return katex.renderToString(sanitizeLatexForKatex(latex.trim()), {
           throwOnError: false,
           displayMode: false,
           strict: false,

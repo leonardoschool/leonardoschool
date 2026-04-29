@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma/client';
 import { getAdminAuth } from '@/lib/firebase/admin';
 import { Prisma } from '@prisma/client';
+import { sanitizeStudentAnswerText } from '@/lib/utils/studentOpenAnswer';
 
 /**
  * API endpoint for saving simulation progress via sendBeacon
@@ -37,9 +38,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { resultId, answers, timeSpent, sectionTimes, currentSectionIndex } = body;
 
-    if (!resultId || !answers) {
+    if (!resultId || !Array.isArray(answers)) {
       return NextResponse.json({ error: 'Dati mancanti' }, { status: 400 });
     }
+
+    const sanitizedAnswers = answers.map((answer: Record<string, unknown>) => ({
+      ...answer,
+      answerText: typeof answer.answerText === 'string'
+        ? sanitizeStudentAnswerText(answer.answerText)
+        : null,
+    }));
 
     // Get student from user
     const student = await prisma.student.findFirst({
@@ -71,7 +79,7 @@ export async function POST(request: NextRequest) {
 
     // Prepare answers with section progress metadata
     const answersWithMeta = {
-      items: answers,
+      items: sanitizedAnswers,
       sectionTimes: sectionTimes || {},
       currentSectionIndex: currentSectionIndex ?? 0,
     };

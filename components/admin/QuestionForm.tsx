@@ -851,9 +851,14 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
             {(openValidationType === 'KEYWORDS' || openValidationType === 'BOTH') && (
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <label className={`text-sm font-medium ${colors.text.primary}`}>
-                    Keywords per validazione *
-                  </label>
+                  <div>
+                    <label className={`text-sm font-medium ${colors.text.primary}`}>
+                      Keywords per validazione *
+                    </label>
+                    <p className={`text-xs ${colors.text.muted} mt-0.5`}>
+                      Lo studente deve scrivere almeno una delle keywords indicate (alternative tra loro).
+                    </p>
+                  </div>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -948,30 +953,13 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
                         placeholder="Keyword..."
                         className={`flex-1 px-3 py-1.5 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} text-sm focus:ring-2 focus:ring-[#a8012b]/20 focus:border-[#a8012b] transition-colors`}
                       />
-                      <div className="flex items-center gap-3">
-                        <Checkbox
-                          checked={keyword.isRequired}
-                          onChange={(e) => updateKeyword(index, 'isRequired', e.target.checked)}
-                          label="Obbligatoria"
-                        />
-                        <input
-                          type="number"
-                          value={keyword.weight}
-                          onChange={(e) => updateKeyword(index, 'weight', Number(e.target.value))}
-                          min="0"
-                          max="10"
-                          step="0.5"
-                          className={`w-16 px-2 py-1 rounded border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} text-sm text-center`}
-                          title="Peso"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeKeyword(index)}
-                          className="p-1.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeKeyword(index)}
+                        className="p-1.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   ))}
                   {keywords.length === 0 && (

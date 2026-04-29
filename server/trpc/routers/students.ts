@@ -746,7 +746,12 @@ export const studentsRouter = router({
       if (onlyMyGroups && ctx.user?.role === 'COLLABORATOR' && ctx.user?.collaborator?.id) {
         // Get groups managed by this collaborator
         const collaboratorGroups = await ctx.prisma.group.findMany({
-          where: { referenceCollaboratorId: ctx.user.collaborator.id },
+          where: {
+            OR: [
+              { referenceCollaboratorId: ctx.user.collaborator.id },
+              { referenceCollaborators: { some: { collaboratorId: ctx.user.collaborator.id } } },
+            ],
+          },
           select: { id: true },
         });
         

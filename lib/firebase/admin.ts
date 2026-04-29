@@ -24,7 +24,15 @@ function initAdmin() {
     }
 
     try {
-      const serviceAccount = JSON.parse(serviceAccountKey);
+      // Parse the service account key, handling the common .env escaping issue where
+      // the private_key field contains literal newline characters instead of \n escape sequences.
+      let serviceAccount: Record<string, unknown>;
+      try {
+        serviceAccount = JSON.parse(serviceAccountKey);
+      } catch {
+        // Retry after escaping literal newlines (control chars → \n escape sequences)
+        serviceAccount = JSON.parse(serviceAccountKey.replace(/\r?\n/g, '\\n'));
+      }
       
       // Validate required fields
       if (!serviceAccount.project_id || !serviceAccount.private_key) {
@@ -36,6 +44,8 @@ function initAdmin() {
         credential: cert(serviceAccount),
         storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
       });
+      adminAuth = getAuth(adminApp);
+      adminStorage = getStorage(adminApp);
     } catch (error) {
       console.error('Failed to initialize Firebase Admin:', error);
       // Don't throw during build - just skip initialization
@@ -43,10 +53,15 @@ function initAdmin() {
     }
   } else {
     adminApp = getApps()[0]!;
+    try {
+      adminAuth = getAuth(adminApp);
+      adminStorage = getStorage(adminApp);
+    } catch (error) {
+      console.error('Failed to get Firebase Admin services:', error);
+      return;
+    }
   }
 
-  adminAuth = getAuth(adminApp);
-  adminStorage = getStorage(adminApp);
   initialized = true;
 }
 

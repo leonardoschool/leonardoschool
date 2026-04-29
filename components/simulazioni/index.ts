@@ -11,6 +11,8 @@ export { default as StudentWaitingRoom } from './StudentWaitingRoom';
 export { default as InTestMessaging, MessagingButton } from './InTestMessaging';
 export { default as SimulationStartScreen } from './SimulationStartScreen';
 export { default as SimulationPreviewModal } from './SimulationPreviewModal';
+export { default as FillSectionModal } from './FillSectionModal';
+export type { PickedQuestion } from './FillSectionModal';
 export {
   SimulationLoadingState,
   SimulationKickedState,

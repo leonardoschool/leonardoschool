@@ -7,7 +7,7 @@ import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { PageLoader } from '@/components/ui/loaders';
 import { getSimulationTypeLabel, getSimulationTypeColors } from '@/lib/utils/simulationLabels';
-import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
+import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import {
   ArrowLeft,
   Trophy,
@@ -449,9 +449,9 @@ export default function StudentSimulationsPage({ params }: { readonly params: Pr
                                               {idx + 1}
                                             </div>
                                             <div className="flex-1">
-                                              <div
+                                              <RichTextRenderer
+                                                text={question.questionText}
                                                 className={`${colors.text.primary} mb-3`}
-                                                dangerouslySetInnerHTML={{ __html: sanitizeHtml(question.questionText) }}
                                               />
                                               {question.topicName && (
                                                 <span className={`text-xs px-2 py-1 rounded-full ${colors.background.secondary} ${colors.text.muted}`}>
@@ -470,9 +470,10 @@ export default function StudentSimulationsPage({ params }: { readonly params: Pr
                                                     <p className="text-xs font-medium text-red-700 dark:text-red-400 mb-1">
                                                       Tua risposta (Errata)
                                                     </p>
-                                                    <p className="text-sm text-red-900 dark:text-red-300">
-                                                      {question.selectedAnswerText}
-                                                    </p>
+                                                    <RichTextRenderer
+                                                      text={question.selectedAnswerText}
+                                                      className="text-sm text-red-900 dark:text-red-300"
+                                                    />
                                                   </div>
                                                 </div>
                                               </div>
@@ -485,9 +486,10 @@ export default function StudentSimulationsPage({ params }: { readonly params: Pr
                                                   <p className="text-xs font-medium text-green-700 dark:text-green-400 mb-1">
                                                     Risposta Corretta
                                                   </p>
-                                                  <p className="text-sm text-green-900 dark:text-green-300">
-                                                    {question.correctAnswerText}
-                                                  </p>
+                                                  <RichTextRenderer
+                                                    text={question.correctAnswerText}
+                                                    className="text-sm text-green-900 dark:text-green-300"
+                                                  />
                                                 </div>
                                               </div>
                                             </div>
@@ -500,9 +502,9 @@ export default function StudentSimulationsPage({ params }: { readonly params: Pr
                                                     <p className={`text-xs font-medium ${colors.text.muted} mb-1`}>
                                                       Spiegazione
                                                     </p>
-                                                    <div
+                                                    <RichTextRenderer
+                                                      text={question.explanation ?? ''}
                                                       className={`text-sm ${colors.text.secondary}`}
-                                                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(question.explanation ?? '') }}
                                                     />
                                                   </div>
                                                 </div>
@@ -840,9 +842,9 @@ function ChartsSection({ simulations, statistics }: Readonly<ChartsSectionProps>
                       borderRadius: '8px',
                       color: '#fff'
                     }}
-                    formatter={(value: number, _name: string, props: { payload: { fullName: string } }) => [
+                    formatter={(value: number, _name: string, props: { payload?: { fullName?: string } }) => [
                       `${value}%`, 
-                      props.payload.fullName
+                      props.payload?.fullName ?? ''
                     ]}
                   />
                 </RadarChart>

@@ -33,6 +33,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Prevent webpack from bundling server-only packages that use native Node.js modules
+  serverExternalPackages: ['firebase-admin'],
+
   async headers() {
     return [
       {

@@ -31,6 +31,23 @@ import { useVirtualRoomSSE, VirtualRoomData } from '@/lib/hooks/useVirtualRoomSS
 import { formatDistanceToNow } from 'date-fns';
 import { it } from 'date-fns/locale';
 
+// Italian labels for cheating event types
+const CHEATING_EVENT_LABELS: Record<string, string> = {
+  TAB_CHANGE: 'Cambio scheda/finestra',
+  WINDOW_BLUR: 'Finestra in background',
+  FULLSCREEN_EXIT: 'Uscita dal fullscreen',
+  PAGE_RELOAD: 'Tentativo di ricaricamento pagina',
+  COPY_ATTEMPT: 'Tentativo di copia',
+  PASTE_ATTEMPT: 'Tentativo di incolla',
+  RIGHT_CLICK: 'Click destro',
+  DEVTOOLS_OPEN: 'Strumenti sviluppatore aperti',
+  SCREENSHOT_ATTEMPT: 'Tentativo di screenshot',
+  KEYBOARD_SHORTCUT: 'Scorciatoia da tastiera bloccata',
+  MULTIPLE_MONITORS: 'Monitor multipli rilevati',
+  DISCONNECTION: 'Disconnessione sospetta',
+  OTHER: 'Altro evento sospetto',
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any, sonarjs/redundant-type-aliases
 type Participant = any;
 
@@ -240,11 +257,16 @@ function ParticipantCard({ participant, totalQuestions, onSendMessage, onKickPar
               Eventi sospetti recenti
             </p>
             <div className="space-y-2">
-              {participant.recentCheatingEvents.slice(0, 3).map((event: { id: string; eventType: string; createdAt: string }) => (
-                <div key={event.id} className="text-xs text-red-700 dark:text-red-100 flex items-center gap-2 bg-red-50 dark:bg-red-500/20 border border-red-300 dark:border-red-500/40 rounded-lg px-3 py-2 shadow-lg shadow-red-100 dark:shadow-red-500/10">
-                  <span className="w-2 h-2 bg-red-500 dark:bg-red-400 rounded-full animate-pulse shadow-lg shadow-red-500/50" />
-                  <span className="flex-1 font-medium">{event.eventType.replace(/_/g, ' ')}</span>
-                  <span className={`${colors.text.muted} text-[10px]`}>
+              {participant.recentCheatingEvents.slice(0, 3).map((event: { id: string; eventType: string; description?: string | null; createdAt: string }) => (
+                <div key={event.id} className="text-xs text-red-700 dark:text-red-100 flex items-start gap-2 bg-red-50 dark:bg-red-500/20 border border-red-300 dark:border-red-500/40 rounded-lg px-3 py-2 shadow-lg shadow-red-100 dark:shadow-red-500/10">
+                  <span className="w-2 h-2 mt-0.5 shrink-0 bg-red-500 dark:bg-red-400 rounded-full animate-pulse shadow-lg shadow-red-500/50" />
+                  <span className="flex-1 min-w-0">
+                    <span className="font-semibold block">{CHEATING_EVENT_LABELS[event.eventType] ?? event.eventType.replace(/_/g, ' ')}</span>
+                    {event.description && (
+                      <span className="text-red-600/80 dark:text-red-300/80 font-normal">{event.description}</span>
+                    )}
+                  </span>
+                  <span className={`${colors.text.muted} text-[10px] shrink-0`}>
                     {formatDistanceToNow(new Date(event.createdAt), { addSuffix: true, locale: it })}
                   </span>
                 </div>

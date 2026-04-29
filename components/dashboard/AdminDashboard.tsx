@@ -81,8 +81,10 @@ export function AdminDashboard({ userName }: AdminDashboardProps) {
   // Fetch calendar events for the next month
   const dateRange = useMemo(() => {
     const start = new Date();
+    start.setHours(0, 0, 0, 0);
     const end = new Date();
     end.setDate(end.getDate() + 30);
+    end.setHours(23, 59, 59, 999);
     return { start, end };
   }, []);
 

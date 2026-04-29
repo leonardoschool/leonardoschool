@@ -20,7 +20,6 @@ import {
   Send,
   XCircle,
   Clock,
-  Star,
   Tag,
   BookOpen,
   AlertCircle,
@@ -331,7 +330,10 @@ export default function DettaglioDomandaPage() {
           {/* Keywords (for open text) */}
           {question.type === 'OPEN_TEXT' && question.keywords && question.keywords.length > 0 && (
             <div className={`${colors.background.card} rounded-xl p-6 ${colors.effects.shadow.sm}`}>
-              <h3 className={`font-semibold ${colors.text.primary} mb-4`}>Keywords di validazione</h3>
+              <h3 className={`font-semibold ${colors.text.primary} mb-1`}>Keywords di validazione</h3>
+              <p className={`text-xs ${colors.text.muted} mb-4`}>
+                Lo studente deve scrivere almeno una di queste keywords (alternative tra loro).
+              </p>
               <p className={`text-sm ${colors.text.muted} mb-4`}>
                 Tipo di validazione: {openValidationTypeLabels[question.openValidationType as keyof typeof openValidationTypeLabels] || 'Manuale'}
               </p>
@@ -339,17 +341,9 @@ export default function DettaglioDomandaPage() {
                 {question.keywords.map((keyword) => (
                   <span
                     key={keyword.id}
-                    className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm ${
-                      keyword.isRequired
-                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                        : `${colors.background.tertiary} ${colors.text.secondary}`
-                    }`}
+                    className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm ${colors.background.tertiary} ${colors.text.secondary}`}
                   >
                     {keyword.keyword}
-                    <span className={`text-xs ${colors.text.muted}`}>
-                      ({keyword.weight})
-                    </span>
-                    {keyword.isRequired && <Star className="w-3 h-3" />}
                   </span>
                 ))}
               </div>

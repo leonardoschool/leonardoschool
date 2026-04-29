@@ -771,9 +771,10 @@ describe('Simulations Router', () => {
   });
 
   // ==================== autoScoreOpenAnswer Tests ====================
-  describe('autoScoreOpenAnswer (keyword matching)', () => {
+  describe('autoScoreOpenAnswer (keyword matching - OR logic)', () => {
     /**
-     * Tests for automatic scoring of open-ended answers based on keywords
+     * Keywords are alternatives: matching ANY ONE is enough for a correct answer (score = 1.0).
+     * Matching none gives score = 0. Weights no longer affect scoring.
      */
 
     describe('keyword matching', () => {
@@ -791,32 +792,41 @@ describe('Simulations Router', () => {
         expect(matched).toHaveLength(2);
       });
 
-      it('should calculate weighted score correctly', () => {
+      it('should give full score (1.0) when at least one keyword matches (OR logic)', () => {
         const keywords = [
-          { keyword: 'fotosintesi', weight: 0.5, isRequired: true },
-          { keyword: 'clorofilla', weight: 0.3, isRequired: false },
-          { keyword: 'ossigeno', weight: 0.2, isRequired: false },
+          { keyword: 'fotosintesi', weight: 1, isRequired: false },
+          { keyword: 'clorofilla', weight: 1, isRequired: false },
+          { keyword: 'ossigeno', weight: 1, isRequired: false },
         ];
         
-        const answerText = 'La fotosintesi produce ossigeno';
-        const matched: string[] = [];
-        let matchedWeight = 0;
-        let totalWeight = 0;
+        // Only one keyword present — should still be fully correct
+        const answerText = 'La fotosintesi avviene nelle cellule vegetali';
+        const matched = keywords.filter(kw =>
+          answerText.toLowerCase().includes(kw.keyword.toLowerCase())
+        );
+
+        // OR logic: ≥1 match → full score
+        const autoScore = matched.length > 0 ? 1.0 : 0.0;
         
-        keywords.forEach(kw => {
-          totalWeight += kw.weight;
-          if (answerText.toLowerCase().includes(kw.keyword.toLowerCase())) {
-            matched.push(kw.keyword);
-            matchedWeight += kw.weight;
-          }
-        });
+        expect(matched.length).toBeGreaterThan(0);
+        expect(autoScore).toBe(1.0);
+      });
+
+      it('should give score 0 when no keyword matches', () => {
+        const keywords = [
+          { keyword: 'fotosintesi', weight: 1, isRequired: false },
+          { keyword: 'clorofilla', weight: 1, isRequired: false },
+        ];
         
-        const score = totalWeight > 0 ? matchedWeight / totalWeight : null;
+        const answerText = 'La cellula produce energia per la vita';
+        const matched = keywords.filter(kw =>
+          answerText.toLowerCase().includes(kw.keyword.toLowerCase())
+        );
+
+        const autoScore = matched.length > 0 ? 1.0 : 0.0;
         
-        expect(matched).toEqual(['fotosintesi', 'ossigeno']);
-        expect(matchedWeight).toBe(0.7); // 0.5 + 0.2
-        expect(totalWeight).toBe(1.0);
-        expect(score).toBe(0.7);
+        expect(matched).toHaveLength(0);
+        expect(autoScore).toBe(0.0);
       });
 
       it('should return null score if no keywords provided', () => {
@@ -826,19 +836,22 @@ describe('Simulations Router', () => {
         expect(score).toBeNull();
       });
 
-      it('should handle required keywords', () => {
-        const _keywords = [
-          { keyword: 'mitocondrio', weight: 1, isRequired: true },
+      it('should treat all keywords as alternatives regardless of isRequired flag', () => {
+        const keywords = [
+          { keyword: 'H2O', weight: 1, isRequired: false },
+          { keyword: 'H₂O', weight: 1, isRequired: false },
         ];
         
-        const answerWithoutRequired = 'La cellula produce energia';
-        const answerWithRequired = 'Il mitocondrio produce energia';
-        
-        const hasRequired1 = answerWithoutRequired.toLowerCase().includes('mitocondrio');
-        const hasRequired2 = answerWithRequired.toLowerCase().includes('mitocondrio');
-        
-        expect(hasRequired1).toBe(false);
-        expect(hasRequired2).toBe(true);
+        // Student writes the second alternative — should be correct
+        const answerText = 'La formula dell\'acqua è H₂O';
+        const matched = keywords.filter(kw =>
+          answerText.toLowerCase().includes(kw.keyword.toLowerCase())
+        );
+
+        const autoScore = matched.length > 0 ? 1.0 : 0.0;
+
+        expect(matched).toHaveLength(1);
+        expect(autoScore).toBe(1.0);
       });
     });
 
@@ -872,26 +885,19 @@ describe('Simulations Router', () => {
         expect(isMatched).toBe(true);
       });
 
-      it('should calculate score as 1.0 for all keywords matched', () => {
+      it('should give score 1.0 when all keywords match', () => {
         const keywords = [
           { keyword: 'parola1', weight: 0.5, isRequired: false },
           { keyword: 'parola2', weight: 0.5, isRequired: false },
         ];
         const answerText = 'parola1 e parola2';
         
-        let matchedWeight = 0;
-        let totalWeight = 0;
+        const matched = keywords.filter(kw =>
+          answerText.toLowerCase().includes(kw.keyword.toLowerCase())
+        );
+        const autoScore = matched.length > 0 ? 1.0 : 0.0;
         
-        keywords.forEach(kw => {
-          totalWeight += kw.weight;
-          if (answerText.toLowerCase().includes(kw.keyword.toLowerCase())) {
-            matchedWeight += kw.weight;
-          }
-        });
-        
-        const score = matchedWeight / totalWeight;
-        
-        expect(score).toBe(1.0);
+        expect(autoScore).toBe(1.0);
       });
     });
   });

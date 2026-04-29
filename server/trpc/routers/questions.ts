@@ -348,7 +348,10 @@ function normalizeDistributionTotal(
  */
 function buildSmartRandomBaseWhere(
   excludeQuestionIds?: string[],
-  tagIds?: string[]
+  tagIds?: string[],
+  type?: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT',
+  topicIds?: string[],
+  subTopicIds?: string[]
 ): Record<string, unknown> {
   const baseWhere: Record<string, unknown> = {
     status: 'PUBLISHED',
@@ -364,6 +367,18 @@ function buildSmartRandomBaseWhere(
         tagId: { in: tagIds },
       },
     };
+  }
+
+  if (type) {
+    baseWhere.type = type;
+  }
+
+  if (topicIds && topicIds.length > 0) {
+    baseWhere.topicId = { in: topicIds };
+  }
+
+  if (subTopicIds && subTopicIds.length > 0) {
+    baseWhere.subTopicId = { in: subTopicIds };
   }
 
   return baseWhere;
@@ -698,7 +713,7 @@ export const questionsRouter = router({
   getQuestions: staffProcedure
     .input(questionFilterSchema)
     .query(async ({ ctx, input }) => {
-      const { page, pageSize, sortBy, sortOrder, includeAnswers } = input;
+      const { page, pageSize, sortBy, sortOrder } = input;
 
       // Build where clause using helpers
       const where = buildQuestionBasicFilters(input);
@@ -737,9 +752,12 @@ export const questionsRouter = router({
           createdBy: {
             select: { id: true, name: true, role: true },
           },
-          answers: includeAnswers ? {
+          answers: {
             orderBy: { order: 'asc' },
-          } : false,
+          },
+          keywords: {
+            select: { keyword: true },
+          },
           questionTags: {
             include: {
               tag: {
@@ -766,6 +784,78 @@ export const questionsRouter = router({
           total,
           totalPages: Math.ceil(total / pageSize),
         },
+      };
+    }),
+
+  /**
+   * Pick N random questions matching given filters.
+   * Used to bulk-fill a simulation section with auto-selected questions.
+   * Excludes already-selected question IDs to avoid duplicates.
+   */
+  pickRandomForSection: staffProcedure
+    .input(
+      z.object({
+        count: z.number().int().min(1).max(200),
+        subjectId: z.string().optional(),
+        type: z.enum(['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'OPEN_TEXT']).optional(),
+        topicIds: z.array(z.string()).optional(),
+        subTopicIds: z.array(z.string()).optional(),
+        difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']).optional(),
+        tagIds: z.array(z.string()).optional(),
+        excludeQuestionIds: z.array(z.string()).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const where: Record<string, unknown> = {
+        status: 'PUBLISHED',
+      };
+
+      if (input.subjectId) where.subjectId = input.subjectId;
+      if (input.type) where.type = input.type;
+      if (input.difficulty) where.difficulty = input.difficulty;
+      if (input.topicIds && input.topicIds.length > 0) {
+        where.topicId = { in: input.topicIds };
+      }
+      if (input.subTopicIds && input.subTopicIds.length > 0) {
+        where.subTopicId = { in: input.subTopicIds };
+      }
+      if (input.excludeQuestionIds && input.excludeQuestionIds.length > 0) {
+        where.id = { notIn: input.excludeQuestionIds };
+      }
+      if (input.tagIds && input.tagIds.length > 0) {
+        where.questionTags = {
+          some: { tagId: { in: input.tagIds } },
+        };
+      }
+
+      // Fetch only IDs first to keep payload small, then shuffle and slice
+      const candidates = await ctx.prisma.question.findMany({
+        where,
+        select: { id: true },
+      });
+
+      const pickedIds = secureShuffleArray(candidates.map((q) => q.id)).slice(
+        0,
+        input.count
+      );
+
+      if (pickedIds.length === 0) {
+        return { questions: [], requested: input.count, found: 0 };
+      }
+
+      const questions = await ctx.prisma.question.findMany({
+        where: { id: { in: pickedIds } },
+        include: {
+          subject: { select: { id: true, name: true, color: true } },
+          topic: { select: { id: true, name: true } },
+          subTopic: { select: { id: true, name: true } },
+        },
+      });
+
+      return {
+        questions,
+        requested: input.count,
+        found: questions.length,
       };
     }),
 
@@ -2271,6 +2361,9 @@ export const questionsRouter = router({
         maximizeTopicCoverage,
         preferRecentQuestions,
         tagIds,
+        type,
+        topicIds,
+        subTopicIds,
         excludeQuestionIds,
       } = input;
 
@@ -2307,7 +2400,13 @@ export const questionsRouter = router({
       const difficultyRatios = getDifficultyRatios(difficultyMix);
 
       // Step 4: Build base query for available questions using helper
-      const baseWhere = buildSmartRandomBaseWhere(excludeQuestionIds, tagIds);
+      const baseWhere = buildSmartRandomBaseWhere(
+        excludeQuestionIds ?? undefined,
+        tagIds ?? undefined,
+        type ?? undefined,
+        topicIds ?? undefined,
+        subTopicIds ?? undefined,
+      );
 
       // Build selection config
       const selectionConfig: SelectionConfig = {

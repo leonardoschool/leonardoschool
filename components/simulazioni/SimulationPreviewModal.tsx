@@ -3,8 +3,8 @@
 import { useState, useMemo } from 'react';
 import Image from 'next/image';
 import { colors } from '@/lib/theme/colors';
-import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
+import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import {
   X,
   ChevronLeft,
@@ -467,9 +467,9 @@ export default function SimulationPreviewModal({
 
                         {/* Question Text */}
                         <div className="mb-8">
-                          <div
+                          <RichTextRenderer
+                            text={currentQuestion.text}
                             className={`text-lg leading-relaxed prose dark:prose-invert max-w-none ${colors.text.primary}`}
-                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentQuestion.text) }}
                           />
                           {currentQuestion.textLatex && (
                             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -527,9 +527,9 @@ export default function SimulationPreviewModal({
                                         />
                                       </div>
                                     )}
-                                    <span
+                                    <RichTextRenderer
+                                      text={answer.text}
                                       className={`text-base ${isSelected ? colors.primary.text : colors.text.primary}`}
-                                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.text) }}
                                     />
                                   </div>
                                 </button>
@@ -715,9 +715,9 @@ export default function SimulationPreviewModal({
                               />
                             </div>
                           )}
-                          <div
+                          <RichTextRenderer
+                            text={currentQuestion.text}
                             className={`prose prose-sm max-w-none ${colors.text.primary}`}
-                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentQuestion.text) }}
                           />
                           {currentQuestion.textLatex && (
                             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -775,9 +775,9 @@ export default function SimulationPreviewModal({
                                         />
                                       </div>
                                     )}
-                                    <div
-                                      className={`${colors.text.primary}`}
-                                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.text) }}
+                                    <RichTextRenderer
+                                      text={answer.text}
+                                      className={colors.text.primary}
                                     />
                                   </div>
                                 </button>

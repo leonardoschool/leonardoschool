@@ -346,7 +346,7 @@ export default function ReviewResultPage() {
                     {oa.keywordsMissed.length > 0 && (
                       <div>
                         <span className={`text-xs font-medium ${colors.text.muted}`}>
-                          Keywords mancanti (required):
+                          Keywords non trovate:
                         </span>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {oa.keywordsMissed.map((kw, i) => (

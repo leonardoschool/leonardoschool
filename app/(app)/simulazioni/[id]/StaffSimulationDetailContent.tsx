@@ -3,11 +3,11 @@
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
-import { stripHtml } from '@/lib/utils/sanitizeHtml';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { PageLoader, Spinner } from '@/components/ui/loaders';
 import ConfirmModal from '@/components/ui/ConfirmModal';
+import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -24,6 +24,10 @@ import {
   AlertCircle,
   Clock,
   Printer,
+  User,
+  Users,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import type { SimulationType, SimulationStatus } from '@/lib/validations/simulationValidation';
 
@@ -49,6 +53,31 @@ const statusColors: Record<SimulationStatus, string> = {
   ARCHIVED: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
 };
 
+interface DetailSection {
+  id: string;
+  name: string;
+  durationMinutes: number;
+  questionIds: string[];
+  subjectId?: string | null;
+  order: number;
+}
+
+function parseDetailSections(rawSections: unknown): DetailSection[] {
+  if (!Array.isArray(rawSections)) return [];
+
+  return rawSections.map((rawSection, index) => {
+    const section = rawSection as Partial<DetailSection>;
+    return {
+      id: section.id || `section-${index}`,
+      name: section.name || `Sezione ${index + 1}`,
+      durationMinutes: section.durationMinutes || 0,
+      questionIds: Array.isArray(section.questionIds) ? section.questionIds : [],
+      subjectId: section.subjectId ?? null,
+      order: section.order ?? index,
+    };
+  }).sort((a, b) => a.order - b.order);
+}
+
 interface StaffSimulationDetailContentProps {
   id: string;
   role: 'ADMIN' | 'COLLABORATOR';
@@ -65,6 +94,19 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [forceDeleteConfirm, setForceDeleteConfirm] = useState<{ resultsCount: number } | null>(null);
   const [archiveConfirm, setArchiveConfirm] = useState(false);
+  const [expandedPreviews, setExpandedPreviews] = useState<Set<string>>(new Set());
+
+  const togglePreview = (questionId: string) => {
+    setExpandedPreviews((prev) => {
+      const next = new Set(prev);
+      if (next.has(questionId)) {
+        next.delete(questionId);
+      } else {
+        next.add(questionId);
+      }
+      return next;
+    });
+  };
 
   // Fetch simulation
   const { data: simulation, isLoading } = trpc.simulations.getSimulation.useQuery({ id });
@@ -508,6 +550,110 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
     );
   }
 
+  type DetailQuestion = typeof simulation.questions[number];
+  const detailSections = parseDetailSections(simulation.sections);
+  const shouldGroupQuestions = simulation.hasSections && detailSections.length > 0;
+  const questionEntries = simulation.questions.map((question, index) => ({ question, index }));
+  const questionsById = new Map<string, { question: DetailQuestion; index: number }>(
+    questionEntries.map((entry) => [entry.question.questionId, entry])
+  );
+  const sectionGroups = detailSections.map((section) => ({
+    section,
+    entries: section.questionIds
+      .map((questionId) => questionsById.get(questionId))
+      .filter((entry): entry is { question: DetailQuestion; index: number } => Boolean(entry)),
+  }));
+  const groupedQuestionIds = new Set(
+    sectionGroups.flatMap((group) => group.entries.map((entry) => entry.question.questionId))
+  );
+  const ungroupedEntries = shouldGroupQuestions
+    ? questionEntries.filter((entry) => !groupedQuestionIds.has(entry.question.questionId))
+    : [];
+
+  const renderQuestionRow = ({ question: sq, index }: { question: DetailQuestion; index: number }) => {
+    const isExpanded = expandedPreviews.has(sq.questionId);
+    const isChoiceType = sq.question.type === 'SINGLE_CHOICE' || sq.question.type === 'MULTIPLE_CHOICE';
+    const correctAnswers = isChoiceType ? sq.question.answers.filter((a) => a.isCorrect) : [];
+    const hasPreview = isChoiceType ? correctAnswers.length > 0 : sq.question.keywords.length > 0;
+
+    return (
+      <div
+        key={sq.id}
+        className={`px-4 sm:px-6 py-3 sm:py-4 border-b ${colors.border.light} last:border-b-0 ${colors.background.hover}`}
+      >
+        <div className="flex items-start gap-3 sm:gap-4">
+          <span className={`w-7 h-7 sm:w-8 sm:h-8 flex-shrink-0 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs sm:text-sm font-medium ${colors.text.primary}`}>
+            {index + 1}
+          </span>
+          <div className="flex-1 min-w-0">
+            <RichTextRenderer
+              text={sq.question.text}
+              className={`text-sm ${colors.text.primary} line-clamp-2 leading-relaxed`}
+            />
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-2">
+              {sq.question.subject && (
+                <span
+                  className="px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap"
+                  style={{ backgroundColor: sq.question.subject.color + '20', color: sq.question.subject.color }}
+                >
+                  {sq.question.subject.name}
+                </span>
+              )}
+              {sq.question.topic && (
+                <span className={`text-xs ${colors.text.muted} truncate`}>{sq.question.topic.name}</span>
+              )}
+            </div>
+            {/* Answer/keyword preview */}
+            {isExpanded && hasPreview && (
+              <div className={`mt-2 p-2 rounded-lg ${
+                isChoiceType
+                  ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+                  : `${colors.background.secondary} border ${colors.border.light}`
+              }`}>
+                {isChoiceType ? (
+                  <>
+                    <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">
+                      {sq.question.type === 'MULTIPLE_CHOICE' ? 'Risposte corrette:' : 'Risposta corretta:'}
+                    </p>
+                    <div className="space-y-0.5">
+                      {correctAnswers.map((a) => (
+                        <p key={a.id} className="text-xs text-green-700 dark:text-green-300">{a.text}</p>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className={`text-xs font-medium ${colors.text.muted} mb-1`}>Keywords:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {sq.question.keywords.map((kw, i) => (
+                        <span key={i} className={`text-xs px-2 py-0.5 rounded-full ${colors.background.tertiary} ${colors.text.tertiary}`}>
+                          {kw.keyword}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          {hasPreview && (
+            <button
+              onClick={() => togglePreview(sq.questionId)}
+              className={`p-1.5 rounded-lg transition-colors flex-shrink-0 mt-0.5 ${
+                isExpanded
+                  ? `${colors.primary.bg} text-white`
+                  : `${colors.background.secondary} ${colors.text.muted} hover:${colors.text.secondary}`
+              }`}
+              title={isExpanded ? 'Nascondi risposta' : 'Mostra risposta'}
+            >
+              {isExpanded ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
@@ -626,36 +772,57 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
               </Link>
             </div>
             <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 400px)' }}>
-              {simulation.questions.map((sq, index) => (
-                <div
-                  key={sq.id}
-                  className={`px-4 sm:px-6 py-3 sm:py-4 border-b ${colors.border.light} last:border-b-0 ${colors.background.hover}`}
-                >
-                  <div className="flex items-start gap-3 sm:gap-4">
-                    <span className={`w-7 h-7 sm:w-8 sm:h-8 flex-shrink-0 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs sm:text-sm font-medium ${colors.text.primary}`}>
-                      {index + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm ${colors.text.primary} line-clamp-2 leading-relaxed`}>
-                        {stripHtml(sq.question.text)}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-2">
-                        {sq.question.subject && (
-                          <span 
-                            className="px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap"
-                            style={{ backgroundColor: sq.question.subject.color + '20', color: sq.question.subject.color }}
-                          >
-                            {sq.question.subject.name}
-                          </span>
-                        )}
-                        {sq.question.topic && (
-                          <span className={`text-xs ${colors.text.muted} truncate`}>{sq.question.topic.name}</span>
-                        )}
+              {shouldGroupQuestions ? (
+                <div>
+                  {sectionGroups.map(({ section, entries }) => (
+                    <div key={section.id}>
+                      <div className={`sticky top-0 z-10 px-4 sm:px-6 py-3 ${colors.background.secondary} border-b ${colors.border.light}`}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className={`w-1.5 h-8 rounded-full ${colors.primary.bg} flex-shrink-0`} />
+                            <div className="min-w-0">
+                              <h3 className={`font-semibold ${colors.text.primary} truncate`}>{section.name}</h3>
+                              <p className={`text-xs ${colors.text.muted}`}>
+                                {entries.length} {entries.length === 1 ? 'domanda' : 'domande'}
+                              </p>
+                            </div>
+                          </div>
+                          {section.durationMinutes > 0 && (
+                            <span className={`text-xs px-2 py-1 rounded-full ${colors.background.card} ${colors.text.muted} border ${colors.border.light} whitespace-nowrap`}>
+                              {section.durationMinutes} min
+                            </span>
+                          )}
+                        </div>
                       </div>
+                      {entries.length > 0 ? (
+                        entries.map(renderQuestionRow)
+                      ) : (
+                        <div className={`px-4 sm:px-6 py-4 border-b ${colors.border.light}`}>
+                          <p className={`text-sm ${colors.text.muted}`}>Nessuna domanda in questa sezione</p>
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  ))}
+                  {ungroupedEntries.length > 0 && (
+                    <div>
+                      <div className="sticky top-0 z-10 px-4 sm:px-6 py-3 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
+                        <div className="flex items-center gap-3">
+                          <span className="w-1.5 h-8 rounded-full bg-amber-500 flex-shrink-0" />
+                          <div>
+                            <h3 className="font-semibold text-amber-700 dark:text-amber-300">Senza sezione</h3>
+                            <p className="text-xs text-amber-700/80 dark:text-amber-300/80">
+                              {ungroupedEntries.length} {ungroupedEntries.length === 1 ? 'domanda' : 'domande'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      {ungroupedEntries.map(renderQuestionRow)}
+                    </div>
+                  )}
                 </div>
-              ))}
+              ) : (
+                simulation.questions.map((question, index) => renderQuestionRow({ question, index }))
+              )}
             </div>
           </div>
 
@@ -734,6 +901,26 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
                 <dd className={`font-semibold ${colors.text.primary}`}>{formatDuration(simulation.durationMinutes)}</dd>
               </div>
             </dl>
+          </div>
+
+          {/* Source Template */}
+          <div className={`p-6 rounded-xl ${colors.background.card} border ${colors.border.light}`}>
+            <h2 className={`text-lg font-semibold ${colors.text.primary} mb-4`}>Template</h2>
+            {simulation.sourceTemplate ? (
+              <div className="space-y-3">
+                <div>
+                  <p className={`font-medium ${colors.text.primary}`}>{simulation.sourceTemplate.title}</p>
+                  <p className={`text-sm ${colors.text.muted}`}>
+                    {simulation.sourceTemplate.totalQuestions} domande • {formatDuration(simulation.sourceTemplate.durationMinutes)}
+                  </p>
+                </div>
+                <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${statusColors[simulation.sourceTemplate.status as SimulationStatus] || statusColors.DRAFT}`}>
+                  {statusLabels[simulation.sourceTemplate.status as SimulationStatus] || simulation.sourceTemplate.status}
+                </span>
+              </div>
+            ) : (
+              <p className={`text-sm ${colors.text.muted}`}>Nessun template associato</p>
+            )}
           </div>
 
           {/* Configuration */}
@@ -818,27 +1005,66 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
               {/* Group assignments by type */}
               {(() => {
                 const groupAssignments = simulation.assignments.filter(a => a.group);
+                const studentAssignments = simulation.assignments.filter(a => a.student);
 
                 return (
                   <div className="space-y-4">
+                    {/* Students */}
+                    {studentAssignments.length > 0 && (
+                      <div>
+                        <h4 className={`text-xs font-medium ${colors.text.muted} uppercase mb-2 flex items-center gap-1.5`}>
+                          <User className="w-3.5 h-3.5" />
+                          Studenti ({studentAssignments.length})
+                        </h4>
+                        <div className="space-y-2">
+                          {studentAssignments.map((assignment) => (
+                            <div
+                              key={assignment.id}
+                              className={`p-3 rounded-lg ${colors.background.secondary} border ${colors.border.light}`}
+                            >
+                              <p className={`text-sm font-medium ${colors.text.primary}`}>
+                                {assignment.student?.user?.name || assignment.student?.user?.email || 'Studente'}
+                              </p>
+                              {assignment.student?.user?.email && (
+                                <p className={`text-xs ${colors.text.muted}`}>{assignment.student.user.email}</p>
+                              )}
+                              <div className={`mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs ${colors.text.muted}`}>
+                                {assignment.assignedBy?.name && <span>Assegnata da {assignment.assignedBy.name}</span>}
+                                {assignment.dueDate && <span>Scadenza {formatDate(assignment.dueDate)}</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Groups */}
                     {groupAssignments.length > 0 && (
                       <div>
-                        <h4 className={`text-xs font-medium ${colors.text.muted} uppercase mb-2`}>
+                        <h4 className={`text-xs font-medium ${colors.text.muted} uppercase mb-2 flex items-center gap-1.5`}>
+                          <Users className="w-3.5 h-3.5" />
                           Gruppi ({groupAssignments.length})
                         </h4>
-                        <div className="flex flex-wrap gap-2">
-                          {groupAssignments.map((a) => (
-                            <span
-                              key={a.id}
-                              className="px-2 py-1 rounded-full text-xs font-medium"
-                              style={{
-                                backgroundColor: (a.group?.color || '#6B7280') + '20',
-                                color: a.group?.color || '#6B7280',
-                              }}
+                        <div className="space-y-2">
+                          {groupAssignments.map((assignment) => (
+                            <div
+                              key={assignment.id}
+                              className={`p-3 rounded-lg ${colors.background.secondary} border ${colors.border.light}`}
                             >
-                              {a.group?.name}
-                            </span>
+                              <span
+                                className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${assignment.group?.color ? '' : `${colors.background.tertiary} ${colors.text.secondary}`}`}
+                                style={assignment.group?.color ? {
+                                  backgroundColor: `${assignment.group.color}20`,
+                                  color: assignment.group.color,
+                                } : undefined}
+                              >
+                                {assignment.group?.name || 'Gruppo'}
+                              </span>
+                              <div className={`mt-2 flex flex-wrap gap-x-2 gap-y-1 text-xs ${colors.text.muted}`}>
+                                {assignment.assignedBy?.name && <span>Assegnata da {assignment.assignedBy.name}</span>}
+                                {assignment.dueDate && <span>Scadenza {formatDate(assignment.dueDate)}</span>}
+                              </div>
+                            </div>
                           ))}
                         </div>
                       </div>

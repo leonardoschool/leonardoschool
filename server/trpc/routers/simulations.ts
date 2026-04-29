@@ -19,6 +19,7 @@ import * as notificationService from '@/server/services/notificationService';
 import { notifications } from '@/lib/notifications/notificationHelpers';
 import { createLogger } from '@/lib/utils/logger';
 import { stripHtml } from '@/lib/utils/sanitizeHtml';
+import { sanitizeStudentAnswerText } from '@/lib/utils/studentOpenAnswer';
 import { secureShuffleArray } from '@/lib/utils';
 
 const log = createLogger('Simulations');
@@ -310,7 +311,12 @@ async function validateCollaboratorAssignments(
 
   // Get groups managed by this collaborator
   const collaboratorGroups = await prisma.group.findMany({
-    where: { referenceCollaboratorId: collaboratorId },
+    where: {
+      OR: [
+        { referenceCollaboratorId: collaboratorId },
+        { referenceCollaborators: { some: { collaboratorId } } },
+      ],
+    },
     select: { id: true },
   });
   const allowedGroupIds = new Set(collaboratorGroups.map(g => g.id));
@@ -966,7 +972,11 @@ function calculateSubmissionScores(
 }
 
 /**
- * Auto-score an open text answer against keywords
+ * Auto-score an open text answer against keywords.
+ *
+ * Keywords are treated as alternatives: the student must match AT LEAST ONE
+ * keyword to receive full marks. Matching any single keyword is sufficient
+ * for a correct answer (autoScore = 1.0). Matching none gives autoScore = 0.
  */
 function autoScoreOpenAnswer(
   answerText: string,
@@ -979,21 +989,20 @@ function autoScoreOpenAnswer(
   const answerLower = answerText.toLowerCase();
   const keywordsMatched: string[] = [];
   const keywordsMissed: string[] = [];
-  let matchedWeight = 0;
-  let totalWeight = 0;
 
   for (const kw of keywords) {
-    totalWeight += kw.weight;
     if (answerLower.includes(kw.keyword.toLowerCase())) {
       keywordsMatched.push(kw.keyword);
-      matchedWeight += kw.weight;
-    } else if (kw.isRequired) {
+    } else {
       keywordsMissed.push(kw.keyword);
     }
   }
 
+  // OR logic: at least one keyword matched → full score; none matched → zero
+  const autoScore = keywordsMatched.length > 0 ? 1.0 : 0.0;
+
   return {
-    autoScore: totalWeight > 0 ? matchedWeight / totalWeight : null,
+    autoScore,
     keywordsMatched,
     keywordsMissed,
   };
@@ -1803,6 +1812,7 @@ export const simulationsRouter = router({
                   subject: { select: { id: true, name: true, code: true, color: true } },
                   topic: { select: { id: true, name: true } },
                   answers: { orderBy: { order: 'asc' } },
+                  keywords: { select: { keyword: true } },
                 },
               },
             },
@@ -1814,6 +1824,15 @@ export const simulationsRouter = router({
               },
               group: { select: { id: true, name: true, color: true } },
               assignedBy: { select: { id: true, name: true } },
+            },
+          },
+          sourceTemplate: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              totalQuestions: true,
+              durationMinutes: true,
             },
           },
           results: {
@@ -1908,6 +1927,7 @@ export const simulationsRouter = router({
           hasSections: simulationData.hasSections ?? false,
           sections: sectionsData ?? undefined,
           isScheduled: simulationData.isScheduled ?? false,
+          ...(simulationData.sourceTemplateId ? { sourceTemplate: { connect: { id: simulationData.sourceTemplateId } } } : {}),
           enableAntiCheat: simulationData.enableAntiCheat ?? false,
           forceFullscreen: simulationData.forceFullscreen ?? false,
           blockTabChange: simulationData.blockTabChange ?? false,
@@ -1940,7 +1960,7 @@ export const simulationsRouter = router({
       });
 
       // Send notifications to assigned students (calendar event + email with .ics)
-      if (simulation.assignments.length > 0) {
+      if (assignments.length > 0) {
         // Fire and forget - don't block the response
         notifySimulationCreated(simulation.id, ctx.prisma).catch((error) => {
           console.error('[Simulations] Failed to send notifications:', error);
@@ -2114,7 +2134,7 @@ export const simulationsRouter = router({
   updateQuestions: adminProcedure
     .input(updateSimulationQuestionsSchema)
     .mutation(async ({ ctx, input }) => {
-      const { simulationId, questions, mode } = input;
+      const { simulationId, questions, mode, sections } = input;
 
       // Check simulation
       const existing = await ctx.prisma.simulation.findUnique({
@@ -2141,6 +2161,20 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Una o più domande non esistono' });
       }
 
+      const questionIdSet = new Set(questionIds);
+      const sanitizedSections = sections?.map((section, index) => {
+        const sectionQuestionIds = (section.questionIds || []).filter(questionId => questionIdSet.has(questionId));
+        return {
+          id: section.id,
+          name: section.name,
+          durationMinutes: section.durationMinutes,
+          questionIds: sectionQuestionIds,
+          questionCount: sectionQuestionIds.length,
+          subjectId: section.subjectId ?? null,
+          order: section.order ?? index,
+        };
+      });
+
       await ctx.prisma.$transaction(async () => {
         if (mode === 'replace') {
           // Delete all existing questions and add new ones
@@ -2156,7 +2190,10 @@ export const simulationsRouter = router({
           });
           await ctx.prisma.simulation.update({
             where: { id: simulationId },
-            data: { totalQuestions: questions.length },
+            data: {
+              totalQuestions: questions.length,
+              ...(sanitizedSections ? { sections: sanitizedSections } : {}),
+            },
           });
         } else if (mode === 'append') {
           // Get current max order
@@ -2181,7 +2218,10 @@ export const simulationsRouter = router({
           const newTotal = await ctx.prisma.simulationQuestion.count({ where: { simulationId } });
           await ctx.prisma.simulation.update({
             where: { id: simulationId },
-            data: { totalQuestions: newTotal },
+            data: {
+              totalQuestions: newTotal,
+              ...(sanitizedSections ? { sections: sanitizedSections } : {}),
+            },
           });
         } else if (mode === 'remove') {
           await ctx.prisma.simulationQuestion.deleteMany({
@@ -2194,7 +2234,10 @@ export const simulationsRouter = router({
           const newTotal = await ctx.prisma.simulationQuestion.count({ where: { simulationId } });
           await ctx.prisma.simulation.update({
             where: { id: simulationId },
-            data: { totalQuestions: newTotal },
+            data: {
+              totalQuestions: newTotal,
+              ...(sanitizedSections ? { sections: sanitizedSections } : {}),
+            },
           });
         }
       });
@@ -3308,6 +3351,10 @@ export const simulationsRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const { resultId, answers, timeSpent, sectionTimes, currentSectionIndex } = input;
+      const sanitizedAnswers = answers.map(answer => ({
+        ...answer,
+        answerText: sanitizeStudentAnswerText(answer.answerText),
+      }));
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
 
       const result = await ctx.prisma.simulationResult.findUnique({
@@ -3329,7 +3376,7 @@ export const simulationsRouter = router({
 
       // Prepare answers with section progress metadata
       const answersWithMeta = {
-        items: answers,
+        items: sanitizedAnswers,
         sectionTimes: sectionTimes || {},
         currentSectionIndex: currentSectionIndex ?? 0,
       };
@@ -3350,6 +3397,10 @@ export const simulationsRouter = router({
     .input(submitSimulationSchema)
     .mutation(async ({ ctx, input }) => {
       const { simulationId, answers, totalTimeSpent } = input;
+      const sanitizedAnswers = answers.map(answer => ({
+        ...answer,
+        answerText: sanitizeStudentAnswerText(answer.answerText),
+      }));
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
       const studentId = student.id;
 
@@ -3387,7 +3438,7 @@ export const simulationsRouter = router({
       // Calculate scores using helper
       const scoringResult = calculateSubmissionScores(
         simulation.questions as unknown as SimulationQuestionWithDetails[],
-        answers.map(a => ({ ...a, questionId: a.questionId ?? '' })),
+        sanitizedAnswers.map(a => ({ ...a, questionId: a.questionId ?? '' })),
         {
           useQuestionPoints: simulation.useQuestionPoints,
           correctPoints: simulation.correctPoints,
@@ -3423,7 +3474,7 @@ export const simulationsRouter = router({
       if (!simulation.showCorrectAnswers) {
         const openAnswersToCreate = buildOpenAnswerSubmissions(
           simulation.questions as unknown as SimulationQuestionWithDetails[],
-          answers.map(a => ({ ...a, questionId: a.questionId ?? '' })),
+          sanitizedAnswers.map(a => ({ ...a, questionId: a.questionId ?? '' })),
           studentId,
           result.id
         );
@@ -3928,9 +3979,15 @@ export const simulationsRouter = router({
       includeOpenQuestions: z.boolean().default(false),
       openQuestionCorrection: z.enum(['self', 'staff']).default('self'),
       requestCorrectionFromId: z.string().optional(),
+      // Scoring overrides (default 1 / 0 / 0). Allow any number to support templates like TOLC (1 / -0.25 / 0).
+      correctPoints: z.number().default(1),
+      wrongPoints: z.number().default(0),
+      blankPoints: z.number().default(0),
+      // Optional template label for analytics/debug, no business logic attached.
+      testTemplate: z.string().max(40).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { questionIds, durationMinutes, includeOpenQuestions, openQuestionCorrection, requestCorrectionFromId } = input;
+      const { questionIds, durationMinutes, includeOpenQuestions, openQuestionCorrection, requestCorrectionFromId, correctPoints, wrongPoints, blankPoints, testTemplate } = input;
 
       // Validate questions exist
       const questions = await ctx.prisma.question.findMany({
@@ -4012,6 +4069,8 @@ export const simulationsRouter = router({
         data: {
           title: `Autoesercitazione ${titleSubject} - ${new Date().toLocaleDateString('it-IT')}`,
           description: `Esercitazione autogenerata con ${finalQuestions.length} domande.${
+            testTemplate ? ` Template: ${testTemplate}.` : ''
+          }${
             openQuestionCorrection === 'staff' ? ' Correzione domande aperte richiesta a docente.' : ''
           }`,
           type: 'QUICK_QUIZ',
@@ -4027,9 +4086,9 @@ export const simulationsRouter = router({
           allowReview: true,
           randomizeOrder: true,
           randomizeAnswers: true,
-          correctPoints: 1,
-          wrongPoints: 0,
-          blankPoints: 0,
+          correctPoints,
+          wrongPoints,
+          blankPoints,
           isRepeatable: true,
           maxAttempts: null,
           questions: {

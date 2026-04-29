@@ -256,6 +256,7 @@ export default function AppHeader() {
                 src={`/images/logo-${effectiveLogoTheme}.png`}
                 alt="Leonardo School"
                 fill
+                sizes="10rem"
                 className="object-contain object-left"
                 priority
               />

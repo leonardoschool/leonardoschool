@@ -1,0 +1,109 @@
+rules_version = '2';
+
+// Firebase Storage security rules for Leonardo School.
+//
+// Path layout (mirrors lib/firebase/storage.ts):
+//   materials/PDF/{file}        - learning materials (PDF), max 50MB
+//   materials/DOCUMENT/{file}   - learning materials (DOC/DOCX/...), max 50MB
+//   materials/VIDEO/{file}      - learning materials (video), max 500MB
+//   students/avatars/{file}     - profile avatars (image), max 2MB
+//   questions/images/{file}     - question images (image), max 2MB
+//   cv/{file}                   - job application CVs (PDF/DOC/DOCX), max 5MB
+//   pdf/{type}/{file}           - generic generated PDFs, max 10MB
+//
+// Sizes are kept in sync with `MAX_MATERIAL_FILE_SIZES` and `MAX_FILE_SIZES`
+// in lib/validations/fileValidation.ts. If those change, update this file too.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ---------- helpers ----------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function isPdf() {
+      return request.resource.contentType == 'application/pdf';
+    }
+
+    function isOfficeDoc() {
+      return request.resource.contentType in [
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      ];
+    }
+
+    function isVideo() {
+      return request.resource.contentType.matches('video/.*');
+    }
+
+    function under(maxBytes) {
+      return request.resource.size > 0 && request.resource.size <= maxBytes;
+    }
+
+    // ---------- learning materials ----------
+    // Anyone signed in can read; only signed-in users can write.
+    // Authorization (admin/collaborator) is enforced server-side via tRPC;
+    // these rules act as the second line of defense (size + MIME).
+
+    match /materials/PDF/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isPdf() && under(50 * 1024 * 1024);
+      allow delete: if isSignedIn();
+    }
+
+    match /materials/DOCUMENT/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (isPdf() || isOfficeDoc()) && under(50 * 1024 * 1024);
+      allow delete: if isSignedIn();
+    }
+
+    match /materials/VIDEO/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isVideo() && under(500 * 1024 * 1024);
+      allow delete: if isSignedIn();
+    }
+
+    // ---------- avatars ----------
+    match /students/avatars/{fileName} {
+      allow read: if true; // public avatars
+      allow write: if isSignedIn() && isImage() && under(2 * 1024 * 1024);
+      allow delete: if isSignedIn();
+    }
+
+    // ---------- question images ----------
+    match /questions/images/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isImage() && under(2 * 1024 * 1024);
+      allow delete: if isSignedIn();
+    }
+
+    // ---------- job application CVs ----------
+    // CV uploads happen from the public "lavora-con-noi" form (unauthenticated),
+    // hence write is allowed without auth but tightly constrained on type/size.
+    // Reads are restricted to signed-in users (admin reviews via tRPC).
+    match /cv/{fileName} {
+      allow read: if isSignedIn();
+      allow create: if (isPdf() || isOfficeDoc()) && under(5 * 1024 * 1024);
+      allow update, delete: if isSignedIn();
+    }
+
+    // ---------- generic generated PDFs (contracts, exports, ...) ----------
+    match /pdf/{type}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isPdf() && under(10 * 1024 * 1024);
+      allow delete: if isSignedIn();
+    }
+
+    // Default deny.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

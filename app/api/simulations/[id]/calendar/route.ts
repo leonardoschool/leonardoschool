@@ -207,7 +207,10 @@ async function checkCollaboratorAccess(
   const managedGroup = await prisma.group.findFirst({
     where: {
       id: { in: groupIds },
-      referenceCollaboratorId: collaboratorId,
+      OR: [
+        { referenceCollaboratorId: collaboratorId },
+        { referenceCollaborators: { some: { collaboratorId } } },
+      ],
     },
   });
 

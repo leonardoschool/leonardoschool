@@ -11,6 +11,36 @@ export const MAX_FILE_SIZES = {
   SIGNATURE: 500 * 1024, // 500KB for signature images
 } as const;
 
+// Maximum file sizes for learning materials (per type)
+export const MAX_MATERIAL_FILE_SIZES = {
+  PDF: 50 * 1024 * 1024, // 50MB
+  DOCUMENT: 50 * 1024 * 1024, // 50MB
+  VIDEO: 500 * 1024 * 1024, // 500MB
+} as const;
+
+export type MaterialFileType = keyof typeof MAX_MATERIAL_FILE_SIZES;
+
+/**
+ * Validate a learning-material file against the per-type size limit.
+ * Returns null if valid, otherwise an Italian error message.
+ */
+export function validateMaterialFileSize(
+  file: { name: string; size: number },
+  type: MaterialFileType
+): string | null {
+  const max = MAX_MATERIAL_FILE_SIZES[type];
+  if (!max) return null;
+  if (file.size === 0) {
+    return `Il file "${file.name}" è vuoto.`;
+  }
+  if (file.size > max) {
+    const maxMB = Math.round((max / (1024 * 1024)) * 10) / 10;
+    const sizeMB = Math.round((file.size / (1024 * 1024)) * 10) / 10;
+    return `Il file "${file.name}" è troppo grande (${sizeMB}MB). Dimensione massima: ${maxMB}MB.`;
+  }
+  return null;
+}
+
 // Allowed MIME types by category
 export const ALLOWED_MIME_TYPES = {
   CV: [

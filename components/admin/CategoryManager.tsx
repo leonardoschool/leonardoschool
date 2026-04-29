@@ -7,6 +7,7 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { Spinner, ButtonLoader } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
+import * as LucideIcons from 'lucide-react';
 import {
   FolderPlus,
   Folder,
@@ -24,7 +25,50 @@ import {
   Minus,
   Eye,
   Search,
+  BookOpen,
+  Video,
+  Image as ImageIcon,
+  Library,
+  GraduationCap,
+  Archive,
+  Bookmark,
+  Star,
+  ExternalLink,
+  type LucideIcon,
 } from 'lucide-react';
+
+/** Resolve any Lucide icon by name. Falls back to Folder.
+ * Icons in lucide-react are React.forwardRef objects (typeof === 'object'), not functions. */
+function getLucideIcon(name: string): LucideIcon {
+  if (!name) return Folder;
+  const iconsMap = LucideIcons as Record<string, unknown>;
+
+  const isValidIcon = (v: unknown): v is LucideIcon =>
+    v != null && (typeof v === 'function' || (typeof v === 'object' && '$$typeof' in (v as object)));
+
+  // Try exact match (user typed PascalCase like "Dna" or "BookOpen")
+  if (isValidIcon(iconsMap[name])) return iconsMap[name] as LucideIcon;
+  // Try capitalizing first letter (e.g. "dna" → "Dna")
+  const pascal = name.charAt(0).toUpperCase() + name.slice(1);
+  if (isValidIcon(iconsMap[pascal])) return iconsMap[pascal] as LucideIcon;
+
+  return Folder;
+}
+
+// Curated subset of Lucide icons available as quick-pick suggestions for folders
+const CATEGORY_ICON_SUGGESTIONS: { name: string; Icon: LucideIcon }[] = [
+  { name: 'Folder', Icon: Folder },
+  { name: 'FolderPlus', Icon: FolderPlus },
+  { name: 'BookOpen', Icon: BookOpen },
+  { name: 'FileText', Icon: FileText },
+  { name: 'Video', Icon: Video },
+  { name: 'Image', Icon: ImageIcon },
+  { name: 'Library', Icon: Library },
+  { name: 'GraduationCap', Icon: GraduationCap },
+  { name: 'Archive', Icon: Archive },
+  { name: 'Bookmark', Icon: Bookmark },
+  { name: 'Star', Icon: Star },
+];
 
 // ==================== TYPES ====================
 
@@ -396,15 +440,61 @@ export default function CategoryManager({ onClose: _onClose, role = 'ADMIN' }: C
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Icona (nome Lucide)
+                  Icona
                 </label>
-                <input
-                  type="text"
-                  value={categoryFormData.icon}
-                  onChange={(e) => setCategoryFormData({ ...categoryFormData, icon: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="es. BookOpen, Video, FileText"
-                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                  Scegli un&apos;icona dalla libreria{' '}
+                  <a
+                    href="https://lucide.dev/icons"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-0.5 text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >
+                    Lucide <ExternalLink className="w-3 h-3" />
+                  </a>{' '}
+                  o seleziona una delle proposte qui sotto. Inserisci il nome esatto (es. <code className="px-1 rounded bg-gray-100 dark:bg-gray-700">BookOpen</code>).
+                </p>
+                <div className="flex items-stretch gap-2">
+                  {(() => {
+                    const PreviewIcon = getLucideIcon(categoryFormData.icon || '');
+                    return (
+                      <div
+                        className="flex items-center justify-center w-11 h-11 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/40 flex-shrink-0"
+                        title="Anteprima icona"
+                      >
+                        <PreviewIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                      </div>
+                    );
+                  })()}
+                  <input
+                    type="text"
+                    value={categoryFormData.icon}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, icon: e.target.value })}
+                    className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="es. BookOpen"
+                  />
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {CATEGORY_ICON_SUGGESTIONS.map(({ name, Icon }) => {
+                    const isActive = (categoryFormData.icon || '').toLowerCase() === name.toLowerCase();
+                    return (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => setCategoryFormData({ ...categoryFormData, icon: name })}
+                        className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs border transition-colors ${
+                          isActive
+                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
+                            : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        }`}
+                        title={name}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        <span>{name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
@@ -467,7 +557,7 @@ export default function CategoryManager({ onClose: _onClose, role = 'ADMIN' }: C
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="p-2.5 rounded-lg bg-gray-100 dark:bg-gray-700">
-                      <Folder className="h-5 w-5 text-amber-500 dark:text-amber-400" />
+                      {(() => { const CatIcon = getLucideIcon(category.icon ?? ''); return <CatIcon className="h-5 w-5 text-amber-500 dark:text-amber-400" />; })()}
                     </div>
                     <div>
                       <h4 className="font-medium text-gray-900 dark:text-gray-100">

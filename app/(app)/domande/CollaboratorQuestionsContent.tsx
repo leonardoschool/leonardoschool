@@ -474,7 +474,7 @@ export default function CollaboratorQuestionsContent() {
                   Domanda
                 </th>
                 <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary}`}>
-                  Creatore
+                  Anno / Fonte
                 </th>
                 <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden md:table-cell`}>
                   Materia
@@ -554,41 +554,28 @@ export default function CollaboratorQuestionsContent() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      {question.createdBy ? (
-                        <div className="flex items-center gap-2">
-                          <div className={`w-7 h-7 rounded-full flex items-center justify-center ${
-                            question.createdBy.role === 'ADMIN' 
-                              ? colors.roles.admin.softBg
-                              : colors.roles.collaborator.softBg
-                          }`}>
-                            <span className={`text-xs font-medium ${
-                              question.createdBy.role === 'ADMIN'
-                                ? colors.roles.admin.text
-                                : colors.roles.collaborator.text
-                            }`}>
-                              {question.createdBy.name.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
+                      {(() => {
+                        const hasYear = Boolean(question.year);
+                        const hasSource = Boolean(question.source);
+                        if (!hasYear && !hasSource) {
+                          return <span className={`text-sm ${colors.text.muted}`}>-</span>;
+                        }
+                        return (
                           <div className="flex flex-col">
-                            <span className={`text-sm ${
-                              question.createdById === currentUser?.id 
-                                ? 'font-medium ' + colors.roles.collaborator.text
-                                : colors.text.secondary
-                            }`}>
-                              {question.createdById === currentUser?.id ? 'Tu' : question.createdBy.name}
-                            </span>
-                            <span className={`text-xs ${
-                              question.createdBy.role === 'ADMIN'
-                                ? colors.roles.admin.text
-                                : colors.roles.collaborator.text
-                            }`}>
-                              {question.createdBy.role === 'ADMIN' ? 'Admin' : 'Collaboratore'}
-                            </span>
+                            {hasYear && (
+                              <span className={`text-sm ${colors.text.primary}`}>{question.year}</span>
+                            )}
+                            {hasSource && (
+                              <span
+                                className={`text-xs ${colors.text.muted} truncate max-w-[120px]`}
+                                title={question.source ?? undefined}
+                              >
+                                {question.source}
+                              </span>
+                            )}
                           </div>
-                        </div>
-                      ) : (
-                        <span className={`text-sm ${colors.text.muted}`}>-</span>
-                      )}
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3 hidden md:table-cell">
                       {question.subject ? (

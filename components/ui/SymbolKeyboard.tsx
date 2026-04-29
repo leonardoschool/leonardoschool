@@ -10,153 +10,203 @@ interface SymbolKeyboardProps {
   className?: string;
 }
 
-// Symbol categories based on the provided image
-const symbolCategories = [
+interface SymbolItem {
+  symbol: string;
+  label: string;
+}
+
+interface SymbolGroup {
+  groupName?: string;
+  symbols: SymbolItem[];
+}
+
+interface SymbolCategory {
+  name: string;
+  groups: SymbolGroup[];
+}
+
+// Symbol categories
+const symbolCategories: SymbolCategory[] = [
   {
     name: 'Alfabeto greco',
-    symbols: [
-      { symbol: 'α', label: 'alfa' },
-      { symbol: 'β', label: 'beta' },
-      { symbol: 'γ', label: 'gamma' },
-      { symbol: 'δ', label: 'delta' },
-      { symbol: 'ε', label: 'epsilon' },
-      { symbol: 'ζ', label: 'zeta' },
-      { symbol: 'η', label: 'eta' },
-      { symbol: 'θ', label: 'theta' },
-      { symbol: 'ι', label: 'iota' },
-      { symbol: 'κ', label: 'kappa' },
-      { symbol: 'λ', label: 'lambda' },
-      { symbol: 'μ', label: 'mu' },
-      { symbol: 'ν', label: 'nu' },
-      { symbol: 'ξ', label: 'xi' },
-      { symbol: 'ο', label: 'omicron' },
-      { symbol: 'π', label: 'pi' },
-      { symbol: 'ρ', label: 'rho' },
-      { symbol: 'σ', label: 'sigma' },
-      { symbol: 'ς', label: 'sigma finale' },
-      { symbol: 'τ', label: 'tau' },
-      { symbol: 'υ', label: 'upsilon' },
-      { symbol: 'φ', label: 'phi' },
-      { symbol: 'χ', label: 'chi' },
-      { symbol: 'ψ', label: 'psi' },
-      { symbol: 'ω', label: 'omega' },
-    ],
-  },
-  {
-    name: 'Greco maiuscolo',
-    symbols: [
-      { symbol: 'Α', label: 'Alfa' },
-      { symbol: 'Β', label: 'Beta' },
-      { symbol: 'Γ', label: 'Gamma' },
-      { symbol: 'Δ', label: 'Delta' },
-      { symbol: 'Ε', label: 'Epsilon' },
-      { symbol: 'Ζ', label: 'Zeta' },
-      { symbol: 'Η', label: 'Eta' },
-      { symbol: 'Θ', label: 'Theta' },
-      { symbol: 'Ι', label: 'Iota' },
-      { symbol: 'Κ', label: 'Kappa' },
-      { symbol: 'Λ', label: 'Lambda' },
-      { symbol: 'Μ', label: 'Mu' },
-      { symbol: 'Ν', label: 'Nu' },
-      { symbol: 'Ξ', label: 'Xi' },
-      { symbol: 'Ο', label: 'Omicron' },
-      { symbol: 'Π', label: 'Pi' },
-      { symbol: 'Ρ', label: 'Rho' },
-      { symbol: 'Σ', label: 'Sigma' },
-      { symbol: 'Τ', label: 'Tau' },
-      { symbol: 'Υ', label: 'Upsilon' },
-      { symbol: 'Φ', label: 'Phi' },
-      { symbol: 'Χ', label: 'Chi' },
-      { symbol: 'Ψ', label: 'Psi' },
-      { symbol: 'Ω', label: 'Omega' },
+    groups: [
+      {
+        groupName: 'Minuscolo',
+        symbols: [
+          { symbol: 'α', label: 'alfa' },
+          { symbol: 'β', label: 'beta' },
+          { symbol: 'γ', label: 'gamma' },
+          { symbol: 'δ', label: 'delta' },
+          { symbol: 'ε', label: 'epsilon' },
+          { symbol: 'ζ', label: 'zeta' },
+          { symbol: 'η', label: 'eta' },
+          { symbol: 'θ', label: 'theta' },
+          { symbol: 'ι', label: 'iota' },
+          { symbol: 'κ', label: 'kappa' },
+          { symbol: 'λ', label: 'lambda' },
+          { symbol: 'μ', label: 'mu' },
+          { symbol: 'ν', label: 'nu' },
+          { symbol: 'ξ', label: 'xi' },
+          { symbol: 'ο', label: 'omicron' },
+          { symbol: 'π', label: 'pi' },
+          { symbol: 'ρ', label: 'rho' },
+          { symbol: 'σ', label: 'sigma' },
+          { symbol: 'ς', label: 'sigma finale' },
+          { symbol: 'τ', label: 'tau' },
+          { symbol: 'υ', label: 'upsilon' },
+          { symbol: 'φ', label: 'phi' },
+          { symbol: 'χ', label: 'chi' },
+          { symbol: 'ψ', label: 'psi' },
+          { symbol: 'ω', label: 'omega' },
+        ],
+      },
+      {
+        groupName: 'Maiuscolo',
+        symbols: [
+          { symbol: 'Α', label: 'Alfa' },
+          { symbol: 'Β', label: 'Beta' },
+          { symbol: 'Γ', label: 'Gamma' },
+          { symbol: 'Δ', label: 'Delta' },
+          { symbol: 'Ε', label: 'Epsilon' },
+          { symbol: 'Ζ', label: 'Zeta' },
+          { symbol: 'Η', label: 'Eta' },
+          { symbol: 'Θ', label: 'Theta' },
+          { symbol: 'Ι', label: 'Iota' },
+          { symbol: 'Κ', label: 'Kappa' },
+          { symbol: 'Λ', label: 'Lambda' },
+          { symbol: 'Μ', label: 'Mu' },
+          { symbol: 'Ν', label: 'Nu' },
+          { symbol: 'Ξ', label: 'Xi' },
+          { symbol: 'Ο', label: 'Omicron' },
+          { symbol: 'Π', label: 'Pi' },
+          { symbol: 'Ρ', label: 'Rho' },
+          { symbol: 'Σ', label: 'Sigma' },
+          { symbol: 'Τ', label: 'Tau' },
+          { symbol: 'Υ', label: 'Upsilon' },
+          { symbol: 'Φ', label: 'Phi' },
+          { symbol: 'Χ', label: 'Chi' },
+          { symbol: 'Ψ', label: 'Psi' },
+          { symbol: 'Ω', label: 'Omega' },
+        ],
+      },
     ],
   },
   {
     name: 'Operatori matematici',
-    symbols: [
-      { symbol: '+', label: 'più' },
-      { symbol: '−', label: 'meno' },
-      { symbol: '±', label: 'più o meno' },
-      { symbol: '×', label: 'per' },
-      { symbol: '÷', label: 'diviso' },
-      { symbol: '·', label: 'punto (prodotto)' },
-      { symbol: '/', label: 'frazione' },
-      { symbol: '√', label: 'radice' },
-      { symbol: '%', label: 'percentuale' },
+    groups: [
+      {
+        symbols: [
+          { symbol: '+', label: 'più' },
+          { symbol: '−', label: 'meno' },
+          { symbol: '±', label: 'più o meno' },
+          { symbol: '×', label: 'per' },
+          { symbol: '÷', label: 'diviso' },
+          { symbol: '·', label: 'punto (prodotto)' },
+          { symbol: '/', label: 'frazione' },
+          { symbol: '√', label: 'radice' },
+          { symbol: '%', label: 'percentuale' },
+        ],
+      },
     ],
   },
   {
     name: 'Relazioni',
-    symbols: [
-      { symbol: '=', label: 'uguale' },
-      { symbol: '≠', label: 'diverso' },
-      { symbol: '<', label: 'minore' },
-      { symbol: '>', label: 'maggiore' },
-      { symbol: '≤', label: 'minore o uguale' },
-      { symbol: '≥', label: 'maggiore o uguale' },
-      { symbol: '≈', label: 'circa uguale' },
-      { symbol: '∝', label: 'proporzionale' },
-      { symbol: '∞', label: 'infinito' },
+    groups: [
+      {
+        symbols: [
+          { symbol: '=', label: 'uguale' },
+          { symbol: '≠', label: 'diverso' },
+          { symbol: '<', label: 'minore' },
+          { symbol: '>', label: 'maggiore' },
+          { symbol: '≤', label: 'minore o uguale' },
+          { symbol: '≥', label: 'maggiore o uguale' },
+          { symbol: '≈', label: 'circa uguale' },
+          { symbol: '∝', label: 'proporzionale' },
+          { symbol: '∞', label: 'infinito' },
+        ],
+      },
     ],
   },
   {
     name: 'Frecce e direzioni',
-    symbols: [
-      { symbol: '→', label: 'freccia destra' },
-      { symbol: '←', label: 'freccia sinistra' },
-      { symbol: '↔', label: 'freccia doppia' },
-      { symbol: '⇌', label: 'equilibrio chimico' },
-      { symbol: '↑', label: 'aumenta' },
-      { symbol: '↓', label: 'diminuisce' },
+    groups: [
+      {
+        symbols: [
+          { symbol: '→', label: 'freccia destra' },
+          { symbol: '←', label: 'freccia sinistra' },
+          { symbol: '↔', label: 'freccia doppia' },
+          { symbol: '⇌', label: 'equilibrio chimico' },
+          { symbol: '↑', label: 'aumenta' },
+          { symbol: '↓', label: 'diminuisce' },
+        ],
+      },
     ],
   },
   {
     name: 'Chimica',
-    symbols: [
-      { symbol: '−', label: 'legame singolo' },
-      { symbol: '=', label: 'legame doppio' },
-      { symbol: '≡', label: 'legame triplo' },
-      { symbol: '···', label: 'legame idrogeno' },
-      { symbol: '⁺', label: 'carica +' },
-      { symbol: '⁻', label: 'carica -' },
-      { symbol: '²⁺', label: 'carica 2+' },
-      { symbol: '²⁻', label: 'carica 2-' },
-      { symbol: '³⁺', label: 'carica 3+' },
-      { symbol: '³⁻', label: 'carica 3-' },
+    groups: [
+      {
+        symbols: [
+          { symbol: '−', label: 'legame singolo' },
+          { symbol: '=', label: 'legame doppio' },
+          { symbol: '≡', label: 'legame triplo' },
+          { symbol: '···', label: 'legame idrogeno' },
+          { symbol: '⁺', label: 'carica +' },
+          { symbol: '⁻', label: 'carica -' },
+          { symbol: '²⁺', label: 'carica 2+' },
+          { symbol: '²⁻', label: 'carica 2-' },
+          { symbol: '³⁺', label: 'carica 3+' },
+          { symbol: '³⁻', label: 'carica 3-' },
+        ],
+      },
     ],
   },
   {
     name: 'Biologia',
-    symbols: [
-      { symbol: "5'→3'", label: 'direzione 5-3' },
-      { symbol: "3'→5'", label: 'direzione 3-5' },
-      { symbol: '♀', label: 'femmina' },
-      { symbol: '♂', label: 'maschio' },
+    groups: [
+      {
+        symbols: [
+          { symbol: "5'→3'", label: 'direzione 5-3' },
+          { symbol: "3'→5'", label: 'direzione 3-5' },
+          { symbol: '♀', label: 'femmina' },
+          { symbol: '♂', label: 'maschio' },
+        ],
+      },
     ],
   },
   {
     name: 'Apici e pedici',
-    symbols: [
-      { symbol: '⁰', label: 'apice 0' },
-      { symbol: '¹', label: 'apice 1' },
-      { symbol: '²', label: 'apice 2' },
-      { symbol: '³', label: 'apice 3' },
-      { symbol: '⁴', label: 'apice 4' },
-      { symbol: '⁵', label: 'apice 5' },
-      { symbol: '⁶', label: 'apice 6' },
-      { symbol: '⁷', label: 'apice 7' },
-      { symbol: '⁸', label: 'apice 8' },
-      { symbol: '⁹', label: 'apice 9' },
-      { symbol: '₀', label: 'pedice 0' },
-      { symbol: '₁', label: 'pedice 1' },
-      { symbol: '₂', label: 'pedice 2' },
-      { symbol: '₃', label: 'pedice 3' },
-      { symbol: '₄', label: 'pedice 4' },
-      { symbol: '₅', label: 'pedice 5' },
-      { symbol: '₆', label: 'pedice 6' },
-      { symbol: '₇', label: 'pedice 7' },
-      { symbol: '₈', label: 'pedice 8' },
-      { symbol: '₉', label: 'pedice 9' },
+    groups: [
+      {
+        groupName: 'Apici',
+        symbols: [
+          { symbol: '⁰', label: 'apice 0' },
+          { symbol: '¹', label: 'apice 1' },
+          { symbol: '²', label: 'apice 2' },
+          { symbol: '³', label: 'apice 3' },
+          { symbol: '⁴', label: 'apice 4' },
+          { symbol: '⁵', label: 'apice 5' },
+          { symbol: '⁶', label: 'apice 6' },
+          { symbol: '⁷', label: 'apice 7' },
+          { symbol: '⁸', label: 'apice 8' },
+          { symbol: '⁹', label: 'apice 9' },
+        ],
+      },
+      {
+        groupName: 'Pedici',
+        symbols: [
+          { symbol: '₀', label: 'pedice 0' },
+          { symbol: '₁', label: 'pedice 1' },
+          { symbol: '₂', label: 'pedice 2' },
+          { symbol: '₃', label: 'pedice 3' },
+          { symbol: '₄', label: 'pedice 4' },
+          { symbol: '₅', label: 'pedice 5' },
+          { symbol: '₆', label: 'pedice 6' },
+          { symbol: '₇', label: 'pedice 7' },
+          { symbol: '₈', label: 'pedice 8' },
+          { symbol: '₉', label: 'pedice 9' },
+        ],
+      },
     ],
   },
 ];
@@ -229,19 +279,28 @@ export default function SymbolKeyboard({ onInsert, className = '' }: SymbolKeybo
 
           {/* Symbols Grid */}
           <div className="p-3 max-h-[250px] overflow-y-auto">
-            <div className="grid grid-cols-8 gap-1">
-              {symbolCategories[activeCategory].symbols.map((item) => (
-                <button
-                  key={item.symbol}
-                  type="button"
-                  onClick={() => handleSymbolClick(item.symbol)}
-                  title={item.label}
-                  className={`p-2 rounded-lg text-lg font-medium ${colors.text.primary} ${colors.background.hover} hover:${colors.primary.softBg} hover:${colors.primary.text} transition-all border ${colors.border.light} hover:border-pink-300 dark:hover:border-pink-700`}
-                >
-                  {item.symbol}
-                </button>
-              ))}
-            </div>
+            {symbolCategories[activeCategory].groups.map((group, groupIdx) => (
+              <div key={groupIdx} className={groupIdx > 0 ? 'mt-3' : ''}>
+                {group.groupName && (
+                  <p className={`text-xs font-semibold ${colors.text.muted} uppercase tracking-wide mb-1.5 pb-1 border-b ${colors.border.light}`}>
+                    {group.groupName}
+                  </p>
+                )}
+                <div className="grid grid-cols-8 gap-1">
+                  {group.symbols.map((item) => (
+                    <button
+                      key={`${item.symbol}-${item.label}`}
+                      type="button"
+                      onClick={() => handleSymbolClick(item.symbol)}
+                      title={item.label}
+                      className={`p-2 rounded-lg text-lg font-medium ${colors.text.primary} ${colors.background.hover} hover:${colors.primary.softBg} hover:${colors.primary.text} transition-all border ${colors.border.light} hover:border-pink-300 dark:hover:border-pink-700`}
+                    >
+                      {item.symbol}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* Footer */}
