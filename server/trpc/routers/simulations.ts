@@ -311,7 +311,12 @@ async function validateCollaboratorAssignments(
 
   // Get groups managed by this collaborator
   const collaboratorGroups = await prisma.group.findMany({
-    where: { referenceCollaboratorId: collaboratorId },
+    where: {
+      OR: [
+        { referenceCollaboratorId: collaboratorId },
+        { referenceCollaborators: { some: { collaboratorId } } },
+      ],
+    },
     select: { id: true },
   });
   const allowedGroupIds = new Set(collaboratorGroups.map(g => g.id));
@@ -967,7 +972,11 @@ function calculateSubmissionScores(
 }
 
 /**
- * Auto-score an open text answer against keywords
+ * Auto-score an open text answer against keywords.
+ *
+ * Keywords are treated as alternatives: the student must match AT LEAST ONE
+ * keyword to receive full marks. Matching any single keyword is sufficient
+ * for a correct answer (autoScore = 1.0). Matching none gives autoScore = 0.
  */
 function autoScoreOpenAnswer(
   answerText: string,
@@ -980,21 +989,20 @@ function autoScoreOpenAnswer(
   const answerLower = answerText.toLowerCase();
   const keywordsMatched: string[] = [];
   const keywordsMissed: string[] = [];
-  let matchedWeight = 0;
-  let totalWeight = 0;
 
   for (const kw of keywords) {
-    totalWeight += kw.weight;
     if (answerLower.includes(kw.keyword.toLowerCase())) {
       keywordsMatched.push(kw.keyword);
-      matchedWeight += kw.weight;
-    } else if (kw.isRequired) {
+    } else {
       keywordsMissed.push(kw.keyword);
     }
   }
 
+  // OR logic: at least one keyword matched → full score; none matched → zero
+  const autoScore = keywordsMatched.length > 0 ? 1.0 : 0.0;
+
   return {
-    autoScore: totalWeight > 0 ? matchedWeight / totalWeight : null,
+    autoScore,
     keywordsMatched,
     keywordsMissed,
   };
@@ -1804,6 +1812,7 @@ export const simulationsRouter = router({
                   subject: { select: { id: true, name: true, code: true, color: true } },
                   topic: { select: { id: true, name: true } },
                   answers: { orderBy: { order: 'asc' } },
+                  keywords: { select: { keyword: true } },
                 },
               },
             },

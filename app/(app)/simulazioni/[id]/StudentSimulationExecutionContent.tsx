@@ -249,15 +249,15 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
 
   // Map anti-cheat event type to DB enum
   const mapEventType = useCallback((type: string) => {
-    const mapping: Record<string, 'TAB_CHANGE' | 'WINDOW_BLUR' | 'COPY_ATTEMPT' | 'PASTE_ATTEMPT' | 'RIGHT_CLICK' | 'DEVTOOLS_OPEN' | 'KEYBOARD_SHORTCUT' | 'OTHER'> = {
+    const mapping: Record<string, 'TAB_CHANGE' | 'WINDOW_BLUR' | 'FULLSCREEN_EXIT' | 'PAGE_RELOAD' | 'COPY_ATTEMPT' | 'PASTE_ATTEMPT' | 'RIGHT_CLICK' | 'DEVTOOLS_OPEN' | 'KEYBOARD_SHORTCUT' | 'OTHER'> = {
       'tab_blur': 'WINDOW_BLUR',
       'visibility_hidden': 'TAB_CHANGE',
-      'fullscreen_exit': 'OTHER',
+      'fullscreen_exit': 'FULLSCREEN_EXIT',
       'copy_attempt': 'COPY_ATTEMPT',
       'paste_attempt': 'PASTE_ATTEMPT',
       'right_click': 'RIGHT_CLICK',
       'keyboard_shortcut': 'KEYBOARD_SHORTCUT',
-      'page_reload_attempt': 'OTHER',
+      'page_reload_attempt': 'PAGE_RELOAD',
       'devtools_open': 'DEVTOOLS_OPEN',
     };
     return mapping[type] || 'OTHER';

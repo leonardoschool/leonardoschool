@@ -713,7 +713,7 @@ export const questionsRouter = router({
   getQuestions: staffProcedure
     .input(questionFilterSchema)
     .query(async ({ ctx, input }) => {
-      const { page, pageSize, sortBy, sortOrder, includeAnswers } = input;
+      const { page, pageSize, sortBy, sortOrder } = input;
 
       // Build where clause using helpers
       const where = buildQuestionBasicFilters(input);
@@ -752,9 +752,12 @@ export const questionsRouter = router({
           createdBy: {
             select: { id: true, name: true, role: true },
           },
-          answers: includeAnswers ? {
+          answers: {
             orderBy: { order: 'asc' },
-          } : false,
+          },
+          keywords: {
+            select: { keyword: true },
+          },
           questionTags: {
             include: {
               tag: {

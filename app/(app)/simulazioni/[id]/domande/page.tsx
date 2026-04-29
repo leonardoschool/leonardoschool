@@ -24,6 +24,8 @@ import {
   Save,
   AlertTriangle,
   ShieldX,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 interface SelectedQuestion {
@@ -38,6 +40,8 @@ interface SelectedQuestion {
     difficulty: string;
     subject?: { id?: string; name: string; color: string } | null;
     topic?: { name: string } | null;
+    answers?: { id: string; text: string; isCorrect: boolean; order: number }[];
+    keywords?: { keyword: string }[];
   };
 }
 
@@ -147,6 +151,43 @@ const TYPE_LABELS: Record<string, string> = {
   OPEN_TEXT: 'Aperta',
 };
 
+function renderAnswerPreview(
+  type: string,
+  answers?: { id: string; text: string; isCorrect: boolean; order: number }[],
+  keywords?: { keyword: string }[]
+) {
+  const isChoiceType = type === 'SINGLE_CHOICE' || type === 'MULTIPLE_CHOICE';
+  if (isChoiceType) {
+    const correctAnswers = answers?.filter((a) => a.isCorrect) ?? [];
+    if (correctAnswers.length === 0) return null;
+    return (
+      <div className="mt-2 p-2 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+        <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">
+          {type === 'MULTIPLE_CHOICE' ? 'Risposte corrette:' : 'Risposta corretta:'}
+        </p>
+        <div className="space-y-0.5">
+          {correctAnswers.map((a) => (
+            <p key={a.id} className="text-xs text-green-700 dark:text-green-300">{a.text}</p>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  if (!keywords || keywords.length === 0) return null;
+  return (
+    <div className={`mt-2 p-2 rounded-lg ${colors.background.secondary} border ${colors.border.light}`}>
+      <p className={`text-xs font-medium ${colors.text.muted} mb-1`}>Keywords:</p>
+      <div className="flex flex-wrap gap-1">
+        {keywords.map((kw, i) => (
+          <span key={i} className={`text-xs px-2 py-0.5 rounded-full ${colors.background.tertiary} ${colors.text.tertiary}`}>
+            {kw.keyword}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function ManageQuestionsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -161,6 +202,19 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
 
   // State
   const [selectedQuestions, setSelectedQuestions] = useState<SelectedQuestion[]>([]);
+  const [expandedPreviews, setExpandedPreviews] = useState<Set<string>>(new Set());
+
+  const togglePreview = (questionId: string) => {
+    setExpandedPreviews((prev) => {
+      const next = new Set(prev);
+      if (next.has(questionId)) {
+        next.delete(questionId);
+      } else {
+        next.add(questionId);
+      }
+      return next;
+    });
+  };
   const [questionSearchTerm, setQuestionSearchTerm] = useState('');
   const [questionSubjectFilter, setQuestionSubjectFilter] = useState('');
   const [questionDifficultyFilter, setQuestionDifficultyFilter] = useState('');
@@ -190,6 +244,8 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
             difficulty: sq.question.difficulty,
             subject: sq.question.subject,
             topic: sq.question.topic,
+            answers: sq.question.answers,
+            keywords: sq.question.keywords,
           },
         }));
       const parsedSections = parseSimulationSections(simulation.sections);
@@ -243,6 +299,8 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
         difficulty: question.difficulty,
         subject: question.subject,
         topic: question.topic,
+        answers: question.answers,
+        keywords: question.keywords,
       },
     };
 
@@ -535,7 +593,29 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                             </span>
                           )}
                         </div>
+                        {expandedPreviews.has(question.id) && renderAnswerPreview(question.type, question.answers, question.keywords)}
                       </div>
+                      {(() => {
+                        const isChoice = question.type === 'SINGLE_CHOICE' || question.type === 'MULTIPLE_CHOICE';
+                        const hasPreview = isChoice
+                          ? (question.answers?.some((a) => a.isCorrect) ?? false)
+                          : (question.keywords?.length ?? 0) > 0;
+                        if (!hasPreview) return null;
+                        const isExpanded = expandedPreviews.has(question.id);
+                        return (
+                          <button
+                            onClick={() => togglePreview(question.id)}
+                            className={`p-1.5 rounded-lg transition-colors flex-shrink-0 mt-0.5 ${
+                              isExpanded
+                                ? `${colors.primary.bg} text-white`
+                                : `${colors.background.secondary} ${colors.text.muted}`
+                            }`}
+                            title={isExpanded ? 'Nascondi risposta' : 'Mostra risposta'}
+                          >
+                            {isExpanded ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        );
+                      })()}
                     </div>
                   );
                 })}
@@ -599,6 +679,12 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                         <div className={`divide-y ${colors.border.light}`}>
                           {sectionQuestions.map((sq) => {
                             const globalIdx = selectedQuestions.findIndex((s) => s.questionId === sq.questionId);
+                            const qType = sq.question?.type;
+                            const isChoice = qType === 'SINGLE_CHOICE' || qType === 'MULTIPLE_CHOICE';
+                            const hasPreview = qType
+                              ? (isChoice ? (sq.question?.answers?.some((a) => a.isCorrect) ?? false) : (sq.question?.keywords?.length ?? 0) > 0)
+                              : false;
+                            const isExpanded = expandedPreviews.has(sq.questionId);
                             return (
                               <div key={sq.questionId} className={`p-3 flex items-start gap-2 ${colors.background.card}`}>
                                 <span className={`mt-1.5 w-6 h-6 shrink-0 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-medium ${colors.text.muted}`}>
@@ -637,7 +723,21 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                                       size="sm"
                                     />
                                   </div>
+                                  {isExpanded && qType && renderAnswerPreview(qType, sq.question?.answers, sq.question?.keywords)}
                                 </div>
+                                {hasPreview && (
+                                  <button
+                                    onClick={() => togglePreview(sq.questionId)}
+                                    className={`p-1.5 rounded-lg transition-colors flex-shrink-0 mt-0.5 ${
+                                      isExpanded
+                                        ? `${colors.primary.bg} text-white`
+                                        : `${colors.background.secondary} ${colors.text.muted}`
+                                    }`}
+                                    title={isExpanded ? 'Nascondi risposta' : 'Mostra risposta'}
+                                  >
+                                    {isExpanded ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                  </button>
+                                )}
                                 {canEdit && (
                                   <button onClick={() => removeQuestion(sq.questionId)} className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors shrink-0">
                                     <X className="w-4 h-4" />
@@ -669,6 +769,12 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                       <div className={`divide-y ${colors.border.light}`}>
                         {unassigned.map((sq) => {
                           const globalIdx = selectedQuestions.findIndex((s) => s.questionId === sq.questionId);
+                          const qType = sq.question?.type;
+                          const isChoice = qType === 'SINGLE_CHOICE' || qType === 'MULTIPLE_CHOICE';
+                          const hasPreview = qType
+                            ? (isChoice ? (sq.question?.answers?.some((a) => a.isCorrect) ?? false) : (sq.question?.keywords?.length ?? 0) > 0)
+                            : false;
+                          const isExpanded = expandedPreviews.has(sq.questionId);
                           return (
                             <div key={sq.questionId} className={`p-3 flex items-start gap-2 ${colors.background.card}`}>
                               <span className={`mt-1.5 w-6 h-6 shrink-0 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-medium ${colors.text.muted}`}>
@@ -707,7 +813,21 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                                     size="sm"
                                   />
                                 </div>
+                                {isExpanded && qType && renderAnswerPreview(qType, sq.question?.answers, sq.question?.keywords)}
                               </div>
+                              {hasPreview && (
+                                <button
+                                  onClick={() => togglePreview(sq.questionId)}
+                                  className={`p-1.5 rounded-lg transition-colors flex-shrink-0 mt-0.5 ${
+                                    isExpanded
+                                      ? `${colors.primary.bg} text-white`
+                                      : `${colors.background.secondary} ${colors.text.muted}`
+                                  }`}
+                                  title={isExpanded ? 'Nascondi risposta' : 'Mostra risposta'}
+                                >
+                                  {isExpanded ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                              )}
                               {canEdit && (
                                 <button onClick={() => removeQuestion(sq.questionId)} className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors shrink-0">
                                   <X className="w-4 h-4" />
@@ -724,63 +844,85 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
             ) : (
               /* ── Flat list (no sections) ── */
               <div className={`divide-y ${colors.border.light}`}>
-                {selectedQuestions.map((sq, index) => (
-                  <div key={sq.questionId} className={`p-3 flex items-start gap-3 ${colors.background.card}`}>
-                    {canEdit && (
-                      <div className="flex flex-col gap-1">
-                        <button
-                          onClick={() => moveQuestion(index, 'up')}
-                          disabled={index === 0}
-                          className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 transition-colors"
-                        >
-                          <ChevronUp className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => moveQuestion(index, 'down')}
-                          disabled={index === selectedQuestions.length - 1}
-                          className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 transition-colors"
-                        >
-                          <ChevronDown className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                    <span className={`mt-2 w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-medium ${colors.text.primary}`}>
-                      {index + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      {sq.question?.text ? (
-                        <RichTextRenderer text={sq.question.text} className={`text-sm ${colors.text.primary} line-clamp-2`} />
-                      ) : (
-                        <p className={`text-sm ${colors.text.primary} line-clamp-2`}>Domanda</p>
+                {selectedQuestions.map((sq, index) => {
+                  const qType = sq.question?.type;
+                  const isChoice = qType === 'SINGLE_CHOICE' || qType === 'MULTIPLE_CHOICE';
+                  const hasPreview = qType
+                    ? (isChoice ? (sq.question?.answers?.some((a) => a.isCorrect) ?? false) : (sq.question?.keywords?.length ?? 0) > 0)
+                    : false;
+                  const isExpanded = expandedPreviews.has(sq.questionId);
+                  return (
+                    <div key={sq.questionId} className={`p-3 flex items-start gap-3 ${colors.background.card}`}>
+                      {canEdit && (
+                        <div className="flex flex-col gap-1">
+                          <button
+                            onClick={() => moveQuestion(index, 'up')}
+                            disabled={index === 0}
+                            className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 transition-colors"
+                          >
+                            <ChevronUp className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => moveQuestion(index, 'down')}
+                            disabled={index === selectedQuestions.length - 1}
+                            className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 transition-colors"
+                          >
+                            <ChevronDown className="w-4 h-4" />
+                          </button>
+                        </div>
                       )}
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                        {sq.question?.subject && (
-                          <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: sq.question.subject.color + '20', color: sq.question.subject.color }}>
-                            {sq.question.subject.name}
-                          </span>
+                      <span className={`mt-2 w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-medium ${colors.text.primary}`}>
+                        {index + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        {sq.question?.text ? (
+                          <RichTextRenderer text={sq.question.text} className={`text-sm ${colors.text.primary} line-clamp-2`} />
+                        ) : (
+                          <p className={`text-sm ${colors.text.primary} line-clamp-2`}>Domanda</p>
                         )}
-                        {sq.question?.type && (
-                          <span className={`text-xs px-1.5 py-0.5 rounded ${colors.background.secondary} ${colors.text.muted} border ${colors.border.light}`}>
-                            {TYPE_LABELS[sq.question.type] ?? sq.question.type}
-                          </span>
-                        )}
-                        {sq.question?.difficulty && (
-                          <span className={`text-xs ${colors.text.muted}`}>
-                            {sq.question.difficulty === 'EASY' ? 'Facile' : sq.question.difficulty === 'MEDIUM' ? 'Media' : 'Difficile'}
-                          </span>
-                        )}
-                        {sq.question?.topic && (
-                          <span className={`text-xs ${colors.text.muted}`}>• {sq.question.topic.name}</span>
-                        )}
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          {sq.question?.subject && (
+                            <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: sq.question.subject.color + '20', color: sq.question.subject.color }}>
+                              {sq.question.subject.name}
+                            </span>
+                          )}
+                          {sq.question?.type && (
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${colors.background.secondary} ${colors.text.muted} border ${colors.border.light}`}>
+                              {TYPE_LABELS[sq.question.type] ?? sq.question.type}
+                            </span>
+                          )}
+                          {sq.question?.difficulty && (
+                            <span className={`text-xs ${colors.text.muted}`}>
+                              {sq.question.difficulty === 'EASY' ? 'Facile' : sq.question.difficulty === 'MEDIUM' ? 'Media' : 'Difficile'}
+                            </span>
+                          )}
+                          {sq.question?.topic && (
+                            <span className={`text-xs ${colors.text.muted}`}>• {sq.question.topic.name}</span>
+                          )}
+                        </div>
+                        {isExpanded && qType && renderAnswerPreview(qType, sq.question?.answers, sq.question?.keywords)}
                       </div>
+                      {hasPreview && (
+                        <button
+                          onClick={() => togglePreview(sq.questionId)}
+                          className={`p-1.5 rounded-lg transition-colors flex-shrink-0 mt-1 ${
+                            isExpanded
+                              ? `${colors.primary.bg} text-white`
+                              : `${colors.background.secondary} ${colors.text.muted}`
+                          }`}
+                          title={isExpanded ? 'Nascondi risposta' : 'Mostra risposta'}
+                        >
+                          {isExpanded ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      )}
+                      {canEdit && (
+                        <button onClick={() => removeQuestion(sq.questionId)} className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
-                    {canEdit && (
-                      <button onClick={() => removeQuestion(sq.questionId)} className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

@@ -23,6 +23,7 @@ export interface VirtualRoomParticipant {
   recentCheatingEvents: Array<{
     id: string;
     eventType: string;
+    description?: string | null;
     createdAt: string;
   }>;
   unreadMessagesCount: number;

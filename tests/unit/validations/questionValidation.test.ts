@@ -660,19 +660,18 @@ describe('validateQuestionKeywords', () => {
       expect(result.error).toContain('almeno una keyword');
     });
 
-    it('should reject keywords without any required', () => {
+    it('should accept keywords without any marked as required (OR logic - any keyword is sufficient)', () => {
       const keywords = [
-        { keyword: 'test', isRequired: false, weight: 1.0, isSuggested: false, caseSensitive: false, exactMatch: false, synonyms: [] },
+        { keyword: 'H2O', isRequired: false, weight: 1.0, isSuggested: false, caseSensitive: false, exactMatch: false, synonyms: [] },
+        { keyword: 'H₂O', isRequired: false, weight: 1.0, isSuggested: false, caseSensitive: false, exactMatch: false, synonyms: [] },
       ];
       const result = validateQuestionKeywords('OPEN_TEXT', 'KEYWORDS', keywords);
-      expect(result.valid).toBe(false);
-      expect(result.error).toContain('keyword obbligatoria');
+      expect(result.valid).toBe(true);
     });
 
-    it('should accept valid keywords with required', () => {
+    it('should accept a single keyword', () => {
       const keywords = [
-        { keyword: 'democrazia', isRequired: true, weight: 1.0, isSuggested: false, caseSensitive: false, exactMatch: false, synonyms: [] },
-        { keyword: 'repubblica', isRequired: false, weight: 0.5, isSuggested: true, caseSensitive: false, exactMatch: false, synonyms: [] },
+        { keyword: 'democrazia', isRequired: false, weight: 1.0, isSuggested: false, caseSensitive: false, exactMatch: false, synonyms: [] },
       ];
       const result = validateQuestionKeywords('OPEN_TEXT', 'KEYWORDS', keywords);
       expect(result.valid).toBe(true);
@@ -685,9 +684,9 @@ describe('validateQuestionKeywords', () => {
       expect(result.valid).toBe(false);
     });
 
-    it('should accept valid keywords', () => {
+    it('should accept keywords without any required (OR logic)', () => {
       const keywords = [
-        { keyword: 'costituzione', isRequired: true, weight: 2.0, isSuggested: false, caseSensitive: false, exactMatch: false, synonyms: [] },
+        { keyword: 'costituzione', isRequired: false, weight: 1.0, isSuggested: false, caseSensitive: false, exactMatch: false, synonyms: [] },
       ];
       const result = validateQuestionKeywords('OPEN_TEXT', 'BOTH', keywords);
       expect(result.valid).toBe(true);

@@ -7,6 +7,18 @@ import { createCachedQuery, CACHE_TIMES } from '@/lib/cache/serverCache';
 // Group Types
 const GroupTypeEnum = z.enum(['STUDENTS', 'COLLABORATORS', 'MIXED']);
 
+function uniqueReferenceIds(ids: Array<string | null | undefined> = []): string[] {
+  return Array.from(new Set(ids.filter((id): id is string => Boolean(id))));
+}
+
+function parseLegacyReference(value: string | null | undefined): { collaboratorIds: string[]; adminIds: string[] } {
+  if (!value) return { collaboratorIds: [], adminIds: [] };
+  if (value.startsWith('admin:')) {
+    return { collaboratorIds: [], adminIds: [value.replace('admin:', '')] };
+  }
+  return { collaboratorIds: [value], adminIds: [] };
+}
+
 // ==================== GROUPS ROUTER ====================
 export const groupsRouter = router({
   // Get paginated groups list
@@ -25,18 +37,30 @@ export const groupsRouter = router({
       const { page, pageSize, type, search, includeInactive, onlyMyGroups } = input;
 
       const where: Record<string, unknown> = {};
+      const andConditions: Record<string, unknown>[] = [];
       if (type) where.type = type;
       if (!includeInactive) where.isActive = true;
       if (search) {
-        where.OR = [
-          { name: { contains: search, mode: 'insensitive' } },
-          { description: { contains: search, mode: 'insensitive' } },
-        ];
+        andConditions.push({
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { description: { contains: search, mode: 'insensitive' } },
+          ],
+        });
       }
       
       // For collaborators: filter by groups they're assigned to
       if (onlyMyGroups && ctx.user?.role === 'COLLABORATOR' && ctx.user?.collaborator?.id) {
-        where.referenceCollaboratorId = ctx.user.collaborator.id;
+        andConditions.push({
+          OR: [
+            { referenceCollaboratorId: ctx.user.collaborator.id },
+            { referenceCollaborators: { some: { collaboratorId: ctx.user.collaborator.id } } },
+          ],
+        });
+      }
+
+      if (andConditions.length > 0) {
+        where.AND = andConditions;
       }
 
       const total = await ctx.prisma.group.count({ where });
@@ -84,18 +108,32 @@ export const groupsRouter = router({
       }).optional()
     )
     .query(async ({ ctx, input }) => {
+      const andConditions = [
+        ...(input?.search ? [{
+          OR: [
+            { name: { contains: input.search, mode: 'insensitive' as const } },
+            { description: { contains: input.search, mode: 'insensitive' as const } },
+          ],
+        }] : []),
+        ...(input?.referenceCollaboratorId ? [{
+          OR: [
+            { referenceCollaboratorId: input.referenceCollaboratorId },
+            { referenceCollaborators: { some: { collaboratorId: input.referenceCollaboratorId } } },
+          ],
+        }] : []),
+        ...(input?.referenceAdminId ? [{
+          OR: [
+            { referenceAdminId: input.referenceAdminId },
+            { referenceAdmins: { some: { adminId: input.referenceAdminId } } },
+          ],
+        }] : []),
+      ];
+
       const groups = await ctx.prisma.group.findMany({
         where: {
           ...(input?.type && { type: input.type }),
-          ...(input?.search && {
-            OR: [
-              { name: { contains: input.search, mode: 'insensitive' } },
-              { description: { contains: input.search, mode: 'insensitive' } },
-            ],
-          }),
           ...(!input?.includeInactive && { isActive: true }),
-          ...(input?.referenceCollaboratorId && { referenceCollaboratorId: input.referenceCollaboratorId }),
-          ...(input?.referenceAdminId && { referenceAdminId: input.referenceAdminId }),
+          ...(andConditions.length > 0 && { AND: andConditions }),
         },
         include: {
           referenceStudent: {
@@ -112,6 +150,18 @@ export const groupsRouter = router({
             include: {
               user: { select: { name: true, email: true } },
             },
+          },
+          referenceStudents: {
+            include: { student: { include: { user: { select: { id: true, name: true, email: true } } } } },
+            orderBy: { createdAt: 'asc' },
+          },
+          referenceCollaborators: {
+            include: { collaborator: { include: { user: { select: { id: true, name: true, email: true } } } } },
+            orderBy: { createdAt: 'asc' },
+          },
+          referenceAdmins: {
+            include: { admin: { include: { user: { select: { id: true, name: true, email: true } } } } },
+            orderBy: { createdAt: 'asc' },
           },
           _count: {
             select: { members: true },
@@ -147,6 +197,18 @@ export const groupsRouter = router({
             include: {
               user: { select: { id: true, name: true, email: true } },
             },
+          },
+          referenceStudents: {
+            include: { student: { include: { user: { select: { id: true, name: true, email: true } } } } },
+            orderBy: { createdAt: 'asc' },
+          },
+          referenceCollaborators: {
+            include: { collaborator: { include: { user: { select: { id: true, name: true, email: true } } } } },
+            orderBy: { createdAt: 'asc' },
+          },
+          referenceAdmins: {
+            include: { admin: { include: { user: { select: { id: true, name: true, email: true } } } } },
+            orderBy: { createdAt: 'asc' },
           },
           members: {
             include: {
@@ -201,6 +263,18 @@ export const groupsRouter = router({
               user: { select: { id: true, name: true } },
             },
           },
+          referenceStudents: {
+            include: { student: { include: { user: { select: { id: true, name: true } } } } },
+            orderBy: { createdAt: 'asc' },
+          },
+          referenceCollaborators: {
+            include: { collaborator: { include: { user: { select: { id: true, name: true } } } } },
+            orderBy: { createdAt: 'asc' },
+          },
+          referenceAdmins: {
+            include: { admin: { include: { user: { select: { id: true, name: true } } } } },
+            orderBy: { createdAt: 'asc' },
+          },
           members: {
             include: {
               student: {
@@ -239,51 +313,38 @@ export const groupsRouter = router({
         type: GroupTypeEnum.default('MIXED'),
         referenceStudentId: z.string().nullish(),
         referenceCollaboratorId: z.string().nullish(), // Can be "admin:ID" or collaborator ID
+        referenceStudentIds: z.array(z.string()).optional(),
+        referenceCollaboratorIds: z.array(z.string()).optional(),
+        referenceAdminIds: z.array(z.string()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Validate references exist
-      if (input.referenceStudentId) {
-        const student = await ctx.prisma.student.findUnique({
-          where: { id: input.referenceStudentId },
-        });
-        if (!student) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Studente di riferimento non trovato',
-          });
+      const legacyReference = parseLegacyReference(input.referenceCollaboratorId);
+      const referenceStudentIds = uniqueReferenceIds([...(input.referenceStudentIds ?? []), input.referenceStudentId]);
+      const referenceCollaboratorIds = uniqueReferenceIds([
+        ...(input.referenceCollaboratorIds ?? []),
+        ...legacyReference.collaboratorIds,
+      ]);
+      const referenceAdminIds = uniqueReferenceIds([...(input.referenceAdminIds ?? []), ...legacyReference.adminIds]);
+
+      if (referenceStudentIds.length > 0) {
+        const count = await ctx.prisma.student.count({ where: { id: { in: referenceStudentIds } } });
+        if (count !== referenceStudentIds.length) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Uno o più studenti di riferimento non sono stati trovati' });
         }
       }
 
-      // Parse referenceCollaboratorId - can be "admin:ID" or collaborator ID
-      let referenceCollaboratorId: string | null = null;
-      let referenceAdminId: string | null = null;
+      if (referenceCollaboratorIds.length > 0) {
+        const count = await ctx.prisma.collaborator.count({ where: { id: { in: referenceCollaboratorIds } } });
+        if (count !== referenceCollaboratorIds.length) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Uno o più collaboratori di riferimento non sono stati trovati' });
+        }
+      }
 
-      if (input.referenceCollaboratorId) {
-        if (input.referenceCollaboratorId.startsWith('admin:')) {
-          // It's an admin reference
-          referenceAdminId = input.referenceCollaboratorId.replace('admin:', '');
-          const admin = await ctx.prisma.admin.findUnique({
-            where: { id: referenceAdminId },
-          });
-          if (!admin) {
-            throw new TRPCError({
-              code: 'NOT_FOUND',
-              message: 'Admin di riferimento non trovato',
-            });
-          }
-        } else {
-          // It's a collaborator reference
-          referenceCollaboratorId = input.referenceCollaboratorId;
-          const collaborator = await ctx.prisma.collaborator.findUnique({
-            where: { id: referenceCollaboratorId },
-          });
-          if (!collaborator) {
-            throw new TRPCError({
-              code: 'NOT_FOUND',
-              message: 'Collaboratore di riferimento non trovato',
-            });
-          }
+      if (referenceAdminIds.length > 0) {
+        const count = await ctx.prisma.admin.count({ where: { id: { in: referenceAdminIds } } });
+        if (count !== referenceAdminIds.length) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Uno o più amministratori di riferimento non sono stati trovati' });
         }
       }
 
@@ -294,19 +355,40 @@ export const groupsRouter = router({
           color: input.color,
           type: input.type,
           isActive: true, // Set active by default
-          referenceStudentId: input.referenceStudentId,
-          referenceCollaboratorId,
-          referenceAdminId,
+          referenceStudentId: referenceStudentIds[0] ?? null,
+          referenceCollaboratorId: referenceCollaboratorIds[0] ?? null,
+          referenceAdminId: referenceAdminIds[0] ?? null,
+          ...(referenceStudentIds.length > 0 && {
+            referenceStudents: { create: referenceStudentIds.map((studentId) => ({ studentId })) },
+          }),
+          ...(referenceCollaboratorIds.length > 0 && {
+            referenceCollaborators: { create: referenceCollaboratorIds.map((collaboratorId) => ({ collaboratorId })) },
+          }),
+          ...(referenceAdminIds.length > 0 && {
+            referenceAdmins: { create: referenceAdminIds.map((adminId) => ({ adminId })) },
+          }),
         },
         include: {
           referenceStudent: {
-            include: { user: { select: { name: true } } },
+            include: { user: { select: { id: true, name: true } } },
           },
           referenceCollaborator: {
-            include: { user: { select: { name: true } } },
+            include: { user: { select: { id: true, name: true } } },
           },
           referenceAdmin: {
-            include: { user: { select: { name: true } } },
+            include: { user: { select: { id: true, name: true } } },
+          },
+          referenceStudents: {
+            include: { student: { include: { user: { select: { id: true, name: true, email: true } } } } },
+            orderBy: { createdAt: 'asc' },
+          },
+          referenceCollaborators: {
+            include: { collaborator: { include: { user: { select: { id: true, name: true, email: true } } } } },
+            orderBy: { createdAt: 'asc' },
+          },
+          referenceAdmins: {
+            include: { admin: { include: { user: { select: { id: true, name: true, email: true } } } } },
+            orderBy: { createdAt: 'asc' },
           },
         },
       });
@@ -326,13 +408,31 @@ export const groupsRouter = router({
         isActive: z.boolean().optional(),
         referenceStudentId: z.string().nullable().optional(),
         referenceCollaboratorId: z.string().nullable().optional(), // Can be "admin:ID" or collaborator ID
+        referenceStudentIds: z.array(z.string()).optional(),
+        referenceCollaboratorIds: z.array(z.string()).optional(),
+        referenceAdminIds: z.array(z.string()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { id, referenceCollaboratorId: rawCollaboratorId, ...data } = input;
+      const {
+        id,
+        referenceCollaboratorId: rawCollaboratorId,
+        referenceStudentId,
+        referenceStudentIds: rawStudentIds,
+        referenceCollaboratorIds: rawCollaboratorIds,
+        referenceAdminIds: rawAdminIds,
+        ...data
+      } = input;
 
       // Check group exists
-      const existing = await ctx.prisma.group.findUnique({ where: { id } });
+      const existing = await ctx.prisma.group.findUnique({
+        where: { id },
+        include: {
+          referenceStudents: { select: { studentId: true } },
+          referenceCollaborators: { select: { collaboratorId: true } },
+          referenceAdmins: { select: { adminId: true } },
+        },
+      });
       if (!existing) {
         throw new TRPCError({
           code: 'NOT_FOUND',
@@ -340,86 +440,137 @@ export const groupsRouter = router({
         });
       }
 
-      // Validate references if provided
-      if (data.referenceStudentId) {
-        const student = await ctx.prisma.student.findUnique({
-          where: { id: data.referenceStudentId },
+      const legacyReference = parseLegacyReference(rawCollaboratorId);
+      const referenceStudentIds = rawStudentIds !== undefined
+        ? uniqueReferenceIds(rawStudentIds)
+        : referenceStudentId !== undefined
+          ? uniqueReferenceIds([referenceStudentId])
+          : undefined;
+      const referenceCollaboratorIds = rawCollaboratorIds !== undefined
+        ? uniqueReferenceIds(rawCollaboratorIds)
+        : rawCollaboratorId !== undefined
+          ? uniqueReferenceIds(legacyReference.collaboratorIds)
+          : undefined;
+      const referenceAdminIds = rawAdminIds !== undefined
+        ? uniqueReferenceIds(rawAdminIds)
+        : rawCollaboratorId !== undefined
+          ? uniqueReferenceIds(legacyReference.adminIds)
+          : undefined;
+
+      if (referenceStudentIds && referenceStudentIds.length > 0) {
+        const count = await ctx.prisma.student.count({ where: { id: { in: referenceStudentIds } } });
+        if (count !== referenceStudentIds.length) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Uno o più studenti di riferimento non sono stati trovati' });
+        }
+      }
+
+      if (referenceCollaboratorIds && referenceCollaboratorIds.length > 0) {
+        const count = await ctx.prisma.collaborator.count({ where: { id: { in: referenceCollaboratorIds } } });
+        if (count !== referenceCollaboratorIds.length) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Uno o più collaboratori di riferimento non sono stati trovati' });
+        }
+      }
+
+      if (referenceAdminIds && referenceAdminIds.length > 0) {
+        const count = await ctx.prisma.admin.count({ where: { id: { in: referenceAdminIds } } });
+        if (count !== referenceAdminIds.length) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Uno o più amministratori di riferimento non sono stati trovati' });
+        }
+      }
+
+      const group = await ctx.prisma.$transaction(async (tx) => {
+        await tx.group.update({
+          where: { id },
+          data: {
+            ...data,
+            ...(referenceStudentIds !== undefined && { referenceStudentId: referenceStudentIds[0] ?? null }),
+            ...(referenceCollaboratorIds !== undefined && { referenceCollaboratorId: referenceCollaboratorIds[0] ?? null }),
+            ...(referenceAdminIds !== undefined && { referenceAdminId: referenceAdminIds[0] ?? null }),
+          },
         });
-        if (!student) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Studente di riferimento non trovato',
-          });
-        }
-      }
 
-      // Parse referenceCollaboratorId - can be "admin:ID" or collaborator ID
-      let referenceCollaboratorId: string | null | undefined = undefined;
-      let referenceAdminId: string | null | undefined = undefined;
-
-      if (rawCollaboratorId !== undefined) {
-        if (rawCollaboratorId === null || rawCollaboratorId === '') {
-          // Clear both references
-          referenceCollaboratorId = null;
-          referenceAdminId = null;
-        } else if (rawCollaboratorId.startsWith('admin:')) {
-          // It's an admin reference
-          referenceAdminId = rawCollaboratorId.replace('admin:', '');
-          referenceCollaboratorId = null; // Clear collaborator if setting admin
-          const admin = await ctx.prisma.admin.findUnique({
-            where: { id: referenceAdminId },
-          });
-          if (!admin) {
-            throw new TRPCError({
-              code: 'NOT_FOUND',
-              message: 'Admin di riferimento non trovato',
-            });
-          }
-        } else {
-          // It's a collaborator reference
-          referenceCollaboratorId = rawCollaboratorId;
-          referenceAdminId = null; // Clear admin if setting collaborator
-          const collaborator = await ctx.prisma.collaborator.findUnique({
-            where: { id: referenceCollaboratorId },
-          });
-          if (!collaborator) {
-            throw new TRPCError({
-              code: 'NOT_FOUND',
-              message: 'Collaboratore di riferimento non trovato',
+        if (referenceStudentIds !== undefined) {
+          await tx.groupStudentReference.deleteMany({ where: { groupId: id } });
+          if (referenceStudentIds.length > 0) {
+            await tx.groupStudentReference.createMany({
+              data: referenceStudentIds.map((studentId) => ({ groupId: id, studentId })),
+              skipDuplicates: true,
             });
           }
         }
-      }
 
-      const group = await ctx.prisma.group.update({
-        where: { id },
-        data: {
-          ...data,
-          ...(referenceCollaboratorId !== undefined && { referenceCollaboratorId }),
-          ...(referenceAdminId !== undefined && { referenceAdminId }),
-        },
-        include: {
-          referenceStudent: {
-            include: { user: { select: { id: true, name: true } } },
+        if (referenceCollaboratorIds !== undefined) {
+          await tx.groupCollaboratorReference.deleteMany({ where: { groupId: id } });
+          if (referenceCollaboratorIds.length > 0) {
+            await tx.groupCollaboratorReference.createMany({
+              data: referenceCollaboratorIds.map((collaboratorId) => ({ groupId: id, collaboratorId })),
+              skipDuplicates: true,
+            });
+          }
+        }
+
+        if (referenceAdminIds !== undefined) {
+          await tx.groupAdminReference.deleteMany({ where: { groupId: id } });
+          if (referenceAdminIds.length > 0) {
+            await tx.groupAdminReference.createMany({
+              data: referenceAdminIds.map((adminId) => ({ groupId: id, adminId })),
+              skipDuplicates: true,
+            });
+          }
+        }
+
+        return tx.group.findUnique({
+          where: { id },
+          include: {
+            referenceStudent: {
+              include: { user: { select: { id: true, name: true } } },
+            },
+            referenceCollaborator: {
+              include: { user: { select: { id: true, name: true } } },
+            },
+            referenceAdmin: {
+              include: { user: { select: { id: true, name: true } } },
+            },
+            referenceStudents: {
+              include: { student: { include: { user: { select: { id: true, name: true, email: true } } } } },
+              orderBy: { createdAt: 'asc' },
+            },
+            referenceCollaborators: {
+              include: { collaborator: { include: { user: { select: { id: true, name: true, email: true } } } } },
+              orderBy: { createdAt: 'asc' },
+            },
+            referenceAdmins: {
+              include: { admin: { include: { user: { select: { id: true, name: true, email: true } } } } },
+              orderBy: { createdAt: 'asc' },
+            },
+            _count: { select: { members: true } },
           },
-          referenceCollaborator: {
-            include: { user: { select: { id: true, name: true } } },
-          },
-          referenceAdmin: {
-            include: { user: { select: { id: true, name: true } } },
-          },
-          _count: { select: { members: true } },
-        },
+        });
       });
 
+      if (!group) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Gruppo non trovato' });
+      }
+
       // Send notifications to newly assigned referents
-      // Only if the referent changed (compare with existing)
-      if (referenceCollaboratorId && referenceCollaboratorId !== existing.referenceCollaboratorId) {
-        const collaboratorUserId = group.referenceCollaborator?.user.id;
-        if (collaboratorUserId) {
+      const existingStudentIds = new Set(uniqueReferenceIds([
+        existing.referenceStudentId,
+        ...existing.referenceStudents.map((reference) => reference.studentId),
+      ]));
+      const existingCollaboratorIds = new Set(uniqueReferenceIds([
+        existing.referenceCollaboratorId,
+        ...existing.referenceCollaborators.map((reference) => reference.collaboratorId),
+      ]));
+      const existingAdminIds = new Set(uniqueReferenceIds([
+        existing.referenceAdminId,
+        ...existing.referenceAdmins.map((reference) => reference.adminId),
+      ]));
+
+      for (const reference of group.referenceCollaborators) {
+        if (!existingCollaboratorIds.has(reference.collaboratorId)) {
           try {
             await notifications.groupReferentAssigned(ctx.prisma, {
-              recipientUserId: collaboratorUserId,
+              recipientUserId: reference.collaborator.user.id,
               groupId: group.id,
               groupName: group.name,
             });
@@ -429,12 +580,11 @@ export const groupsRouter = router({
         }
       }
 
-      if (referenceAdminId && referenceAdminId !== existing.referenceAdminId) {
-        const adminUserId = group.referenceAdmin?.user.id;
-        if (adminUserId) {
+      for (const reference of group.referenceAdmins) {
+        if (!existingAdminIds.has(reference.adminId)) {
           try {
             await notifications.groupReferentAssigned(ctx.prisma, {
-              recipientUserId: adminUserId,
+              recipientUserId: reference.admin.user.id,
               groupId: group.id,
               groupName: group.name,
             });
@@ -444,12 +594,11 @@ export const groupsRouter = router({
         }
       }
 
-      if (data.referenceStudentId && data.referenceStudentId !== existing.referenceStudentId) {
-        const studentUserId = group.referenceStudent?.user.id;
-        if (studentUserId) {
+      for (const reference of group.referenceStudents) {
+        if (!existingStudentIds.has(reference.studentId)) {
           try {
             await notifications.groupReferentAssigned(ctx.prisma, {
-              recipientUserId: studentUserId,
+              recipientUserId: reference.student.user.id,
               groupId: group.id,
               groupName: group.name,
             });
@@ -504,6 +653,7 @@ export const groupsRouter = router({
       // Check group exists and is active
       const group = await ctx.prisma.group.findUnique({
         where: { id: input.groupId },
+        include: { referenceCollaborators: { select: { collaboratorId: true } } },
       });
 
       if (!group) {
@@ -519,7 +669,12 @@ export const groupsRouter = router({
           where: { userId: ctx.user.id },
         });
         
-        if (!collaborator || group.referenceCollaboratorId !== collaborator.id) {
+        const isReferenceCollaborator = collaborator && (
+          group.referenceCollaboratorId === collaborator.id
+          || group.referenceCollaborators.some((reference) => reference.collaboratorId === collaborator.id)
+        );
+
+        if (!isReferenceCollaborator) {
           throw new TRPCError({
             code: 'FORBIDDEN',
             message: 'Solo il collaboratore referente può aggiungere membri a questo gruppo',
@@ -748,7 +903,7 @@ export const groupsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const member = await ctx.prisma.groupMember.findUnique({
         where: { id: input.memberId },
-        include: { group: true },
+        include: { group: { include: { referenceCollaborators: { select: { collaboratorId: true } } } } },
       });
 
       if (!member) {
@@ -764,7 +919,12 @@ export const groupsRouter = router({
           where: { userId: ctx.user.id },
         });
         
-        if (!collaborator || member.group.referenceCollaboratorId !== collaborator.id) {
+        const isReferenceCollaborator = collaborator && (
+          member.group.referenceCollaboratorId === collaborator.id
+          || member.group.referenceCollaborators.some((reference) => reference.collaboratorId === collaborator.id)
+        );
+
+        if (!isReferenceCollaborator) {
           throw new TRPCError({
             code: 'FORBIDDEN',
             message: 'Solo il collaboratore referente può rimuovere membri da questo gruppo',
@@ -1033,8 +1193,10 @@ export const groupsRouter = router({
         OR: [
           // Referent as collaborator
           ...(collaborator ? [{ referenceCollaboratorId: collaborator.id }] : []),
+          ...(collaborator ? [{ referenceCollaborators: { some: { collaboratorId: collaborator.id } } }] : []),
           // Referent as admin
           ...(admin ? [{ referenceAdminId: admin.id }] : []),
+          ...(admin ? [{ referenceAdmins: { some: { adminId: admin.id } } }] : []),
           // Member as collaborator
           ...(collaborator ? [{ members: { some: { collaboratorId: collaborator.id } } }] : []),
         ],
@@ -1052,6 +1214,15 @@ export const groupsRouter = router({
         },
         referenceStudent: {
           include: { user: { select: { id: true, name: true } } },
+        },
+        referenceCollaborators: {
+          include: { collaborator: { include: { user: { select: { id: true, name: true } } } } },
+        },
+        referenceAdmins: {
+          include: { admin: { include: { user: { select: { id: true, name: true } } } } },
+        },
+        referenceStudents: {
+          include: { student: { include: { user: { select: { id: true, name: true } } } } },
         },
         members: {
           include: {
@@ -1079,10 +1250,15 @@ export const groupsRouter = router({
       memberCount: g._count.members,
       isReferent: 
         (collaborator && g.referenceCollaboratorId === collaborator.id) ||
-        (admin && g.referenceAdminId === admin.id),
+        (collaborator && g.referenceCollaborators.some((reference) => reference.collaboratorId === collaborator.id)) ||
+        (admin && g.referenceAdminId === admin.id) ||
+        (admin && g.referenceAdmins.some((reference) => reference.adminId === admin.id)),
       referenceCollaborator: g.referenceCollaborator,
       referenceAdmin: g.referenceAdmin,
       referenceStudent: g.referenceStudent,
+      referenceCollaborators: g.referenceCollaborators,
+      referenceAdmins: g.referenceAdmins,
+      referenceStudents: g.referenceStudents,
       members: g.members,
     }));
   }),

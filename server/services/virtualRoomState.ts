@@ -157,6 +157,7 @@ export async function getSessionState(sessionId: string, participantIdForMessage
       recentCheatingEvents: p.cheatingEvents.map(e => ({
         id: e.id,
         eventType: e.eventType,
+        description: e.description ?? null,
         createdAt: e.createdAt,
       })),
       unreadMessagesCount: p.messages.filter(m => m.senderType === 'STUDENT' && !m.isRead).length,

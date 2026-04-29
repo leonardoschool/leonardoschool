@@ -149,7 +149,7 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
     // Visibility change handler
     const handleVisibilityChange = () => {
       if (document.hidden && mergedConfig.blockTabSwitch) {
-        logEvent('visibility_hidden', 'User switched to another tab/window');
+        logEvent('visibility_hidden', 'Lo studente ha cambiato scheda o finestra del browser');
         setState(prev => ({ ...prev, isBlurred: true }));
       } else {
         setState(prev => ({ ...prev, isBlurred: false }));
@@ -159,7 +159,7 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
     // Window blur handler
     const handleBlur = () => {
       if (mergedConfig.blockTabSwitch) {
-        logEvent('tab_blur', 'Window lost focus');
+        logEvent('tab_blur', 'La finestra del browser ha perso il focus');
         setState(prev => ({ ...prev, isBlurred: true }));
       }
     };
@@ -175,7 +175,7 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
       setState(prev => ({ ...prev, isFullscreen }));
       
       if (!isFullscreen && mergedConfig.forceFullscreen) {
-        logEvent('fullscreen_exit', 'User exited fullscreen mode');
+        logEvent('fullscreen_exit', 'Lo studente ha abbandonato la modalità schermo intero');
         // Re-request fullscreen after a short delay
         setTimeout(() => {
           requestFullscreen();
@@ -187,7 +187,7 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
     const handleCopy = (e: ClipboardEvent) => {
       if (mergedConfig.blockCopyPaste) {
         e.preventDefault();
-        logEvent('copy_attempt', 'User attempted to copy content');
+        logEvent('copy_attempt', 'Lo studente ha tentato di copiare del testo');
       }
     };
 
@@ -195,7 +195,7 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
     const handlePaste = (e: ClipboardEvent) => {
       if (mergedConfig.blockCopyPaste) {
         e.preventDefault();
-        logEvent('paste_attempt', 'User attempted to paste content');
+        logEvent('paste_attempt', 'Lo studente ha tentato di incollare del testo');
       }
     };
 
@@ -203,7 +203,7 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
     const handleContextMenu = (e: MouseEvent) => {
       if (mergedConfig.blockRightClick) {
         e.preventDefault();
-        logEvent('right_click', 'User attempted to right-click');
+        logEvent('right_click', 'Lo studente ha fatto click con il tasto destro del mouse');
       }
     };
 
@@ -242,14 +242,14 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
       if (isBlocked) {
         e.preventDefault();
         e.stopPropagation();
-        logEvent('keyboard_shortcut', `Blocked shortcut: ${e.ctrlKey ? 'Ctrl+' : ''}${e.shiftKey ? 'Shift+' : ''}${e.altKey ? 'Alt+' : ''}${e.key}`);
+        logEvent('keyboard_shortcut', `Scorciatoia bloccata: ${e.ctrlKey ? 'Ctrl+' : ''}${e.shiftKey ? 'Shift+' : ''}${e.altKey ? 'Alt+' : ''}${e.key}`);
       }
     };
 
     // Beforeunload handler
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (mergedConfig.blockReload) {
-        logEvent('page_reload_attempt', 'User attempted to leave/reload page');
+        logEvent('page_reload_attempt', 'Lo studente ha tentato di abbandonare o ricaricare la pagina');
         e.preventDefault();
         e.returnValue = 'Sei sicuro di voler abbandonare la simulazione? I tuoi progressi potrebbero andare persi.';
         return e.returnValue;
@@ -263,7 +263,7 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
       const heightThreshold = globalThis.outerHeight - globalThis.innerHeight > threshold;
       
       if (widthThreshold || heightThreshold) {
-        logEvent('devtools_open', 'DevTools may be open');
+        logEvent('devtools_open', 'Possibile apertura degli strumenti per sviluppatori (DevTools)');
       }
     };
 

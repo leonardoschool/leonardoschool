@@ -21,6 +21,7 @@ import {
   UsersRound,
   MessageSquare,
   Send,
+  Check,
 } from 'lucide-react';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
@@ -52,6 +53,18 @@ interface GroupData {
     id: string;
     user: { name: string };
   } | null;
+  referenceStudents?: Array<{
+    studentId: string;
+    student: { id: string; user: { name: string; email?: string } };
+  }>;
+  referenceCollaborators?: Array<{
+    collaboratorId: string;
+    collaborator: { id: string; user: { name: string; email?: string } };
+  }>;
+  referenceAdmins?: Array<{
+    adminId: string;
+    admin: { id: string; user: { name: string; email?: string } };
+  }>;
   members: Array<{
     id: string;
     student: { id: string; user: { name: string; email: string } } | null;
@@ -414,28 +427,51 @@ export default function AdminGruppiContent() {
               </div>
 
               {/* References */}
-              {(group.referenceCollaborator || group.referenceAdmin || group.referenceStudent) && (
-                <div className={`text-sm ${colors.text.muted} space-y-1`}>
-                  {group.referenceCollaborator && (
-                    <div className="flex items-center gap-1.5">
-                      <UserCog className="w-3.5 h-3.5" />
-                      <b>Collaboratore:</b> <span> {group.referenceCollaborator.user.name}</span>
-                    </div>
-                  )}
-                  {group.referenceAdmin && (
-                    <div className="flex items-center gap-1.5">
-                      <UserCog className="w-3.5 h-3.5" />
-                      <b>Collaboratore:</b> <span> {group.referenceAdmin.user.name}</span>
-                    </div>
-                  )}
-                  {group.referenceStudent && (
-                    <div className="flex items-center gap-1.5">
-                      <GraduationCap className="w-3.5 h-3.5" />
-                      <b>Riferimento studenti:</b> <span> {group.referenceStudent.user.name}</span>
-                    </div>
-                  )}
-                </div>
-              )}
+              {(() => {
+                const linkedAdminReferences = group.referenceAdmins?.map((reference) => reference.admin.user.name) ?? [];
+                const linkedCollaboratorReferences = group.referenceCollaborators?.map((reference) => reference.collaborator.user.name) ?? [];
+                const linkedStudentReferences = group.referenceStudents?.map((reference) => reference.student.user.name) ?? [];
+                const adminReferences = linkedAdminReferences.length > 0
+                  ? linkedAdminReferences
+                  : (group.referenceAdmin ? [group.referenceAdmin.user.name] : []);
+                const collaboratorReferences = linkedCollaboratorReferences.length > 0
+                  ? linkedCollaboratorReferences
+                  : (group.referenceCollaborator ? [group.referenceCollaborator.user.name] : []);
+                const studentReferences = linkedStudentReferences.length > 0
+                  ? linkedStudentReferences
+                  : (group.referenceStudent ? [group.referenceStudent.user.name] : []);
+
+                if (adminReferences.length === 0 && collaboratorReferences.length === 0 && studentReferences.length === 0) {
+                  return null;
+                }
+
+                const formatNames = (names: string[]) => names.length <= 2
+                  ? names.join(', ')
+                  : `${names.slice(0, 2).join(', ')} +${names.length - 2}`;
+
+                return (
+                  <div className={`text-sm ${colors.text.muted} space-y-1`}>
+                    {adminReferences.length > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <UserCog className="w-3.5 h-3.5" />
+                        <b>Amministratori:</b> <span>{formatNames(adminReferences)}</span>
+                      </div>
+                    )}
+                    {collaboratorReferences.length > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <UserCog className="w-3.5 h-3.5" />
+                        <b>Collaboratori:</b> <span>{formatNames(collaboratorReferences)}</span>
+                      </div>
+                    )}
+                    {studentReferences.length > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <GraduationCap className="w-3.5 h-3.5" />
+                        <b>Studenti:</b> <span>{formatNames(studentReferences)}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Actions */}
               <div className="flex items-center gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
@@ -565,10 +601,134 @@ interface GroupFormModalProps {
     description?: string | null;
     color?: string | null;
     type?: GroupType;
-    referenceStudentId?: string | null;
-    referenceCollaboratorId?: string | null;
+    referenceStudentIds?: string[];
+    referenceCollaboratorIds?: string[];
+    referenceAdminIds?: string[];
   }) => void;
   isLoading: boolean;
+}
+
+interface ReferenceOption {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+function MultiReferenceSelect({
+  label,
+  values,
+  options,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  values: string[];
+  options: ReferenceOption[];
+  onChange: (values: string[]) => void;
+  placeholder: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const selectedOptions = options.filter((option) => values.includes(option.value));
+  const filteredOptions = options.filter((option) => {
+    const normalizedSearch = searchTerm.toLowerCase();
+    return option.label.toLowerCase().includes(normalizedSearch)
+      || option.description?.toLowerCase().includes(normalizedSearch);
+  });
+
+  const toggleValue = (value: string) => {
+    onChange(values.includes(value)
+      ? values.filter((selectedValue) => selectedValue !== value)
+      : [...values, value]
+    );
+  };
+
+  return (
+    <div>
+      <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+        {label}
+      </label>
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        className={`w-full min-h-[46px] px-3 py-2 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} text-left focus:ring-2 focus:ring-red-500/20 focus:border-red-500`}
+      >
+        {selectedOptions.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {selectedOptions.map((option) => (
+              <span
+                key={option.value}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs ${colors.background.secondary} ${colors.text.secondary} border ${colors.border.primary}`}
+              >
+                {option.label}
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleValue(option.value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      toggleValue(option.value);
+                    }
+                  }}
+                  className="hover:text-red-500"
+                  aria-label={`Rimuovi ${option.label}`}
+                >
+                  <X className="w-3 h-3" />
+                </span>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span className={colors.text.muted}>{placeholder}</span>
+        )}
+      </button>
+
+      {isOpen && (
+        <div className={`mt-2 rounded-lg border ${colors.border.primary} ${colors.background.card} shadow-lg overflow-hidden`}>
+          <div className={`p-2 border-b ${colors.border.primary}`}>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Cerca..."
+              className={`w-full px-3 py-2 rounded-md border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} text-sm`}
+            />
+          </div>
+          <div className="max-h-52 overflow-y-auto p-1">
+            {filteredOptions.map((option) => {
+              const isSelected = values.includes(option.value);
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => toggleValue(option.value)}
+                  className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-left text-sm ${colors.background.hover}`}
+                >
+                  <span className="min-w-0">
+                    <span className={`block font-medium ${colors.text.primary} truncate`}>{option.label}</span>
+                    {option.description && (
+                      <span className={`block text-xs ${colors.text.muted} truncate`}>{option.description}</span>
+                    )}
+                  </span>
+                  <span className={`w-5 h-5 rounded border ${isSelected ? `${colors.primary.bg} border-transparent text-white` : colors.border.primary} flex items-center justify-center flex-shrink-0`}>
+                    {isSelected && <Check className="w-3.5 h-3.5" />}
+                  </span>
+                </button>
+              );
+            })}
+            {filteredOptions.length === 0 && (
+              <p className={`px-3 py-4 text-sm text-center ${colors.text.muted}`}>Nessun risultato</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModalProps) {
@@ -592,8 +752,9 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
     description: '',
     color: '#6366f1',
     type: 'MIXED' as GroupType,
-    referenceStudentId: '',
-    referenceCollaboratorId: '',
+    referenceStudentIds: [] as string[],
+    referenceCollaboratorIds: [] as string[],
+    referenceAdminIds: [] as string[],
     isActive: true,
   });
 
@@ -601,22 +762,28 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
   useEffect(() => {
     if (existingGroup) {
       const group = existingGroup as unknown as GroupData;
-      // Determine collaborator/admin reference value
-      let referenceCollaboratorValue = '';
-      if (group.referenceAdminId) {
-        referenceCollaboratorValue = `admin:${group.referenceAdminId}`;
-      } else if (group.referenceCollaboratorId) {
-        referenceCollaboratorValue = group.referenceCollaboratorId;
-      }
+      const linkedStudentIds = group.referenceStudents?.map((reference) => reference.studentId) ?? [];
+      const linkedCollaboratorIds = group.referenceCollaborators?.map((reference) => reference.collaboratorId) ?? [];
+      const linkedAdminIds = group.referenceAdmins?.map((reference) => reference.adminId) ?? [];
+      const referenceStudentIds = linkedStudentIds.length > 0
+        ? linkedStudentIds
+        : (group.referenceStudentId ? [group.referenceStudentId] : []);
+      const referenceCollaboratorIds = linkedCollaboratorIds.length > 0
+        ? linkedCollaboratorIds
+        : (group.referenceCollaboratorId ? [group.referenceCollaboratorId] : []);
+      const referenceAdminIds = linkedAdminIds.length > 0
+        ? linkedAdminIds
+        : (group.referenceAdminId ? [group.referenceAdminId] : []);
       
       setFormData({
         name: group.name,
         description: group.description || '',
         color: group.color || '#6366f1',
         type: group.type,
-        referenceStudentId: group.referenceStudentId || '',
+        referenceStudentIds,
+        referenceCollaboratorIds,
+        referenceAdminIds,
         isActive: group.isActive,
-        referenceCollaboratorId: referenceCollaboratorValue,
       });
     }
   }, [existingGroup]);
@@ -630,14 +797,18 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
       description?: string | null;
       color?: string | null;
       type: GroupType;
-      referenceStudentId?: string | null;
-      referenceCollaboratorId?: string | null;
+      referenceStudentIds?: string[];
+      referenceCollaboratorIds?: string[];
+      referenceAdminIds?: string[];
       isActive?: boolean;
     } = {
       name: formData.name,
       description: formData.description || undefined,
       color: formData.color || undefined,
       type: formData.type,
+      referenceStudentIds: formData.referenceStudentIds,
+      referenceCollaboratorIds: formData.referenceCollaboratorIds,
+      referenceAdminIds: formData.referenceAdminIds,
     };
 
     // Aggiungi isActive solo se siamo in modifica (groupId esiste)
@@ -645,22 +816,15 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
       submitData.isActive = formData.isActive;
     }
 
-    // Aggiungi riferimenti solo se pertinenti al tipo
-    if (formData.type !== 'STUDENTS') {
-      submitData.referenceCollaboratorId = formData.referenceCollaboratorId || undefined;
-    }
-    if (formData.type !== 'COLLABORATORS') {
-      submitData.referenceStudentId = formData.referenceStudentId || undefined;
-    }
-
     onSubmit(submitData);
   };
 
   // Type definitions for the user lists
-  type UserWithStudent = { id: string; name: string; student?: { id: string } };
+  type UserWithStudent = { id: string; name: string; email?: string; student?: { id: string; matricola?: string | null } };
   type UserWithCollaborator = { 
     id: string; 
     name: string; 
+    email?: string;
     role?: string; 
     collaborator?: { 
       id: string;
@@ -672,18 +836,15 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
     admin?: { id: string } 
   };
 
-  const studentOptions = [
-    { value: '', label: 'Nessuno' },
-    ...((students as unknown as UserWithStudent[] | undefined)
-      ?.filter((s) => s.student?.id) // Solo utenti con profilo studente
-      .map((s) => ({
-        value: s.student!.id,
-        label: s.name || 'N/A',
-      })) || []),
-  ];
+  const studentOptions: ReferenceOption[] = ((students as unknown as UserWithStudent[] | undefined)
+    ?.filter((s) => s.student?.id)
+    .map((s) => ({
+      value: s.student!.id,
+      label: s.name || 'N/A',
+      description: s.student?.matricola || s.email,
+    })) || []);
 
-  // Combina collaboratori e admin per il riferimento
-  const collaboratorOptionsList: { value: string; label: string }[] = [];
+  const collaboratorOptions: ReferenceOption[] = [];
   
   // Aggiungi collaboratori con materie
   (collaborators as unknown as UserWithCollaborator[] | undefined)
@@ -693,31 +854,25 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
       const subjectStr = subjects.length > 0 
         ? ` — ${subjects.map(s => s.subject.code || s.subject.name).join(', ')}`
         : '';
-      collaboratorOptionsList.push({
+      collaboratorOptions.push({
         value: c.collaborator!.id,
-        label: `${c.name || 'N/A'}${subjectStr}`,
+        label: c.name || 'N/A',
+        description: subjectStr ? subjectStr.replace(' — ', '') : c.email,
       });
     });
 
-  // Aggiungi admin (stilizzati meglio)
-  (admins?.users as unknown as UserWithCollaborator[] | undefined)
+  const adminOptions: ReferenceOption[] = ((admins?.users as unknown as UserWithCollaborator[] | undefined)
     ?.filter((a) => a.admin?.id)
-    .forEach((a) => {
-      collaboratorOptionsList.push({
-        value: `admin:${a.admin!.id}`, // Prefisso per distinguere
-        label: `${a.name || 'N/A'} — 👑 Admin`,
-      });
-    });
-
-  const collaboratorOptions = [
-    { value: '', label: 'Nessuno' },
-    ...collaboratorOptionsList,
-  ];
+    .map((a) => ({
+      value: a.admin!.id,
+      label: a.name || 'N/A',
+      description: a.email,
+    })) || []);
 
   return (
     <Portal>
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className={`${colors.background.card} rounded-xl w-full max-w-lg max-h-[90vh] overflow-visible shadow-xl`}>
+        <div className={`${colors.background.card} rounded-xl w-full max-w-2xl max-h-[90vh] overflow-visible shadow-xl`}>
           <div className="max-h-[90vh] overflow-y-auto rounded-xl">
           <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-inherit z-10">
             <h2 className={`text-xl font-semibold ${colors.text.primary}`}>
@@ -789,16 +944,7 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
                 </label>
                 <CustomSelect
                   value={formData.type}
-                  onChange={(v) => {
-                    const newType = v as GroupType;
-                    setFormData({ 
-                      ...formData, 
-                      type: newType,
-                      // Reset riferimenti non pertinenti al nuovo tipo
-                      referenceStudentId: newType === 'COLLABORATORS' ? '' : formData.referenceStudentId,
-                      referenceCollaboratorId: newType === 'STUDENTS' ? '' : formData.referenceCollaboratorId,
-                    });
-                  }}
+                  onChange={(v) => setFormData({ ...formData, type: v as GroupType })}
                   options={[
                     { value: 'MIXED', label: 'Misto' },
                     { value: 'STUDENTS', label: 'Solo Studenti' },
@@ -808,37 +954,29 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
               </div>
             </div>
 
-            {/* Collaboratore di riferimento - solo se non è gruppo STUDENTS */}
-            {formData.type !== 'STUDENTS' && (
-              <div>
-                <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                  Collaboratore di riferimento
-                </label>
-                <CustomSelect
-                  value={formData.referenceCollaboratorId}
-                  onChange={(v) => setFormData({ ...formData, referenceCollaboratorId: v })}
-                  options={collaboratorOptions}
-                  placeholder="Seleziona collaboratore..."
-                  searchable
-                />
-              </div>
-            )}
+            <MultiReferenceSelect
+              label="Amministratori di riferimento"
+              values={formData.referenceAdminIds}
+              options={adminOptions}
+              onChange={(referenceAdminIds) => setFormData({ ...formData, referenceAdminIds })}
+              placeholder="Seleziona uno o più amministratori..."
+            />
 
-            {/* Studente di riferimento - solo se non è gruppo COLLABORATORS */}
-            {formData.type !== 'COLLABORATORS' && (
-              <div>
-                <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-                  Studente di riferimento
-                </label>
-                <CustomSelect
-                  value={formData.referenceStudentId}
-                  onChange={(v) => setFormData({ ...formData, referenceStudentId: v })}
-                  options={studentOptions}
-                  placeholder="Seleziona studente..."
-                  searchable
-                />
-              </div>
-            )}
+            <MultiReferenceSelect
+              label="Collaboratori di riferimento"
+              values={formData.referenceCollaboratorIds}
+              options={collaboratorOptions}
+              onChange={(referenceCollaboratorIds) => setFormData({ ...formData, referenceCollaboratorIds })}
+              placeholder="Seleziona uno o più collaboratori..."
+            />
+
+            <MultiReferenceSelect
+              label="Studenti di riferimento"
+              values={formData.referenceStudentIds}
+              options={studentOptions}
+              onChange={(referenceStudentIds) => setFormData({ ...formData, referenceStudentIds })}
+              placeholder="Seleziona uno o più studenti..."
+            />
 
             {/* Stato attivo/inattivo - solo in modifica */}
             {groupId && (
@@ -887,6 +1025,23 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
         </div>
       </div>
     </Portal>
+  );
+}
+
+function ReferenceList({ title, names }: { title: string; names: string[] }) {
+  return (
+    <div>
+      <p className={`text-xs font-medium ${colors.text.muted} uppercase mb-1`}>{title}</p>
+      {names.length > 0 ? (
+        <div className="space-y-1">
+          {names.map((name) => (
+            <p key={name} className={`text-sm ${colors.text.primary}`}>{name}</p>
+          ))}
+        </div>
+      ) : (
+        <p className={`text-sm ${colors.text.muted}`}>Nessuno</p>
+      )}
+    </div>
   );
 }
 
@@ -972,6 +1127,35 @@ function GroupDetailsModal({ group, isLoading, onClose, onRemoveMember, isRemovi
 
           {/* Members */}
           <div className="flex-1 overflow-y-auto p-6">
+            {(() => {
+              const linkedAdminReferences = group.referenceAdmins?.map((reference) => reference.admin.user.name) ?? [];
+              const linkedCollaboratorReferences = group.referenceCollaborators?.map((reference) => reference.collaborator.user.name) ?? [];
+              const linkedStudentReferences = group.referenceStudents?.map((reference) => reference.student.user.name) ?? [];
+              const adminReferences = linkedAdminReferences.length > 0
+                ? linkedAdminReferences
+                : (group.referenceAdmin ? [group.referenceAdmin.user.name] : []);
+              const collaboratorReferences = linkedCollaboratorReferences.length > 0
+                ? linkedCollaboratorReferences
+                : (group.referenceCollaborator ? [group.referenceCollaborator.user.name] : []);
+              const studentReferences = linkedStudentReferences.length > 0
+                ? linkedStudentReferences
+                : (group.referenceStudent ? [group.referenceStudent.user.name] : []);
+              const hasReferences = adminReferences.length > 0 || collaboratorReferences.length > 0 || studentReferences.length > 0;
+
+              if (!hasReferences) return null;
+
+              return (
+                <div className={`mb-5 p-4 rounded-xl border ${colors.border.primary} ${colors.background.secondary}`}>
+                  <h3 className={`font-medium ${colors.text.primary} mb-3`}>Referenti</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                    <ReferenceList title="Amministratori" names={adminReferences} />
+                    <ReferenceList title="Collaboratori" names={collaboratorReferences} />
+                    <ReferenceList title="Studenti" names={studentReferences} />
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="flex items-center justify-between mb-4">
               <h3 className={`font-medium ${colors.text.primary}`}>
                 Membri ({group.members.length})

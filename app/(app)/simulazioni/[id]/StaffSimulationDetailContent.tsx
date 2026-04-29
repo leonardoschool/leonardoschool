@@ -26,6 +26,8 @@ import {
   Printer,
   User,
   Users,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import type { SimulationType, SimulationStatus } from '@/lib/validations/simulationValidation';
 
@@ -92,6 +94,19 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [forceDeleteConfirm, setForceDeleteConfirm] = useState<{ resultsCount: number } | null>(null);
   const [archiveConfirm, setArchiveConfirm] = useState(false);
+  const [expandedPreviews, setExpandedPreviews] = useState<Set<string>>(new Set());
+
+  const togglePreview = (questionId: string) => {
+    setExpandedPreviews((prev) => {
+      const next = new Set(prev);
+      if (next.has(questionId)) {
+        next.delete(questionId);
+      } else {
+        next.add(questionId);
+      }
+      return next;
+    });
+  };
 
   // Fetch simulation
   const { data: simulation, isLoading } = trpc.simulations.getSimulation.useQuery({ id });
@@ -555,37 +570,89 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
     ? questionEntries.filter((entry) => !groupedQuestionIds.has(entry.question.questionId))
     : [];
 
-  const renderQuestionRow = ({ question: sq, index }: { question: DetailQuestion; index: number }) => (
-    <div
-      key={sq.id}
-      className={`px-4 sm:px-6 py-3 sm:py-4 border-b ${colors.border.light} last:border-b-0 ${colors.background.hover}`}
-    >
-      <div className="flex items-start gap-3 sm:gap-4">
-        <span className={`w-7 h-7 sm:w-8 sm:h-8 flex-shrink-0 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs sm:text-sm font-medium ${colors.text.primary}`}>
-          {index + 1}
-        </span>
-        <div className="flex-1 min-w-0">
-          <RichTextRenderer
-            text={sq.question.text}
-            className={`text-sm ${colors.text.primary} line-clamp-2 leading-relaxed`}
-          />
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-2">
-            {sq.question.subject && (
-              <span
-                className="px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap"
-                style={{ backgroundColor: sq.question.subject.color + '20', color: sq.question.subject.color }}
-              >
-                {sq.question.subject.name}
-              </span>
-            )}
-            {sq.question.topic && (
-              <span className={`text-xs ${colors.text.muted} truncate`}>{sq.question.topic.name}</span>
+  const renderQuestionRow = ({ question: sq, index }: { question: DetailQuestion; index: number }) => {
+    const isExpanded = expandedPreviews.has(sq.questionId);
+    const isChoiceType = sq.question.type === 'SINGLE_CHOICE' || sq.question.type === 'MULTIPLE_CHOICE';
+    const correctAnswers = isChoiceType ? sq.question.answers.filter((a) => a.isCorrect) : [];
+    const hasPreview = isChoiceType ? correctAnswers.length > 0 : sq.question.keywords.length > 0;
+
+    return (
+      <div
+        key={sq.id}
+        className={`px-4 sm:px-6 py-3 sm:py-4 border-b ${colors.border.light} last:border-b-0 ${colors.background.hover}`}
+      >
+        <div className="flex items-start gap-3 sm:gap-4">
+          <span className={`w-7 h-7 sm:w-8 sm:h-8 flex-shrink-0 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs sm:text-sm font-medium ${colors.text.primary}`}>
+            {index + 1}
+          </span>
+          <div className="flex-1 min-w-0">
+            <RichTextRenderer
+              text={sq.question.text}
+              className={`text-sm ${colors.text.primary} line-clamp-2 leading-relaxed`}
+            />
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-2">
+              {sq.question.subject && (
+                <span
+                  className="px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap"
+                  style={{ backgroundColor: sq.question.subject.color + '20', color: sq.question.subject.color }}
+                >
+                  {sq.question.subject.name}
+                </span>
+              )}
+              {sq.question.topic && (
+                <span className={`text-xs ${colors.text.muted} truncate`}>{sq.question.topic.name}</span>
+              )}
+            </div>
+            {/* Answer/keyword preview */}
+            {isExpanded && hasPreview && (
+              <div className={`mt-2 p-2 rounded-lg ${
+                isChoiceType
+                  ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+                  : `${colors.background.secondary} border ${colors.border.light}`
+              }`}>
+                {isChoiceType ? (
+                  <>
+                    <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">
+                      {sq.question.type === 'MULTIPLE_CHOICE' ? 'Risposte corrette:' : 'Risposta corretta:'}
+                    </p>
+                    <div className="space-y-0.5">
+                      {correctAnswers.map((a) => (
+                        <p key={a.id} className="text-xs text-green-700 dark:text-green-300">{a.text}</p>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className={`text-xs font-medium ${colors.text.muted} mb-1`}>Keywords:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {sq.question.keywords.map((kw, i) => (
+                        <span key={i} className={`text-xs px-2 py-0.5 rounded-full ${colors.background.tertiary} ${colors.text.tertiary}`}>
+                          {kw.keyword}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             )}
           </div>
+          {hasPreview && (
+            <button
+              onClick={() => togglePreview(sq.questionId)}
+              className={`p-1.5 rounded-lg transition-colors flex-shrink-0 mt-0.5 ${
+                isExpanded
+                  ? `${colors.primary.bg} text-white`
+                  : `${colors.background.secondary} ${colors.text.muted} hover:${colors.text.secondary}`
+              }`}
+              title={isExpanded ? 'Nascondi risposta' : 'Mostra risposta'}
+            >
+              {isExpanded ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          )}
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8">

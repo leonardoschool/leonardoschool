@@ -3142,20 +3142,18 @@ export default function NewSimulationPage() {
             {questionDetail.type === 'OPEN_TEXT' ? (
               <div className="space-y-2 mt-4">
                 <h4 className={`font-medium ${colors.text.primary}`}>Keywords di valutazione:</h4>
+                <p className={`text-xs ${colors.text.muted}`}>
+                  Lo studente deve scrivere almeno una di queste keywords (alternative tra loro).
+                </p>
                 {questionDetail.keywords && questionDetail.keywords.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {questionDetail.keywords.map((keyword) => (
                       <span
                         key={keyword.id}
-                        className={`px-2 py-1 rounded-lg text-xs font-medium ${
-                          keyword.isRequired
-                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                            : `${colors.background.secondary} ${colors.text.secondary}`
-                        }`}
+                        className={`px-2 py-1 rounded-lg text-xs font-medium ${colors.background.secondary} ${colors.text.secondary}`}
                         title={keyword.synonyms.length > 0 ? `Sinonimi: ${keyword.synonyms.join(', ')}` : undefined}
                       >
                         {keyword.keyword}
-                        {keyword.isRequired && ' · obbligatoria'}
                       </span>
                     ))}
                   </div>

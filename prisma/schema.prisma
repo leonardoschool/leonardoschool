@@ -99,6 +99,8 @@ enum SimulationAccessType {
 enum CheatingEventType {
   TAB_CHANGE // Cambio tab/finestra
   WINDOW_BLUR // Finestra persa di focus
+  FULLSCREEN_EXIT // Uscita dalla modalità schermo intero
+  PAGE_RELOAD // Tentativo di ricaricare la pagina
   COPY_ATTEMPT // Tentativo di copia
   PASTE_ATTEMPT // Tentativo di incolla
   RIGHT_CLICK // Click destro
@@ -274,10 +276,10 @@ model User {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   lastLoginAt DateTime?
-  
+
   // Push notifications
-  expoPushToken String?   // Expo push notification token for mobile app
-  
+  expoPushToken String? // Expo push notification token for mobile app
+
   // FCM tokens for web push notifications (multi-device support)
   fcmTokens FCMToken[]
 
@@ -289,9 +291,9 @@ model User {
   questionsCreated Question[]    @relation("QuestionCreatedBy")
 
   // Simulation relations
-  simulationsCreated Simulation[]           @relation("SimulationCreatedBy")
-  simulationTemplatesCreated SimulationTemplate[] @relation("SimulationTemplateCreatedBy")
-  assignmentsCreated SimulationAssignment[] @relation("AssignmentCreator")
+  simulationsCreated         Simulation[]           @relation("SimulationCreatedBy")
+  simulationTemplatesCreated SimulationTemplate[]   @relation("SimulationTemplateCreatedBy")
+  assignmentsCreated         SimulationAssignment[] @relation("AssignmentCreator")
 
   // Calendar & Event relations
   eventsCreated    CalendarEvent[]   @relation("EventCreatedBy")
@@ -327,8 +329,8 @@ model FCMToken {
   token      String   @unique
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deviceInfo String?  // User agent for device identification
-  platform   String?  // 'web', 'android', 'ios' - for analytics
+  deviceInfo String? // User agent for device identification
+  platform   String? // 'web', 'android', 'ios' - for analytics
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   lastUsedAt DateTime @default(now())
@@ -361,8 +363,8 @@ model Student {
   // Parent/Guardian requirement flags
   // Admin can request parent data for adult students via requiresParentData
   // For minors (<18), parent data is always required at registration
-  requiresParentData Boolean @default(false) // Admin can set this to true for adult students
-  parentDataRequestedAt DateTime? // When admin requested the parent data
+  requiresParentData      Boolean   @default(false) // Admin can set this to true for adult students
+  parentDataRequestedAt   DateTime? // When admin requested the parent data
   parentDataRequestedById String? // Admin user ID who requested
 
   // Relations
@@ -375,6 +377,7 @@ model Student {
   materialCategoryAccess MaterialCategoryStudentAccess[]
   groupMemberships       GroupMember[] // Gruppi a cui appartiene
   referenceGroups        Group[]                         @relation("GroupReferenceStudent") // Gruppi di cui è riferimento
+  groupReferenceLinks    GroupStudentReference[]
 
   // Question-related relations
   questionFeedbacks     QuestionFeedback[] // Segnalazioni domande
@@ -438,8 +441,9 @@ model Admin {
   canManageTests Boolean @default(true)
   canViewStats   Boolean @default(true)
 
-  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  referenceGroups Group[] @relation("GroupReferenceAdmin")
+  user                User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceGroups     Group[]               @relation("GroupReferenceAdmin")
+  groupReferenceLinks GroupAdminReference[]
 
   @@index([userId])
   @@map("admins")
@@ -472,11 +476,12 @@ model Collaborator {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  contracts        Contract[] // Unified contract system
-  subjects         CollaboratorSubject[] // Materie insegnate
-  groupMemberships GroupMember[] // Gruppi a cui appartiene
-  referenceGroups  Group[]               @relation("GroupReferenceCollaborator") // Gruppi di cui è riferimento
+  user                User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contracts           Contract[] // Unified contract system
+  subjects            CollaboratorSubject[] // Materie insegnate
+  groupMemberships    GroupMember[] // Gruppi a cui appartiene
+  referenceGroups     Group[]                      @relation("GroupReferenceCollaborator") // Gruppi di cui è riferimento
+  groupReferenceLinks GroupCollaboratorReference[]
 
   @@index([userId])
   @@map("collaborators")
@@ -893,9 +898,9 @@ model Simulation {
   maxAttempts  Int? // Max attempts allowed (null = unlimited if repeatable)
 
   // Paper-based mode (for in-person exams without computer)
-  isPaperBased         Boolean @default(false) // If true, exam is printed and answers entered manually
-  paperInstructions    String? @db.Text // Special instructions for paper-based exams
-  showSectionsInPaper  Boolean @default(true) // If true, show section dividers in PDF output
+  isPaperBased        Boolean @default(false) // If true, exam is printed and answers entered manually
+  paperInstructions   String? @db.Text // Special instructions for paper-based exams
+  showSectionsInPaper Boolean @default(true) // If true, show section dividers in PDF output
 
   // Attendance tracking
   trackAttendance Boolean @default(false) // If true, attendance is recorded for this simulation
@@ -929,13 +934,13 @@ model Simulation {
   updatedAt DateTime @updatedAt
 
   // Relations
-  createdBy      User?               @relation("SimulationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  sourceTemplate SimulationTemplate? @relation("SimulationsFromTemplate", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
-  questions     SimulationQuestion[]
-  results       SimulationResult[]
-  assignments   SimulationAssignment[] // Specific student/group assignments
-  sessions      SimulationSession[] // Virtual room sessions
-  calendarEvent CalendarEvent?         @relation("SimulationCalendarEvent", fields: [calendarEventId], references: [id], onDelete: SetNull)
+  createdBy      User?                  @relation("SimulationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  sourceTemplate SimulationTemplate?    @relation("SimulationsFromTemplate", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  questions      SimulationQuestion[]
+  results        SimulationResult[]
+  assignments    SimulationAssignment[] // Specific student/group assignments
+  sessions       SimulationSession[] // Virtual room sessions
+  calendarEvent  CalendarEvent?         @relation("SimulationCalendarEvent", fields: [calendarEventId], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([startDate])
@@ -1002,7 +1007,7 @@ model SimulationTemplate {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  createdBy          User?       @relation("SimulationTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy          User?        @relation("SimulationTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   simulationsCreated Simulation[] @relation("SimulationsFromTemplate")
 
   @@index([status])
@@ -1030,18 +1035,18 @@ model SimulationAssignment {
   notes        String?   @db.Text // Notes for this specific assignment
 
   // Schedule for this specific assignment
-  startDate    DateTime? // When this assignment becomes available
-  endDate      DateTime? // When this assignment closes
-  locationType String? // 'ONLINE', 'IN_PERSON', 'HYBRID'
-  createCalendarEvent Boolean @default(false) // Whether to create a calendar event for this assignment
+  startDate           DateTime? // When this assignment becomes available
+  endDate             DateTime? // When this assignment closes
+  locationType        String? // 'ONLINE', 'IN_PERSON', 'HYBRID'
+  createCalendarEvent Boolean   @default(false) // Whether to create a calendar event for this assignment
 
   // Relations
-  simulation Simulation           @relation(fields: [simulationId], references: [id], onDelete: Cascade)
-  student    Student?             @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  group      Group?               @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  assignedBy User?                @relation("AssignmentCreator", fields: [assignedById], references: [id], onDelete: SetNull)
-  results    SimulationResult[]   // Results for this specific assignment
-  sessions   SimulationSession[]  // Virtual Room sessions for this assignment
+  simulation Simulation          @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  student    Student?            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  group      Group?              @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  assignedBy User?               @relation("AssignmentCreator", fields: [assignedById], references: [id], onDelete: SetNull)
+  results    SimulationResult[] // Results for this specific assignment
+  sessions   SimulationSession[] // Virtual Room sessions for this assignment
 
   // Note: Removed unique constraints to allow multiple assignments of the same simulation
   // to the same student/group with different dates/schedules
@@ -1052,7 +1057,7 @@ model SimulationAssignment {
   @@index([endDate])
   @@index([status])
   @@index([simulationId, studentId]) // Composite index for queries
-  @@index([simulationId, groupId])   // Composite index for queries
+  @@index([simulationId, groupId]) // Composite index for queries
   @@map("simulation_assignments")
 }
 
@@ -1099,7 +1104,7 @@ model SimulationResult {
   // Open answer review status
   pendingOpenAnswers Int       @default(0) // Number of open answers awaiting manual review
   reviewedAt         DateTime? // When all open answers were reviewed
-  reviewedById       String?   // Who completed the review
+  reviewedById       String? // Who completed the review
 
   // Answers (JSON array)
   answers Json // [{questionId, answer: 'A'|'B'|'C'|'D'|'E'|'BLANK', isCorrect, timeSpent}]
@@ -1184,26 +1189,26 @@ model SimulationSessionParticipant {
   isConnected    Boolean   @default(true) // Currently connected
   lastHeartbeat  DateTime  @default(now()) // Last activity ping
   disconnectedAt DateTime? // When disconnected (for reconnection)
-  
+
   // Kick/block status
   isKicked     Boolean   @default(false) // Se lo studente è stato espulso
   kickedAt     DateTime? // Quando è stato espulso
-  kickedReason String?   // Motivo dell'espulsione
+  kickedReason String? // Motivo dell'espulsione
 
   // Progress tracking (for admin monitoring)
-  currentQuestionIndex Int @default(0) // Current question being viewed
-  answeredCount        Int @default(0) // Number of questions answered
+  currentQuestionIndex Int     @default(0) // Current question being viewed
+  answeredCount        Int     @default(0) // Number of questions answered
   resultId             String? @unique // Link to SimulationResult when started
 
   // For ranking display
   anonymousId String @default(cuid()) // ID anonimo per la graduatoria pubblica
 
   // Relations
-  session         SimulationSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  student         Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  cheatingEvents  SessionCheatingEvent[]
-  messages        SessionMessage[]
-  result          SimulationResult?        @relation(fields: [resultId], references: [id], onDelete: SetNull)
+  session        SimulationSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student        Student                @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  cheatingEvents SessionCheatingEvent[]
+  messages       SessionMessage[]
+  result         SimulationResult?      @relation(fields: [resultId], references: [id], onDelete: SetNull)
 
   @@unique([sessionId, studentId])
   @@index([sessionId])
@@ -1241,10 +1246,10 @@ model SessionMessage {
 
   senderType SessionMessageSender // ADMIN or STUDENT
   senderId   String? // User ID of the sender (admin/collaborator or student's user)
-  message    String  @db.Text
+  message    String               @db.Text
 
-  isRead    Boolean   @default(false)
-  readAt    DateTime?
+  isRead Boolean   @default(false)
+  readAt DateTime?
 
   createdAt DateTime @default(now())
 
@@ -1637,7 +1642,7 @@ model Contract {
   // Revocation info (for revoked contracts that were previously signed)
   revokedAt   DateTime?
   revokedBy   String? // Admin userId who revoked
-  revokeNotes String? @db.Text // Reason for revocation
+  revokeNotes String?   @db.Text // Reason for revocation
 
   // Admin notes
   adminNotes String? @db.Text
@@ -1929,7 +1934,7 @@ model MaterialCategoryStudentAccess {
 
 // Junction table for Material <-> Category many-to-many relationship
 model MaterialCategoryLink {
-  id         String @id @default(cuid())
+  id         String   @id @default(cuid())
   materialId String
   categoryId String
   createdAt  DateTime @default(now())
@@ -2055,9 +2060,9 @@ model Material {
   createdBy String? // Admin userId
 
   // Relations
-  subject       CustomSubject?            @relation(fields: [subjectId], references: [id], onDelete: SetNull)
-  topic         Topic?                    @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  subTopic      SubTopic?                 @relation(fields: [subTopicId], references: [id], onDelete: SetNull)
+  subject       CustomSubject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  topic         Topic?                  @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  subTopic      SubTopic?               @relation(fields: [subTopicId], references: [id], onDelete: SetNull)
   categories    MaterialCategoryLink[]
   groupAccess   MaterialGroupAccess[]
   studentAccess MaterialStudentAccess[]
@@ -2233,10 +2238,13 @@ model Group {
   updatedAt DateTime @updatedAt
 
   // Relations
-  referenceStudent      Student?      @relation("GroupReferenceStudent", fields: [referenceStudentId], references: [id], onDelete: SetNull)
-  referenceCollaborator Collaborator? @relation("GroupReferenceCollaborator", fields: [referenceCollaboratorId], references: [id], onDelete: SetNull)
-  referenceAdmin        Admin?        @relation("GroupReferenceAdmin", fields: [referenceAdminId], references: [id], onDelete: SetNull)
-  members               GroupMember[]
+  referenceStudent       Student?                     @relation("GroupReferenceStudent", fields: [referenceStudentId], references: [id], onDelete: SetNull)
+  referenceCollaborator  Collaborator?                @relation("GroupReferenceCollaborator", fields: [referenceCollaboratorId], references: [id], onDelete: SetNull)
+  referenceAdmin         Admin?                       @relation("GroupReferenceAdmin", fields: [referenceAdminId], references: [id], onDelete: SetNull)
+  referenceStudents      GroupStudentReference[]
+  referenceCollaborators GroupCollaboratorReference[]
+  referenceAdmins        GroupAdminReference[]
+  members                GroupMember[]
 
   // Simulation assignments
   simulationAssignments SimulationAssignment[]
@@ -2251,6 +2259,51 @@ model Group {
   @@index([type])
   @@index([isActive])
   @@map("groups")
+}
+
+model GroupStudentReference {
+  id        String   @id @default(cuid())
+  groupId   String
+  studentId String
+  createdAt DateTime @default(now())
+
+  group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, studentId])
+  @@index([groupId])
+  @@index([studentId])
+  @@map("group_student_references")
+}
+
+model GroupCollaboratorReference {
+  id             String   @id @default(cuid())
+  groupId        String
+  collaboratorId String
+  createdAt      DateTime @default(now())
+
+  group        Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  collaborator Collaborator @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, collaboratorId])
+  @@index([groupId])
+  @@index([collaboratorId])
+  @@map("group_collaborator_references")
+}
+
+model GroupAdminReference {
+  id        String   @id @default(cuid())
+  groupId   String
+  adminId   String
+  createdAt DateTime @default(now())
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, adminId])
+  @@index([groupId])
+  @@index([adminId])
+  @@map("group_admin_references")
 }
 
 model GroupMember {

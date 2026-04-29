@@ -110,6 +110,23 @@ export const messagesRouter = router({
                     },
                   },
                 },
+                referenceStudents: {
+                  select: {
+                    student: {
+                      select: {
+                        user: {
+                          select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                            role: true,
+                            isActive: true,
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
               },
             },
           },
@@ -117,7 +134,10 @@ export const messagesRouter = router({
         
         // Extract unique reference students (excluding self)
         const referenceStudents = groups
-          .map(g => g.group.referenceStudent?.user)
+          .flatMap(g => [
+            g.group.referenceStudent?.user,
+            ...g.group.referenceStudents.map(reference => reference.student.user),
+          ])
           .filter((u): u is NonNullable<typeof u> => 
             u !== null && 
             u !== undefined && 
@@ -177,6 +197,7 @@ export const messagesRouter = router({
           OR: [
             // Collaborator is a referent
             { referenceCollaboratorId: collaboratorId },
+            { referenceCollaborators: { some: { collaboratorId } } },
             // Collaborator is a member
             { members: { some: { collaboratorId } } },
           ],
@@ -206,6 +227,21 @@ export const messagesRouter = router({
           select: {
             id: true,
             user: { select: { id: true, name: true, email: true } },
+          },
+        },
+        referenceStudents: {
+          select: {
+            student: { select: { id: true, user: { select: { id: true, name: true, email: true } } } },
+          },
+        },
+        referenceCollaborators: {
+          select: {
+            collaborator: { select: { id: true, user: { select: { id: true, name: true, email: true } } } },
+          },
+        },
+        referenceAdmins: {
+          select: {
+            admin: { select: { id: true, user: { select: { id: true, name: true, email: true } } } },
           },
         },
         members: {
@@ -240,15 +276,18 @@ export const messagesRouter = router({
       color: group.color,
       type: group.type,
       memberCount: group._count.members,
-      referents: [
+      referents: Array.from(new Map([
         group.referenceAdmin?.user,
         group.referenceCollaborator?.user,
         group.referenceStudent?.user,
-      ].filter(Boolean).map(u => ({
+        ...group.referenceAdmins.map(reference => reference.admin.user),
+        ...group.referenceCollaborators.map(reference => reference.collaborator.user),
+        ...group.referenceStudents.map(reference => reference.student.user),
+      ].filter(Boolean).map(u => [u!.id, {
         id: u!.id,
         name: u!.name,
         email: u!.email,
-      })),
+      }])).values()),
       members: group.members.map(m => {
         const user = m.student?.user || m.collaborator?.user;
         return user ? {
@@ -305,7 +344,10 @@ export const messagesRouter = router({
           const sharedGroup = await ctx.prisma.group.findFirst({
             where: {
               members: { some: { studentId: student.id } },
-              referenceStudent: { userId: recipient.id },
+              OR: [
+                { referenceStudent: { userId: recipient.id } },
+                { referenceStudents: { some: { student: { userId: recipient.id } } } },
+              ],
             },
           });
           

@@ -266,7 +266,10 @@ export function validateQuestionAnswers(
 }
 
 /**
- * Validates keywords for open text questions
+ * Validates keywords for open text questions.
+ *
+ * Keywords are alternatives: the student only needs to match ONE of them.
+ * Therefore the only requirement is that at least one keyword is provided.
  */
 export function validateQuestionKeywords(
   type: QuestionType,
@@ -282,14 +285,6 @@ export function validateQuestionKeywords(
       return { 
         valid: false, 
         error: 'Devi inserire almeno una keyword per la validazione automatica.' 
-      };
-    }
-    
-    const requiredKeywords = keywords.filter(k => k.isRequired);
-    if (requiredKeywords.length === 0) {
-      return { 
-        valid: false, 
-        error: 'Devi avere almeno una keyword obbligatoria.' 
       };
     }
   }
