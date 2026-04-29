@@ -44,6 +44,9 @@ interface FillSectionModalProps {
   readonly onPicked: (questions: PickedQuestion[]) => void;
 }
 
+// Stable reference to avoid creating a new [] on every render when query data is undefined
+const EMPTY_TOPICS: { id: string; name: string; subTopics?: { id: string; name: string }[] }[] = [];
+
 const DIFFICULTY_OPTIONS = [
   { value: '', label: 'Tutte le difficoltà' },
   { value: 'EASY', label: 'Facile' },
@@ -86,7 +89,7 @@ export default function FillSectionModal({
     enabled: isOpen,
   });
 
-  const { data: topics = [] } = trpc.materials.getTopics.useQuery(
+  const { data: topics = EMPTY_TOPICS } = trpc.materials.getTopics.useQuery(
     { subjectId },
     { enabled: isOpen && !!subjectId }
   );
@@ -105,10 +108,15 @@ export default function FillSectionModal({
       );
   }, [topics, selectedTopicIds]);
 
-  // Reset sub-topic selection when topics change to keep selection valid
+  // Reset sub-topic selection when topics change to keep selection valid.
+  // Return prev unchanged when nothing is filtered out so React bails out
+  // of re-rendering and avoids an infinite update loop.
   useEffect(() => {
     const validIds = new Set(availableSubTopics.map((st) => st.id));
-    setSelectedSubTopicIds((prev) => prev.filter((id) => validIds.has(id)));
+    setSelectedSubTopicIds((prev) => {
+      const next = prev.filter((id) => validIds.has(id));
+      return next.length === prev.length ? prev : next;
+    });
   }, [availableSubTopics]);
 
   // Subject options

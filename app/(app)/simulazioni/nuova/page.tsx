@@ -213,6 +213,13 @@ export default function NewSimulationPage() {
   // Question detail modal
   const [previewQuestion, setPreviewQuestion] = useState<string | null>(null);
 
+  // Right-panel tab: list of selected questions OR section assignment view
+  const [rightPanelTab, setRightPanelTab] = useState<'domande' | 'sezioni'>('domande');
+  // Section-centric assignment: which section's "add questions" panel is open
+  const [expandedAddSection, setExpandedAddSection] = useState<string | null>(null);
+  // Questions checked inside the expanded section's add-panel
+  const [bulkAssignSelectedIds, setBulkAssignSelectedIds] = useState<string[]>([]);
+
   // Simulation preview modal (for students view)
   const [showSimulationPreview, setShowSimulationPreview] = useState(false);
   const [previewQuestionsData, setPreviewQuestionsData] = useState<Array<{
@@ -2202,219 +2209,356 @@ export default function NewSimulationPage() {
                 </div>
               </div>
 
-              {/* Selected questions */}
-              <div className={`rounded-xl border ${colors.border.light} overflow-hidden flex flex-col max-h-[500px]`}>
-                <div className={`p-4 ${colors.background.secondary} border-b ${colors.border.light} flex-shrink-0`}>
-                  <h3 className={`font-medium ${colors.text.primary}`}>
-                    Domande selezionate ({selectedQuestions.length})
-                  </h3>
-                  {hasSections && sectionMode === 'manual' && sections.length > 0 && (
-                    <p className={`text-xs ${colors.text.muted} mt-1`}>
-                      Assegna ciascuna domanda a una sezione usando il selettore
-                    </p>
-                  )}
-                  {hasSections && sectionMode === 'manual' && getUnassignedQuestions().length > 0 && (
-                    <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
-                      ⚠️ {getUnassignedQuestions().length} domande non assegnate a nessuna sezione
-                    </p>
+              {/* Right panel: tabbed — Domande selezionate / Sezioni */}
+              <div className={`rounded-xl border ${colors.border.light} overflow-hidden flex flex-col max-h-[600px]`}>
+                {/* Tab bar */}
+                <div className={`flex border-b ${colors.border.light} ${colors.background.secondary} flex-shrink-0`}>
+                  <button
+                    type="button"
+                    onClick={() => setRightPanelTab('domande')}
+                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                      rightPanelTab === 'domande'
+                        ? `border-b-2 border-blue-600 text-blue-600 dark:text-blue-400 ${colors.background.card}`
+                        : `${colors.text.muted} hover:${colors.text.secondary}`
+                    }`}
+                  >
+                    Domande selezionate
+                    <span className={`ml-2 px-1.5 py-0.5 rounded-full text-xs ${
+                      rightPanelTab === 'domande' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                    }`}>
+                      {selectedQuestions.length}
+                    </span>
+                  </button>
+                  {hasSections && sectionMode === 'manual' && (
+                    <button
+                      type="button"
+                      onClick={() => setRightPanelTab('sezioni')}
+                      className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                        rightPanelTab === 'sezioni'
+                          ? `border-b-2 border-blue-600 text-blue-600 dark:text-blue-400 ${colors.background.card}`
+                          : `${colors.text.muted} hover:${colors.text.secondary}`
+                      }`}
+                    >
+                      Sezioni
+                      {getUnassignedQuestions().length > 0 && (
+                        <span className="ml-2 px-1.5 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300">
+                          {getUnassignedQuestions().length} non assegnate
+                        </span>
+                      )}
+                    </button>
                   )}
                 </div>
-                <div className="flex-1 overflow-y-auto">
-                  {selectedQuestions.length === 0 ? (
-                    <div className="p-8 text-center">
-                      <Target className="w-12 h-12 mx-auto text-gray-400 mb-2" />
-                      <p className={colors.text.muted}>Nessuna domanda selezionata</p>
-                      <p className={`text-sm ${colors.text.muted}`}>Aggiungi domande dalla lista a sinistra</p>
-                    </div>
-                  ) : hasSections && sectionMode === 'manual' && sections.length > 0 ? (
-                    // Group questions by section
-                    <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {/* Unassigned questions section */}
-                      {getUnassignedQuestions().length > 0 && (
-                        <div className={`${colors.background.tertiary}`}>
-                          <div className={`px-3 py-2 flex items-center gap-2 border-b ${colors.border.light}`}>
-                            <span className={`text-sm font-medium ${colors.text.muted}`}>Non assegnate</span>
-                            <span className={`px-1.5 py-0.5 rounded text-xs bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400`}>
-                              {getUnassignedQuestions().length}
+
+                {/* TAB: Domande selezionate */}
+                {rightPanelTab === 'domande' && (
+                  <div className="flex-1 overflow-y-auto">
+                    {selectedQuestions.length === 0 ? (
+                      <div className="p-8 text-center">
+                        <Target className="w-12 h-12 mx-auto text-gray-400 mb-2" />
+                        <p className={colors.text.muted}>Nessuna domanda selezionata</p>
+                        <p className={`text-sm ${colors.text.muted}`}>Aggiungi domande dalla lista a sinistra</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {selectedQuestions.map((sq, index) => (
+                          <div key={sq.questionId} className={`p-3 flex items-start gap-3 ${colors.background.card}`}>
+                            <div className="flex flex-col gap-1">
+                              <button
+                                onClick={() => moveQuestion(index, 'up')}
+                                disabled={index === 0}
+                                className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 ${colors.text.secondary}`}
+                              >
+                                <ChevronUp className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => moveQuestion(index, 'down')}
+                                disabled={index === selectedQuestions.length - 1}
+                                className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 ${colors.text.secondary}`}
+                              >
+                                <ChevronDown className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <span className={`mt-2 w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-medium ${colors.text.primary}`}>
+                              {index + 1}
                             </span>
-                          </div>
-                          {getUnassignedQuestions().map((sq) => (
-                            <div key={sq.questionId} className={`p-3 flex items-center gap-3 ${colors.background.card}`}>
-                              <div className="flex-1 min-w-0">
-                                <p className={`text-sm ${colors.text.primary} line-clamp-1`}>
-                                  {sq.question?.text ? stripHtml(sq.question.text) : 'Domanda'}
-                                </p>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm ${colors.text.primary} line-clamp-2`}>
+                                {sq.question?.text ? stripHtml(sq.question.text) : 'Domanda'}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                {sq.question?.subject && (
+                                  <span
+                                    className="px-2 py-0.5 rounded text-xs font-medium"
+                                    style={{
+                                      backgroundColor: (sq.question.subject.color || '#6b7280') + 'd9',
+                                      color: 'white',
+                                    }}
+                                  >
+                                    {sq.question.subject.name}
+                                  </span>
+                                )}
+                                {sq.question?.difficulty && (
+                                  <span className={`text-xs font-medium ${
+                                    sq.question.difficulty === 'EASY' ? 'text-green-600 dark:text-green-400' :
+                                    sq.question.difficulty === 'MEDIUM' ? 'text-yellow-600 dark:text-yellow-400' :
+                                    sq.question.difficulty === 'HARD' ? 'text-red-600 dark:text-red-400' : colors.text.muted
+                                  }`}>
+                                    {sq.question.difficulty === 'EASY' ? 'Facile' : sq.question.difficulty === 'MEDIUM' ? 'Media' : sq.question.difficulty === 'HARD' ? 'Difficile' : sq.question.difficulty}
+                                  </span>
+                                )}
                               </div>
-                              <div className="w-36">
-                                <CustomSelect
-                                  value=""
-                                  onChange={(value) => assignQuestionToSection(sq.questionId, value || null)}
-                                  options={[
-                                    { value: '', label: 'Assegna a...' },
-                                    ...sections.map((s) => ({ value: s.id, label: s.name }))
-                                  ]}
-                                  placeholder="Assegna a..."
-                                  size="sm"
+                            </div>
+                            <button
+                              onClick={() => setPreviewQuestion(sq.questionId)}
+                              className={`p-1.5 rounded-lg ${colors.text.muted} hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-blue-500`}
+                              title="Visualizza dettagli"
+                            >
+                              <Info className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => removeQuestion(sq.questionId)}
+                              className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB: Sezioni — section-centric assignment */}
+                {rightPanelTab === 'sezioni' && hasSections && sectionMode === 'manual' && (
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    {sections.length === 0 ? (
+                      <div className="p-8 text-center space-y-2">
+                        <Layers className="w-12 h-12 mx-auto text-gray-400" />
+                        <p className={`font-medium ${colors.text.primary}`}>Nessuna sezione configurata</p>
+                        <p className={`text-sm ${colors.text.muted}`}>
+                          Vai alla scheda <strong>Configurazione</strong> e aggiungi le sezioni, poi torna qui ad assegnare le domande.
+                        </p>
+                      </div>
+                    ) : selectedQuestions.length === 0 ? (
+                      <div className="p-8 text-center space-y-2">
+                        <Target className="w-12 h-12 mx-auto text-gray-400" />
+                        <p className={`font-medium ${colors.text.primary}`}>Nessuna domanda selezionata</p>
+                        <p className={`text-sm ${colors.text.muted}`}>
+                          Prima aggiungi le domande dal pannello a sinistra (Manuale, Casuale o Smart), poi torna qui per assegnarle alle sezioni.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Progress banner */}
+                        {(() => {
+                          const unassignedCount = getUnassignedQuestions().length;
+                          const assignedCount = selectedQuestions.length - unassignedCount;
+                          return (
+                            <div className={`px-4 py-2.5 flex-shrink-0 border-b ${colors.border.light} ${
+                              unassignedCount > 0 ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-green-50 dark:bg-green-900/20'
+                            }`}>
+                              <p className={`text-xs font-medium mb-1 ${unassignedCount > 0 ? 'text-yellow-700 dark:text-yellow-400' : 'text-green-700 dark:text-green-400'}`}>
+                                {unassignedCount === 0
+                                  ? `✓ Tutte le ${selectedQuestions.length} domande sono assegnate`
+                                  : `${assignedCount} / ${selectedQuestions.length} domande assegnate — ${unassignedCount} ancora da assegnare`}
+                              </p>
+                              <div className="h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-blue-500 transition-all duration-300"
+                                  style={{ width: `${(assignedCount / selectedQuestions.length) * 100}%` }}
                                 />
                               </div>
-                              <button
-                                onClick={() => removeQuestion(sq.questionId)}
-                                className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
                             </div>
-                          ))}
-                        </div>
-                      )}
-                      
-                      {/* Questions grouped by section */}
-                      {sections.map((section) => {
-                        const sectionQuestions = selectedQuestions.filter(sq => 
-                          section.questionIds?.includes(sq.questionId)
-                        );
-                        return (
-                          <div key={section.id}>
-                            <div className={`px-3 py-2 flex items-center gap-2 border-b ${colors.border.light} ${colors.background.secondary}`}>
-                              <span className={`w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-blue-400`}>
-                                {section.order + 1}
-                              </span>
-                              <span className={`text-sm font-medium ${colors.text.primary}`}>{section.name}</span>
-                              <span className={`px-1.5 py-0.5 rounded text-xs ${
-                                sectionQuestions.length > 0 
-                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                  : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
-                              }`}>
-                                {sectionQuestions.length} domande
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setFillSectionId(section.id)}
-                                className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50 transition-colors"
-                                title="Riempi automaticamente questa sezione con domande casuali"
-                              >
-                                <Wand2 className="w-3.5 h-3.5" />
-                                Riempi
-                              </button>
-                            </div>
-                            {sectionQuestions.length === 0 ? (
-                              <div className={`p-3 text-center ${colors.background.card}`}>
-                                <p className={`text-xs ${colors.text.muted}`}>Nessuna domanda in questa sezione</p>
-                              </div>
-                            ) : (
-                              sectionQuestions.map((sq) => (
-                                <div key={sq.questionId} className={`p-3 flex items-center gap-3 ${colors.background.card}`}>
-                                  <div className="flex-1 min-w-0">
-                                    <p className={`text-sm ${colors.text.primary} line-clamp-1`}>
-                                      {sq.question?.text ? stripHtml(sq.question.text) : 'Domanda'}
-                                    </p>
-                                    <div className="flex items-center gap-2 mt-1">
-                                      {sq.question?.subject && (
-                                        <span 
-                                          className="px-2 py-0.5 rounded text-xs font-medium"
-                                          style={{ 
-                                            backgroundColor: (sq.question.subject.color || '#6b7280') + 'd9', 
-                                            color: 'white'
-                                          }}
+                          );
+                        })()}
+
+                        {/* Section cards */}
+                        <div className="flex-1 overflow-y-auto p-3 space-y-3">
+                          {sections.map((section) => {
+                            const sectionQuestions = selectedQuestions.filter((sq) =>
+                              section.questionIds?.includes(sq.questionId)
+                            );
+                            const unassigned = getUnassignedQuestions();
+                            const isExpanded = expandedAddSection === section.id;
+
+                            return (
+                              <div key={section.id} className={`rounded-xl border ${colors.border.light} overflow-hidden`}>
+                                {/* Section header */}
+                                <div className={`px-3 py-2.5 flex items-center gap-2 ${colors.background.secondary}`}>
+                                  <span className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-blue-400 shrink-0">
+                                    {section.order + 1}
+                                  </span>
+                                  <span className={`text-sm font-semibold ${colors.text.primary} flex-1 truncate`}>{section.name}</span>
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${
+                                    sectionQuestions.length > 0
+                                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                      : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                                  }`}>
+                                    {sectionQuestions.length} domande
+                                  </span>
+                                </div>
+
+                                {/* Assigned questions list */}
+                                {sectionQuestions.length > 0 && (
+                                  <div className={`divide-y ${colors.border.light}`}>
+                                    {sectionQuestions.map((sq) => (
+                                      <div key={sq.questionId} className={`px-3 py-2 flex items-center gap-2 ${colors.background.card}`}>
+                                        <p className={`text-sm ${colors.text.primary} line-clamp-1 flex-1`}>
+                                          {sq.question?.text ? stripHtml(sq.question.text) : 'Domanda'}
+                                        </p>
+                                        {sq.question?.subject && (
+                                          <span
+                                            className="px-1.5 py-0.5 rounded text-xs font-medium shrink-0"
+                                            style={{ backgroundColor: (sq.question.subject.color || '#6b7280') + 'd9', color: 'white' }}
+                                          >
+                                            {sq.question.subject.name}
+                                          </span>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => assignQuestionToSection(sq.questionId, null)}
+                                          className="p-1 rounded text-red-400 hover:text-red-600 shrink-0"
+                                          title="Rimuovi dalla sezione"
                                         >
-                                          {sq.question.subject.name}
-                                        </span>
-                                      )}
-                                    </div>
+                                          <X className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    ))}
                                   </div>
-                                  <div className="w-36">
-                                    <CustomSelect
-                                      value={section.id}
-                                      onChange={(value) => assignQuestionToSection(sq.questionId, value || null)}
-                                      options={[
-                                        { value: '', label: 'Rimuovi sezione' },
-                                        ...sections.map((s) => ({ value: s.id, label: s.name }))
-                                      ]}
-                                      placeholder={section.name}
-                                      size="sm"
-                                    />
-                                  </div>
+                                )}
+
+                                {/* Action row */}
+                                <div className={`px-3 py-2 flex items-center gap-2 border-t ${colors.border.light} ${colors.background.card}`}>
                                   <button
-                                    onClick={() => removeQuestion(sq.questionId)}
-                                    className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                    type="button"
+                                    disabled={unassigned.length === 0 && !isExpanded}
+                                    onClick={() => {
+                                      const next = isExpanded ? null : section.id;
+                                      setExpandedAddSection(next);
+                                      setBulkAssignSelectedIds([]);
+                                    }}
+                                    className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                      isExpanded
+                                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                                        : unassigned.length === 0
+                                          ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 cursor-not-allowed'
+                                          : 'bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/40'
+                                    }`}
                                   >
-                                    <X className="w-4 h-4" />
+                                    <Plus className="w-3.5 h-3.5" />
+                                    {isExpanded
+                                      ? 'Chiudi'
+                                      : unassigned.length === 0
+                                        ? 'Nessuna disponibile'
+                                        : `Aggiungi dalle selezionate (${unassigned.length})`}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setFillSectionId(section.id)}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-400 dark:hover:bg-purple-900/50 transition-colors"
+                                    title="Pesca domande casuali dal database e aggiungile a questa sezione"
+                                  >
+                                    <Wand2 className="w-3.5 h-3.5" />
+                                    Casuale DB
                                   </button>
                                 </div>
-                              ))
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {selectedQuestions.map((sq, index) => (
-                        <div key={sq.questionId} className={`p-3 flex items-start gap-3 ${colors.background.card}`}>
-                          <div className="flex flex-col gap-1">
-                            <button
-                              onClick={() => moveQuestion(index, 'up')}
-                              disabled={index === 0}
-                              className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 ${colors.text.secondary}`}
-                            >
-                              <ChevronUp className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => moveQuestion(index, 'down')}
-                              disabled={index === selectedQuestions.length - 1}
-                              className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 ${colors.text.secondary}`}
-                            >
-                              <ChevronDown className="w-4 h-4" />
-                            </button>
-                          </div>
-                          <span className={`mt-2 w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-medium ${colors.text.primary}`}>
-                            {index + 1}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm ${colors.text.primary} line-clamp-2`}>
-                              {sq.question?.text ? stripHtml(sq.question.text) : 'Domanda'}
-                            </p>
-                            <div className="flex items-center gap-2 mt-1">
-                              {sq.question?.subject && (
-                                <span 
-                                  className="px-2 py-0.5 rounded text-xs font-medium"
-                                  style={{ 
-                                    backgroundColor: (sq.question.subject.color || '#6b7280') + 'd9', 
-                                    color: 'white'
-                                  }}
-                                >
-                                  {sq.question.subject.name}
-                                </span>
-                              )}
-                              {sq.question?.difficulty && (
-                                <span className={`text-xs font-medium ${
-                                  sq.question.difficulty === 'EASY' ? 'text-green-600 dark:text-green-400' : 
-                                  sq.question.difficulty === 'MEDIUM' ? 'text-yellow-600 dark:text-yellow-400' : 
-                                  sq.question.difficulty === 'HARD' ? 'text-red-600 dark:text-red-400' : colors.text.muted
-                                }`}>
-                                  {sq.question.difficulty === 'EASY' ? 'Facile' : sq.question.difficulty === 'MEDIUM' ? 'Media' : sq.question.difficulty === 'HARD' ? 'Difficile' : sq.question.difficulty}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => setPreviewQuestion(sq.questionId)}
-                            className={`p-1.5 rounded-lg ${colors.text.muted} hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-blue-500`}
-                            title="Visualizza dettagli"
-                          >
-                            <Info className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => removeQuestion(sq.questionId)}
-                            className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
+
+                                {/* Expandable: pick unassigned questions to add to this section */}
+                                {isExpanded && (
+                                  <div className={`border-t ${colors.border.light}`}>
+                                    {unassigned.length === 0 ? (
+                                      <p className={`px-3 py-3 text-xs ${colors.text.muted}`}>
+                                        Tutte le domande selezionate sono già assegnate a una sezione.
+                                      </p>
+                                    ) : (
+                                      <>
+                                        <div className="max-h-44 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
+                                          {unassigned.map((sq) => {
+                                            const checked = bulkAssignSelectedIds.includes(sq.questionId);
+                                            return (
+                                              <label
+                                                key={sq.questionId}
+                                                className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer ${
+                                                  checked ? 'bg-blue-50 dark:bg-blue-900/20' : `hover:${colors.background.secondary}`
+                                                }`}
+                                              >
+                                                <Checkbox
+                                                  checked={checked}
+                                                  onChange={() =>
+                                                    setBulkAssignSelectedIds((prev) =>
+                                                      checked ? prev.filter((id) => id !== sq.questionId) : [...prev, sq.questionId]
+                                                    )
+                                                  }
+                                                />
+                                                <span className={`text-sm ${colors.text.primary} line-clamp-1 flex-1`}>
+                                                  {sq.question?.text ? stripHtml(sq.question.text) : 'Domanda'}
+                                                </span>
+                                                {sq.question?.subject && (
+                                                  <span
+                                                    className="px-1.5 py-0.5 rounded text-xs font-medium shrink-0"
+                                                    style={{ backgroundColor: (sq.question.subject.color || '#6b7280') + 'd9', color: 'white' }}
+                                                  >
+                                                    {sq.question.subject.name}
+                                                  </span>
+                                                )}
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                        <div className={`px-3 py-2 flex items-center gap-2 border-t ${colors.border.light} ${colors.background.secondary}`}>
+                                          <button
+                                            type="button"
+                                            onClick={() => setBulkAssignSelectedIds(unassigned.map((q) => q.questionId))}
+                                            className={`text-xs ${colors.text.muted} hover:text-blue-500 underline`}
+                                          >
+                                            Tutte ({unassigned.length})
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setBulkAssignSelectedIds([])}
+                                            className={`text-xs ${colors.text.muted} hover:text-blue-500 underline`}
+                                          >
+                                            Nessuna
+                                          </button>
+                                          <div className="flex-1" />
+                                          <button
+                                            type="button"
+                                            disabled={bulkAssignSelectedIds.length === 0}
+                                            onClick={() => {
+                                              const ids = new Set(bulkAssignSelectedIds);
+                                              setSections((prev) =>
+                                                prev.map((s) => {
+                                                  if (s.id === section.id) {
+                                                    const merged = Array.from(new Set([...(s.questionIds || []), ...ids]));
+                                                    return { ...s, questionIds: merged, questionCount: merged.length };
+                                                  }
+                                                  // Remove from other sections to keep assignment exclusive
+                                                  const cleaned = (s.questionIds || []).filter((id) => !ids.has(id));
+                                                  return { ...s, questionIds: cleaned, questionCount: cleaned.length };
+                                                })
+                                              );
+                                              setBulkAssignSelectedIds([]);
+                                              setExpandedAddSection(null);
+                                            }}
+                                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                          >
+                                            {bulkAssignSelectedIds.length > 0
+                                              ? `Aggiungi ${bulkAssignSelectedIds.length} domande`
+                                              : 'Aggiungi domande'}
+                                          </button>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
