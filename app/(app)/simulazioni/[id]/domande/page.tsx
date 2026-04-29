@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
-import { stripHtml } from '@/lib/utils/sanitizeHtml';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { PageLoader, Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
+import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { isStaff } from '@/lib/permissions';
 import {
@@ -36,10 +36,116 @@ interface SelectedQuestion {
     text: string;
     type: string;
     difficulty: string;
-    subject?: { name: string; color: string } | null;
+    subject?: { id?: string; name: string; color: string } | null;
     topic?: { name: string } | null;
   };
 }
+
+interface ManagedSection {
+  id: string;
+  name: string;
+  durationMinutes: number;
+  questionIds: string[];
+  questionCount: number;
+  subjectId?: string | null;
+  order: number;
+}
+
+function parseSimulationSections(rawSections: unknown): ManagedSection[] {
+  if (!Array.isArray(rawSections)) return [];
+
+  return rawSections.map((rawSection, index) => {
+    const section = rawSection as Partial<ManagedSection>;
+    const questionIds = Array.isArray(section.questionIds) ? section.questionIds : [];
+
+    return {
+      id: section.id || `section-${index}`,
+      name: section.name || `Sezione ${index + 1}`,
+      durationMinutes: section.durationMinutes || 10,
+      questionIds,
+      questionCount: questionIds.length,
+      subjectId: section.subjectId ?? null,
+      order: section.order ?? index,
+    };
+  }).sort((a, b) => a.order - b.order);
+}
+
+function getPreferredSectionId(question: SelectedQuestion, availableSections: ManagedSection[]): string {
+  if (availableSections.length === 0) return '';
+
+  const subjectId = question.question?.subject?.id;
+  const subjectName = question.question?.subject?.name;
+  const matchingBySubjectId = subjectId
+    ? availableSections.find(section => section.subjectId === subjectId)
+    : undefined;
+  const matchingByName = subjectName
+    ? availableSections.find(section => section.name.toLowerCase() === subjectName.toLowerCase())
+    : undefined;
+
+  return matchingBySubjectId?.id || matchingByName?.id || availableSections[0].id;
+}
+
+function moveQuestionToSection(
+  availableSections: ManagedSection[],
+  questionId: string,
+  sectionId: string
+): ManagedSection[] {
+  return availableSections.map(section => {
+    const cleanedQuestionIds = section.questionIds.filter(id => id !== questionId);
+    const questionIds = section.id === sectionId
+      ? [...cleanedQuestionIds, questionId]
+      : cleanedQuestionIds;
+
+    return {
+      ...section,
+      questionIds,
+      questionCount: questionIds.length,
+    };
+  });
+}
+
+function removeQuestionFromSections(
+  availableSections: ManagedSection[],
+  questionId: string
+): ManagedSection[] {
+  return availableSections.map(section => {
+    const questionIds = section.questionIds.filter(id => id !== questionId);
+    return { ...section, questionIds, questionCount: questionIds.length };
+  });
+}
+
+function normalizeSectionsForQuestions(
+  rawSections: ManagedSection[],
+  questions: SelectedQuestion[]
+): { sections: ManagedSection[]; changed: boolean } {
+  if (rawSections.length === 0) return { sections: [], changed: false };
+
+  const validQuestionIds = new Set(questions.map(question => question.questionId));
+  let changed = false;
+  let normalizedSections = rawSections.map(section => {
+    const questionIds = section.questionIds.filter(questionId => validQuestionIds.has(questionId));
+    if (questionIds.length !== section.questionIds.length) changed = true;
+    return { ...section, questionIds, questionCount: questionIds.length };
+  });
+
+  const assignedQuestionIds = new Set(normalizedSections.flatMap(section => section.questionIds));
+  for (const question of questions) {
+    if (assignedQuestionIds.has(question.questionId)) continue;
+    const sectionId = getPreferredSectionId(question, normalizedSections);
+    if (!sectionId) continue;
+    normalizedSections = moveQuestionToSection(normalizedSections, question.questionId, sectionId);
+    assignedQuestionIds.add(question.questionId);
+    changed = true;
+  }
+
+  return { sections: normalizedSections, changed };
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  SINGLE_CHOICE: 'Singola',
+  MULTIPLE_CHOICE: 'Multipla',
+  OPEN_TEXT: 'Aperta',
+};
 
 export default function ManageQuestionsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -58,6 +164,8 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
   const [questionSearchTerm, setQuestionSearchTerm] = useState('');
   const [questionSubjectFilter, setQuestionSubjectFilter] = useState('');
   const [questionDifficultyFilter, setQuestionDifficultyFilter] = useState('');
+  const [questionTypeFilter, setQuestionTypeFilter] = useState('');
+  const [sections, setSections] = useState<ManagedSection[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
@@ -70,8 +178,7 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
   // Initialize selected questions when simulation loads
   useEffect(() => {
     if (simulation && !initialized) {
-      setSelectedQuestions(
-        simulation.questions.map((sq, index) => ({
+      const initialQuestions = simulation.questions.map((sq, index) => ({
           questionId: sq.question.id,
           order: sq.order ?? index,
           customPoints: sq.customPoints,
@@ -84,8 +191,15 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
             subject: sq.question.subject,
             topic: sq.question.topic,
           },
-        }))
-      );
+        }));
+      const parsedSections = parseSimulationSections(simulation.sections);
+      const normalizedSections = normalizeSectionsForQuestions(parsedSections, initialQuestions);
+
+      setSelectedQuestions(initialQuestions);
+      setSections(normalizedSections.sections);
+      if (simulation.hasSections && normalizedSections.changed) {
+        setHasChanges(true);
+      }
       setInitialized(true);
     }
   }, [simulation, initialized]);
@@ -101,6 +215,7 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
     subjectId: questionSubjectFilter || undefined,
     difficulty:
       (questionDifficultyFilter as 'EASY' | 'MEDIUM' | 'HARD' | undefined) || undefined,
+    type: (questionTypeFilter as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT' | undefined) || undefined,
     status: 'PUBLISHED',
   });
 
@@ -118,21 +233,27 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
   const addQuestion = (question: NonNullable<typeof questionsData>['questions'][0]) => {
     if (selectedQuestions.some((q) => q.questionId === question.id)) return;
 
+    const newQuestion: SelectedQuestion = {
+      questionId: question.id,
+      order: selectedQuestions.length,
+      question: {
+        id: question.id,
+        text: question.text,
+        type: question.type,
+        difficulty: question.difficulty,
+        subject: question.subject,
+        topic: question.topic,
+      },
+    };
+
     setSelectedQuestions((prev) => [
       ...prev,
-      {
-        questionId: question.id,
-        order: prev.length,
-        question: {
-          id: question.id,
-          text: question.text,
-          type: question.type,
-          difficulty: question.difficulty,
-          subject: question.subject,
-          topic: question.topic,
-        },
-      },
+      newQuestion,
     ]);
+    const preferredSectionId = getPreferredSectionId(newQuestion, sections);
+    if (preferredSectionId) {
+      setSections((prev) => moveQuestionToSection(prev, question.id, preferredSectionId));
+    }
     setHasChanges(true);
   };
 
@@ -141,7 +262,44 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
     setSelectedQuestions((prev) =>
       prev.filter((q) => q.questionId !== questionId).map((q, i) => ({ ...q, order: i }))
     );
+    setSections((prev) => removeQuestionFromSections(prev, questionId));
     setHasChanges(true);
+  };
+
+  const getQuestionSectionId = (questionId: string): string => {
+    return sections.find(section => section.questionIds.includes(questionId))?.id || '';
+  };
+
+  const assignQuestionToSection = (questionId: string, sectionId: string) => {
+    if (!sectionId) return;
+    setSections((prev) => moveQuestionToSection(prev, questionId, sectionId));
+    setHasChanges(true);
+  };
+
+  const buildSectionsPayload = (): ManagedSection[] | undefined => {
+    if (!simulation?.hasSections || sections.length === 0) return undefined;
+
+    const selectedQuestionIds = new Set(selectedQuestions.map(question => question.questionId));
+    let payloadSections = sections.map((section, index) => {
+      const questionIds = section.questionIds.filter(questionId => selectedQuestionIds.has(questionId));
+      return {
+        ...section,
+        order: section.order ?? index,
+        questionIds,
+        questionCount: questionIds.length,
+      };
+    });
+
+    const assignedQuestionIds = new Set(payloadSections.flatMap(section => section.questionIds));
+    for (const question of selectedQuestions) {
+      if (assignedQuestionIds.has(question.questionId)) continue;
+      const sectionId = getPreferredSectionId(question, payloadSections);
+      if (!sectionId) continue;
+      payloadSections = moveQuestionToSection(payloadSections, question.questionId, sectionId);
+      assignedQuestionIds.add(question.questionId);
+    }
+
+    return payloadSections;
   };
 
   // Move question
@@ -167,6 +325,7 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
         customPoints: q.customPoints,
         customNegativePoints: q.customNegativePoints,
       })),
+      sections: buildSectionsPayload(),
     });
   };
 
@@ -273,18 +432,16 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                   className={`w-full pl-10 pr-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary} text-sm`}
                 />
               </div>
+              <CustomSelect
+                value={questionSubjectFilter}
+                onChange={setQuestionSubjectFilter}
+                options={[
+                  { value: '', label: 'Tutte le materie' },
+                  ...(subjectsData?.map((s) => ({ value: s.id, label: s.name })) || []),
+                ]}
+                placeholder="Tutte le materie"
+              />
               <div className="flex gap-2">
-                <div className="flex-1">
-                  <CustomSelect
-                    value={questionSubjectFilter}
-                    onChange={setQuestionSubjectFilter}
-                    options={[
-                      { value: '', label: 'Tutte le materie' },
-                      ...(subjectsData?.map((s) => ({ value: s.id, label: s.name })) || []),
-                    ]}
-                    placeholder="Tutte le materie"
-                  />
-                </div>
                 <div className="flex-1">
                   <CustomSelect
                     value={questionDifficultyFilter}
@@ -296,6 +453,19 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                       { value: 'HARD', label: 'Difficile' },
                     ]}
                     placeholder="Tutte le difficoltà"
+                  />
+                </div>
+                <div className="flex-1">
+                  <CustomSelect
+                    value={questionTypeFilter}
+                    onChange={setQuestionTypeFilter}
+                    options={[
+                      { value: '', label: 'Tutti i tipi' },
+                      { value: 'SINGLE_CHOICE', label: 'Singola scelta' },
+                      { value: 'MULTIPLE_CHOICE', label: 'Multipla scelta' },
+                      { value: 'OPEN_TEXT', label: 'Risposta aperta' },
+                    ]}
+                    placeholder="Tutti i tipi"
                   />
                 </div>
               </div>
@@ -333,10 +503,11 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                         {isSelected ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
                       </button>
                       <div className="flex-1 min-w-0">
-                        <p className={`text-sm ${colors.text.primary} line-clamp-2`}>
-                          {stripHtml(question.text)}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1">
+                        <RichTextRenderer
+                          text={question.text}
+                          className={`text-sm ${colors.text.primary} line-clamp-2`}
+                        />
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                           {question.subject && (
                             <span
                               className="px-2 py-0.5 rounded text-xs font-medium"
@@ -348,6 +519,9 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                               {question.subject.name}
                             </span>
                           )}
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${colors.background.secondary} ${colors.text.muted} border ${colors.border.light}`}>
+                            {TYPE_LABELS[question.type] ?? question.type}
+                          </span>
                           <span className={`text-xs ${colors.text.muted}`}>
                             {question.difficulty === 'EASY'
                               ? 'Facile'
@@ -376,6 +550,11 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
             <h3 className={`font-medium ${colors.text.primary}`}>
               Domande nella simulazione ({selectedQuestions.length})
             </h3>
+            {simulation.hasSections && sections.length > 0 && (
+              <p className={`text-sm ${colors.text.muted} mt-1`}>
+                Le domande sono raggruppate per sezione. Usa il selettore per spostarle.
+              </p>
+            )}
             {hasChanges && (
               <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">
                 Hai modifiche non salvate
@@ -391,13 +570,162 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                   Aggiungi domande dalla lista a sinistra
                 </p>
               </div>
+            ) : simulation.hasSections && sections.length > 0 ? (
+              /* ── Grouped by section ── */
+              <div>
+                {sections.map((section) => {
+                  const sectionQuestions = section.questionIds
+                    .map((qId) => selectedQuestions.find((sq) => sq.questionId === qId))
+                    .filter((sq): sq is SelectedQuestion => sq !== undefined);
+                  return (
+                    <div key={section.id}>
+                      {/* Section header */}
+                      <div className={`sticky top-0 z-10 flex items-center justify-between px-4 py-2.5 ${colors.background.secondary} border-b ${colors.border.light}`}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-pink-500 dark:bg-pink-400 shrink-0" />
+                          <span className={`font-semibold text-sm ${colors.text.primary}`}>{section.name}</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded-full bg-gray-200 dark:bg-gray-600 ${colors.text.muted} font-medium`}>
+                            {sectionQuestions.length}
+                          </span>
+                        </div>
+                        <span className={`text-xs ${colors.text.muted}`}>{section.durationMinutes} min</span>
+                      </div>
+                      {/* Section questions */}
+                      {sectionQuestions.length === 0 ? (
+                        <div className={`px-4 py-3 border-b ${colors.border.light}`}>
+                          <p className={`text-sm ${colors.text.muted} italic`}>Nessuna domanda in questa sezione</p>
+                        </div>
+                      ) : (
+                        <div className={`divide-y ${colors.border.light}`}>
+                          {sectionQuestions.map((sq) => {
+                            const globalIdx = selectedQuestions.findIndex((s) => s.questionId === sq.questionId);
+                            return (
+                              <div key={sq.questionId} className={`p-3 flex items-start gap-2 ${colors.background.card}`}>
+                                <span className={`mt-1.5 w-6 h-6 shrink-0 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-medium ${colors.text.muted}`}>
+                                  {globalIdx + 1}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  {sq.question?.text ? (
+                                    <RichTextRenderer text={sq.question.text} className={`text-sm ${colors.text.primary} line-clamp-2`} />
+                                  ) : (
+                                    <p className={`text-sm ${colors.text.primary} line-clamp-2`}>Domanda</p>
+                                  )}
+                                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                    {sq.question?.subject && (
+                                      <span className="px-1.5 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: sq.question.subject.color + '20', color: sq.question.subject.color }}>
+                                        {sq.question.subject.name}
+                                      </span>
+                                    )}
+                                    {sq.question?.type && (
+                                      <span className={`text-xs px-1.5 py-0.5 rounded ${colors.background.secondary} ${colors.text.muted} border ${colors.border.light}`}>
+                                        {TYPE_LABELS[sq.question.type] ?? sq.question.type}
+                                      </span>
+                                    )}
+                                    {sq.question?.difficulty && (
+                                      <span className={`text-xs ${colors.text.muted}`}>
+                                        {sq.question.difficulty === 'EASY' ? 'Facile' : sq.question.difficulty === 'MEDIUM' ? 'Media' : 'Difficile'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="mt-2">
+                                    <CustomSelect
+                                      value={getQuestionSectionId(sq.questionId)}
+                                      onChange={(sectionId) => assignQuestionToSection(sq.questionId, sectionId)}
+                                      options={sections.map((s) => ({ value: s.id, label: s.name }))}
+                                      placeholder="Seleziona sezione"
+                                      disabled={!canEdit}
+                                      size="sm"
+                                    />
+                                  </div>
+                                </div>
+                                {canEdit && (
+                                  <button onClick={() => removeQuestion(sq.questionId)} className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors shrink-0">
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* Unassigned questions */}
+                {(() => {
+                  const unassigned = selectedQuestions.filter(
+                    (sq) => !sections.some((s) => s.questionIds.includes(sq.questionId))
+                  );
+                  if (unassigned.length === 0) return null;
+                  return (
+                    <div>
+                      <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                          <span className="font-semibold text-sm text-amber-700 dark:text-amber-300">Senza sezione</span>
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-200 dark:bg-amber-800 text-amber-700 dark:text-amber-300 font-medium">{unassigned.length}</span>
+                        </div>
+                      </div>
+                      <div className={`divide-y ${colors.border.light}`}>
+                        {unassigned.map((sq) => {
+                          const globalIdx = selectedQuestions.findIndex((s) => s.questionId === sq.questionId);
+                          return (
+                            <div key={sq.questionId} className={`p-3 flex items-start gap-2 ${colors.background.card}`}>
+                              <span className={`mt-1.5 w-6 h-6 shrink-0 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-medium ${colors.text.muted}`}>
+                                {globalIdx + 1}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                {sq.question?.text ? (
+                                  <RichTextRenderer text={sq.question.text} className={`text-sm ${colors.text.primary} line-clamp-2`} />
+                                ) : (
+                                  <p className={`text-sm ${colors.text.primary} line-clamp-2`}>Domanda</p>
+                                )}
+                                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                  {sq.question?.subject && (
+                                    <span className="px-1.5 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: sq.question.subject.color + '20', color: sq.question.subject.color }}>
+                                      {sq.question.subject.name}
+                                    </span>
+                                  )}
+                                  {sq.question?.type && (
+                                    <span className={`text-xs px-1.5 py-0.5 rounded ${colors.background.secondary} ${colors.text.muted} border ${colors.border.light}`}>
+                                      {TYPE_LABELS[sq.question.type] ?? sq.question.type}
+                                    </span>
+                                  )}
+                                  {sq.question?.difficulty && (
+                                    <span className={`text-xs ${colors.text.muted}`}>
+                                      {sq.question.difficulty === 'EASY' ? 'Facile' : sq.question.difficulty === 'MEDIUM' ? 'Media' : 'Difficile'}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="mt-2">
+                                  <CustomSelect
+                                    value={getQuestionSectionId(sq.questionId)}
+                                    onChange={(sectionId) => assignQuestionToSection(sq.questionId, sectionId)}
+                                    options={sections.map((s) => ({ value: s.id, label: s.name }))}
+                                    placeholder="Seleziona sezione"
+                                    disabled={!canEdit}
+                                    size="sm"
+                                  />
+                                </div>
+                              </div>
+                              {canEdit && (
+                                <button onClick={() => removeQuestion(sq.questionId)} className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors shrink-0">
+                                  <X className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
             ) : (
+              /* ── Flat list (no sections) ── */
               <div className={`divide-y ${colors.border.light}`}>
                 {selectedQuestions.map((sq, index) => (
-                  <div
-                    key={sq.questionId}
-                    className={`p-3 flex items-start gap-3 ${colors.background.card}`}
-                  >
+                  <div key={sq.questionId} className={`p-3 flex items-start gap-3 ${colors.background.card}`}>
                     {canEdit && (
                       <div className="flex flex-col gap-1">
                         <button
@@ -416,48 +744,38 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                         </button>
                       </div>
                     )}
-                    <span
-                      className={`mt-2 w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-medium ${colors.text.primary}`}
-                    >
+                    <span className={`mt-2 w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-medium ${colors.text.primary}`}>
                       {index + 1}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm ${colors.text.primary} line-clamp-2`}>
-                        {stripHtml(sq.question?.text) || 'Domanda'}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      {sq.question?.text ? (
+                        <RichTextRenderer text={sq.question.text} className={`text-sm ${colors.text.primary} line-clamp-2`} />
+                      ) : (
+                        <p className={`text-sm ${colors.text.primary} line-clamp-2`}>Domanda</p>
+                      )}
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                         {sq.question?.subject && (
-                          <span
-                            className="px-2 py-0.5 rounded text-xs font-medium"
-                            style={{
-                              backgroundColor: sq.question.subject.color + '20',
-                              color: sq.question.subject.color,
-                            }}
-                          >
+                          <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: sq.question.subject.color + '20', color: sq.question.subject.color }}>
                             {sq.question.subject.name}
+                          </span>
+                        )}
+                        {sq.question?.type && (
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${colors.background.secondary} ${colors.text.muted} border ${colors.border.light}`}>
+                            {TYPE_LABELS[sq.question.type] ?? sq.question.type}
                           </span>
                         )}
                         {sq.question?.difficulty && (
                           <span className={`text-xs ${colors.text.muted}`}>
-                            {sq.question.difficulty === 'EASY'
-                              ? 'Facile'
-                              : sq.question.difficulty === 'MEDIUM'
-                                ? 'Media'
-                                : 'Difficile'}
+                            {sq.question.difficulty === 'EASY' ? 'Facile' : sq.question.difficulty === 'MEDIUM' ? 'Media' : 'Difficile'}
                           </span>
                         )}
                         {sq.question?.topic && (
-                          <span className={`text-xs ${colors.text.muted}`}>
-                            • {sq.question.topic.name}
-                          </span>
+                          <span className={`text-xs ${colors.text.muted}`}>• {sq.question.topic.name}</span>
                         )}
                       </div>
                     </div>
                     {canEdit && (
-                      <button
-                        onClick={() => removeQuestion(sq.questionId)}
-                        className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                      >
+                      <button onClick={() => removeQuestion(sq.questionId)} className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
                         <X className="w-4 h-4" />
                       </button>
                     )}

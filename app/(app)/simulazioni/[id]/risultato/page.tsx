@@ -8,9 +8,10 @@ import { useToast } from '@/components/ui/Toast';
 import { useApiError } from '@/lib/hooks/useApiError';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
+import { sanitizeStudentOpenAnswerInput } from '@/lib/utils/studentOpenAnswer';
 import { auth } from '@/lib/firebase/config';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
+import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import {
   ArrowLeft,
   Trophy,
@@ -658,7 +659,7 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                           {answer.question.textLatex ? (
                             <LaTeXRenderer latex={answer.question.textLatex} className="line-clamp-1" displayMode={false} />
                           ) : (
-                            <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.question.text) }} />
+                            <RichTextRenderer text={answer.question.text} />
                           )}
                         </div>
                       </div>
@@ -671,7 +672,7 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                       <div className={`p-3 rounded-lg ${colors.background.secondary} ${colors.text.primary} space-y-2`}>
                         {/* Question text */}
                         {answer.question.text && (
-                          <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.question.text) }} />
+                          <RichTextRenderer text={answer.question.text} />
                         )}
                         {/* LaTeX formula if present */}
                         {answer.question.textLatex && (
@@ -690,10 +691,9 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                               <MessageSquare className="w-4 h-4 text-gray-500" />
                               <span className={`text-sm font-medium ${colors.text.secondary}`}>La tua risposta:</span>
                             </div>
-                            <div 
-                              className={`${colors.text.primary}`}
-                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.answerText || '') }}
-                            />
+                            <p className={colors.text.primary}>
+                              {sanitizeStudentOpenAnswerInput(answer.answerText || '')}
+                            </p>
                           </div>
 
                           {/* Self-correction buttons */}
@@ -780,7 +780,7 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                                 {a.textLatex ? (
                                   <LaTeXRenderer latex={a.textLatex} displayMode={false} />
                                 ) : (
-                                  <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(a.text) }} />
+                                  <RichTextRenderer text={a.text} />
                                 )}
                               </div>
                               {isSelected && (
@@ -799,9 +799,9 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                       {answer.question.explanation && (
                         <div className={`p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800`}>
                           <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">Spiegazione:</p>
-                          <div 
+                          <RichTextRenderer
+                            text={answer.question.explanation}
                             className="text-sm text-blue-700 dark:text-blue-300"
-                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.question.explanation) }}
                           />
                         </div>
                       )}

@@ -38,7 +38,7 @@ export const simulationSectionSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1, 'Nome sezione obbligatorio'),
   durationMinutes: z.number().int().min(1, 'Durata sezione obbligatoria'),
-  questionCount: z.number().int().min(1).optional(),
+  questionCount: z.number().int().min(0).optional(),
   subjectId: z.string().optional().nullable(),
   questionIds: z.array(z.string()).optional().default([]),
   order: z.number().int().min(0).default(0),
@@ -258,6 +258,7 @@ export const updateSimulationQuestionsSchema = z.object({
   simulationId: z.string().min(1, 'ID simulazione obbligatorio'),
   questions: z.array(simulationQuestionSchema).min(1, 'Aggiungi almeno una domanda'),
   mode: z.enum(['replace', 'append', 'remove']).default('replace'),
+  sections: z.array(simulationSectionSchema).optional().nullable(),
 });
 
 export type UpdateSimulationQuestionsInput = z.infer<typeof updateSimulationQuestionsSchema>;

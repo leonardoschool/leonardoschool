@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { colors } from '@/lib/theme/colors';
 import { Eye, Code, HelpCircle, ChevronDown, ChevronUp, X } from 'lucide-react';
 import katex from 'katex';
+import { sanitizeLatexForKatex } from '@/lib/utils/latex';
 
 interface LaTeXEditorProps {
   value: string;
@@ -88,7 +89,7 @@ const latexTemplates = [
 // Render LaTeX to HTML safely
 function renderLatex(latex: string): { html: string; error: string | null } {
   try {
-    const html = katex.renderToString(latex, {
+    const html = katex.renderToString(sanitizeLatexForKatex(latex), {
       throwOnError: false,
       displayMode: true,
       strict: false,
@@ -338,7 +339,7 @@ export function LaTeXRenderer({ latex, className = '', displayMode = true }: LaT
     }
 
     try {
-      const rendered = katex.renderToString(latex, {
+      const rendered = katex.renderToString(sanitizeLatexForKatex(latex), {
         throwOnError: false,
         displayMode,
         output: 'html',

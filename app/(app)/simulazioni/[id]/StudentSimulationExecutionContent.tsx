@@ -27,6 +27,7 @@ import {
 } from '@/components/simulazioni/SimulationModals';
 import { useRouter } from 'next/navigation';
 import { useAntiCheat } from '@/lib/hooks/useAntiCheat';
+import { sanitizeStudentAnswerText, sanitizeStudentOpenAnswerInput } from '@/lib/utils/studentOpenAnswer';
 
 interface Answer {
   questionId: string;
@@ -41,7 +42,8 @@ interface SimulationSection {
   name: string;
   durationMinutes: number;
   questionIds: string[];
-  subjectId?: string;
+  subjectId?: string | null;
+  order?: number;
 }
 
 interface StudentSimulationExecutionContentProps {
@@ -174,7 +176,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     const restoredAnswers = savedAnswers.map(a => ({
       questionId: a.questionId,
       answerId: a.answerId,
-      answerText: a.answerText,
+      answerText: sanitizeStudentAnswerText(a.answerText),
       timeSpent: a.timeSpent || 0,
       flagged: a.flagged || false,
     }));
@@ -304,7 +306,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
       const finalAnswers = answers.map((a) => ({
         questionId: a.questionId,
         answerId: a.answerId,
-        answerText: a.answerText,
+        answerText: sanitizeStudentAnswerText(a.answerText),
         timeSpent: questionTimes[a.questionId] || 0,
         flagged: a.flagged,
       }));
@@ -427,6 +429,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     
     const answersWithTimes = answers.map((a) => ({
       ...a,
+      answerText: sanitizeStudentAnswerText(a.answerText),
       timeSpent: questionTimes[a.questionId] || 0,
     }));
 
@@ -448,6 +451,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
       // Save progress synchronously using sendBeacon for reliability
       const answersWithTimes = answers.map((a) => ({
         ...a,
+        answerText: sanitizeStudentAnswerText(a.answerText),
         timeSpent: questionTimes[a.questionId] || 0,
       }));
 
@@ -503,11 +507,12 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     if (!simulation) return;
     const currentQuestion = simulation.questions[currentQuestionIndex];
     if (!currentQuestion) return;
+    const sanitizedText = sanitizeStudentOpenAnswerInput(text);
 
     setAnswers((prev) =>
       prev.map((a) =>
         a.questionId === currentQuestion.questionId
-          ? { ...a, answerText: text || null }
+          ? { ...a, answerText: sanitizedText.trim().length > 0 ? sanitizedText : null }
           : a
       )
     );
@@ -595,7 +600,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     const finalAnswers = answers.map((a) => ({
       questionId: a.questionId,
       answerId: a.answerId,
-      answerText: a.answerText,
+      answerText: sanitizeStudentAnswerText(a.answerText),
       timeSpent: questionTimes[a.questionId] || 0,
       flagged: a.flagged,
     }));
@@ -620,11 +625,36 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     }
     try {
       const parsed = simulation.sections as unknown as SimulationSection[];
-      return Array.isArray(parsed) ? parsed : [];
+      if (!Array.isArray(parsed)) return [];
+
+      const normalizedSections = parsed
+        .map((section) => ({
+          ...section,
+          questionIds: Array.isArray(section.questionIds) ? [...section.questionIds] : [],
+        }))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+      if (!simulation.questions || normalizedSections.length === 0) return normalizedSections;
+
+      const assignedQuestionIds = new Set(normalizedSections.flatMap(section => section.questionIds));
+      for (const simulationQuestion of simulation.questions) {
+        if (assignedQuestionIds.has(simulationQuestion.questionId)) continue;
+
+        const subjectId = simulationQuestion.question?.subject?.id;
+        const subjectName = simulationQuestion.question?.subject?.name;
+        const targetSection = normalizedSections.find(section => section.subjectId && section.subjectId === subjectId)
+          || normalizedSections.find(section => subjectName && section.name.toLowerCase() === subjectName.toLowerCase())
+          || normalizedSections[0];
+
+        targetSection.questionIds.push(simulationQuestion.questionId);
+        assignedQuestionIds.add(simulationQuestion.questionId);
+      }
+
+      return normalizedSections;
     } catch {
       return [];
     }
-  }, [simulation?.hasSections, simulation?.sections]);
+  }, [simulation?.hasSections, simulation?.sections, simulation?.questions]);
 
   const hasSectionsMode = sections.length > 0;
 

@@ -19,6 +19,7 @@ import * as notificationService from '@/server/services/notificationService';
 import { notifications } from '@/lib/notifications/notificationHelpers';
 import { createLogger } from '@/lib/utils/logger';
 import { stripHtml } from '@/lib/utils/sanitizeHtml';
+import { sanitizeStudentAnswerText } from '@/lib/utils/studentOpenAnswer';
 import { secureShuffleArray } from '@/lib/utils';
 
 const log = createLogger('Simulations');
@@ -1816,6 +1817,15 @@ export const simulationsRouter = router({
               assignedBy: { select: { id: true, name: true } },
             },
           },
+          sourceTemplate: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              totalQuestions: true,
+              durationMinutes: true,
+            },
+          },
           results: {
             include: {
               student: {
@@ -2115,7 +2125,7 @@ export const simulationsRouter = router({
   updateQuestions: adminProcedure
     .input(updateSimulationQuestionsSchema)
     .mutation(async ({ ctx, input }) => {
-      const { simulationId, questions, mode } = input;
+      const { simulationId, questions, mode, sections } = input;
 
       // Check simulation
       const existing = await ctx.prisma.simulation.findUnique({
@@ -2142,6 +2152,20 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Una o più domande non esistono' });
       }
 
+      const questionIdSet = new Set(questionIds);
+      const sanitizedSections = sections?.map((section, index) => {
+        const sectionQuestionIds = (section.questionIds || []).filter(questionId => questionIdSet.has(questionId));
+        return {
+          id: section.id,
+          name: section.name,
+          durationMinutes: section.durationMinutes,
+          questionIds: sectionQuestionIds,
+          questionCount: sectionQuestionIds.length,
+          subjectId: section.subjectId ?? null,
+          order: section.order ?? index,
+        };
+      });
+
       await ctx.prisma.$transaction(async () => {
         if (mode === 'replace') {
           // Delete all existing questions and add new ones
@@ -2157,7 +2181,10 @@ export const simulationsRouter = router({
           });
           await ctx.prisma.simulation.update({
             where: { id: simulationId },
-            data: { totalQuestions: questions.length },
+            data: {
+              totalQuestions: questions.length,
+              ...(sanitizedSections ? { sections: sanitizedSections } : {}),
+            },
           });
         } else if (mode === 'append') {
           // Get current max order
@@ -2182,7 +2209,10 @@ export const simulationsRouter = router({
           const newTotal = await ctx.prisma.simulationQuestion.count({ where: { simulationId } });
           await ctx.prisma.simulation.update({
             where: { id: simulationId },
-            data: { totalQuestions: newTotal },
+            data: {
+              totalQuestions: newTotal,
+              ...(sanitizedSections ? { sections: sanitizedSections } : {}),
+            },
           });
         } else if (mode === 'remove') {
           await ctx.prisma.simulationQuestion.deleteMany({
@@ -2195,7 +2225,10 @@ export const simulationsRouter = router({
           const newTotal = await ctx.prisma.simulationQuestion.count({ where: { simulationId } });
           await ctx.prisma.simulation.update({
             where: { id: simulationId },
-            data: { totalQuestions: newTotal },
+            data: {
+              totalQuestions: newTotal,
+              ...(sanitizedSections ? { sections: sanitizedSections } : {}),
+            },
           });
         }
       });
@@ -3309,6 +3342,10 @@ export const simulationsRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const { resultId, answers, timeSpent, sectionTimes, currentSectionIndex } = input;
+      const sanitizedAnswers = answers.map(answer => ({
+        ...answer,
+        answerText: sanitizeStudentAnswerText(answer.answerText),
+      }));
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
 
       const result = await ctx.prisma.simulationResult.findUnique({
@@ -3330,7 +3367,7 @@ export const simulationsRouter = router({
 
       // Prepare answers with section progress metadata
       const answersWithMeta = {
-        items: answers,
+        items: sanitizedAnswers,
         sectionTimes: sectionTimes || {},
         currentSectionIndex: currentSectionIndex ?? 0,
       };
@@ -3351,6 +3388,10 @@ export const simulationsRouter = router({
     .input(submitSimulationSchema)
     .mutation(async ({ ctx, input }) => {
       const { simulationId, answers, totalTimeSpent } = input;
+      const sanitizedAnswers = answers.map(answer => ({
+        ...answer,
+        answerText: sanitizeStudentAnswerText(answer.answerText),
+      }));
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
       const studentId = student.id;
 
@@ -3388,7 +3429,7 @@ export const simulationsRouter = router({
       // Calculate scores using helper
       const scoringResult = calculateSubmissionScores(
         simulation.questions as unknown as SimulationQuestionWithDetails[],
-        answers.map(a => ({ ...a, questionId: a.questionId ?? '' })),
+        sanitizedAnswers.map(a => ({ ...a, questionId: a.questionId ?? '' })),
         {
           useQuestionPoints: simulation.useQuestionPoints,
           correctPoints: simulation.correctPoints,
@@ -3424,7 +3465,7 @@ export const simulationsRouter = router({
       if (!simulation.showCorrectAnswers) {
         const openAnswersToCreate = buildOpenAnswerSubmissions(
           simulation.questions as unknown as SimulationQuestionWithDetails[],
-          answers.map(a => ({ ...a, questionId: a.questionId ?? '' })),
+          sanitizedAnswers.map(a => ({ ...a, questionId: a.questionId ?? '' })),
           studentId,
           result.id
         );

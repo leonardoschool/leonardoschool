@@ -7,6 +7,7 @@ import { colors } from '@/lib/theme/colors';
 import { PageLoader } from '@/components/ui/loaders';
 import Button from '@/components/ui/Button';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
+import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import {
   BookOpen,
   ChevronLeft,
@@ -85,7 +86,7 @@ export default function StudyModeContent({ questionIds }: StudyModeContentProps)
     if (textLatex) {
       return <LaTeXRenderer latex={textLatex} className={colors.text.primary} />;
     }
-    return <p>{text}</p>;
+    return <RichTextRenderer text={text} />;
   };
 
   // Render a single question card with answers
@@ -155,7 +156,7 @@ export default function StudyModeContent({ questionIds }: StudyModeContentProps)
                   {/* Answer text */}
                   <div className="flex-1 min-w-0">
                     <div className={`${colors.text.primary}`}>
-                      <p>{answer.text}</p>
+                      <RichTextRenderer text={answer.text} />
                     </div>
                   </div>
 

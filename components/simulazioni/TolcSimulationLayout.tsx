@@ -3,9 +3,10 @@
 import { useState, useMemo, useCallback } from 'react';
 import Image from 'next/image';
 import { colors } from '@/lib/theme/colors';
-import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
+import { sanitizeStudentOpenAnswerInput } from '@/lib/utils/studentOpenAnswer';
 import { TextareaWithSymbols } from '@/components/ui/SymbolKeyboard';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
+import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import {
   ChevronLeft,
   ChevronRight,
@@ -361,9 +362,9 @@ export default function TolcSimulationLayout({
                 </div>
               )}
 
-              <div 
+              <RichTextRenderer
+                text={currentQuestion.question?.text || ''}
                 className={`text-lg leading-relaxed prose dark:prose-invert max-w-none ${colors.text.primary}`}
-                dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentQuestion.question?.text || '') }}
               />
               {currentQuestion.question?.textLatex && (
                 <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -384,11 +385,11 @@ export default function TolcSimulationLayout({
                 </span>
                 <TextareaWithSymbols
                   value={currentAnswer?.answerText || ''}
-                  onChange={(text) => onOpenTextChange?.(text)}
-                  placeholder="Inserisci la tua risposta... Puoi usare formule LaTeX ($x^2$) e HTML (<sub>2</sub>)"
+                  onChange={(text) => onOpenTextChange?.(sanitizeStudentOpenAnswerInput(text))}
+                  placeholder="Inserisci la tua risposta... Usa i simboli dalla tastiera qui sopra"
                   rows={6}
-                  showFormattingHelp={true}
-                  showPreview={true}
+                  showFormattingHelp={false}
+                  showPreview={false}
                 />
               </div>
             ) : (
@@ -436,9 +437,9 @@ export default function TolcSimulationLayout({
                             />
                           </div>
                         )}
-                        <span 
+                        <RichTextRenderer
+                          text={answer.text}
                           className={`text-base ${isSelected ? colors.primary.text : colors.text.primary}`}
-                          dangerouslySetInnerHTML={{ __html: sanitizeHtml(answer.text) }}
                         />
                       </div>
                     </button>
