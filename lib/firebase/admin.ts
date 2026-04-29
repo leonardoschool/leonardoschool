@@ -24,7 +24,15 @@ function initAdmin() {
     }
 
     try {
-      const serviceAccount = JSON.parse(serviceAccountKey);
+      // Parse the service account key, handling the common .env escaping issue where
+      // the private_key field contains literal newline characters instead of \n escape sequences.
+      let serviceAccount: Record<string, unknown>;
+      try {
+        serviceAccount = JSON.parse(serviceAccountKey);
+      } catch {
+        // Retry after escaping literal newlines (control chars → \n escape sequences)
+        serviceAccount = JSON.parse(serviceAccountKey.replace(/\r?\n/g, '\\n'));
+      }
       
       // Validate required fields
       if (!serviceAccount.project_id || !serviceAccount.private_key) {
