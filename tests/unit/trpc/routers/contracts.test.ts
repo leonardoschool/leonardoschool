@@ -706,7 +706,7 @@ describe('Contracts Router', () => {
       });
 
       it('should accept optional price as number', () => {
-        const input = { price: 1500,00 };
+        const input = { price: 1500.00 };
         expect(typeof input.price).toBe('number');
       });
 
