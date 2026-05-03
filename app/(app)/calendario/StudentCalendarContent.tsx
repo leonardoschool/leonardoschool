@@ -264,6 +264,7 @@ export default function StudentCalendarContent() {
           groupId={selectedGroupInfo}
           isOpen={true}
           onClose={() => setSelectedGroupInfo(null)}
+          hideUserDetails
         />
       )}
 

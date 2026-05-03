@@ -168,8 +168,6 @@ const symbolCategories: SymbolCategory[] = [
         symbols: [
           { symbol: "5'→3'", label: 'direzione 5-3' },
           { symbol: "3'→5'", label: 'direzione 3-5' },
-          { symbol: '♀', label: 'femmina' },
-          { symbol: '♂', label: 'maschio' },
         ],
       },
     ],
@@ -190,6 +188,8 @@ const symbolCategories: SymbolCategory[] = [
           { symbol: '⁷', label: 'apice 7' },
           { symbol: '⁸', label: 'apice 8' },
           { symbol: '⁹', label: 'apice 9' },
+          { symbol: '⁺', label: 'apice +' },
+          { symbol: '⁻', label: 'apice -' },
         ],
       },
       {
@@ -205,6 +205,8 @@ const symbolCategories: SymbolCategory[] = [
           { symbol: '₇', label: 'pedice 7' },
           { symbol: '₈', label: 'pedice 8' },
           { symbol: '₉', label: 'pedice 9' },
+          { symbol: '₊', label: 'pedice +' },
+          { symbol: '₋', label: 'pedice -' },
         ],
       },
     ],
@@ -286,14 +288,16 @@ export default function SymbolKeyboard({ onInsert, className = '' }: SymbolKeybo
                     {group.groupName}
                   </p>
                 )}
-                <div className="grid grid-cols-8 gap-1">
+                <div className="flex flex-wrap gap-1">
                   {group.symbols.map((item) => (
                     <button
                       key={`${item.symbol}-${item.label}`}
                       type="button"
                       onClick={() => handleSymbolClick(item.symbol)}
                       title={item.label}
-                      className={`p-2 rounded-lg text-lg font-medium ${colors.text.primary} ${colors.background.hover} hover:${colors.primary.softBg} hover:${colors.primary.text} transition-all border ${colors.border.light} hover:border-pink-300 dark:hover:border-pink-700`}
+                      className={`h-10 rounded-lg text-base font-medium ${colors.text.primary} ${colors.background.hover} hover:${colors.primary.softBg} hover:${colors.primary.text} transition-all border ${colors.border.light} hover:border-pink-300 dark:hover:border-pink-700 ${
+                        item.symbol.length > 2 ? 'px-3' : 'w-10'
+                      }`}
                     >
                       {item.symbol}
                     </button>

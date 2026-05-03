@@ -26,7 +26,7 @@ export const contractsRouter = router({
           isActive: true,
           ...(input?.targetRole ? { targetRole: input.targetRole } : {}),
         },
-        orderBy: { name: 'asc' },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       });
     }),
 
@@ -45,6 +45,12 @@ export const contractsRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const maxOrder = await ctx.prisma.contractTemplate.aggregate({
+        where: { isActive: true },
+        _max: { sortOrder: true },
+      });
+      const nextSortOrder = (maxOrder._max.sortOrder ?? 0) + 1000;
+
       return ctx.prisma.contractTemplate.create({
         data: {
           name: input.name,
@@ -54,6 +60,7 @@ export const contractsRouter = router({
           duration: input.duration,
           targetRole: input.targetRole,
           createdBy: ctx.user.id,
+          sortOrder: nextSortOrder,
         },
       });
     }),
@@ -79,6 +86,59 @@ export const contractsRouter = router({
       return ctx.prisma.contractTemplate.update({
         where: { id },
         data,
+      });
+    }),
+
+  /**
+   * Duplicate a contract template (copy appears right after the original)
+   */
+  duplicateTemplate: adminProcedure
+    .input(
+      z.object({
+        id: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Fetch all active templates in current display order
+      const allTemplates = await ctx.prisma.contractTemplate.findMany({
+        where: { isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      });
+
+      const originalIndex = allTemplates.findIndex(t => t.id === input.id);
+      if (originalIndex === -1) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Template non trovato',
+        });
+      }
+
+      const original = allTemplates[originalIndex];
+
+      // Renormalize all sortOrders to integer multiples of 1000, then
+      // insert the copy at originalIndex + 0.5 (i.e., between original and next)
+      return ctx.prisma.$transaction(async (tx) => {
+        for (let i = 0; i < allTemplates.length; i++) {
+          await tx.contractTemplate.update({
+            where: { id: allTemplates[i].id },
+            data: { sortOrder: (i + 1) * 1000 },
+          });
+        }
+
+        const copySortOrder = (originalIndex + 1) * 1000 + 500;
+
+        return tx.contractTemplate.create({
+          data: {
+            name: `Copia di ${original.name}`,
+            description: original.description,
+            content: original.content,
+            price: original.price,
+            duration: original.duration,
+            targetRole: original.targetRole,
+            createdBy: ctx.user.id,
+            sortOrder: copySortOrder,
+          },
+        });
       });
     }),
 
@@ -902,25 +962,8 @@ export const contractsRouter = router({
         },
       });
 
-      // Get user info for notification
+      // Get user info for return message
       const userName = contract.student?.user?.name || contract.collaborator?.user?.name || 'Utente';
-      const userUserId = contract.student?.user?.id || contract.collaborator?.user?.id;
-      const templateName = contract.template.name;
-
-      // Send notification to user about contract revocation
-      if (userUserId) {
-        const revokeReason = input.revokeNotes ? ` Motivo: ${input.revokeNotes}` : '';
-        const notificationMessage = `Il tuo contratto "${templateName}" è stato revocato dall'amministrazione.${revokeReason}`;
-        
-        await ctx.prisma.notification.create({
-          data: {
-            userId: userUserId,
-            type: 'CONTRACT_CANCELLED',
-            title: 'Contratto revocato',
-            message: notificationMessage,
-          },
-        });
-      }
 
       return { 
         success: true, 

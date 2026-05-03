@@ -20,6 +20,7 @@ export interface GroupInfoModalProps {
   groupId: string;
   isOpen: boolean;
   onClose: () => void;
+  hideUserDetails?: boolean;
 }
 
 // Interfacce per i dati del gruppo
@@ -80,7 +81,7 @@ const groupTypeColors: Record<string, { bg: string; text: string }> = {
   },
 };
 
-export function GroupInfoModal({ groupId, isOpen, onClose }: GroupInfoModalProps) {
+export function GroupInfoModal({ groupId, isOpen, onClose, hideUserDetails = false }: GroupInfoModalProps) {
   const [selectedUserInfo, setSelectedUserInfo] = useState<{ userId: string; userType: 'STUDENT' | 'COLLABORATOR' } | null>(null);
   
   const { 
@@ -233,16 +234,18 @@ export function GroupInfoModal({ groupId, isOpen, onClose }: GroupInfoModalProps
                             <p className={`font-medium ${colors.text.primary}`}>{group.referenceCollaborator.user.name}</p>
                             <p className={`text-xs ${colors.text.muted}`}>Collaboratore referente</p>
                           </div>
-                          <button
-                            onClick={() => setSelectedUserInfo({
-                              userId: group.referenceCollaborator!.user.id,
-                              userType: 'COLLABORATOR'
-                            })}
-                            className={`p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 ${colors.text.secondary}`}
-                            title="Info utente"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
+                          {!hideUserDetails && (
+                            <button
+                              onClick={() => setSelectedUserInfo({
+                                userId: group.referenceCollaborator!.user.id,
+                                userType: 'COLLABORATOR'
+                              })}
+                              className={`p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 ${colors.text.secondary}`}
+                              title="Info utente"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       )}
                       {group.referenceStudent && (
@@ -254,16 +257,18 @@ export function GroupInfoModal({ groupId, isOpen, onClose }: GroupInfoModalProps
                             <p className={`font-medium ${colors.text.primary}`}>{group.referenceStudent.user.name}</p>
                             <p className={`text-xs ${colors.text.muted}`}>Studente referente</p>
                           </div>
-                          <button
-                            onClick={() => setSelectedUserInfo({
-                              userId: group.referenceStudent!.user.id,
-                              userType: 'STUDENT'
-                            })}
-                            className={`p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 ${colors.text.secondary}`}
-                            title="Info utente"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
+                          {!hideUserDetails && (
+                            <button
+                              onClick={() => setSelectedUserInfo({
+                                userId: group.referenceStudent!.user.id,
+                                userType: 'STUDENT'
+                              })}
+                              className={`p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 ${colors.text.secondary}`}
+                              title="Info utente"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -305,7 +310,7 @@ export function GroupInfoModal({ groupId, isOpen, onClose }: GroupInfoModalProps
                               <p className={`font-medium ${colors.text.primary} truncate`}>{user?.name}</p>
                               <p className={`text-xs ${colors.text.muted} truncate`}>{user?.email}</p>
                             </div>
-                            {userId && (
+                            {userId && !hideUserDetails && (
                               <button
                                 onClick={() => setSelectedUserInfo({
                                   userId,

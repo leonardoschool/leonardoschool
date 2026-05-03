@@ -349,7 +349,7 @@ function normalizeDistributionTotal(
 function buildSmartRandomBaseWhere(
   excludeQuestionIds?: string[],
   tagIds?: string[],
-  type?: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT',
+  types?: string[],
   topicIds?: string[],
   subTopicIds?: string[]
 ): Record<string, unknown> {
@@ -369,8 +369,8 @@ function buildSmartRandomBaseWhere(
     };
   }
 
-  if (type) {
-    baseWhere.type = type;
+  if (types && types.length > 0) {
+    baseWhere.type = types.length === 1 ? types[0] : { in: types };
   }
 
   if (topicIds && topicIds.length > 0) {
@@ -796,11 +796,11 @@ export const questionsRouter = router({
     .input(
       z.object({
         count: z.number().int().min(1).max(200),
-        subjectId: z.string().optional(),
-        type: z.enum(['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'OPEN_TEXT']).optional(),
+        subjectIds: z.array(z.string()).optional(),
+        types: z.array(z.enum(['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'OPEN_TEXT'])).optional(),
         topicIds: z.array(z.string()).optional(),
         subTopicIds: z.array(z.string()).optional(),
-        difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']).optional(),
+        difficulties: z.array(z.enum(['EASY', 'MEDIUM', 'HARD'])).optional(),
         tagIds: z.array(z.string()).optional(),
         excludeQuestionIds: z.array(z.string()).optional(),
       })
@@ -810,9 +810,12 @@ export const questionsRouter = router({
         status: 'PUBLISHED',
       };
 
-      if (input.subjectId) where.subjectId = input.subjectId;
-      if (input.type) where.type = input.type;
-      if (input.difficulty) where.difficulty = input.difficulty;
+      if (input.subjectIds && input.subjectIds.length > 0)
+        where.subjectId = input.subjectIds.length === 1 ? input.subjectIds[0] : { in: input.subjectIds };
+      if (input.types && input.types.length > 0)
+        where.type = input.types.length === 1 ? input.types[0] : { in: input.types };
+      if (input.difficulties && input.difficulties.length > 0)
+        where.difficulty = input.difficulties.length === 1 ? input.difficulties[0] : { in: input.difficulties };
       if (input.topicIds && input.topicIds.length > 0) {
         where.topicId = { in: input.topicIds };
       }
@@ -2361,7 +2364,8 @@ export const questionsRouter = router({
         maximizeTopicCoverage,
         preferRecentQuestions,
         tagIds,
-        type,
+        types,
+        subjectIds,
         topicIds,
         subTopicIds,
         excludeQuestionIds,
@@ -2403,7 +2407,7 @@ export const questionsRouter = router({
       const baseWhere = buildSmartRandomBaseWhere(
         excludeQuestionIds ?? undefined,
         tagIds ?? undefined,
-        type ?? undefined,
+        types ?? undefined,
         topicIds ?? undefined,
         subTopicIds ?? undefined,
       );
@@ -2423,7 +2427,10 @@ export const questionsRouter = router({
 
       // Process each subject in distribution
       const subjectEntries = Array.from(targetDistribution.entries()).filter(
-        ([subjectId, targetCount]) => targetCount > 0 && subjectsById.has(subjectId)
+        ([subjectId, targetCount]) =>
+          targetCount > 0 &&
+          subjectsById.has(subjectId) &&
+          (!subjectIds || subjectIds.length === 0 || subjectIds.includes(subjectId))
       );
 
       for (const [subjectId, targetCount] of subjectEntries) {

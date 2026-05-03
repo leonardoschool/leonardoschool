@@ -30,6 +30,7 @@ import {
   ChevronUp,
   Archive,
   Globe,
+  Copy,
 } from 'lucide-react';
 import CustomSelect from '@/components/ui/CustomSelect';
 import type { SimulationStatus } from '@/lib/validations/simulationValidation';
@@ -136,6 +137,7 @@ export default function TemplatesContent() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
   const [archiveConfirm, setArchiveConfirm] = useState<{ id: string; title: string } | null>(null);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -164,6 +166,18 @@ export default function TemplatesContent() {
       if (expandedId === deleteConfirm?.id) setExpandedId(null);
     },
     onError: handleMutationError,
+  });
+
+  const duplicateMutation = trpc.simulationTemplates.duplicate.useMutation({
+    onSuccess: () => {
+      showSuccess('Duplicato', 'Template duplicato con successo come bozza');
+      utils.simulationTemplates.list.invalidate();
+      setDuplicatingId(null);
+    },
+    onError: (err) => {
+      setDuplicatingId(null);
+      handleMutationError(err);
+    },
   });
 
   const updateStatusMutation = trpc.simulationTemplates.update.useMutation({
@@ -647,6 +661,20 @@ export default function TemplatesContent() {
                       Modifica
                     </Link>
                   )}
+
+                  {/* Duplicate */}
+                  <button
+                    onClick={() => {
+                      setDuplicatingId(openMenuId);
+                      duplicateMutation.mutate({ id: openMenuId });
+                      setOpenMenuId(null);
+                    }}
+                    disabled={duplicateMutation.isPending && duplicatingId === openMenuId}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm ${colors.text.secondary} hover:${colors.background.hover} transition-colors disabled:opacity-50`}
+                  >
+                    <Copy className="w-4 h-4" />
+                    Duplica
+                  </button>
 
                   {/* Archive / Restore */}
                   {canAct && (

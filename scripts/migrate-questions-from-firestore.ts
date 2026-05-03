@@ -347,6 +347,31 @@ function isMiurDatabaseCode(value?: string | null): boolean {
   return readable?.toLowerCase().startsWith('miur_') ?? false;
 }
 
+/**
+ * Risolve il nome fonte CINECA dal codice miur, distinguendo mese se presente.
+ * Es: miur_5_2024 → "CINECA MAGGIO", miur_7_2024 → "CINECA LUGLIO", miur_2024 → "CINECA"
+ */
+const MONTH_NAMES_IT: Record<number, string> = {
+  1: 'GENNAIO', 2: 'FEBBRAIO', 3: 'MARZO', 4: 'APRILE',
+  5: 'MAGGIO', 6: 'GIUGNO', 7: 'LUGLIO', 8: 'AGOSTO',
+  9: 'SETTEMBRE', 10: 'OTTOBRE', 11: 'NOVEMBRE', 12: 'DICEMBRE',
+};
+
+function resolveCinecaSource(value?: string | null): string {
+  const readable = resolveToReadable(value);
+  if (!readable) return 'CINECA';
+
+  // Format atteso: miur_{mese}_{anno} oppure miur_{anno}
+  const match = readable.toLowerCase().match(/^miur_0?(\d{1,2})_\d{4}$/);
+  if (match) {
+    const month = parseInt(match[1], 10);
+    const monthName = MONTH_NAMES_IT[month];
+    if (monthName) return `CINECA ${monthName}`;
+  }
+
+  return 'CINECA';
+}
+
 function parseYearFromText(value?: string | null): number | null {
   const readable = resolveToReadable(value);
   if (!readable) return null;
@@ -388,7 +413,7 @@ function parseDatabaseMetadata(rawDatabase: string | undefined, databaseName: st
 
   const year = parseYearFromText(readable);
   if (isMiurDatabaseCode(readable)) {
-    return { source: 'CINECA', year };
+    return { source: resolveCinecaSource(readable), year };
   }
 
   return {
@@ -418,7 +443,7 @@ function resolveDatabaseName(config: SimulationConfigData | null, rawDatabase?: 
   if (isEmpty(rawDatabase)) return null;
 
   if (isMiurDatabaseCode(rawDatabase)) {
-    return 'CINECA';
+    return resolveCinecaSource(rawDatabase);
   }
   
   // Prova a cercare nella configurazione

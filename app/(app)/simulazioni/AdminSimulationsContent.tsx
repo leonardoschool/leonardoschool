@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
@@ -36,9 +37,11 @@ import {
   Unlock,
   User,
   BookOpen,
+  Copy,
 } from 'lucide-react';
 import type { SimulationType, SimulationStatus } from '@/lib/validations/simulationValidation';
 import { SimulationAssignModal } from '@/components/ui/SimulationAssignModal';
+import DateTimePicker from '@/components/ui/DateTimePicker';
 import TemplatesContent from './TemplatesContent';
 
 type TabType = 'simulations' | 'assignments' | 'templates';
@@ -87,6 +90,7 @@ const assignmentStatusColors: Record<AssignmentStatus, string> = {
 };
 
 export default function AdminSimulationsContent() {
+  const router = useRouter();
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
   const utils = trpc.useUtils();
@@ -129,11 +133,21 @@ export default function AdminSimulationsContent() {
   
   // Student detail modal state
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+
+  // Edit assignment modal state
+  const [editingAssignment, setEditingAssignment] = useState<GroupedAssignment | null>(null);
+  const [editStartDate, setEditStartDate] = useState('');
+  const [editEndDate, setEditEndDate] = useState('');
+
+  // Assignment action menu state
+  const [openAssignmentMenuId, setOpenAssignmentMenuId] = useState<string | null>(null);
+  const [assignmentMenuPosition, setAssignmentMenuPosition] = useState<{ top: number; left: number } | null>(null);
   
   // Expanded groups state (for showing all students)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const menuRef = useRef<HTMLDivElement>(null);
+  const assignmentMenuRef = useRef<HTMLDivElement>(null);
 
   // Fetch groups for filter
   const { data: groupsData } = trpc.groups.getGroups.useQuery({ page: 1, pageSize: 100 });
@@ -200,6 +214,15 @@ export default function AdminSimulationsContent() {
     },
   });
 
+  const duplicateMutation = trpc.simulations.duplicate.useMutation({
+    onSuccess: async (duplicated) => {
+      showSuccess('Duplicata', 'Simulazione duplicata come bozza. Puoi convertirla in esercitazione dalla pagina di modifica.');
+      await utils.simulations.getSimulations.invalidate();
+      router.push(`/simulazioni/${duplicated.id}/modifica`);
+    },
+    onError: handleMutationError,
+  });
+
   const publishMutation = trpc.simulations.publish.useMutation({
     onSuccess: () => {
       showSuccess('Pubblicata', 'Simulazione pubblicata con successo');
@@ -238,6 +261,15 @@ export default function AdminSimulationsContent() {
     onSuccess: () => {
       showSuccess('Eliminata', 'Assegnazione eliminata con successo');
       utils.simulations.getAssignments.invalidate();
+    },
+    onError: handleMutationError,
+  });
+
+  const updateAssignmentsMutation = trpc.simulations.updateAssignments.useMutation({
+    onSuccess: () => {
+      showSuccess('Salvata', 'Assegnazione aggiornata con successo');
+      utils.simulations.getAssignments.invalidate();
+      setEditingAssignment(null);
     },
     onError: handleMutationError,
   });
@@ -342,7 +374,7 @@ export default function AdminSimulationsContent() {
     }));
   }, [assignmentsData]);
 
-  // Close menu on click outside
+  // Close simulation menu on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -353,6 +385,42 @@ export default function AdminSimulationsContent() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Close assignment menu on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (assignmentMenuRef.current && !assignmentMenuRef.current.contains(event.target as Node)) {
+        setOpenAssignmentMenuId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Handle assignment menu open with smart positioning
+  const handleAssignmentMenuOpen = (id: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    const button = event.currentTarget as HTMLElement;
+    const rect = button.getBoundingClientRect();
+    const menuHeight = 280;
+    const menuWidth = 208;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const openUpward = spaceBelow < menuHeight && spaceAbove > menuHeight + 20;
+    const top = openUpward
+      ? rect.top + window.scrollY - menuHeight - 4
+      : rect.bottom + window.scrollY + 4;
+    let left: number;
+    if (window.innerWidth < 640 || window.innerWidth - rect.right < menuWidth + 16) {
+      const idealLeft = rect.right + window.scrollX - menuWidth;
+      left = Math.max(window.scrollX + 8, idealLeft);
+    } else {
+      left = rect.right + window.scrollX - menuWidth;
+    }
+    setAssignmentMenuPosition({ top, left });
+    setOpenAssignmentMenuId(openAssignmentMenuId === id ? null : id);
+  };
 
   // Handle menu open with smart positioning
   const handleMenuOpen = (id: string, event: React.MouseEvent) => {
@@ -951,106 +1019,13 @@ export default function AdminSimulationsContent() {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-1.5 sm:gap-2 flex-wrap">
-                              {/* Virtual Room button for ROOM access type - show if ACTIVE and not expired */}
-                              {group.simulationAccessType === 'ROOM' && group.status === 'ACTIVE' && (() => {
-                                const isExpired = group.endDate && new Date(group.endDate) < new Date();
-                                
-                                if (isExpired) {
-                                  return (
-                                    <button
-                                      disabled
-                                      className={`inline-flex items-center gap-1.5 px-2 py-1.5 sm:px-3 sm:py-2 text-sm font-medium rounded-lg bg-gray-400 dark:bg-gray-700 text-gray-200 dark:text-gray-500 cursor-not-allowed opacity-50`}
-                                      title="Simulazione scaduta"
-                                    >
-                                      <Lock className="w-4 h-4" />
-                                      <span className="hidden sm:inline">Virtual Room</span>
-                                    </button>
-                                  );
-                                }
-                                
-                                return (
-                                  <button
-                                    onClick={() => {
-                                      const url = `/virtual-room/${group.id}`;
-                                      const width = Math.min(1400, window.screen.width - 100);
-                                      const height = Math.min(900, window.screen.height - 100);
-                                      const left = (window.screen.width - width) / 2;
-                                      const top = (window.screen.height - height) / 2;
-                                      window.open(
-                                        url,
-                                        `VirtualRoom_${group.id}`,
-                                        `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes`
-                                      );
-                                    }}
-                                    className={`inline-flex items-center gap-1.5 px-2 py-1.5 sm:px-3 sm:py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 shadow-sm hover:shadow-md transition-all`}
-                                    title="Virtual Room"
-                                  >
-                                    <Users className="w-4 h-4" />
-                                    <span className="hidden sm:inline">Virtual Room</span>
-                                  </button>
-                                );
-                              })()}
-                              {/* Statistics - only show if there are completions */}
-                              {group.completedCount > 0 && (
-                                <Link
-                                  href={`/simulazioni/${group.simulationId}/statistiche-assegnazione?assignmentId=${group.id}`}
-                                  className={`inline-flex items-center gap-1.5 px-2 py-1.5 sm:px-3 sm:py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-purple-500 to-indigo-600 text-white hover:from-purple-600 hover:to-indigo-700 shadow-sm hover:shadow-md transition-all`}
-                                  title="Statistiche"
-                                >
-                                  <BarChart3 className="w-4 h-4" />
-                                  <span className="hidden sm:inline">Statistiche</span>
-                                </Link>
-                              )}
-                              {/* Close/Reopen button - Admin can always act */}
-                              {group.status === 'CLOSED' ? (
-                                <button
-                                  onClick={() => {
-                                    const assignmentIds = [
-                                      ...group.students.map(s => s.assignmentId),
-                                      ...group.groups.map(g => g.assignmentId),
-                                    ];
-                                    reopenAssignmentMutation.mutate({ assignmentIds });
-                                  }}
-                                  disabled={reopenAssignmentMutation.isPending}
-                                  className={`inline-flex items-center gap-1 px-2 py-1.5 sm:px-3 text-sm rounded-lg bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
-                                  title="Riapri assegnazione"
-                                >
-                                  <Unlock className="w-4 h-4" />
-                                  <span className="hidden sm:inline">Riapri</span>
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => {
-                                    const assignmentIds = [
-                                      ...group.students.map(s => s.assignmentId),
-                                      ...group.groups.map(g => g.assignmentId),
-                                    ];
-                                    closeAssignmentMutation.mutate({ assignmentIds });
-                                  }}
-                                  disabled={closeAssignmentMutation.isPending}
-                                  className={`inline-flex items-center gap-1 px-2 py-1.5 sm:px-3 text-sm rounded-lg bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
-                                  title="Chiudi assegnazione"
-                                >
-                                  <Lock className="w-4 h-4" />
-                                  <span className="hidden sm:inline">Chiudi</span>
-                                </button>
-                              )}
-                              {/* Delete button - Admin can always act */}
-                              <button
-                                onClick={() => {
-                                  const firstAssignmentId = group.students[0]?.assignmentId || group.groups[0]?.assignmentId;
-                                  if (firstAssignmentId) {
-                                    removeAssignmentMutation.mutate({ assignmentId: firstAssignmentId });
-                                  }
-                                }}
-                                disabled={removeAssignmentMutation.isPending}
-                                className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 hover:opacity-80 transition-opacity disabled:opacity-50`}
-                                title="Elimina assegnazione"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
+                            <button
+                              onClick={(e) => handleAssignmentMenuOpen(group.id, e)}
+                              className={`p-2 rounded-lg ${colors.effects.hover.bgSubtle} ${colors.text.secondary} transition-colors`}
+                              title="Azioni"
+                            >
+                              <MoreVertical className="w-5 h-5" />
+                            </button>
                           </td>
                         </tr>
                       );
@@ -1173,6 +1148,18 @@ export default function AdminSimulationsContent() {
               >
                 <UserPlus className="w-5 h-5 sm:w-4 sm:h-4" />
                 Assegna a studenti
+              </button>
+
+              <button
+                onClick={() => {
+                  duplicateMutation.mutate({ id: openMenuId });
+                  setOpenMenuId(null);
+                }}
+                disabled={duplicateMutation.isPending}
+                className={`w-full flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm sm:text-sm rounded-lg ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors touch-manipulation disabled:opacity-50`}
+              >
+                <Copy className="w-5 h-5 sm:w-4 sm:h-4" />
+                Duplica
               </button>
               
               {/* Pubblica - only for DRAFT */}
@@ -1307,6 +1294,216 @@ export default function AdminSimulationsContent() {
           onClose={() => setSelectedStudentId(null)}
           studentId={selectedStudentId}
         />
+      )}
+
+      {/* Assignment Action Dropdown Menu */}
+      {openAssignmentMenuId && assignmentMenuPosition && (() => {
+        const activeGroup = groupedAssignments.find(g => g.id === openAssignmentMenuId);
+        if (!activeGroup) return null;
+        const isExpired = activeGroup.endDate && new Date(activeGroup.endDate) < new Date();
+        const hasNavItems = (activeGroup.simulationAccessType === 'ROOM' && activeGroup.status === 'ACTIVE') || activeGroup.completedCount > 0;
+        return (
+          <Portal>
+            <div
+              className="fixed inset-0 bg-black/50 z-40 sm:hidden"
+              onClick={() => setOpenAssignmentMenuId(null)}
+            />
+            <div
+              ref={assignmentMenuRef}
+              className={`fixed z-50 shadow-xl ${colors.background.card} border ${colors.border.light} inset-x-0 bottom-0 rounded-t-2xl sm:rounded-xl max-h-[80vh] overflow-y-auto sm:w-52 sm:inset-x-auto sm:bottom-auto`}
+              style={{
+                top: typeof window !== 'undefined' && window.innerWidth >= 640 ? assignmentMenuPosition.top : undefined,
+                left: typeof window !== 'undefined' && window.innerWidth >= 640 ? assignmentMenuPosition.left : undefined,
+              }}
+            >
+              <div className="sm:hidden flex justify-center py-2">
+                <div className="w-12 h-1 rounded-full bg-gray-300 dark:bg-gray-600" />
+              </div>
+
+              {hasNavItems && (
+                <>
+                  <div className="px-3 sm:px-2 pb-2 pt-2">
+                    <p className={`px-2 py-1 text-xs font-semibold uppercase tracking-wider ${colors.text.muted}`}>
+                      Navigazione
+                    </p>
+                    {activeGroup.simulationAccessType === 'ROOM' && activeGroup.status === 'ACTIVE' && (
+                      isExpired ? (
+                        <div className={`flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm rounded-lg text-gray-400 opacity-50 cursor-not-allowed`}>
+                          <Lock className="w-5 h-5 sm:w-4 sm:h-4" />
+                          Virtual Room (scaduta)
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            const url = `/virtual-room/${activeGroup.id}`;
+                            const width = Math.min(1400, window.screen.width - 100);
+                            const height = Math.min(900, window.screen.height - 100);
+                            const left = (window.screen.width - width) / 2;
+                            const top = (window.screen.height - height) / 2;
+                            window.open(url, `VirtualRoom_${activeGroup.id}`, `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes`);
+                            setOpenAssignmentMenuId(null);
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm rounded-lg text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors touch-manipulation`}
+                        >
+                          <Users className="w-5 h-5 sm:w-4 sm:h-4" />
+                          Virtual Room
+                        </button>
+                      )
+                    )}
+                    {activeGroup.completedCount > 0 && (
+                      <Link
+                        href={`/simulazioni/${activeGroup.simulationId}/statistiche-assegnazione?assignmentId=${activeGroup.id}`}
+                        className={`flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm rounded-lg text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors touch-manipulation`}
+                        onClick={() => setOpenAssignmentMenuId(null)}
+                      >
+                        <BarChart3 className="w-5 h-5 sm:w-4 sm:h-4" />
+                        Statistiche
+                      </Link>
+                    )}
+                  </div>
+                  <hr className={`my-1 ${colors.border.light}`} />
+                </>
+              )}
+
+              <div className="px-3 sm:px-2 py-2">
+                <p className={`px-2 py-1 text-xs font-semibold uppercase tracking-wider ${colors.text.muted}`}>
+                  Azioni
+                </p>
+                {activeGroup.status === 'CLOSED' ? (
+                  <button
+                    onClick={() => {
+                      const assignmentIds = [
+                        ...activeGroup.students.map(s => s.assignmentId),
+                        ...activeGroup.groups.map(g => g.assignmentId),
+                      ];
+                      reopenAssignmentMutation.mutate({ assignmentIds });
+                      setOpenAssignmentMenuId(null);
+                    }}
+                    disabled={reopenAssignmentMutation.isPending}
+                    className={`w-full flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm rounded-lg text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors touch-manipulation disabled:opacity-50`}
+                  >
+                    <Unlock className="w-5 h-5 sm:w-4 sm:h-4" />
+                    Riapri assegnazione
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      const assignmentIds = [
+                        ...activeGroup.students.map(s => s.assignmentId),
+                        ...activeGroup.groups.map(g => g.assignmentId),
+                      ];
+                      closeAssignmentMutation.mutate({ assignmentIds });
+                      setOpenAssignmentMenuId(null);
+                    }}
+                    disabled={closeAssignmentMutation.isPending}
+                    className={`w-full flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm rounded-lg text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors touch-manipulation disabled:opacity-50`}
+                  >
+                    <Lock className="w-5 h-5 sm:w-4 sm:h-4" />
+                    Chiudi assegnazione
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    const toLocal = (d: string | Date | null) => {
+                      if (!d) return '';
+                      const dt = new Date(d);
+                      const pad = (n: number) => String(n).padStart(2, '0');
+                      return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+                    };
+                    setEditStartDate(toLocal(activeGroup.startDate));
+                    setEditEndDate(toLocal(activeGroup.endDate));
+                    setEditingAssignment(activeGroup);
+                    setOpenAssignmentMenuId(null);
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm rounded-lg text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors touch-manipulation`}
+                >
+                  <Edit2 className="w-5 h-5 sm:w-4 sm:h-4" />
+                  Modifica date
+                </button>
+              </div>
+
+              <hr className={`my-1 ${colors.border.light}`} />
+
+              <div className="px-3 sm:px-2 pt-1 pb-4 sm:pb-1">
+                <button
+                  onClick={() => {
+                    const firstAssignmentId = activeGroup.students[0]?.assignmentId || activeGroup.groups[0]?.assignmentId;
+                    if (firstAssignmentId) {
+                      removeAssignmentMutation.mutate({ assignmentId: firstAssignmentId });
+                    }
+                    setOpenAssignmentMenuId(null);
+                  }}
+                  disabled={removeAssignmentMutation.isPending}
+                  className={`w-full flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors touch-manipulation disabled:opacity-50`}
+                >
+                  <Trash2 className="w-5 h-5 sm:w-4 sm:h-4" />
+                  Elimina assegnazione
+                </button>
+              </div>
+            </div>
+          </Portal>
+        );
+      })()}
+
+      {/* Edit Assignment Modal */}
+      {editingAssignment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-md rounded-xl shadow-xl border ${colors.border.light} bg-white dark:bg-gray-800 p-6`}>
+            <h3 className={`text-lg font-semibold ${colors.text.primary} mb-1`}>
+              Modifica assegnazione
+            </h3>
+            <p className={`text-sm ${colors.text.muted} mb-5`}>
+              {editingAssignment.simulationTitle}
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className={`block text-sm font-medium ${colors.text.secondary} mb-1.5`}>
+                  Data e ora inizio
+                </label>
+                <DateTimePicker
+                  value={editStartDate}
+                  onChange={setEditStartDate}
+                  placeholder="Seleziona data e ora inizio"
+                />
+              </div>
+              <div>
+                <label className={`block text-sm font-medium ${colors.text.secondary} mb-1.5`}>
+                  Data e ora fine
+                </label>
+                <DateTimePicker
+                  value={editEndDate}
+                  onChange={setEditEndDate}
+                  placeholder="Seleziona data e ora fine"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 mt-6">
+              <button
+                onClick={() => setEditingAssignment(null)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-700 ${colors.text.secondary} hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors`}
+              >
+                Annulla
+              </button>
+              <button
+                onClick={() => {
+                  const assignmentIds = [
+                    ...editingAssignment.students.map(s => s.assignmentId),
+                    ...editingAssignment.groups.map(g => g.assignmentId),
+                  ];
+                  updateAssignmentsMutation.mutate({
+                    assignmentIds,
+                    startDate: editStartDate ? new Date(editStartDate).toISOString() : null,
+                    endDate: editEndDate ? new Date(editEndDate).toISOString() : null,
+                  });
+                }}
+                disabled={updateAssignmentsMutation.isPending}
+                className={`px-4 py-2 rounded-lg text-sm font-medium ${colors.primary.bg} text-white hover:opacity-90 transition-opacity disabled:opacity-50`}
+              >
+                {updateAssignmentsMutation.isPending ? 'Salvataggio...' : 'Salva'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

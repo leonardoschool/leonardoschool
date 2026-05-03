@@ -219,4 +219,27 @@ export const simulationTemplatesRouter = router({
       await ctx.prisma.simulationTemplate.delete({ where: { id: input.id } });
       return { success: true };
     }),
+
+  duplicate: staffProcedure
+    .input(z.object({ id: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const original = await ctx.prisma.simulationTemplate.findUnique({
+        where: { id: input.id },
+      });
+      await ensureTemplateAccess(original, ctx.user);
+
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { id, createdAt, updatedAt, createdById, creatorRole, simulationsCreated, ...rest } =
+        original as typeof original & { simulationsCreated?: unknown };
+
+      return ctx.prisma.simulationTemplate.create({
+        data: {
+          ...rest,
+          title: `Copia di ${original!.title}`,
+          status: 'DRAFT',
+          createdBy: { connect: { id: ctx.user.id } },
+          creatorRole: ctx.user.role,
+        },
+      });
+    }),
 });

@@ -196,6 +196,33 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
     
     // Type for simulation question
     type SimQuestion = typeof simulation.questions[0];
+
+    const escapeHtmlAttribute = (value: string) => value
+      .replaceAll('&', '&amp;')
+      .replaceAll('"', '&quot;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;');
+
+    const removeLatexImageReferences = (text: string) => text
+      .replaceAll(/\\includegraphics(?:\[[^\]]*\])?\{[^}]+\}/g, '')
+      .trim();
+
+    const toPrintableImageSrc = (imageUrl?: string | null) => {
+      if (!imageUrl?.trim()) return '';
+
+      try {
+        return new URL(imageUrl, window.location.origin).href;
+      } catch {
+        return imageUrl;
+      }
+    };
+
+    const renderImage = (imageUrl?: string | null, className = 'question-image') => {
+      const imageSrc = toPrintableImageSrc(imageUrl);
+      if (!imageSrc) return '';
+
+      return `<div class="${className}"><img src="${escapeHtmlAttribute(imageSrc)}" alt="Immagine" loading="eager" decoding="sync"></div>`;
+    };
     
     // Helper to render questions grouped by type
     const renderQuestionsByType = (
@@ -206,56 +233,26 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
       let questionNumber = startNumber;
       
       // Group by type
-      const multipleChoice = questionsToRender.filter(sq => sq.question.type === 'MULTIPLE_CHOICE');
-      const singleChoice = questionsToRender.filter(sq => sq.question.type === 'SINGLE_CHOICE');
+      const choiceQuestions = questionsToRender.filter(sq => sq.question.type !== 'OPEN_TEXT');
       const openText = questionsToRender.filter(sq => sq.question.type === 'OPEN_TEXT');
       
-      // Render MULTIPLE_CHOICE
-      if (multipleChoice.length > 0) {
+      // Render choice questions
+      if (choiceQuestions.length > 0) {
         html += `<div class="question-type-header">DOMANDE A RISPOSTA MULTIPLA</div>`;
-        for (const sq of multipleChoice) {
-          const imageHtml = sq.question.imageUrl 
-            ? `<div class="question-image"><img src="${sq.question.imageUrl}" alt="Immagine" style="max-width: 300px; max-height: 200px;"></div>`
-            : '';
+        for (const sq of choiceQuestions) {
+          const imageHtml = renderImage(sq.question.imageUrl);
           const answersHtml = sq.question.answers 
             ? `<div class="answers">
                 ${[...sq.question.answers]
-                  .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                  .sort((firstAnswer, secondAnswer) => (firstAnswer.order ?? 0) - (secondAnswer.order ?? 0))
                   .map((answer, ansIndex) => `
-                    <div class="answer"><strong>${String.fromCharCode(65 + ansIndex)})</strong> ${answer.text}</div>
+                    <div class="answer"><strong>${String.fromCharCode(65 + ansIndex)})</strong> ${removeLatexImageReferences(answer.text)}${renderImage(answer.imageUrl, 'answer-image')}</div>
                   `).join('')}
               </div>`
             : '';
           html += `
             <div class="question">
-              <div class="question-text"><strong>${questionNumber}.</strong> ${sq.question.text}</div>
-              ${imageHtml}
-              ${answersHtml}
-            </div>
-          `;
-          questionNumber++;
-        }
-      }
-      
-      // Render SINGLE_CHOICE
-      if (singleChoice.length > 0) {
-        html += `<div class="question-type-header">DOMANDE A RISPOSTA SINGOLA</div>`;
-        for (const sq of singleChoice) {
-          const imageHtml = sq.question.imageUrl 
-            ? `<div class="question-image"><img src="${sq.question.imageUrl}" alt="Immagine" style="max-width: 300px; max-height: 200px;"></div>`
-            : '';
-          const answersHtml = sq.question.answers 
-            ? `<div class="answers">
-                ${[...sq.question.answers]
-                  .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-                  .map((answer, ansIndex) => `
-                    <div class="answer"><strong>${String.fromCharCode(65 + ansIndex)})</strong> ${answer.text}</div>
-                  `).join('')}
-              </div>`
-            : '';
-          html += `
-            <div class="question">
-              <div class="question-text"><strong>${questionNumber}.</strong> ${sq.question.text}</div>
+              <div class="question-text"><strong>${questionNumber}.</strong> ${removeLatexImageReferences(sq.question.text)}</div>
               ${imageHtml}
               ${answersHtml}
             </div>
@@ -266,14 +263,12 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
       
       // Render OPEN_TEXT
       if (openText.length > 0) {
-        html += `<div class="question-type-header">DOMANDE A RISPOSTA APERTA</div>`;
+        html += `<div class="question-type-header">DOMANDE A RISPOSTA CON MODALITÀ A COMPLETAMENTO</div>`;
         for (const sq of openText) {
-          const imageHtml = sq.question.imageUrl 
-            ? `<div class="question-image"><img src="${sq.question.imageUrl}" alt="Immagine" style="max-width: 300px; max-height: 200px;"></div>`
-            : '';
+          const imageHtml = renderImage(sq.question.imageUrl);
           html += `
             <div class="question">
-              <div class="question-text"><strong>${questionNumber}.</strong> ${sq.question.text}</div>
+              <div class="question-text"><strong>${questionNumber}.</strong> ${removeLatexImageReferences(sq.question.text)}</div>
               ${imageHtml}
               <div class="open-answer-space"></div>
             </div>
@@ -410,6 +405,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
     .academic-year {
       font-family: 'Times New Roman', Times, serif;
       font-size: 11pt;
+      font-weight: bold;
       text-align: center;
       margin-bottom: 10px;
     }
@@ -443,10 +439,8 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
     
     /* Open answer space for OPEN_TEXT questions */
     .open-answer-space {
-      border: 1px solid #ccc;
       min-height: 120px;
       margin: 8px 0 8px 25px;
-      background: #fafafa;
     }
     .question-text { 
       margin-bottom: 4px;
@@ -460,6 +454,15 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
     .question-image {
       margin: 6px 0;
       text-align: center;
+    }
+    .question-image img,
+    .answer-image img {
+      max-width: 300px;
+      max-height: 200px;
+      height: auto;
+    }
+    .answer-image {
+      margin: 4px 0 4px 25px;
     }
     .answers { 
       margin-left: 25px; 
@@ -518,7 +521,31 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
         ],
         throwOnError: false
       });
-      setTimeout(function() { window.print(); }, 800);
+      const imageLoaders = Array.from(document.images).map(function(image) {
+        if (image.complete) {
+          if (image.naturalWidth === 0) {
+            const imageWrapper = image.closest('.question-image, .answer-image');
+            if (imageWrapper) imageWrapper.remove();
+          }
+          return Promise.resolve();
+        }
+
+        return new Promise(function(resolve) {
+          image.addEventListener('load', resolve, { once: true });
+          image.addEventListener('error', function() {
+            const imageWrapper = image.closest('.question-image, .answer-image');
+            if (imageWrapper) imageWrapper.remove();
+            resolve(undefined);
+          }, { once: true });
+        });
+      });
+      const imageTimeout = new Promise(function(resolve) {
+        setTimeout(resolve, 3000);
+      });
+
+      Promise.race([Promise.all(imageLoaders), imageTimeout]).then(function() {
+        setTimeout(function() { window.print(); }, 100);
+      });
     });
   <\/script>
 </body>

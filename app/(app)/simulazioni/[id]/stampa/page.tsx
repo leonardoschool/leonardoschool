@@ -58,7 +58,9 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
   }
 
   const questions = simulation?.questions || [];
-  
+  const mcQuestions = questions.filter(sq => sq.question.type !== 'OPEN_TEXT');
+  const openTextQuestions = questions.filter(sq => sq.question.type === 'OPEN_TEXT');
+
   // Calculate academic year (starts in September)
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth();
@@ -227,67 +229,99 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
           )}
           
           {/* Academic year */}
-          <div className="text-center font-['Times_New_Roman',Times,serif] text-sm mb-6">
+          <div className="text-center font-['Times_New_Roman',Times,serif] text-sm font-bold mb-6">
             {academicYearText}
           </div>
-          
-          {/* Questions title - only once at the beginning */}
-          <div className="text-center font-['Times_New_Roman',Times,serif] text-sm font-bold uppercase underline mb-5">
-            DOMANDE A RISPOSTA MULTIPLA
-          </div>
 
-          {/* All questions without section headers */}
-          <div className="space-y-1.5 print-body">
-            {questions.map((sq, index) => (
-              <div key={sq.id} className="no-break">
-                {/* Question */}
-                <div className="mb-1">
-                  <span className="font-bold">{index + 1}. </span>
-                  <span className="font-bold">
-                    <RichTextRenderer text={sq.question.text} className="inline" />
-                  </span>
+          {/* Questions grouped by type */}
+          <div className="print-body">
+            {/* Multiple choice / single choice questions */}
+            {mcQuestions.length > 0 && (
+              <>
+                <div className="text-center font-['Times_New_Roman',Times,serif] text-sm font-bold uppercase underline mb-5">
+                  DOMANDE A RISPOSTA MULTIPLA
                 </div>
+                <div className="space-y-1.5">
+                  {mcQuestions.map((sq, index) => (
+                    <div key={sq.id} className="no-break">
+                      {/* Question */}
+                      <div className="mb-1">
+                        <span className="font-bold">{index + 1}. </span>
+                        <span className="font-bold">
+                          <RichTextRenderer text={sq.question.text} className="inline" />
+                        </span>
+                      </div>
 
-                {/* Image if present */}
-                {sq.question.imageUrl && (
-                  <div className="my-2 text-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={sq.question.imageUrl}
-                      alt={`Immagine domanda ${index + 1}`}
-                      className="max-w-md max-h-48 mx-auto"
-                    />
-                  </div>
-                )}
-
-                {/* Answers */}
-                {sq.question.type !== 'OPEN_TEXT' && sq.question.answers && (
-                  <div className="ml-8 space-y-0.5">
-                    {[...sq.question.answers]
-                      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-                      .map((answer, ansIndex) => (
-                        <div key={answer.id} className="flex items-start gap-2">
-                          <span className="font-bold w-5">
-                            {String.fromCodePoint(65 + ansIndex)})
-                          </span>
-                          <div className="flex-1">
-                            <RichTextRenderer text={answer.text} />
-                          </div>
+                      {/* Image if present */}
+                      {sq.question.imageUrl && (
+                        <div className="my-2 text-center">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={sq.question.imageUrl}
+                            alt={`Immagine domanda ${index + 1}`}
+                            className="max-w-md max-h-48 mx-auto"
+                          />
                         </div>
-                      ))}
-                  </div>
-                )}
+                      )}
 
-                {/* Open text placeholder */}
-                {sq.question.type === 'OPEN_TEXT' && (
-                  <div className="ml-8 mt-2">
-                    <div className="border border-gray-300 rounded p-4 min-h-[100px]">
-                      <p className="text-gray-400 text-sm italic">Spazio per la risposta</p>
+                      {/* Answers */}
+                      {sq.question.answers && (
+                        <div className="ml-8 space-y-0.5">
+                          {[...sq.question.answers]
+                            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                            .map((answer, ansIndex) => (
+                              <div key={answer.id} className="flex items-start gap-2">
+                                <span className="font-bold w-5">
+                                  {String.fromCodePoint(65 + ansIndex)})
+                                </span>
+                                <div className="flex-1">
+                                  <RichTextRenderer text={answer.text} />
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
-              </div>
-            ))}
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Open text questions */}
+            {openTextQuestions.length > 0 && (
+              <>
+                <div className={`text-center font-['Times_New_Roman',Times,serif] text-sm font-bold uppercase underline mb-5 ${mcQuestions.length > 0 ? 'mt-8' : ''}`}>
+                  DOMANDE A RISPOSTA CON MODALITÀ A COMPLETAMENTO
+                </div>
+                <div className="space-y-1.5">
+                  {openTextQuestions.map((sq, index) => (
+                    <div key={sq.id} className="no-break">
+                      {/* Question */}
+                      <div className="mb-1">
+                        <span className="font-bold">{mcQuestions.length + index + 1}. </span>
+                        <span className="font-bold">
+                          <RichTextRenderer text={sq.question.text} className="inline" />
+                        </span>
+                      </div>
+
+                      {/* Image if present */}
+                      {sq.question.imageUrl && (
+                        <div className="my-2 text-center">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={sq.question.imageUrl}
+                            alt={`Immagine domanda ${mcQuestions.length + index + 1}`}
+                            className="max-w-md max-h-48 mx-auto"
+                          />
+                        </div>
+                      )}
+
+                      <div className="ml-8 mt-2 min-h-[100px]" aria-hidden="true" />
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

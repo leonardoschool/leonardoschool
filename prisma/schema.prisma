@@ -1595,6 +1595,7 @@ model ContractTemplate {
   duration    String? // "12 mesi", "6 mesi", etc.
   targetRole  ContractTargetRole @default(STUDENT) // Per chi è destinato questo template
   isActive    Boolean            @default(true)
+  sortOrder   Float              @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1882,6 +1883,7 @@ model MaterialCategory {
   name        String
   description String?
   icon        String? // Lucide icon name
+  color       String? // Hex color for the icon (e.g. #A01B3B)
   order       Int     @default(0)
   isActive    Boolean @default(true)
 

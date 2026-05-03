@@ -43,6 +43,7 @@ import {
   Info,
   Monitor,
   Wand2,
+  Trash2,
 } from 'lucide-react';
 import type { SimulationType, LocationType, SimulationSection } from '@/lib/validations/simulationValidation';
 import { SIMULATION_PRESETS } from '@/lib/validations/simulationValidation';
@@ -549,8 +550,27 @@ export default function NewSimulationPage() {
 
   // Remove question
   const removeQuestion = (questionId: string) => {
-    setSelectedQuestions(prev => 
+    setSelectedQuestions(prev =>
       prev.filter(q => q.questionId !== questionId).map((q, i) => ({ ...q, order: i }))
+    );
+  };
+
+  // Remove all selected questions and clear all section assignments
+  const clearAllQuestions = () => {
+    setSelectedQuestions([]);
+    setSections(prev => prev.map(s => ({ ...s, questionIds: [], questionCount: 0 })));
+  };
+
+  // Remove all questions belonging to a specific section
+  const clearSectionQuestions = (sectionId: string) => {
+    const section = sections.find(s => s.id === sectionId);
+    if (!section) return;
+    const idsToRemove = new Set(section.questionIds ?? []);
+    setSelectedQuestions(prev =>
+      prev.filter(q => !idsToRemove.has(q.questionId)).map((q, i) => ({ ...q, order: i }))
+    );
+    setSections(prev =>
+      prev.map(s => s.id === sectionId ? { ...s, questionIds: [], questionCount: 0 } : s)
     );
   };
 
@@ -721,9 +741,10 @@ export default function NewSimulationPage() {
     text: string;
     type: string;
     difficulty: string;
+    imageUrl?: string | null;
     subject?: { name?: string | null; color?: string | null } | null;
     topic?: { name?: string | null } | null;
-    answers: Array<{ id: string; text: string; isCorrect: boolean; order: number }>;
+    answers: Array<{ id: string; text: string; isCorrect: boolean; order: number; imageUrl?: string | null }>;
   };
 
   // Generate auto sections based on question subjects
@@ -776,6 +797,33 @@ export default function NewSimulationPage() {
     const academicYearStart = currentMonth >= 8 ? currentYear : currentYear - 1;
     const academicYearEnd = academicYearStart + 1;
     const academicYearText = `Anno accademico ${academicYearStart}/${academicYearEnd}`;
+
+    const escapeHtmlAttribute = (value: string) => value
+      .replaceAll('&', '&amp;')
+      .replaceAll('"', '&quot;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;');
+
+    const removeLatexImageReferences = (text: string) => text
+      .replaceAll(/\\includegraphics(?:\[[^\]]*\])?\{[^}]+\}/g, '')
+      .trim();
+
+    const toPrintableImageSrc = (imageUrl?: string | null) => {
+      if (!imageUrl?.trim()) return '';
+
+      try {
+        return new URL(imageUrl, window.location.origin).href;
+      } catch {
+        return imageUrl;
+      }
+    };
+
+    const renderImage = (imageUrl?: string | null, className = 'question-image') => {
+      const imageSrc = toPrintableImageSrc(imageUrl);
+      if (!imageSrc) return '';
+
+      return `<div class="${className}"><img src="${escapeHtmlAttribute(imageSrc)}" alt="Immagine" loading="eager" decoding="sync"></div>`;
+    };
     
     // Get effective sections
     const effectiveSections = getEffectiveSections(questions);
@@ -789,40 +837,21 @@ export default function NewSimulationPage() {
       let questionNumber = startNumber;
       
       // Group by type
-      const multipleChoice = questionsToRender.filter(q => q.type === 'MULTIPLE_CHOICE');
-      const singleChoice = questionsToRender.filter(q => q.type === 'SINGLE_CHOICE');
+      const choiceQuestions = questionsToRender.filter(question => question.type !== 'OPEN_TEXT');
       const openText = questionsToRender.filter(q => q.type === 'OPEN_TEXT');
       
-      // Render MULTIPLE_CHOICE
-      if (multipleChoice.length > 0) {
+      // Render choice questions
+      if (choiceQuestions.length > 0) {
         html += `<div class="question-type-header">DOMANDE A RISPOSTA MULTIPLA</div>`;
-        for (const question of multipleChoice) {
+        for (const question of choiceQuestions) {
           html += `<div class="question">`;
-          html += `<div class="question-text"><strong>${questionNumber}.</strong> ${question.text}</div>`;
+          html += `<div class="question-text"><strong>${questionNumber}.</strong> ${removeLatexImageReferences(question.text)}</div>`;
+          html += renderImage(question.imageUrl);
           if (question.answers && question.answers.length > 0) {
             html += `<div class="answers">`;
-            const sortedAnswers = [...question.answers].sort((a, b) => a.order - b.order);
+            const sortedAnswers = [...question.answers].sort((firstAnswer, secondAnswer) => firstAnswer.order - secondAnswer.order);
             sortedAnswers.forEach((answer, idx) => {
-              html += `<div class="answer"><strong>${String.fromCharCode(65 + idx)})</strong> ${answer.text}</div>`;
-            });
-            html += `</div>`;
-          }
-          html += `</div>`;
-          questionNumber++;
-        }
-      }
-      
-      // Render SINGLE_CHOICE
-      if (singleChoice.length > 0) {
-        html += `<div class="question-type-header">DOMANDE A RISPOSTA SINGOLA</div>`;
-        for (const question of singleChoice) {
-          html += `<div class="question">`;
-          html += `<div class="question-text"><strong>${questionNumber}.</strong> ${question.text}</div>`;
-          if (question.answers && question.answers.length > 0) {
-            html += `<div class="answers">`;
-            const sortedAnswers = [...question.answers].sort((a, b) => a.order - b.order);
-            sortedAnswers.forEach((answer, idx) => {
-              html += `<div class="answer"><strong>${String.fromCharCode(65 + idx)})</strong> ${answer.text}</div>`;
+              html += `<div class="answer"><strong>${String.fromCharCode(65 + idx)})</strong> ${removeLatexImageReferences(answer.text)}${renderImage(answer.imageUrl, 'answer-image')}</div>`;
             });
             html += `</div>`;
           }
@@ -833,10 +862,11 @@ export default function NewSimulationPage() {
       
       // Render OPEN_TEXT
       if (openText.length > 0) {
-        html += `<div class="question-type-header">DOMANDE A RISPOSTA APERTA</div>`;
+        html += `<div class="question-type-header">DOMANDE A RISPOSTA CON MODALITÀ A COMPLETAMENTO</div>`;
         for (const question of openText) {
           html += `<div class="question">`;
-          html += `<div class="question-text"><strong>${questionNumber}.</strong> ${question.text}</div>`;
+          html += `<div class="question-text"><strong>${questionNumber}.</strong> ${removeLatexImageReferences(question.text)}</div>`;
+          html += renderImage(question.imageUrl);
           // Open questions don't have answer options - add space for answer
           html += `<div class="open-answer-space"></div>`;
           html += `</div>`;
@@ -980,6 +1010,7 @@ export default function NewSimulationPage() {
     .academic-year {
       font-family: 'Times New Roman', Times, serif;
       font-size: 11pt;
+      font-weight: bold;
       text-align: center;
       margin-bottom: 10px;
     }
@@ -1013,10 +1044,8 @@ export default function NewSimulationPage() {
     
     /* Open answer space for OPEN_TEXT questions */
     .open-answer-space {
-      border: 1px solid #ccc;
       min-height: 120px;
       margin: 8px 0 8px 25px;
-      background: #fafafa;
     }
     .question-text { 
       margin-bottom: 4px;
@@ -1026,6 +1055,19 @@ export default function NewSimulationPage() {
     }
     .question-text strong {
       font-weight: bold;
+    }
+    .question-image {
+      margin: 6px 0;
+      text-align: center;
+    }
+    .question-image img,
+    .answer-image img {
+      max-width: 300px;
+      max-height: 200px;
+      height: auto;
+    }
+    .answer-image {
+      margin: 4px 0 4px 25px;
     }
     .answers { 
       margin-left: 25px; 
@@ -1079,7 +1121,31 @@ export default function NewSimulationPage() {
         ],
         throwOnError: false
       });
-      setTimeout(function() { window.print(); }, 800);
+      const imageLoaders = Array.from(document.images).map(function(image) {
+        if (image.complete) {
+          if (image.naturalWidth === 0) {
+            const imageWrapper = image.closest('.question-image, .answer-image');
+            if (imageWrapper) imageWrapper.remove();
+          }
+          return Promise.resolve();
+        }
+
+        return new Promise(function(resolve) {
+          image.addEventListener('load', resolve, { once: true });
+          image.addEventListener('error', function() {
+            const imageWrapper = image.closest('.question-image, .answer-image');
+            if (imageWrapper) imageWrapper.remove();
+            resolve(undefined);
+          }, { once: true });
+        });
+      });
+      const imageTimeout = new Promise(function(resolve) {
+        setTimeout(resolve, 3000);
+      });
+
+      Promise.race([Promise.all(imageLoaders), imageTimeout]).then(function() {
+        setTimeout(function() { window.print(); }, 100);
+      });
     });
   <\/script>
 </body>
@@ -2320,6 +2386,16 @@ export default function NewSimulationPage() {
                       {selectedQuestions.length}
                     </span>
                   </button>
+                  {selectedQuestions.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearAllQuestions}
+                      title="Rimuovi tutte le domande"
+                      className="px-3 py-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                   {hasSections && sectionMode === 'manual' && (
                     <button
                       type="button"
@@ -2487,6 +2563,16 @@ export default function NewSimulationPage() {
                                   }`}>
                                     {sectionQuestions.length} domande
                                   </span>
+                                  {sectionQuestions.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => clearSectionQuestions(section.id)}
+                                      title="Rimuovi tutte le domande di questa sezione"
+                                      className="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0 transition-colors"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
                                 </div>
 
                                 {/* Assigned questions list */}
@@ -2850,6 +2936,7 @@ export default function NewSimulationPage() {
                           text: q.text,
                           type: q.type,
                           difficulty: q.difficulty,
+                          imageUrl: q.imageUrl,
                           subject: q.subject,
                           topic: q.topic,
                           answers: q.answers.map(a => ({
@@ -2857,6 +2944,7 @@ export default function NewSimulationPage() {
                             text: a.text,
                             isCorrect: a.isCorrect,
                             order: a.order,
+                            imageUrl: a.imageUrl,
                           })),
                         }));
                         

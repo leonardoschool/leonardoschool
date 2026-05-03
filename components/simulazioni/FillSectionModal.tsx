@@ -16,6 +16,7 @@ import { Modal } from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import CustomSelect from '@/components/ui/CustomSelect';
 import Checkbox from '@/components/ui/Checkbox';
+import MultiSelect from '@/components/ui/MultiSelect';
 import { ButtonLoader } from '@/components/ui/loaders';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
@@ -85,11 +86,11 @@ export default function FillSectionModal({
   // Form state
   const [mode, setMode] = useState<'random' | 'smart'>('random');
   const [count, setCount] = useState<string>(String(defaultCount));
-  const [subjectId, setSubjectId] = useState<string>(defaultSubjectId ?? '');
+  const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>(defaultSubjectId ? [defaultSubjectId] : []);
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
   const [selectedSubTopicIds, setSelectedSubTopicIds] = useState<string[]>([]);
-  const [difficulty, setDifficulty] = useState<string>('');
-  const [questionType, setQuestionType] = useState<string>('');
+  const [selectedDifficulties, setSelectedDifficulties] = useState<string[]>([]);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [difficultyMix, setDifficultyMix] = useState<DifficultyMix>('BALANCED');
   const [avoidRecentlyUsed, setAvoidRecentlyUsed] = useState(true);
@@ -100,17 +101,20 @@ export default function FillSectionModal({
     if (isOpen) {
       setCount(String(defaultCount));
       setMode('random');
-      setSubjectId(defaultSubjectId ?? '');
+      setSelectedSubjectIds(defaultSubjectId ? [defaultSubjectId] : []);
       setSelectedTopicIds([]);
       setSelectedSubTopicIds([]);
-      setDifficulty('');
-      setQuestionType('');
+      setSelectedDifficulties([]);
+      setSelectedTypes([]);
       setSelectedTagIds([]);
       setDifficultyMix('BALANCED');
       setAvoidRecentlyUsed(true);
       setMaximizeTopicCoverage(true);
     }
   }, [isOpen, defaultCount, defaultSubjectId]);
+
+  // Topics are loaded only when exactly one subject is selected
+  const primarySubjectId = selectedSubjectIds.length === 1 ? selectedSubjectIds[0] : '';
 
   // Data
   const { data: subjects = [] } = trpc.questions.getSubjects.useQuery(undefined, {
@@ -123,8 +127,8 @@ export default function FillSectionModal({
   );
 
   const { data: topics = EMPTY_TOPICS } = trpc.materials.getTopics.useQuery(
-    { subjectId },
-    { enabled: isOpen && !!subjectId }
+    { subjectId: primarySubjectId },
+    { enabled: isOpen && !!primarySubjectId }
   );
 
   // Derived sub-topics from selected topics
@@ -152,15 +156,6 @@ export default function FillSectionModal({
     });
   }, [availableSubTopics]);
 
-  // Subject options
-  const subjectOptions = useMemo(
-    () => [
-      { value: '', label: 'Tutte le materie' },
-      ...subjects.map((s) => ({ value: s.id, label: s.name })),
-    ],
-    [subjects]
-  );
-
   // Mutation
   const pickMutation = trpc.questions.pickRandomForSection.useMutation({
     onError: handleMutationError,
@@ -171,24 +166,6 @@ export default function FillSectionModal({
   });
 
   const isPending = pickMutation.isPending || smartMutation.isPending;
-
-  const toggleTopic = (id: string) => {
-    setSelectedTopicIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  };
-
-  const toggleSubTopic = (id: string) => {
-    setSelectedSubTopicIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  };
-
-  const toggleTag = (id: string) => {
-    setSelectedTagIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  };
 
   const handleSubmit = async () => {
     const parsedCount = parseInt(count, 10);
@@ -207,13 +184,14 @@ export default function FillSectionModal({
 
             const result = await smartMutation.mutateAsync({
               totalQuestions: parsedCount,
-              preset: subjectId ? 'SINGLE_SUBJECT' : 'BALANCED',
-              focusSubjectId: subjectId || undefined,
+              preset: selectedSubjectIds.length === 1 ? 'SINGLE_SUBJECT' : 'BALANCED',
+              focusSubjectId: selectedSubjectIds.length === 1 ? selectedSubjectIds[0] : undefined,
               difficultyMix,
               avoidRecentlyUsed,
               maximizeTopicCoverage,
               tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
-              type: (questionType || undefined) as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT' | undefined,
+              types: selectedTypes.length > 0 ? selectedTypes as ('SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT')[] : undefined,
+              subjectIds: selectedSubjectIds.length > 1 ? selectedSubjectIds : undefined,
               topicIds: selectedTopicIds.length > 0 ? selectedTopicIds : undefined,
               subTopicIds: selectedSubTopicIds.length > 0 ? selectedSubTopicIds : undefined,
               excludeQuestionIds,
@@ -231,11 +209,11 @@ export default function FillSectionModal({
         : await (async () => {
             const result = await pickMutation.mutateAsync({
               count: parsedCount,
-              subjectId: subjectId || undefined,
-              type: (questionType || undefined) as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT' | undefined,
+              subjectIds: selectedSubjectIds.length > 0 ? selectedSubjectIds : undefined,
+              types: selectedTypes.length > 0 ? selectedTypes as ('SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT')[] : undefined,
               topicIds: selectedTopicIds.length > 0 ? selectedTopicIds : undefined,
               subTopicIds: selectedSubTopicIds.length > 0 ? selectedSubTopicIds : undefined,
-              difficulty: (difficulty || undefined) as 'EASY' | 'MEDIUM' | 'HARD' | undefined,
+              difficulties: selectedDifficulties.length > 0 ? selectedDifficulties as ('EASY' | 'MEDIUM' | 'HARD')[] : undefined,
               tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
               excludeQuestionIds,
             });
@@ -326,107 +304,60 @@ export default function FillSectionModal({
           />
         </div>
 
-        {/* Subject */}
-        <div>
-          <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-            Materia
-          </label>
-          <CustomSelect
-            value={subjectId}
-            onChange={(val) => {
-              setSubjectId(val);
+        {/* Subject multi-select */}
+        {subjects.length > 0 && (
+          <MultiSelect
+            label="Materia"
+            values={selectedSubjectIds}
+            options={subjects.map((s) => ({ value: s.id, label: s.name, color: s.color }))}
+            onChange={(vals) => {
+              setSelectedSubjectIds(vals);
               setSelectedTopicIds([]);
               setSelectedSubTopicIds([]);
             }}
-            options={subjectOptions}
             placeholder="Tutte le materie"
           />
-        </div>
+        )}
 
-        {/* Question type */}
-        <div>
-          <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-            Tipologia domanda
-          </label>
-          <CustomSelect
-            value={questionType}
-            onChange={setQuestionType}
-            options={QUESTION_TYPE_OPTIONS}
-            placeholder="Tutte le tipologie"
+        {/* Question type multi-select */}
+        <MultiSelect
+          label="Tipologia domanda"
+          values={selectedTypes}
+          options={QUESTION_TYPE_OPTIONS.filter((o) => o.value !== '')}
+          onChange={setSelectedTypes}
+          placeholder="Tutte le tipologie"
+        />
+
+        {/* Topics multi-select — only when a single subject is selected */}
+        {primarySubjectId && topics.length > 0 && (
+          <MultiSelect
+            label="Argomenti"
+            values={selectedTopicIds}
+            options={topics.map((t) => ({ value: t.id, label: t.name }))}
+            onChange={setSelectedTopicIds}
+            placeholder="Tutti gli argomenti"
           />
-        </div>
-
-        {/* Topics multi-select */}
-        {subjectId && topics.length > 0 && (
-          <div>
-            <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-              Argomenti
-              <span className={`ml-2 text-xs font-normal ${colors.text.muted}`}>
-                ({selectedTopicIds.length} selezionati)
-              </span>
-            </label>
-            <div
-              className={`max-h-40 overflow-y-auto rounded-lg border ${colors.border.input} ${colors.background.input} p-2 space-y-1`}
-            >
-              {topics.map((t) => (
-                <label
-                  key={t.id}
-                  className={`flex items-center gap-2 px-2 py-1 rounded hover:${colors.background.secondary} cursor-pointer text-sm ${colors.text.primary}`}
-                >
-                  <Checkbox
-                    checked={selectedTopicIds.includes(t.id)}
-                    onChange={() => toggleTopic(t.id)}
-                  />
-                  <span>{t.name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
         )}
 
         {/* Sub-topics multi-select */}
         {availableSubTopics.length > 0 && (
-          <div>
-            <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-              Sotto-argomenti
-              <span className={`ml-2 text-xs font-normal ${colors.text.muted}`}>
-                ({selectedSubTopicIds.length} selezionati)
-              </span>
-            </label>
-            <div
-              className={`max-h-40 overflow-y-auto rounded-lg border ${colors.border.input} ${colors.background.input} p-2 space-y-1`}
-            >
-              {availableSubTopics.map((st) => (
-                <label
-                  key={st.id}
-                  className={`flex items-center gap-2 px-2 py-1 rounded hover:${colors.background.secondary} cursor-pointer text-sm ${colors.text.primary}`}
-                >
-                  <Checkbox
-                    checked={selectedSubTopicIds.includes(st.id)}
-                    onChange={() => toggleSubTopic(st.id)}
-                  />
-                  <span>
-                    {st.name}{' '}
-                    <span className={`text-xs ${colors.text.muted}`}>({st.topicName})</span>
-                  </span>
-                </label>
-              ))}
-            </div>
-          </div>
+          <MultiSelect
+            label="Sotto-argomenti"
+            values={selectedSubTopicIds}
+            options={availableSubTopics.map((st) => ({ value: st.id, label: `${st.name} (${st.topicName})` }))}
+            onChange={setSelectedSubTopicIds}
+            placeholder="Tutti i sotto-argomenti"
+          />
         )}
 
         {mode === 'random' ? (
-          <div>
-            <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-              Difficoltà
-            </label>
-            <CustomSelect
-              value={difficulty}
-              onChange={setDifficulty}
-              options={DIFFICULTY_OPTIONS}
-              placeholder="Tutte le difficoltà"
-            />
-          </div>
+          <MultiSelect
+            label="Difficoltà"
+            values={selectedDifficulties}
+            options={DIFFICULTY_OPTIONS.filter((o) => o.value !== '')}
+            onChange={setSelectedDifficulties}
+            placeholder="Tutte le difficoltà"
+          />
         ) : (
           <div className="space-y-3">
             <CustomSelect
@@ -453,41 +384,22 @@ export default function FillSectionModal({
 
         {/* Tags */}
         {tagCategories.length > 0 && (
-          <div>
-            <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
-              Tag
-              <span className={`ml-2 text-xs font-normal ${colors.text.muted}`}>
-                ({selectedTagIds.length} selezionati)
-              </span>
-            </label>
-            <div className={`max-h-32 overflow-y-auto rounded-lg border ${colors.border.input} ${colors.background.input} p-2 space-y-2`}>
-              {tagCategories.map((category) => (
-                <div key={category.id}>
-                  <p className={`text-xs ${colors.text.muted} mb-1`}>{category.name}</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {category.tags.map((tag) => {
-                      const selected = selectedTagIds.includes(tag.id);
-                      const hasColor = Boolean(tag.color);
-                      return (
-                        <button
-                          key={tag.id}
-                          type="button"
-                          onClick={() => toggleTag(tag.id)}
-                          className={`px-2 py-1 rounded text-xs font-medium transition-colors ${selected ? 'ring-2 ring-offset-1 ring-blue-500' : ''} ${hasColor ? '' : `${colors.background.secondary} ${colors.text.secondary}`}`}
-                          style={hasColor ? {
-                            backgroundColor: `${tag.color}20`,
-                            color: tag.color,
-                          } : undefined}
-                        >
-                          {tag.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <MultiSelect
+            label="Tag"
+            values={selectedTagIds}
+            options={tagCategories.flatMap((cat) =>
+              cat.tags.map((tag) => {
+                const tagLabel = tagCategories.length > 1 ? `${tag.name} (${cat.name})` : tag.name;
+                return {
+                  value: tag.id,
+                  label: tagLabel,
+                  color: tag.color ?? undefined,
+                };
+              })
+            )}
+            onChange={setSelectedTagIds}
+            placeholder="Tutti i tag"
+          />
         )}
 
         {/* Info */}

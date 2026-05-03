@@ -799,7 +799,7 @@ function AssignContractModal({
                         value={customPrice}
                         onChange={(e) => setCustomPrice(e.target.value)}
                         className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.text.primary} ${colors.border.primary} border focus:ring-2 focus:ring-red-500`}
-                        placeholder="Es: 1500.00"
+                        placeholder="Es: 1500,00"
                       />
                     </div>
                     <div>
@@ -871,7 +871,7 @@ function AssignContractModal({
                             min="0"
                             value={compensation}
                             onChange={(e) => setCompensation(e.target.value)}
-                            placeholder="Es: 1500.00"
+                            placeholder="Es: 1500,00"
                             className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.text.primary} ${colors.border.primary} border focus:ring-2 focus:ring-red-500`}
                           />
                         </div>

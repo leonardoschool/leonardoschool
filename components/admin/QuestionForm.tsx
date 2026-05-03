@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import TagSelector from '@/components/admin/TagSelector';
 import LaTeXEditor from '@/components/ui/LaTeXEditor';
+import SymbolKeyboard from '@/components/ui/SymbolKeyboard';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import { Modal } from '@/components/ui/Modal';
 import {
@@ -122,6 +123,37 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string>('');
   const [uploadingImage, setUploadingImage] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+
+  // Textarea refs for symbol keyboard
+  const questionTextRef = useRef<HTMLTextAreaElement>(null);
+  const correctExplanationRef = useRef<HTMLTextAreaElement>(null);
+  const wrongExplanationRef = useRef<HTMLTextAreaElement>(null);
+
+  // Insert a symbol/string at the cursor position of a textarea
+  const insertSymbolIntoTextarea = useCallback(
+    (
+      ref: React.RefObject<HTMLTextAreaElement>,
+      value: string,
+      setValue: (v: string) => void,
+      symbol: string
+    ) => {
+      const el = ref.current;
+      if (!el) {
+        setValue(value + symbol);
+        return;
+      }
+      const start = el.selectionStart ?? value.length;
+      const end = el.selectionEnd ?? start;
+      const newValue = value.substring(0, start) + symbol + value.substring(end);
+      setValue(newValue);
+      const newPos = start + symbol.length;
+      setTimeout(() => {
+        el.focus();
+        el.setSelectionRange(newPos, newPos);
+      }, 0);
+    },
+    []
+  );
 
   // Preview modal state
   const [showPreview, setShowPreview] = useState(false);
@@ -593,6 +625,7 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
           )}
 
           <textarea
+            ref={questionTextRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={4}
@@ -618,16 +651,23 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
             </div>
           )}
 
-          {/* Formula Helper Toggle */}
-          <button
-            type="button"
-            onClick={() => setShowFormulaHelper(!showFormulaHelper)}
-            className={`mt-3 inline-flex items-center gap-2 text-sm ${colors.text.muted} hover:${colors.primary.text} transition-colors`}
-          >
-            <Sparkles className="w-4 h-4" />
-            {showFormulaHelper ? 'Nascondi assistente formule' : 'Assistente formule LaTeX'}
-            {showFormulaHelper ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
+          {/* Symbol Keyboard + Formula Helper Toggle */}
+          <div className="mt-3 flex items-center gap-3 flex-wrap">
+            <SymbolKeyboard
+              onInsert={(symbol) =>
+                insertSymbolIntoTextarea(questionTextRef, text, setText, symbol)
+              }
+            />
+            <button
+              type="button"
+              onClick={() => setShowFormulaHelper(!showFormulaHelper)}
+              className={`inline-flex items-center gap-2 text-sm ${colors.text.muted} hover:${colors.primary.text} transition-colors`}
+            >
+              <Sparkles className="w-4 h-4" />
+              {showFormulaHelper ? 'Nascondi assistente formule' : 'Assistente formule LaTeX'}
+              {showFormulaHelper ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
 
         {/* Formula Helper - LaTeX Editor as copy helper */}
@@ -1009,10 +1049,18 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
             💡 Le spiegazioni supportano LaTeX (<code className="px-1 bg-gray-200 dark:bg-gray-700 rounded">$formula$</code>) e HTML (<code className="px-1 bg-gray-200 dark:bg-gray-700 rounded">&lt;sub&gt;2&lt;/sub&gt;</code>)
           </p>
           <div>
-            <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-              Spiegazione risposta corretta
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className={`text-sm font-medium ${colors.text.primary}`}>
+                Spiegazione risposta corretta
+              </label>
+              <SymbolKeyboard
+                onInsert={(symbol) =>
+                  insertSymbolIntoTextarea(correctExplanationRef, correctExplanation, setCorrectExplanation, symbol)
+                }
+              />
+            </div>
             <textarea
+              ref={correctExplanationRef}
               value={correctExplanation}
               onChange={(e) => setCorrectExplanation(e.target.value)}
               rows={2}
@@ -1029,10 +1077,18 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
             )}
           </div>
           <div>
-            <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-              Spiegazione risposta errata
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className={`text-sm font-medium ${colors.text.primary}`}>
+                Spiegazione risposta errata
+              </label>
+              <SymbolKeyboard
+                onInsert={(symbol) =>
+                  insertSymbolIntoTextarea(wrongExplanationRef, wrongExplanation, setWrongExplanation, symbol)
+                }
+              />
+            </div>
             <textarea
+              ref={wrongExplanationRef}
               value={wrongExplanation}
               onChange={(e) => setWrongExplanation(e.target.value)}
               rows={2}

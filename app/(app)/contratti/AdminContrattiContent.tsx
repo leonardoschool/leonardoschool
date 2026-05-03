@@ -25,7 +25,8 @@ import {
   GraduationCap,
   UserCog,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  Copy
 } from 'lucide-react';
 
 export default function AdminContrattiContent() {
@@ -78,6 +79,14 @@ export default function AdminContrattiContent() {
       utils.contracts.getTemplates.invalidate();
       showSuccess('Modello eliminato', 'Il modello di contratto è stato eliminato.');
       setDeleteModal({ isOpen: false, templateId: '', templateName: '' });
+    },
+    onError: handleMutationError,
+  });
+
+  const duplicateMutation = trpc.contracts.duplicateTemplate.useMutation({
+    onSuccess: () => {
+      utils.contracts.getTemplates.invalidate();
+      showSuccess('Modello duplicato', 'Il modello di contratto è stato duplicato con successo.');
     },
     onError: handleMutationError,
   });
@@ -529,7 +538,7 @@ Email: {{EMAIL}}</p>
                     value={formData.price}
                     onChange={(e) => handleChange('price', e.target.value)}
                     onBlur={() => handleBlur('price')}
-                    placeholder="1500.00"
+                    placeholder="1500,00"
                     className={getInputClass('price')}
                   />
                   {touched.price && fieldErrors.price && (
@@ -808,6 +817,14 @@ Email: {{EMAIL}}</p>
                     >
                       <Edit2 className="w-4 h-4" />
                       Modifica
+                    </button>
+                    <button
+                      onClick={() => duplicateMutation.mutate({ id: template.id })}
+                      disabled={duplicateMutation.isPending}
+                      className={`px-4 py-2 rounded-lg ${colors.status.warning.softBg} ${colors.status.warning.text} hover:opacity-80 transition-colors flex items-center gap-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
+                      title="Duplica"
+                    >
+                      <Copy className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => setDeleteModal({ isOpen: true, templateId: template.id, templateName: template.name })}

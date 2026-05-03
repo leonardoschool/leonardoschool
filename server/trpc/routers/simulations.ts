@@ -24,6 +24,10 @@ import { secureShuffleArray } from '@/lib/utils';
 
 const log = createLogger('Simulations');
 
+function jsonOrUndefined(value: Prisma.JsonValue | null): Prisma.InputJsonValue | undefined {
+  return value === null ? undefined : value as Prisma.InputJsonValue;
+}
+
 /**
  * Auto-close an expired assignment (called on-demand when student accesses)
  * This ensures assignments are closed in real-time without depending on cron jobs
@@ -851,6 +855,7 @@ interface SimulationQuestionWithDetails {
     type: string;
     points: number;
     negativePoints: number;
+    openValidationType: string | null;
     subject: { name: string } | null;
     answers: Array<{ id: string; isCorrect: boolean }>;
     keywords: Array<{ keyword: string; weight: number; isRequired: boolean }>;
@@ -896,6 +901,22 @@ function evaluateSingleSubmissionAnswer(
 
   // Handle OPEN_TEXT questions
   if (sq.question.type === 'OPEN_TEXT') {
+    // KEYWORDS mode: auto-grade immediately, no staff review needed
+    if (
+      sq.question.openValidationType === 'KEYWORDS' &&
+      sq.question.keywords.length > 0 &&
+      studentAnswer?.answerText?.trim()
+    ) {
+      const scoring = autoScoreOpenAnswer(studentAnswer.answerText, sq.question.keywords);
+      if (scoring.autoScore !== null) {
+        const isCorrect = scoring.autoScore > 0;
+        return {
+          isCorrect,
+          earnedPoints: isCorrect ? points : negativePoints,
+          category: isCorrect ? 'correct' : 'wrong',
+        };
+      }
+    }
     if (studentAnswer?.answerText && studentAnswer.answerText.trim().length > 0) {
       return { isCorrect: null, earnedPoints: 0, category: 'pending' };
     } else {
@@ -1036,7 +1057,10 @@ function buildOpenAnswerSubmissions(
     if (!studentAnswer?.answerText?.trim()) continue;
 
     const scoring = autoScoreOpenAnswer(studentAnswer.answerText, sq.question.keywords);
-    
+    // KEYWORDS mode is fully automatic — mark as already validated
+    const isAutoValidated =
+      sq.question.openValidationType === 'KEYWORDS' && scoring.autoScore !== null;
+
     submissions.push({
       questionId: sq.questionId,
       studentId,
@@ -1046,7 +1070,7 @@ function buildOpenAnswerSubmissions(
       keywordsMissed: scoring.keywordsMissed,
       autoScore: scoring.autoScore,
       finalScore: scoring.autoScore,
-      isValidated: false,
+      isValidated: isAutoValidated,
     });
   }
 
@@ -2130,6 +2154,99 @@ export const simulationsRouter = router({
       return simulation;
     }),
 
+  // Duplicate simulation as a draft copy without assignments, results or calendar events
+  duplicate: adminProcedure
+    .input(z.object({ id: z.string().min(1, 'ID simulazione obbligatorio') }))
+    .mutation(async ({ ctx, input }) => {
+      const original = await ctx.prisma.simulation.findUnique({
+        where: { id: input.id },
+        include: {
+          questions: {
+            orderBy: { order: 'asc' },
+            select: {
+              questionId: true,
+              order: true,
+              customPoints: true,
+              customNegativePoints: true,
+            },
+          },
+        },
+      });
+
+      if (!original) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
+      }
+
+      const duplicated = await ctx.prisma.simulation.create({
+        data: {
+          title: `Copia di ${original.title}`,
+          description: original.description,
+          type: original.type,
+          status: 'DRAFT',
+          visibility: 'PRIVATE',
+          createdBy: { connect: { id: ctx.user.id } },
+          creatorRole: ctx.user.role,
+          isOfficial: original.isOfficial,
+          accessType: original.isOfficial ? 'ROOM' : 'OPEN',
+          isScheduled: false,
+          startDate: null,
+          endDate: null,
+          durationMinutes: original.durationMinutes,
+          totalQuestions: original.questions.length,
+          showResults: original.showResults,
+          showCorrectAnswers: original.showCorrectAnswers,
+          allowReview: original.allowReview,
+          randomizeOrder: original.randomizeOrder,
+          randomizeAnswers: original.randomizeAnswers,
+          useQuestionPoints: original.useQuestionPoints,
+          correctPoints: original.correctPoints,
+          wrongPoints: original.wrongPoints,
+          blankPoints: original.blankPoints,
+          maxScore: original.maxScore,
+          passingScore: original.passingScore,
+          isRepeatable: original.isRepeatable,
+          maxAttempts: original.maxAttempts,
+          isPaperBased: original.isPaperBased,
+          paperInstructions: original.paperInstructions,
+          showSectionsInPaper: original.showSectionsInPaper,
+          trackAttendance: original.trackAttendance,
+          locationType: original.locationType,
+          locationDetails: original.locationDetails,
+          hasSections: original.hasSections,
+          sections: jsonOrUndefined(original.sections),
+          enableAntiCheat: original.enableAntiCheat,
+          forceFullscreen: original.forceFullscreen,
+          blockTabChange: original.blockTabChange,
+          blockCopyPaste: original.blockCopyPaste,
+          logSuspiciousEvents: original.logSuspiciousEvents,
+          subjectDistribution: jsonOrUndefined(original.subjectDistribution),
+          difficultyDistribution: jsonOrUndefined(original.difficultyDistribution),
+          topicIds: jsonOrUndefined(original.topicIds),
+          sourceTemplate: original.sourceTemplateId
+            ? { connect: { id: original.sourceTemplateId } }
+            : undefined,
+          isPublic: false,
+          questions: {
+            create: original.questions.map((question, index) => ({
+              question: { connect: { id: question.questionId } },
+              order: question.order ?? index,
+              customPoints: question.customPoints,
+              customNegativePoints: question.customNegativePoints,
+            })),
+          },
+        },
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          isOfficial: true,
+          status: true,
+        },
+      });
+
+      return duplicated;
+    }),
+
   // Update simulation questions
   updateQuestions: adminProcedure
     .input(updateSimulationQuestionsSchema)
@@ -2838,6 +2955,47 @@ export const simulationsRouter = router({
       return updated;
     }),
 
+  // Update multiple assignments (bulk date change) - Staff can edit their own, admin can edit all
+  updateAssignments: staffProcedure
+    .input(z.object({
+      assignmentIds: z.array(z.string()).min(1),
+      startDate: z.string().datetime().optional().nullable(),
+      endDate: z.string().datetime().optional().nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { assignmentIds, startDate, endDate } = input;
+
+      const assignments = await ctx.prisma.simulationAssignment.findMany({
+        where: { id: { in: assignmentIds } },
+        include: { simulation: { select: { id: true, title: true } } },
+      });
+
+      if (assignments.length === 0) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Assegnazioni non trovate' });
+      }
+
+      // Collaborators can only edit assignments they created
+      if (ctx.user.role === 'COLLABORATOR') {
+        const notOwned = assignments.some(a => a.assignedById !== ctx.user.id);
+        if (notOwned) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Puoi modificare solo le assegnazioni che hai creato tu',
+          });
+        }
+      }
+
+      const result = await ctx.prisma.simulationAssignment.updateMany({
+        where: { id: { in: assignmentIds } },
+        data: {
+          startDate: startDate ? new Date(startDate) : null,
+          endDate: endDate ? new Date(endDate) : null,
+        },
+      });
+
+      return { success: true, updatedCount: result.count };
+    }),
+
   // Remove assignment
   removeAssignment: staffProcedure
     .input(z.object({ assignmentId: z.string() }))
@@ -3483,12 +3641,14 @@ export const simulationsRouter = router({
           await ctx.prisma.openAnswerSubmission.createMany({
             data: openAnswersToCreate,
           });
+          // Only count submissions that still need staff review (not auto-validated)
+          const pendingCount = openAnswersToCreate.filter(s => !s.isValidated).length;
           await ctx.prisma.simulationResult.update({
             where: { id: result.id },
-            data: { pendingOpenAnswers: openAnswersToCreate.length },
+            data: { pendingOpenAnswers: pendingCount },
           });
+          openAnswersCount = pendingCount;
         }
-        openAnswersCount = openAnswersToCreate.length;
       }
 
       // Notify staff about completion (background, don't block response)

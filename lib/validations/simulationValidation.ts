@@ -582,9 +582,12 @@ export const smartRandomGenerationSchema = z.object({
   // Optional tag filters (if user wants to limit to specific tags)
   tagIds: z.array(z.string()).optional().nullable(),
 
-  // Optional question type filter
-  type: z.enum(['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'OPEN_TEXT']).optional().nullable(),
-  
+  // Optional question type filter (multi-select)
+  types: z.array(z.enum(['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'OPEN_TEXT'])).optional().nullable(),
+
+  // Optional subject filter (multi-select — limits distribution to these subjects)
+  subjectIds: z.array(z.string()).optional().nullable(),
+
   // Optional topic / sub-topic filters (limit to specific argomenti/sotto-argomenti)
   topicIds: z.array(z.string()).optional().nullable(),
   subTopicIds: z.array(z.string()).optional().nullable(),

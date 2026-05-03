@@ -480,18 +480,6 @@ export const notifications = {
       contractName: string;
     }
   ) {
-    // Notifica al destinatario se disponibile
-    if (params.recipientUserId) {
-      await createNotification(prisma, {
-        userId: params.recipientUserId,
-        type: 'CONTRACT_CANCELLED',
-        title: 'Contratto annullato',
-        message: `Il contratto "${params.contractName}" è stato annullato.`,
-        linkType: 'contract',
-        channel: 'BOTH',
-      });
-    }
-
     // Notifica agli admin
     await notifyAdmins(prisma, {
       type: 'CONTRACT_CANCELLED',

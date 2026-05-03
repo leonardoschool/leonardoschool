@@ -434,19 +434,21 @@ export default function ImpostazioniPage() {
               <ChevronRight className={`w-5 h-5 ${colors.icon.secondary}`} />
             </button>
             
-            <button
-              onClick={() => showSuccess('Contatta supporto', 'Per eliminare il tuo account, contatta il supporto all\'indirizzo info@leonardoschool.it')}
-              className={`w-full flex items-center justify-between py-3 px-3 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors`}
-            >
-              <div className="flex items-center gap-3">
-                <Trash2 className={`w-5 h-5 text-red-500`} />
-                <div className="text-left">
-                  <p className={`text-sm font-medium text-red-600 dark:text-red-400`}>Elimina account</p>
-                  <p className={`text-xs ${colors.text.muted}`}>Rimuovi permanentemente il tuo account</p>
+            {user?.role !== 'STUDENT' && (
+              <button
+                onClick={() => showSuccess('Contatta supporto', 'Per eliminare il tuo account, contatta il supporto all\'indirizzo info@leonardoschool.it')}
+                className={`w-full flex items-center justify-between py-3 px-3 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors`}
+              >
+                <div className="flex items-center gap-3">
+                  <Trash2 className={`w-5 h-5 text-red-500`} />
+                  <div className="text-left">
+                    <p className={`text-sm font-medium text-red-600 dark:text-red-400`}>Elimina account</p>
+                    <p className={`text-xs ${colors.text.muted}`}>Rimuovi permanentemente il tuo account</p>
+                  </div>
                 </div>
-              </div>
-              <ChevronRight className={`w-5 h-5 text-red-400`} />
-            </button>
+                <ChevronRight className={`w-5 h-5 text-red-400`} />
+              </button>
+            )}
           </div>
         </SettingsSection>
 

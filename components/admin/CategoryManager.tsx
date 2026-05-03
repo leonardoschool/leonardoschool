@@ -79,6 +79,7 @@ interface CategoryData {
   name: string;
   description?: string | null;
   icon?: string | null;
+  color?: string | null;
   order: number;
   isActive: boolean;
   visibility: MaterialVisibility;
@@ -117,6 +118,7 @@ interface CategoryFormData {
   name: string;
   description: string;
   icon: string;
+  color: string;
 }
 
 interface AssignmentData {
@@ -158,6 +160,7 @@ const defaultFormData: CategoryFormData = {
   name: '',
   description: '',
   icon: '',
+  color: '',
 };
 
 const defaultAssignmentData: AssignmentData = {
@@ -285,6 +288,7 @@ export default function CategoryManager({ onClose: _onClose, role = 'ADMIN' }: C
       name: category.name,
       description: category.description || '',
       icon: category.icon || '',
+      color: category.color || '',
     });
     setEditingCategoryId(category.id);
     setShowCategoryForm(true);
@@ -313,6 +317,7 @@ export default function CategoryManager({ onClose: _onClose, role = 'ADMIN' }: C
         name: categoryFormData.name,
         description: categoryFormData.description || null,
         icon: categoryFormData.icon || null,
+        color: (categoryFormData.color || null) as string | null,
         visibility: currentCategory?.visibility || 'NONE',
         groupIds: currentCategory?.groupAccess?.map(ga => ga.group.id) || [],
         studentIds: currentCategory?.studentAccess?.map(sa => sa.student.id) || [],
@@ -322,6 +327,7 @@ export default function CategoryManager({ onClose: _onClose, role = 'ADMIN' }: C
         name: categoryFormData.name,
         description: categoryFormData.description || undefined,
         icon: categoryFormData.icon || undefined,
+        color: (categoryFormData.color || null) as string | null,
         visibility: 'NONE',
       });
     }
@@ -457,12 +463,13 @@ export default function CategoryManager({ onClose: _onClose, role = 'ADMIN' }: C
                 <div className="flex items-stretch gap-2">
                   {(() => {
                     const PreviewIcon = getLucideIcon(categoryFormData.icon || '');
+                    const previewColor = categoryFormData.color || '#6b7280';
                     return (
                       <div
                         className="flex items-center justify-center w-11 h-11 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/40 flex-shrink-0"
                         title="Anteprima icona"
                       >
-                        <PreviewIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                        <PreviewIcon className="w-5 h-5" style={{ color: previewColor }} />
                       </div>
                     );
                   })()}
@@ -494,6 +501,46 @@ export default function CategoryManager({ onClose: _onClose, role = 'ADMIN' }: C
                       </button>
                     );
                   })}
+                </div>
+
+                {/* Color picker */}
+                <div className="mt-3">
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                    Colore icona
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={categoryFormData.color || '#6b7280'}
+                      onChange={(e) => setCategoryFormData({ ...categoryFormData, color: e.target.value })}
+                      className="w-10 h-10 rounded-lg border border-gray-200 dark:border-gray-600 cursor-pointer bg-transparent p-0.5"
+                      title="Scegli colore"
+                    />
+                    <div className="flex flex-wrap gap-1.5">
+                      {['#ef4444','#f97316','#eab308','#22c55e','#14b8a6','#3b82f6','#6366f1','#a855f7','#ec4899','#A01B3B','#6b7280'].map((hex) => (
+                        <button
+                          key={hex}
+                          type="button"
+                          onClick={() => setCategoryFormData({ ...categoryFormData, color: hex })}
+                          className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${
+                            categoryFormData.color === hex ? 'border-gray-900 dark:border-white scale-110' : 'border-transparent'
+                          }`}
+                          style={{ backgroundColor: hex }}
+                          title={hex}
+                        />
+                      ))}
+                      {categoryFormData.color && (
+                        <button
+                          type="button"
+                          onClick={() => setCategoryFormData({ ...categoryFormData, color: '' })}
+                          className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors ml-1"
+                          title="Rimuovi colore"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -557,7 +604,11 @@ export default function CategoryManager({ onClose: _onClose, role = 'ADMIN' }: C
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="p-2.5 rounded-lg bg-gray-100 dark:bg-gray-700">
-                      {(() => { const CatIcon = getLucideIcon(category.icon ?? ''); return <CatIcon className="h-5 w-5 text-amber-500 dark:text-amber-400" />; })()}
+                      {(() => {
+                        const CatIcon = getLucideIcon(category.icon ?? '');
+                        const iconColor = category.color || '#f59e0b';
+                        return <CatIcon className="h-5 w-5" style={{ color: iconColor }} />;
+                      })()}
                     </div>
                     <div>
                       <h4 className="font-medium text-gray-900 dark:text-gray-100">
