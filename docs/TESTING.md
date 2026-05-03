@@ -335,7 +335,7 @@ See `.github/workflows/test.yml` for configuration.
 | Students | 77 | Profile, stats, parent/guardian management |
 | Contracts | 90 | Templates, workflow, signing |
 | Groups | 66 | CRUD, member management, stats |
-| Materials | 94 | Categories, subjects, topics, subtopics, access control |
+| Materials | 94 | Categories, subjects, topics, access control |
 | Notifications | 83 | CRUD, preferences, read status, batch operations |
 | Messages | 109 | Conversations, send/receive, archive, read status |
 | Calendar | 105 | Events, invitations, attendances, staff absences |

@@ -12,6 +12,7 @@ import {
   submitSimulationSchema,
   quickQuizConfigSchema,
   bulkAssignmentSchema,
+  getDifficultyRatios,
 } from '@/lib/validations/simulationValidation';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { notifySimulationCreated, notifyNewAssignments } from '@/server/services/simulationNotificationService';
@@ -1770,6 +1771,132 @@ function buildSimulationWhereClause(
   }
 
   return where;
+}
+
+type SelfPracticeTemplateSection = {
+  id?: string;
+  name?: string;
+  durationMinutes?: number;
+  questionCount?: number;
+  subjectId?: string | null;
+  topicIds?: string[] | null;
+  questionIds?: string[];
+  order?: number;
+};
+
+type PickedTemplateQuestion = {
+  id: string;
+  sectionId: string;
+  subject: { name: string } | null;
+  type: string;
+};
+
+function parseTemplateSections(sections: Prisma.JsonValue | null): SelfPracticeTemplateSection[] {
+  if (!Array.isArray(sections)) return [];
+  return (sections as unknown[])
+    .filter((section): section is Record<string, unknown> => Boolean(section) && typeof section === 'object' && !Array.isArray(section))
+    .map((section, index) => ({
+      id: typeof section.id === 'string' ? section.id : `section-${index}`,
+      name: typeof section.name === 'string' ? section.name : `Sezione ${index + 1}`,
+      durationMinutes: typeof section.durationMinutes === 'number' ? section.durationMinutes : 0,
+      questionCount: typeof section.questionCount === 'number' ? section.questionCount : 0,
+      subjectId: typeof section.subjectId === 'string' ? section.subjectId : null,
+      topicIds: Array.isArray(section.topicIds) ? (section.topicIds as unknown[]).filter((id): id is string => typeof id === 'string') : [],
+      order: typeof section.order === 'number' ? section.order : index,
+    }))
+    .sort((first, second) => (first.order ?? 0) - (second.order ?? 0));
+}
+
+async function pickQuestionsForTemplateSection(
+  prisma: PrismaClient,
+  section: SelfPracticeTemplateSection,
+  difficultyMix: 'BALANCED' | 'EASY_FOCUS' | 'HARD_FOCUS' | 'MEDIUM_ONLY' | 'MIXED',
+  alreadyPickedIds: string[]
+): Promise<PickedTemplateQuestion[]> {
+  const targetCount = section.questionCount ?? 0;
+  if (targetCount <= 0) return [];
+
+  const baseWhere: Prisma.QuestionWhereInput = {
+    status: 'PUBLISHED',
+    ...(section.subjectId ? { subjectId: section.subjectId } : {}),
+    ...(section.topicIds && section.topicIds.length > 0 ? { topicId: { in: section.topicIds } } : {}),
+  };
+
+  const ratios = getDifficultyRatios(difficultyMix);
+  const rawTargets = {
+    EASY: Math.round(targetCount * ratios.EASY),
+    MEDIUM: Math.round(targetCount * ratios.MEDIUM),
+    HARD: Math.round(targetCount * ratios.HARD),
+  };
+  const rawTotal = rawTargets.EASY + rawTargets.MEDIUM + rawTargets.HARD;
+  if (rawTotal < targetCount) {
+    rawTargets.MEDIUM += targetCount - rawTotal;
+  } else if (rawTotal > targetCount) {
+    const excess = rawTotal - targetCount;
+    if (rawTargets.HARD >= excess) {
+      rawTargets.HARD -= excess;
+    } else {
+      rawTargets.MEDIUM -= excess - rawTargets.HARD;
+      rawTargets.HARD = 0;
+    }
+  }
+  const difficultyTargets = rawTargets;
+  const picked: PickedTemplateQuestion[] = [];
+  const pickedIds = new Set(alreadyPickedIds);
+
+  for (const [difficulty, count] of Object.entries(difficultyTargets)) {
+    if (count <= 0) continue;
+    const candidates = await prisma.question.findMany({
+      where: {
+        ...baseWhere,
+        difficulty: difficulty as 'EASY' | 'MEDIUM' | 'HARD',
+        id: { notIn: Array.from(pickedIds) },
+      },
+      take: count * 5,
+      orderBy: [{ timesUsed: 'asc' }, { createdAt: 'desc' }],
+      select: {
+        id: true,
+        type: true,
+        subject: { select: { name: true } },
+      },
+    });
+
+    for (const question of secureShuffleArray(candidates).slice(0, count)) {
+      picked.push({ ...question, sectionId: section.id ?? 'section' });
+      pickedIds.add(question.id);
+    }
+  }
+
+  const remaining = targetCount - picked.length;
+  if (remaining > 0) {
+    const fillCandidates = await prisma.question.findMany({
+      where: {
+        ...baseWhere,
+        id: { notIn: Array.from(pickedIds) },
+      },
+      take: remaining * 5,
+      orderBy: [{ timesUsed: 'asc' }, { createdAt: 'desc' }],
+      select: {
+        id: true,
+        type: true,
+        subject: { select: { name: true } },
+      },
+    });
+
+    for (const question of secureShuffleArray(fillCandidates).slice(0, remaining)) {
+      picked.push({ ...question, sectionId: section.id ?? 'section' });
+      pickedIds.add(question.id);
+    }
+  }
+
+  if (picked.length === 0) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `Non ci sono domande pubblicate disponibili per la sezione "${section.name ?? 'Sezione'}"`,
+    });
+  }
+
+  return picked;
 }
 
 export const simulationsRouter = router({
@@ -4301,6 +4428,169 @@ export const simulationsRouter = router({
       return { 
         id: simulation.id,
         hasOpenQuestions: simulation.questions.some(q => q.question.type === 'OPEN_TEXT'),
+      };
+    }),
+
+  createSelfPracticeFromTemplate: studentProcedure
+    .input(z.object({
+      templateId: z.string().min(1),
+      difficultyMix: z.enum(['BALANCED', 'EASY_FOCUS', 'HARD_FOCUS', 'MEDIUM_ONLY', 'MIXED']).default('BALANCED'),
+      openQuestionCorrection: z.enum(['self', 'staff']).default('self'),
+      requestCorrectionFromId: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const student = await ctx.prisma.student.findUnique({
+        where: { userId: ctx.user.id },
+        select: {
+          id: true,
+          groupMemberships: { select: { groupId: true } },
+        },
+      });
+
+      if (!student) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Profilo studente non trovato' });
+      }
+
+      if (input.openQuestionCorrection === 'staff' && input.requestCorrectionFromId) {
+        const staffMember = await ctx.prisma.user.findFirst({
+          where: {
+            id: input.requestCorrectionFromId,
+            role: { in: ['ADMIN', 'COLLABORATOR'] },
+            isActive: true,
+          },
+        });
+
+        if (!staffMember) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Docente selezionato non valido' });
+        }
+      }
+
+      const groupIds = student.groupMemberships.map((membership) => membership.groupId);
+      const template = await ctx.prisma.simulationTemplate.findFirst({
+        where: {
+          id: input.templateId,
+          status: 'PUBLISHED',
+          isSelfPracticeTemplate: true,
+          templateAssignments: {
+            some: {
+              OR: [
+                { studentId: student.id },
+                ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
+              ],
+            },
+          },
+        },
+      });
+
+      if (!template) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Template non disponibile per questo studente' });
+      }
+
+      const sections = parseTemplateSections(template.sections);
+      if (sections.length === 0) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Il template non contiene sezioni configurate' });
+      }
+
+      const selectedQuestions: PickedTemplateQuestion[] = [];
+      const sectionQuestionIds = new Map<string, string[]>();
+
+      for (const section of sections) {
+        const picked = await pickQuestionsForTemplateSection(
+          ctx.prisma,
+          section,
+          input.difficultyMix,
+          selectedQuestions.map((question) => question.id)
+        );
+        selectedQuestions.push(...picked);
+        sectionQuestionIds.set(section.id ?? 'section', picked.map((question) => question.id));
+      }
+
+      if (selectedQuestions.length === 0) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nessuna domanda disponibile per questo template' });
+      }
+
+      const simulationSections = sections.map((section, index) => ({
+        id: section.id ?? `section-${index}`,
+        name: section.name ?? `Sezione ${index + 1}`,
+        durationMinutes: section.durationMinutes ?? 0,
+        questionCount: sectionQuestionIds.get(section.id ?? 'section')?.length ?? 0,
+        subjectId: section.subjectId ?? null,
+        topicIds: section.topicIds ?? [],
+        questionIds: sectionQuestionIds.get(section.id ?? 'section') ?? [],
+        order: index,
+      }));
+
+      const subjectCounts = selectedQuestions.reduce((acc, question) => {
+        const subjectName = question.subject?.name ?? 'Varie';
+        acc[subjectName] = (acc[subjectName] ?? 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      const simulation = await ctx.prisma.simulation.create({
+        data: {
+          title: `Autoesercitazione ${template.title} - ${new Date().toLocaleDateString('it-IT')}`,
+          description: `Autoesercitazione generata dal template "${template.title}".`,
+          type: 'QUICK_QUIZ',
+          status: 'PUBLISHED',
+          visibility: 'PRIVATE',
+          createdBy: { connect: { id: ctx.user.id } },
+          creatorRole: 'STUDENT',
+          isOfficial: false,
+          durationMinutes: template.durationMinutes,
+          totalQuestions: selectedQuestions.length,
+          showResults: true,
+          showCorrectAnswers: input.openQuestionCorrection === 'self',
+          allowReview: true,
+          randomizeOrder: template.randomizeOrder,
+          randomizeAnswers: template.randomizeAnswers,
+          useQuestionPoints: template.useQuestionPoints,
+          correctPoints: template.correctPoints,
+          wrongPoints: template.wrongPoints,
+          blankPoints: template.blankPoints,
+          isRepeatable: true,
+          maxAttempts: null,
+          hasSections: true,
+          sections: simulationSections as Prisma.InputJsonValue,
+          subjectDistribution: subjectCounts as Prisma.InputJsonValue,
+          sourceTemplate: { connect: { id: template.id } },
+          questions: {
+            create: selectedQuestions.map((question, index) => ({
+              question: { connect: { id: question.id } },
+              order: index,
+            })),
+          },
+        },
+        include: {
+          questions: {
+            include: {
+              question: { select: { id: true, type: true } },
+            },
+          },
+        },
+      });
+
+      const openQuestionsCount = simulation.questions.filter((question) => question.question.type === 'OPEN_TEXT').length;
+
+      if (input.openQuestionCorrection === 'staff' && input.requestCorrectionFromId && openQuestionsCount > 0) {
+        const studentUser = await ctx.prisma.user.findUnique({
+          where: { id: ctx.user.id },
+          select: { name: true },
+        });
+
+        await notificationService.notifyOpenAnswerCorrectionRequest(ctx.prisma, {
+          staffUserId: input.requestCorrectionFromId,
+          simulationId: simulation.id,
+          simulationTitle: simulation.title,
+          studentName: studentUser?.name || 'Uno studente',
+          openQuestionsCount,
+        }).catch((error) => {
+          console.error('[Simulations] Failed to notify staff for correction request:', error);
+        });
+      }
+
+      return {
+        id: simulation.id,
+        hasOpenQuestions: simulation.questions.some((question) => question.question.type === 'OPEN_TEXT'),
       };
     }),
 

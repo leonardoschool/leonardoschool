@@ -175,12 +175,9 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
   const handlePrint = () => {
     if (!simulation) return;
     
-    // Calculate academic year
+    // Calculate academic year (current year → next year)
     const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth();
-    const academicYearStart = currentMonth >= 8 ? currentYear : currentYear - 1;
-    const academicYearEnd = academicYearStart + 1;
-    const academicYearText = `Anno accademico ${academicYearStart}/${academicYearEnd}`;
+    const academicYearText = `Anno accademico ${currentYear}/${currentYear + 1}`;
     
     // Check if simulation has sections
     const hasSections = simulation.hasSections;
@@ -227,7 +224,8 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
     // Helper to render questions grouped by type
     const renderQuestionsByType = (
       questionsToRender: SimQuestion[],
-      startNumber: number
+      startNumber: number,
+      showTypeHeaders: boolean = true
     ): { html: string; nextNumber: number } => {
       let html = '';
       let questionNumber = startNumber;
@@ -238,7 +236,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
       
       // Render choice questions
       if (choiceQuestions.length > 0) {
-        html += `<div class="question-type-header">DOMANDE A RISPOSTA MULTIPLA</div>`;
+        if (showTypeHeaders) html += `<div class="question-type-header">DOMANDE A RISPOSTA MULTIPLA</div>`;
         for (const sq of choiceQuestions) {
           const imageHtml = renderImage(sq.question.imageUrl);
           const answersHtml = sq.question.answers 
@@ -263,7 +261,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
       
       // Render OPEN_TEXT
       if (openText.length > 0) {
-        html += `<div class="question-type-header">DOMANDE A RISPOSTA CON MODALITÀ A COMPLETAMENTO</div>`;
+        if (showTypeHeaders) html += `<div class="question-type-header">DOMANDE A RISPOSTA CON MODALITÀ A COMPLETAMENTO</div>`;
         for (const sq of openText) {
           const imageHtml = renderImage(sq.question.imageUrl);
           html += `
@@ -282,10 +280,22 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
     
     // Generate questions HTML - with or without sections
     let questionsHtml = '';
-    
+
+    // Determine globally if multiple question types exist
+    const hasMultipleTypes =
+      simulation.questions.some(sq => sq.question.type !== 'OPEN_TEXT') &&
+      simulation.questions.some(sq => sq.question.type === 'OPEN_TEXT');
+
     if (hasSections && showSectionsInPaper && sections && sections.length > 0) {
       // Group questions by section, then by type within each section
       const sortedSections = [...sections].sort((a, b) => a.order - b.order);
+
+      // Count sections that actually have questions
+      const sectionsWithQuestions = sortedSections.filter(section =>
+        (section.questionIds || []).some(id => simulation.questions.some(sq => sq.question.id === id))
+      );
+      const showSectionHeaders = sectionsWithQuestions.length > 1;
+
       let globalQuestionNumber = 1;
       
       for (const section of sortedSections) {
@@ -295,15 +305,15 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
           .filter((sq): sq is SimQuestion => sq !== undefined);
         
         if (sectionQuestions.length === 0) continue;
-        
-        questionsHtml += `<div class="section-header">${section.name}</div>`;
-        const result = renderQuestionsByType(sectionQuestions, globalQuestionNumber);
+
+        if (showSectionHeaders) questionsHtml += `<div class="section-header">${section.name}</div>`;
+        const result = renderQuestionsByType(sectionQuestions, globalQuestionNumber, hasMultipleTypes);
         questionsHtml += result.html;
         globalQuestionNumber = result.nextNumber;
       }
     } else {
       // No sections - just group by type
-      const result = renderQuestionsByType(simulation.questions, 1);
+      const result = renderQuestionsByType(simulation.questions, 1, hasMultipleTypes);
       questionsHtml = result.html;
     }
     
@@ -410,7 +420,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
       margin-bottom: 10px;
     }
     
-    /* Section header (e.g., FISICA E MATEMATICA) */
+    /* Section header (e.g., Fisica e Matematica) */
     .section-header {
       font-family: 'Times New Roman', Times, serif;
       font-size: 12pt;
@@ -418,7 +428,6 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
       text-align: center;
       text-decoration: underline;
       margin: 25px 0 10px 0;
-      text-transform: uppercase;
     }
     
     /* Question type header (e.g., DOMANDE A RISPOSTA MULTIPLA) */
@@ -439,8 +448,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
     
     /* Open answer space for OPEN_TEXT questions */
     .open-answer-space {
-      min-height: 120px;
-      margin: 8px 0 8px 25px;
+      display: none;
     }
     .question-text { 
       margin-bottom: 4px;
@@ -483,6 +491,16 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
     /* KaTeX */
     .katex { font-size: 1em; }
     .katex-display { margin: 6px 0; }
+    
+    /* End of questions */
+    .end-of-questions {
+      text-align: center;
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 11pt;
+      font-weight: bold;
+      margin-top: 30px;
+      padding-top: 10px;
+    }
   </style>
 </head>
 <body>
@@ -506,6 +524,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
     <div class="academic-year">${academicYearText}</div>
     
     ${questionsHtml}
+    <div class="end-of-questions">********** FINE DELLE DOMANDE **********</div>
   </div>
   
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"><\/script>

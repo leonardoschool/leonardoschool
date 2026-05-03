@@ -54,9 +54,6 @@ const getNoColorTextClasses = (subjectColor: string | null | undefined) => {
   return subjectColor ? '' : 'text-gray-800 dark:text-gray-100';
 };
 
-// Interfacce per la gerarchia (aggiornate per nuovo schema)
-type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD';
-
 interface MaterialData {
   id: string;
   title: string;
@@ -74,11 +71,6 @@ interface MaterialData {
   topic: {
     id: string;
     name: string;
-  } | null;
-  subTopic: {
-    id: string;
-    name: string;
-    difficulty: DifficultyLevel;
   } | null;
   subject: {
     id: string;
@@ -98,16 +90,7 @@ interface HierarchyNode {
       id: string;
       name: string;
     };
-    subTopics: {
-      subTopic: {
-        id: string;
-        name: string;
-        difficulty: DifficultyLevel;
-      };
-      materials: MaterialData[];
-    }[];
-    // Materials directly under topic (no subTopic)
-    directMaterials: MaterialData[];
+    materials: MaterialData[];
   }[];
   // Materials directly under subject (no topic)
   directMaterials: MaterialData[];
@@ -123,58 +106,27 @@ function matchesSearch(m: MaterialData, searchLower: string, additionalTexts: st
   return textToSearch.includes(searchLower);
 }
 
-// Helper per filtrare materiali in un subTopic
-function filterSubTopicMaterials(
-  materials: MaterialData[],
-  searchLower: string,
-  subTopicName: string,
-  topicName: string
-): MaterialData[] {
-  return materials.filter((m) =>
-    matchesSearch(m, searchLower, [subTopicName, topicName])
-  );
-}
-
-// Helper per filtrare i subTopics
-function filterSubTopics(
-  subTopics: HierarchyNode['topics'][0]['subTopics'],
-  topicName: string,
-  searchLower: string,
-  difficultyFilter: string
-): HierarchyNode['topics'][0]['subTopics'] {
-  return subTopics
-    .filter((stNode) => !difficultyFilter || stNode.subTopic.difficulty === difficultyFilter)
-    .map((stNode) => ({
-      ...stNode,
-      materials: filterSubTopicMaterials(stNode.materials, searchLower, stNode.subTopic.name, topicName),
-    }))
-    .filter((stNode) => stNode.materials.length > 0);
-}
-
 // Helper per filtrare i topics
 function filterTopics(
   topics: HierarchyNode['topics'],
-  searchLower: string,
-  difficultyFilter: string
+  searchLower: string
 ): HierarchyNode['topics'] {
   return topics
     .map((topicNode) => ({
       ...topicNode,
-      directMaterials: topicNode.directMaterials.filter((m) =>
+      materials: topicNode.materials.filter((m) =>
         matchesSearch(m, searchLower, [topicNode.topic.name])
       ),
-      subTopics: filterSubTopics(topicNode.subTopics, topicNode.topic.name, searchLower, difficultyFilter),
     }))
-    .filter((topicNode) => topicNode.subTopics.length > 0 || topicNode.directMaterials.length > 0);
+    .filter((topicNode) => topicNode.materials.length > 0);
 }
 
 // Helper per filtrare la gerarchia completa
 function filterHierarchy(
   hierarchy: HierarchyNode[],
-  searchQuery: string,
-  difficultyFilter: string
+  searchQuery: string
 ): HierarchyNode[] {
-  if (!searchQuery && !difficultyFilter) return hierarchy;
+  if (!searchQuery) return hierarchy;
 
   const searchLower = searchQuery.toLowerCase();
 
@@ -182,7 +134,7 @@ function filterHierarchy(
     .map((subjectNode) => ({
       ...subjectNode,
       directMaterials: subjectNode.directMaterials.filter((m) => matchesSearch(m, searchLower)),
-      topics: filterTopics(subjectNode.topics, searchLower, difficultyFilter),
+      topics: filterTopics(subjectNode.topics, searchLower),
     }))
     .filter((subNode) => subNode.topics.length > 0 || subNode.directMaterials.length > 0);
 }
@@ -191,10 +143,7 @@ export default function StudentMaterialsContent() {
   // Stati UI
   const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
   const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
-  const [expandedSubTopics, setExpandedSubTopics] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
-  const [difficultyFilter, setDifficultyFilter] = useState<string>('');
-  const [showFilters, setShowFilters] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
   // Query per categorie (cartelle) e materiali studente
@@ -248,37 +197,12 @@ export default function StudentMaterialsContent() {
             id: mat.topic.id,
             name: mat.topic.name,
           },
-          subTopics: [],
-          directMaterials: [],
+          materials: [],
         };
         subjectNode.topics.push(topicNode);
       }
 
-      // Se non c'è subTopic, aggiungi ai materiali diretti del topic
-      if (!mat.subTopic) {
-        topicNode.directMaterials.push(mat);
-        return;
-      }
-
-      // Find or create subTopic
-      const subTopicId = mat.subTopic.id;
-      let subTopicNode = topicNode.subTopics.find(
-        (st) => st.subTopic.id === subTopicId
-      );
-      if (!subTopicNode) {
-        subTopicNode = {
-          subTopic: {
-            id: mat.subTopic.id,
-            name: mat.subTopic.name,
-            difficulty: mat.subTopic.difficulty,
-          },
-          materials: [],
-        };
-        topicNode.subTopics.push(subTopicNode);
-      }
-
-      // Add material
-      subTopicNode.materials.push(mat);
+      topicNode.materials.push(mat);
     });
 
     return Array.from(subjectMap.values());
@@ -286,8 +210,8 @@ export default function StudentMaterialsContent() {
 
   // Filtra materiali usando helper estratti
   const filteredHierarchy = useMemo<HierarchyNode[]>(() => {
-    return filterHierarchy(hierarchy, searchQuery, difficultyFilter);
-  }, [hierarchy, searchQuery, difficultyFilter]);
+    return filterHierarchy(hierarchy, searchQuery);
+  }, [hierarchy, searchQuery]);
 
   // Toggle functions
   const toggleSubject = (id: string) => {
@@ -301,15 +225,6 @@ export default function StudentMaterialsContent() {
 
   const toggleTopic = (id: string) => {
     setExpandedTopics((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSubTopic = (id: string) => {
-    setExpandedSubTopics((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -334,25 +249,6 @@ export default function StudentMaterialsContent() {
     return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  // Helper per badge difficolta
-  const getDifficultyBadge = (difficulty: 'EASY' | 'MEDIUM' | 'HARD') => {
-    const styles = {
-      EASY: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-      MEDIUM: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-      HARD: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-    };
-    const labels = {
-      EASY: 'Facile',
-      MEDIUM: 'Medio',
-      HARD: 'Difficile',
-    };
-    return (
-      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[difficulty]}`}>
-        {labels[difficulty]}
-      </span>
-    );
-  };
-
   // Conta totale materiali
   const totalMaterials = materials?.length || 0;
   const totalCategories = categories?.length || 0;
@@ -368,26 +264,13 @@ export default function StudentMaterialsContent() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div>
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">I Miei Materiali</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
             {totalCategories > 0 && `${totalCategories} ${totalCategories === 1 ? 'cartella' : 'cartelle'} • `}
             {totalMaterials} {totalMaterials === 1 ? 'materiale' : 'materiali'}
           </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`p-2 rounded-lg border transition-colors ${
-              showFilters || difficultyFilter
-                ? `${colors.primary.bg} ${colors.primary.text} border-transparent`
-                : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-            }`}
-          >
-            <Filter className="w-5 h-5" />
-          </button>
         </div>
       </div>
 
@@ -477,25 +360,6 @@ export default function StudentMaterialsContent() {
             </button>
           )}
         </div>
-
-        {showFilters && (
-          <div className="flex flex-wrap gap-2 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-            <span className="text-sm text-gray-600 dark:text-gray-400 self-center">Difficolta:</span>
-            {['', 'EASY', 'MEDIUM', 'HARD'].map((diff) => (
-              <button
-                key={diff}
-                onClick={() => setDifficultyFilter(diff)}
-                className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                  difficultyFilter === diff
-                    ? `${colors.primary.bg} text-white`
-                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
-                }`}
-              >
-                {{ '': 'Tutti', 'EASY': 'Facile', 'MEDIUM': 'Medio', 'HARD': 'Difficile' }[diff] || diff}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Empty State */}
@@ -505,11 +369,11 @@ export default function StudentMaterialsContent() {
             <Book className="w-8 h-8 text-gray-400" />
           </div>
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-            {searchQuery || difficultyFilter ? 'Nessun risultato' : 'Nessun materiale disponibile'}
+            {searchQuery ? 'Nessun risultato' : 'Nessun materiale disponibile'}
           </h3>
           <p className="text-gray-600 dark:text-gray-400 max-w-md">
-            {searchQuery || difficultyFilter
-              ? 'Prova a modificare i filtri di ricerca'
+            {searchQuery
+              ? 'Prova a modificare la ricerca'
               : 'I materiali assegnati appariranno qui'}
           </p>
         </div>
@@ -539,10 +403,7 @@ export default function StudentMaterialsContent() {
           // Conta totale materiali per subject
           const totalMaterialsInSubject = 
             subjectNode.directMaterials.length +
-            subjectNode.topics.reduce(
-              (acc, t) => acc + t.directMaterials.length + t.subTopics.reduce((a, st) => a + st.materials.length, 0),
-              0
-            );
+            subjectNode.topics.reduce((acc, topic) => acc + topic.materials.length, 0);
 
           return (
             <div
@@ -586,8 +447,7 @@ export default function StudentMaterialsContent() {
                   
                   {subjectNode.topics.map((topicNode) => {
                     const isTopicExpanded = expandedTopics.has(topicNode.topic.id);
-                    const topicMaterialCount = topicNode.directMaterials.length + 
-                      topicNode.subTopics.reduce((a, st) => a + st.materials.length, 0);
+                    const topicMaterialCount = topicNode.materials.length;
 
                     return (
                       <div key={topicNode.topic.id} className="border-t border-gray-100 dark:border-gray-700">
@@ -614,35 +474,19 @@ export default function StudentMaterialsContent() {
                           </span>
                         </button>
 
-                        {/* SubTopics and direct materials */}
+                        {/* Topic materials */}
                         {isTopicExpanded && (
                           <div className="bg-gray-50/50 dark:bg-gray-800/50">
-                            {/* Materiali diretti del topic (senza subTopic) */}
-                            {topicNode.directMaterials.length > 0 && (
-                              <div className="pl-14 pr-4 py-3 space-y-2">
-                                {topicNode.directMaterials.map((material) => (
-                                  <MaterialCard
-                                    key={material.id}
-                                    material={material}
-                                    getFileIcon={getFileIcon}
-                                    formatFileSize={formatFileSize}
-                                  />
-                                ))}
-                              </div>
-                            )}
-                            
-                            {topicNode.subTopics.map((stNode) => (
-                              <SubTopicItem
-                                key={stNode.subTopic.id}
-                                stNode={stNode}
-                                isExpanded={expandedSubTopics.has(stNode.subTopic.id)}
-                                subTopicId={stNode.subTopic.id}
-                                toggleSubTopic={toggleSubTopic}
-                                getFileIcon={getFileIcon}
-                                formatFileSize={formatFileSize}
-                                getDifficultyBadge={getDifficultyBadge}
-                              />
-                            ))}
+                            <div className="pl-14 pr-4 py-3 space-y-2">
+                              {topicNode.materials.map((material) => (
+                                <MaterialCard
+                                  key={material.id}
+                                  material={material}
+                                  getFileIcon={getFileIcon}
+                                  formatFileSize={formatFileSize}
+                                />
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -654,78 +498,6 @@ export default function StudentMaterialsContent() {
           );
         })}
       </div>
-    </div>
-  );
-}
-
-// Componente SubTopic Item (estratto per ridurre nesting)
-interface SubTopicItemProps {
-  readonly stNode: {
-    subTopic: {
-      id: string;
-      name: string;
-      difficulty: 'EASY' | 'MEDIUM' | 'HARD';
-    };
-    materials: MaterialData[];
-  };
-  readonly isExpanded: boolean;
-  readonly subTopicId: string;
-  readonly toggleSubTopic: (id: string) => void;
-  readonly getFileIcon: (fileType: string) => JSX.Element;
-  readonly formatFileSize: (bytes: number) => string;
-  readonly getDifficultyBadge: (difficulty: DifficultyLevel) => JSX.Element;
-}
-
-function SubTopicItem({
-  stNode,
-  isExpanded,
-  subTopicId,
-  toggleSubTopic,
-  getFileIcon,
-  formatFileSize,
-  getDifficultyBadge,
-}: SubTopicItemProps) {
-  const handleToggle = () => toggleSubTopic(subTopicId);
-
-  return (
-    <div>
-      {/* SubTopic Header */}
-      <button
-        onClick={handleToggle}
-        className="w-full flex items-center gap-3 p-3 pl-14 hover:bg-gray-100 dark:hover:bg-gray-700/30 transition-colors"
-      >
-        {isExpanded ? (
-          <ChevronDown className="w-4 h-4 text-gray-400" />
-        ) : (
-          <ChevronRight className="w-4 h-4 text-gray-400" />
-        )}
-        {isExpanded ? (
-          <FolderOpen className="w-4 h-4 text-gray-400" />
-        ) : (
-          <Folder className="w-4 h-4 text-gray-400" />
-        )}
-        <span className="text-gray-700 dark:text-gray-300">
-          {stNode.subTopic.name}
-        </span>
-        {getDifficultyBadge(stNode.subTopic.difficulty)}
-        <span className="ml-auto text-xs text-gray-400">
-          {stNode.materials.length} file
-        </span>
-      </button>
-
-      {/* Materials */}
-      {isExpanded && (
-        <div className="pl-20 pr-4 pb-3 space-y-2">
-          {stNode.materials.map((material) => (
-            <MaterialCard
-              key={material.id}
-              material={material}
-              getFileIcon={getFileIcon}
-              formatFileSize={formatFileSize}
-            />
-          ))}
-        </div>
-      )}
     </div>
   );
 }

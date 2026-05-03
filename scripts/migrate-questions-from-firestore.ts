@@ -18,7 +18,6 @@
  * section                    →  non usato per la categorizzazione delle domande
  * subject                    →  subjectId (materia, livello 2)
  * argument                   →  topicId (argomento, livello 3)
- * sotto-argomento            →  subTopicId vuoto (dato non presente nella vecchia app)
  * status                     →  status (enabled→PUBLISHED, disabled→ARCHIVED)
  * author                     →  source / legacyTags
  * severity                   →  difficulty (mappato)
@@ -256,7 +255,7 @@ function findInSections(
 /**
  * Risolve la gerarchia completa di una domanda.
  * Firestore: section → subject → argument
- * PostgreSQL: subject → topic, con subTopic vuoto.
+ * PostgreSQL: subject → topic.
  *
  * La vecchia section resta disponibile per le simulazioni, ma non viene usata
  * nell'organizzazione delle domande.
@@ -269,13 +268,11 @@ function resolveQuestionHierarchy(
 ): {
   subjectName: string | null;
   topicName: string | null;
-  subTopicName: string | null;
   rawValues: { section: string | null; subject: string | null; argument: string | null };
 } {
   const result = {
     subjectName: null as string | null,
     topicName: null as string | null,
-    subTopicName: null as string | null,
     rawValues: {
       section: resolveToReadable(rawSection),
       subject: resolveToReadable(rawSubject),
@@ -287,7 +284,6 @@ function resolveQuestionHierarchy(
     // Fallback: usa i valori grezzi di livello 2 e 3 se non c'è configurazione
     result.subjectName = result.rawValues.subject;
     result.topicName = result.rawValues.argument;
-    result.subTopicName = null;
     return result;
   }
   
@@ -328,8 +324,6 @@ function resolveQuestionHierarchy(
     }
   }
 
-  result.subTopicName = null;
-  
   return result;
 }
 
@@ -853,13 +847,11 @@ async function migrateQuestions(): Promise<void> {
           console.log(`      Section "${firestoreQuestion.section}" → Fallback Subject when subject is empty`);
           console.log(`      Subject "${firestoreQuestion.subject}" → Subject: "${hierarchy.subjectName || '(vuoto)'}"`);
           console.log(`      Argument "${firestoreQuestion.argument}" → Topic: "${hierarchy.topicName || '(vuoto)'}"`);
-          console.log(`      SubTopic → (vuoto)`);
         }
         
         // 2. Crea/trova Subject e Topic nel database PostgreSQL
         const subjectId = await getOrCreateSubject(hierarchy.subjectName, subjectsCache);
         const topicId = await getOrCreateTopic(hierarchy.topicName, subjectId, topicsCache);
-        const subTopicId = null;
         
         // 3. Aggiorna stats con i nomi leggibili
         if (hierarchy.subjectName) {
@@ -918,10 +910,9 @@ async function migrateQuestions(): Promise<void> {
           type: questionType,
           status: status,
           
-          // Categorization - section ignored, sub-topic left empty
+          // Categorization - section ignored
           subjectId: subjectId,
           topicId: topicId,
-          subTopicId: subTopicId,
           difficulty: difficulty,
           
           // Images (prendi la prima se presente)
@@ -1072,8 +1063,6 @@ async function migrateQuestions(): Promise<void> {
       console.log(`   ... and ${stats.topics.size - 10} more topics`);
     }
     
-    console.log('\n📑 SubTopics (Sotto-argomenti): left empty for imported questions');
-    
     console.log('\n🏷️ Databases distribution:');
     Array.from(stats.databases.entries())
       .sort((a, b) => b[1] - a[1])
@@ -1189,7 +1178,6 @@ async function previewMapping(): Promise<void> {
     console.log(`      section: "${q.section || '(vuoto)'}" → Ignored for question categorization`);
     console.log(`      subject: "${q.subject || '(vuoto)'}" → Subject: "${hierarchy.subjectName || '⚠️ NON RISOLTO'}"`);
     console.log(`      argument: "${q.argument || '(vuoto)'}" → Topic: "${hierarchy.topicName || '⚠️ NON RISOLTO'}"`);
-    console.log(`      subTopic: (vuoto)`);
     
     // Track stats
     if (hierarchy.subjectName) {
@@ -1257,8 +1245,6 @@ async function previewMapping(): Promise<void> {
     .forEach(([topic, count]) => {
       console.log(`   ✅ ${topic}: ${count} questions`);
     });
-  
-  console.log('\n📑 SubTopics (Sotto-argomenti): left empty for imported questions');
   
   console.log('\n🏷️ Database Tags that would be created:');
   Array.from(stats.databases.entries())
@@ -1429,7 +1415,6 @@ Il mapping intelligente converte:
 - section (es. "biology") → ignorata nella categorizzazione delle domande
 - subject/livello 2 (es. "biolg") → Subject/Materia (es. "Biologia")
 - argument/livello 3 (es. "3cznQ") → Topic/Argomento (es. "Fondamenti di genetica")
-- subTopic/sotto-argomento → vuoto (dato non presente nella vecchia app)
 - database (es. "k7JL") → Tag (es. "CISIA")
 - author/database (es. "M/O, 2020", "V, 2011", "miur_5_2024") → source/year
 - severity (es. "0") → Difficulty (es. "Facile" → EASY)

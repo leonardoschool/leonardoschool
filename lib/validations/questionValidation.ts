@@ -6,6 +6,9 @@ import { z } from 'zod';
 export const QuestionTypeEnum = z.enum(['MULTIPLE_CHOICE', 'SINGLE_CHOICE', 'OPEN_TEXT']);
 export type QuestionType = z.infer<typeof QuestionTypeEnum>;
 
+export const QuestionLanguageEnum = z.enum(['IT', 'EN']);
+export type QuestionLanguage = z.infer<typeof QuestionLanguageEnum>;
+
 export const QuestionStatusEnum = z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']);
 export type QuestionStatus = z.infer<typeof QuestionStatusEnum>;
 
@@ -76,7 +79,6 @@ const questionBaseSchema = z.object({
   // Categorization
   subjectId: z.string().optional().nullable(),
   topicId: z.string().optional().nullable(),
-  subTopicId: z.string().optional().nullable(),
   difficulty: DifficultyLevelEnum.default('MEDIUM'),
   
   // Scoring
@@ -110,6 +112,7 @@ const questionBaseSchema = z.object({
   year: z.number().min(1900).max(2100).optional().nullable(),
   source: z.string().optional().nullable(),
   externalId: z.string().optional().nullable(),
+  language: QuestionLanguageEnum.default('IT'),
 });
 
 // Schema for creating a new question
@@ -141,7 +144,6 @@ export const questionFilterSchema = z.object({
   search: z.string().optional(),
   subjectId: z.string().optional(),
   topicId: z.string().optional(),
-  subTopicId: z.string().optional(),
   type: QuestionTypeEnum.optional(),
   status: QuestionStatusEnum.optional(),
   difficulty: DifficultyLevelEnum.optional(),
@@ -150,6 +152,7 @@ export const questionFilterSchema = z.object({
   year: z.number().optional(),
   source: z.string().optional(),
   createdById: z.string().optional(),
+  language: QuestionLanguageEnum.optional(),
   
   // Sorting
   sortBy: z.enum([
@@ -304,6 +307,11 @@ export const questionStatusLabels: Record<QuestionStatus, string> = {
   DRAFT: 'Bozza',
   PUBLISHED: 'Pubblicata',
   ARCHIVED: 'Archiviata',
+};
+
+export const questionLanguageLabels: Record<QuestionLanguage, string> = {
+  IT: 'Italiano',
+  EN: 'Inglese',
 };
 
 export const difficultyLabels: Record<DifficultyLevel, string> = {

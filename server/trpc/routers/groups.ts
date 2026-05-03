@@ -105,6 +105,7 @@ export const groupsRouter = router({
         includeInactive: z.boolean().optional().default(false),
         referenceCollaboratorId: z.string().optional(), // Filtro per collaboratore di riferimento
         referenceAdminId: z.string().optional(), // Filtro per admin di riferimento
+        onlyMyGroups: z.boolean().optional().default(false), // For collaborators: only groups they're assigned to
       }).optional()
     )
     .query(async ({ ctx, input }) => {
@@ -125,6 +126,12 @@ export const groupsRouter = router({
           OR: [
             { referenceAdminId: input.referenceAdminId },
             { referenceAdmins: { some: { adminId: input.referenceAdminId } } },
+          ],
+        }] : []),
+        ...(input?.onlyMyGroups && ctx.user?.role === 'COLLABORATOR' && ctx.user?.collaborator?.id ? [{
+          OR: [
+            { referenceCollaboratorId: ctx.user.collaborator.id },
+            { referenceCollaborators: { some: { collaboratorId: ctx.user.collaborator.id } } },
           ],
         }] : []),
       ];
@@ -163,6 +170,18 @@ export const groupsRouter = router({
             include: { admin: { include: { user: { select: { id: true, name: true, email: true } } } } },
             orderBy: { createdAt: 'asc' },
           },
+          members: {
+            where: { studentId: { not: null } },
+            include: {
+              student: {
+                select: {
+                  id: true,
+                  user: { select: { id: true, name: true } },
+                },
+              },
+            },
+            orderBy: { joinedAt: 'asc' },
+          },
           _count: {
             select: { members: true },
           },
@@ -173,6 +192,9 @@ export const groupsRouter = router({
       return groups.map((group) => ({
         ...group,
         memberCount: group._count.members,
+        studentMembers: group.members
+          .filter((m) => m.student)
+          .map((m) => ({ id: m.student!.id, name: m.student!.user.name ?? '' })),
       }));
     }),
 

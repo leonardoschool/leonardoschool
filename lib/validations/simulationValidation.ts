@@ -40,6 +40,7 @@ export const simulationSectionSchema = z.object({
   durationMinutes: z.number().int().min(1, 'Durata sezione obbligatoria'),
   questionCount: z.number().int().min(0).optional(),
   subjectId: z.string().optional().nullable(),
+  topicIds: z.array(z.string()).optional().default([]),
   questionIds: z.array(z.string()).optional().default([]),
   order: z.number().int().min(0).default(0),
 });
@@ -198,6 +199,9 @@ export const createSimulationTemplateSchema = simulationBaseSchema
   .extend({
     hasSections: z.literal(true).default(true),
     sections: z.array(simulationSectionSchema).min(1, 'Aggiungi almeno una sezione'),
+    isSelfPracticeTemplate: z.boolean().default(false),
+    assignedStudentIds: z.array(z.string()).optional().default([]),
+    assignedGroupIds: z.array(z.string()).optional().default([]),
   });
 
 export type CreateSimulationTemplateInput = z.infer<typeof createSimulationTemplateSchema>;
@@ -588,12 +592,14 @@ export const smartRandomGenerationSchema = z.object({
   // Optional subject filter (multi-select — limits distribution to these subjects)
   subjectIds: z.array(z.string()).optional().nullable(),
 
-  // Optional topic / sub-topic filters (limit to specific argomenti/sotto-argomenti)
+  // Optional topic filters (limit to specific argomenti)
   topicIds: z.array(z.string()).optional().nullable(),
-  subTopicIds: z.array(z.string()).optional().nullable(),
   
   // Exclude specific questions
   excludeQuestionIds: z.array(z.string()).optional().nullable(),
+
+  // Optional language filter
+  language: z.enum(['IT', 'EN']).optional().nullable(),
 });
 
 export type SmartRandomGenerationInput = z.infer<typeof smartRandomGenerationSchema>;

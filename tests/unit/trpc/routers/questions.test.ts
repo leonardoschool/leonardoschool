@@ -85,7 +85,6 @@ function createMockQuestion(overrides = {}) {
     explanation: faker.lorem.sentence(),
     subjectId: faker.string.uuid(),
     topicId: null,
-    subTopicId: null,
     timeLimit: null,
     createdById: faker.string.uuid(),
     createdAt: new Date(),

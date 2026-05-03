@@ -1,7 +1,7 @@
 /**
  * Leonardo School Mobile - Materiali Screen
  * 
- * Materiale didattico con struttura gerarchica: Categorie → Subject → Topic → SubTopic → Materials
+ * Materiale didattico con struttura gerarchica: Categorie → Subject → Topic → Materials
  * Allineato 100% con webapp StudentMaterialsContent.tsx
  */
 
@@ -28,8 +28,6 @@ import { DrawerMenu, AppHeader } from '../../components/navigation';
 import { trpc } from '../../lib/trpc';
 import { spacing, layout } from '../../lib/theme/spacing';
 
-type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD';
-
 interface Category {
   id: string;
   name: string;
@@ -53,11 +51,6 @@ interface MaterialData {
     id: string;
     name: string;
   } | null;
-  subTopic: {
-    id: string;
-    name: string;
-    difficulty: DifficultyLevel;
-  } | null;
   subject: {
     id: string;
     name: string;
@@ -76,15 +69,7 @@ interface HierarchyNode {
       id: string;
       name: string;
     };
-    subTopics: {
-      subTopic: {
-        id: string;
-        name: string;
-        difficulty: DifficultyLevel;
-      };
-      materials: MaterialData[];
-    }[];
-    directMaterials: MaterialData[];
+    materials: MaterialData[];
   }[];
   directMaterials: MaterialData[];
 }
@@ -95,12 +80,10 @@ export default function MaterialiScreen() {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [difficultyFilter, setDifficultyFilter] = useState<string>('');
   
   // Stati per expand/collapse
   const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
   const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
-  const [expandedSubTopics, setExpandedSubTopics] = useState<Set<string>>(new Set());
 
   // Query per categorie e materiali
   const { data: categories, isLoading: loadingCategories } = trpc.materials.getCategories.useQuery();
@@ -147,32 +130,12 @@ export default function MaterialiScreen() {
       if (!topicNode) {
         topicNode = {
           topic: { id: mat.topic.id, name: mat.topic.name },
-          subTopics: [],
-          directMaterials: [],
+          materials: [],
         };
         subjectNode.topics.push(topicNode);
       }
 
-      if (!mat.subTopic) {
-        topicNode.directMaterials.push(mat);
-        return;
-      }
-
-      const subTopicId = mat.subTopic.id;
-      let subTopicNode = topicNode.subTopics.find((st) => st.subTopic.id === subTopicId);
-      if (!subTopicNode) {
-        subTopicNode = {
-          subTopic: {
-            id: mat.subTopic.id,
-            name: mat.subTopic.name,
-            difficulty: mat.subTopic.difficulty,
-          },
-          materials: [],
-        };
-        topicNode.subTopics.push(subTopicNode);
-      }
-
-      subTopicNode.materials.push(mat);
+      topicNode.materials.push(mat);
     });
 
     return Array.from(subjectMap.values());
@@ -180,7 +143,7 @@ export default function MaterialiScreen() {
 
   // Filtra gerarchia
   const filteredHierarchy = useMemo<HierarchyNode[]>(() => {
-    if (!searchQuery && !difficultyFilter) return hierarchy;
+    if (!searchQuery) return hierarchy;
 
     const searchLower = searchQuery.toLowerCase();
 
@@ -194,25 +157,15 @@ export default function MaterialiScreen() {
         topics: subjectNode.topics
           .map((topicNode) => ({
             ...topicNode,
-            directMaterials: topicNode.directMaterials.filter((m) =>
+            materials: topicNode.materials.filter((m) =>
               m.title.toLowerCase().includes(searchLower) ||
               m.description?.toLowerCase().includes(searchLower)
             ),
-            subTopics: topicNode.subTopics
-              .filter((stNode) => !difficultyFilter || stNode.subTopic.difficulty === difficultyFilter)
-              .map((stNode) => ({
-                ...stNode,
-                materials: stNode.materials.filter((m) =>
-                  m.title.toLowerCase().includes(searchLower) ||
-                  m.description?.toLowerCase().includes(searchLower)
-                ),
-              }))
-              .filter((stNode) => stNode.materials.length > 0),
           }))
-          .filter((topicNode) => topicNode.subTopics.length > 0 || topicNode.directMaterials.length > 0),
+          .filter((topicNode) => topicNode.materials.length > 0),
       }))
       .filter((subNode) => subNode.topics.length > 0 || subNode.directMaterials.length > 0);
-  }, [hierarchy, searchQuery, difficultyFilter]);
+  }, [hierarchy, searchQuery]);
 
   // Toggle functions
   const toggleSubject = (id: string) => {
@@ -233,15 +186,6 @@ export default function MaterialiScreen() {
     });
   };
 
-  const toggleSubTopic = (id: string) => {
-    setExpandedSubTopics((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
   // Helpers
   const getMaterialIcon = (type: string): keyof typeof Ionicons.glyphMap => {
     const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -253,24 +197,6 @@ export default function MaterialiScreen() {
       OTHER: 'folder',
     };
     return iconMap[type] || 'document';
-  };
-
-  const getDifficultyColor = (difficulty: DifficultyLevel) => {
-    switch (difficulty) {
-      case 'EASY': return colors.status.success.main;
-      case 'MEDIUM': return colors.status.warning.main;
-      case 'HARD': return colors.status.error.main;
-      default: return themedColors.textMuted;
-    }
-  };
-
-  const getDifficultyLabel = (difficulty: DifficultyLevel) => {
-    switch (difficulty) {
-      case 'EASY': return 'Facile';
-      case 'MEDIUM': return 'Medio';
-      case 'HARD': return 'Difficile';
-      default: return difficulty;
-    }
   };
 
   const formatFileSize = (bytes: number | null) => {
@@ -325,49 +251,11 @@ export default function MaterialiScreen() {
     );
   };
 
-  // Render subTopic
-  const renderSubTopic = (
-    subTopicNode: HierarchyNode['topics'][0]['subTopics'][0],
-    topicId: string
-  ) => {
-    const id = `${topicId}-${subTopicNode.subTopic.id}`;
-    const isExpanded = expandedSubTopics.has(id);
-    const diffColor = getDifficultyColor(subTopicNode.subTopic.difficulty);
-
-    return (
-      <View key={id}>
-        <TouchableOpacity
-          style={[styles.subTopicHeader, { backgroundColor: themedColors.backgroundSecondary }]}
-          onPress={() => toggleSubTopic(id)}
-        >
-          <Ionicons
-            name={isExpanded ? 'chevron-down' : 'chevron-forward'}
-            size={16}
-            color={themedColors.text}
-          />
-          <Text variant="body" style={{ flex: 1, marginLeft: spacing[2], fontWeight: '500' }}>
-            {subTopicNode.subTopic.name}
-          </Text>
-          <View style={[styles.difficultyBadge, { backgroundColor: `${diffColor}15` }]}>
-            <Caption style={{ color: diffColor, fontWeight: '600' }}>
-              {getDifficultyLabel(subTopicNode.subTopic.difficulty)}
-            </Caption>
-          </View>
-          <Caption style={{ marginLeft: spacing[2] }}>
-            {subTopicNode.materials.length}
-          </Caption>
-        </TouchableOpacity>
-        {isExpanded && subTopicNode.materials.map((m) => renderMaterial(m, 1))}
-      </View>
-    );
-  };
-
   // Render topic
   const renderTopic = (topicNode: HierarchyNode['topics'][0], subjectId: string) => {
     const id = `${subjectId}-${topicNode.topic.id}`;
     const isExpanded = expandedTopics.has(id);
-    const totalMaterials = topicNode.directMaterials.length + 
-      topicNode.subTopics.reduce((sum, st) => sum + st.materials.length, 0);
+    const totalMaterials = topicNode.materials.length;
 
     return (
       <View key={id} style={{ marginBottom: spacing[2] }}>
@@ -393,8 +281,7 @@ export default function MaterialiScreen() {
         </TouchableOpacity>
         {isExpanded && (
           <View>
-            {topicNode.directMaterials.map((m) => renderMaterial(m, 1))}
-            {topicNode.subTopics.map((st) => renderSubTopic(st, id))}
+            {topicNode.materials.map((m) => renderMaterial(m, 1))}
           </View>
         )}
       </View>
@@ -406,10 +293,7 @@ export default function MaterialiScreen() {
     const isExpanded = expandedSubjects.has(subjectNode.subject.id);
     const subjectColor = subjectNode.subject.color || colors.primary.main;
     const totalMaterials = subjectNode.directMaterials.length +
-      subjectNode.topics.reduce((sum, t) => 
-        sum + t.directMaterials.length + 
-        t.subTopics.reduce((s, st) => s + st.materials.length, 0), 0
-      );
+      subjectNode.topics.reduce((sum, topic) => sum + topic.materials.length, 0);
 
     return (
       <Card key={subjectNode.subject.id} variant="outlined" style={styles.subjectCard}>
@@ -518,46 +402,6 @@ export default function MaterialiScreen() {
         </View>
       )}
 
-      {/* Difficulty Filter */}
-      <View style={styles.difficultyContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesScroll}>
-          <TouchableOpacity
-            style={[
-              styles.diffChip,
-              !difficultyFilter && { backgroundColor: themedColors.card },
-              difficultyFilter && { backgroundColor: themedColors.backgroundSecondary },
-            ]}
-            onPress={() => setDifficultyFilter('')}
-          >
-            <Caption style={{ fontWeight: !difficultyFilter ? '700' : '400' }}>Tutte le difficoltà</Caption>
-          </TouchableOpacity>
-          {['EASY', 'MEDIUM', 'HARD'].map((diff) => (
-            <TouchableOpacity
-              key={diff}
-              style={[
-                styles.diffChip,
-                difficultyFilter === diff && { 
-                  backgroundColor: `${getDifficultyColor(diff as DifficultyLevel)}15`,
-                  borderWidth: 1,
-                  borderColor: getDifficultyColor(diff as DifficultyLevel),
-                },
-                difficultyFilter !== diff && { backgroundColor: themedColors.backgroundSecondary },
-              ]}
-              onPress={() => setDifficultyFilter(diff === difficultyFilter ? '' : diff)}
-            >
-              <Caption 
-                style={{ 
-                  color: difficultyFilter === diff ? getDifficultyColor(diff as DifficultyLevel) : themedColors.text,
-                  fontWeight: difficultyFilter === diff ? '700' : '400',
-                }}
-              >
-                {getDifficultyLabel(diff as DifficultyLevel)}
-              </Caption>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -583,7 +427,7 @@ export default function MaterialiScreen() {
                 Nessun materiale disponibile
               </Text>
               <Caption style={{ marginTop: 8, textAlign: 'center' }}>
-                {searchQuery ? 'Prova a modificare i filtri di ricerca' : 'I materiali appariranno qui quando saranno caricati'}
+                {searchQuery ? 'Prova a modificare la ricerca' : 'I materiali appariranno qui quando saranno caricati'}
               </Caption>
             </View>
           </Card>
@@ -640,16 +484,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[2],
     borderRadius: layout.borderRadius.full,
   },
-  difficultyContainer: {
-    paddingVertical: spacing[2],
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
-  },
-  diffChip: {
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    borderRadius: layout.borderRadius.full,
-  },
   scrollView: {
     flex: 1,
   },
@@ -692,20 +526,6 @@ const styles = StyleSheet.create({
     borderRadius: layout.borderRadius.lg,
     gap: spacing[2],
     marginBottom: spacing[1],
-  },
-  subTopicHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing[2.5],
-    borderRadius: layout.borderRadius.md,
-    gap: spacing[2],
-    marginBottom: spacing[1],
-    marginLeft: spacing[4],
-  },
-  difficultyBadge: {
-    paddingHorizontal: spacing[2],
-    paddingVertical: spacing[0.5],
-    borderRadius: layout.borderRadius.sm,
   },
   materialItem: {
     flexDirection: 'row',

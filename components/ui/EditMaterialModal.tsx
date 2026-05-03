@@ -15,7 +15,6 @@ import CustomSelect from '@/components/ui/CustomSelect';
 import Checkbox from '@/components/ui/Checkbox';
 
 type MaterialType = 'PDF' | 'VIDEO' | 'LINK' | 'DOCUMENT';
-type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD';
 
 interface EditMaterialModalProps {
   isOpen: boolean;
@@ -23,7 +22,6 @@ interface EditMaterialModalProps {
   material: any;
   subjects: any[];
   topics: any[];
-  selectedTopic: any;
   categories: any[];
   onSave: (data: any) => void;
   isLoading: boolean;
@@ -43,19 +41,12 @@ const typeLabels: Record<MaterialType, string> = {
   DOCUMENT: 'Documento',
 };
 
-const difficultyLabels: Record<DifficultyLevel, string> = {
-  EASY: 'Facile',
-  MEDIUM: 'Medio',
-  HARD: 'Difficile',
-};
-
 export function EditMaterialModal({
   isOpen,
   onClose,
   material,
   subjects,
   topics,
-  selectedTopic,
   categories,
   onSave,
   isLoading,
@@ -67,7 +58,6 @@ export function EditMaterialModal({
     categoryIds: [] as string[],
     subjectId: '',
     topicId: '',
-    subTopicId: '',
     externalUrl: '',
   });
   
@@ -87,7 +77,6 @@ export function EditMaterialModal({
         categoryIds: material.categories?.map((c: any) => c.categoryId || c.category?.id).filter(Boolean) || [],
         subjectId: material.subjectId || '',
         topicId: material.topicId || '',
-        subTopicId: material.subTopicId || '',
         externalUrl: material.externalUrl || '',
       });
     }
@@ -150,7 +139,6 @@ export function EditMaterialModal({
       categoryIds: formData.categoryIds.length > 0 ? formData.categoryIds : undefined,
       subjectId: formData.subjectId || undefined,
       topicId: formData.topicId || undefined,
-      subTopicId: formData.subTopicId || undefined,
       ...fileData,
     });
   };
@@ -401,7 +389,7 @@ export function EditMaterialModal({
               options={subjects?.map((s: any) => ({ value: s.id, label: s.name })) || []}
               value={formData.subjectId}
               onChange={(value) => {
-                setFormData({ ...formData, subjectId: value, topicId: '', subTopicId: '' });
+                setFormData({ ...formData, subjectId: value, topicId: '' });
               }}
               placeholder="Seleziona materia..."
               disabled={isLoading || uploading}
@@ -417,29 +405,8 @@ export function EditMaterialModal({
               <CustomSelect
                 options={topics.map((t: any) => ({ value: t.id, label: t.name }))}
                 value={formData.topicId}
-                onChange={(value) => {
-                  setFormData({ ...formData, topicId: value, subTopicId: '' });
-                }}
+                onChange={(value) => setFormData({ ...formData, topicId: value })}
                 placeholder="Seleziona argomento..."
-                disabled={isLoading || uploading}
-              />
-            </div>
-          )}
-
-          {/* Subtopic (Sotto-argomento) */}
-          {formData.topicId && selectedTopic?.subTopics && selectedTopic.subTopics.length > 0 && (
-            <div>
-              <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                Sotto-argomento
-              </label>
-              <CustomSelect
-                options={selectedTopic.subTopics.map((st: any) => ({
-                  value: st.id,
-                  label: `${st.name} (${difficultyLabels[st.difficulty as DifficultyLevel]})`,
-                }))}
-                value={formData.subTopicId}
-                onChange={(value) => setFormData({ ...formData, subTopicId: value })}
-                placeholder="Seleziona sotto-argomento..."
                 disabled={isLoading || uploading}
               />
             </div>

@@ -276,7 +276,6 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
   const [multiUploadData, setMultiUploadData] = useState({
     subjectId: '',
     topicId: '',      // Classification - Argomento
-    subTopicId: '',   // Classification - Sotto-argomento
     categoryId: '',   // Container category (optional)
     type: 'PDF' as MaterialType,
   });
@@ -292,7 +291,6 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
     externalUrl: '',
     subjectId: '',
     topicId: '',       // Classification - Argomento
-    subTopicId: '',    // Classification - Sotto-argomento
     categoryId: '',    // Container category (optional)
     tags: [] as string[],
   });
@@ -352,27 +350,6 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
     { subjectId: editingMaterial?.subjectId || '' },
     { enabled: !!editingMaterial?.subjectId }
   );
-
-  // Find selected topic to get its subtopics (for single form)
-  const selectedTopic = formTopics?.find((t: { id: string }) => t.id === materialFormData.topicId) as {
-    id: string;
-    name: string;
-    subTopics?: Array<{ id: string; name: string; difficulty: string }>;
-  } | undefined;
-
-  // Find selected topic for multi-upload
-  const multiSelectedTopic = multiFormTopics?.find((t: { id: string }) => t.id === multiUploadData.topicId) as {
-    id: string;
-    name: string;
-    subTopics?: Array<{ id: string; name: string; difficulty: string }>;
-  } | undefined;
-
-  // Find selected topic for edit modal
-  const editModalSelectedTopic = editModalTopics?.find((t: { id: string }) => t.id === editingMaterial?.topicId) as {
-    id: string;
-    name: string;
-    subTopics?: Array<{ id: string; name: string; difficulty: string }>;
-  } | undefined;
 
   // ==================== SUBJECT MUTATIONS ====================
 
@@ -482,7 +459,6 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
       externalUrl: '',
       subjectId: '',
       topicId: '',
-      subTopicId: '',
       categoryId: '',
       tags: [],
     });
@@ -613,7 +589,6 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
         ...fileData,
         subjectId: multiUploadData.subjectId || undefined,
         topicId: multiUploadData.topicId || undefined,
-        subTopicId: multiUploadData.subTopicId || undefined,
         categoryId: multiUploadData.categoryId || undefined,
       });
       
@@ -675,7 +650,6 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
         files: uploadedMaterials,
         subjectId: multiUploadData.subjectId || undefined,
         topicId: multiUploadData.topicId || undefined,
-        subTopicId: multiUploadData.subTopicId || undefined,
         categoryId: multiUploadData.categoryId || undefined,
         visibility: 'NONE', // Materials are not assigned by default, use "Gestisci destinatari" button
       });
@@ -696,7 +670,6 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
     setMultiUploadData({
       subjectId: '',
       topicId: '',
-      subTopicId: '',
       categoryId: '',
       type: 'PDF',
     });
@@ -716,8 +689,8 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
       fileSize: materialFormData.fileSize || undefined,
       externalUrl: materialFormData.externalUrl || undefined,
       subjectId: materialFormData.subjectId || undefined,
+      topicId: materialFormData.topicId || undefined,
       categoryId: materialFormData.categoryId || undefined,
-      subTopicId: materialFormData.subTopicId || undefined,
       tags: materialFormData.tags,
       visibility: 'ALL_STUDENTS' as const, // Default, will be changed via assignment modal
     };
@@ -1103,8 +1076,7 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
                           onChange={(value) => setMultiUploadData({ 
                             ...multiUploadData, 
                             subjectId: value,
-                            topicId: '',
-                            subTopicId: ''
+                            topicId: ''
                           })}
                           options={[
                             { value: '', label: 'Nessuna' },
@@ -1120,11 +1092,7 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
                         <CustomSelect
                           id="multi-upload-topic"
                           value={multiUploadData.topicId}
-                          onChange={(value) => setMultiUploadData({ 
-                            ...multiUploadData, 
-                            topicId: value,
-                            subTopicId: ''
-                          })}
+                          onChange={(value) => setMultiUploadData({ ...multiUploadData, topicId: value })}
                           options={[
                             { value: '', label: 'Nessuno' },
                             ...((multiFormTopics as Array<{ id: string; name: string }> | undefined)?.map((c) => ({ 
@@ -1134,25 +1102,6 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
                           ]}
                           placeholder="Argomento"
                           disabled={!multiUploadData.subjectId}
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="multi-upload-subtopic" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                          Sottoargomento
-                        </label>
-                        <CustomSelect
-                          id="multi-upload-subtopic"
-                          value={multiUploadData.subTopicId}
-                          onChange={(value) => setMultiUploadData({ ...multiUploadData, subTopicId: value })}
-                          options={[
-                            { value: '', label: 'Nessuno' },
-                            ...(multiSelectedTopic?.subTopics?.map((sc) => ({ 
-                              value: sc.id, 
-                              label: sc.name 
-                            })) || [])
-                          ]}
-                          placeholder="Sottoargomento"
-                          disabled={!multiUploadData.topicId}
                         />
                       </div>
                     </div>
@@ -1552,8 +1501,8 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
                       </div>
                     )}
 
-                    {/* Hierarchical Selection: Subject > Category > SubCategory */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Hierarchical Selection: Subject > Topic */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Subject */}
                       <div>
                         <label htmlFor="material-subject" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
@@ -1565,8 +1514,7 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
                           onChange={(value) => setMaterialFormData({ 
                             ...materialFormData, 
                             subjectId: value,
-                            categoryId: '', // Reset category when subject changes
-                            subTopicId: '' // Reset subcategory
+                            topicId: ''
                           })}
                           options={[
                             { value: '', label: 'Nessuna materia' },
@@ -1584,12 +1532,8 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
                         </label>
                         <CustomSelect
                           id="material-topic"
-                          value={materialFormData.categoryId}
-                          onChange={(value) => setMaterialFormData({ 
-                            ...materialFormData, 
-                            categoryId: value,
-                            subTopicId: '' // Reset subtopic when topic changes
-                          })}
+                          value={materialFormData.topicId}
+                          onChange={(value) => setMaterialFormData({ ...materialFormData, topicId: value })}
                           options={[
                             { value: '', label: 'Nessuno' },
                             ...((formTopics as Array<{ id: string; name: string }> | undefined)?.map((c) => ({ 
@@ -1599,34 +1543,6 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
                           ]}
                           placeholder={materialFormData.subjectId ? "Seleziona argomento..." : "Prima seleziona materia"}
                           disabled={!materialFormData.subjectId}
-                        />
-                      </div>
-
-                      {/* SubTopic */}
-                      <div>
-                        <label htmlFor="material-subtopic" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                          Sottoargomento
-                        </label>
-                        <CustomSelect
-                          id="material-subtopic"
-                          value={materialFormData.subTopicId}
-                          onChange={(value) => setMaterialFormData({ ...materialFormData, subTopicId: value })}
-                          options={[
-                            { value: '', label: 'Nessuno' },
-                            ...(selectedTopic?.subTopics?.map((sc) => {
-                              const getDifficultyLabel = (difficulty: string): string => {
-                                if (difficulty === 'EASY') return 'Facile';
-                                if (difficulty === 'MEDIUM') return 'Medio';
-                                return 'Difficile';
-                              };
-                              return { 
-                                value: sc.id, 
-                                label: `${sc.name} (${getDifficultyLabel(sc.difficulty)})` 
-                              };
-                            }) || [])
-                          ]}
-                          placeholder={materialFormData.categoryId ? "Seleziona sottoargomento..." : "Prima seleziona argomento"}
-                          disabled={!materialFormData.categoryId}
                         />
                       </div>
                     </div>
@@ -2259,7 +2175,6 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
           material={editingMaterial}
           subjects={subjects || []}
           topics={editModalTopics || []}
-          selectedTopic={editModalSelectedTopic}
           categories={_allCategories || []}
           onSave={handleSaveMaterialFromModal}
           isLoading={updateMaterialFromModalMutation.isPending}
@@ -2345,26 +2260,7 @@ function SubjectTopicsPreview({ subjectId, subjectColor }: SubjectTopicsPreviewP
             <span className={`text-xs px-1.5 py-0.5 rounded ${difficultyColors[topic.difficulty as DifficultyLevel].bg} ${difficultyColors[topic.difficulty as DifficultyLevel].text}`}>
               {difficultyLabels[topic.difficulty as DifficultyLevel]}
             </span>
-            {topic.subTopics && topic.subTopics.length > 0 && (
-              <span className={`text-xs ${colors.text.muted}`}>
-                ({topic.subTopics.length} sotto-argomenti)
-              </span>
-            )}
           </div>
-          {/* Sub-topics */}
-          {topic.subTopics && topic.subTopics.length > 0 && (
-            <div className="ml-6 mt-1 space-y-1">
-              {topic.subTopics.map((subTopic) => (
-                <div key={subTopic.id} className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600" />
-                  <span className={`text-xs ${colors.text.secondary}`}>{subTopic.name}</span>
-                  <span className={`text-xs px-1 py-0.5 rounded ${difficultyColors[subTopic.difficulty as DifficultyLevel].bg} ${difficultyColors[subTopic.difficulty as DifficultyLevel].text}`}>
-                    {difficultyLabels[subTopic.difficulty as DifficultyLevel]}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       ))}
     </div>

@@ -61,12 +61,9 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
   const mcQuestions = questions.filter(sq => sq.question.type !== 'OPEN_TEXT');
   const openTextQuestions = questions.filter(sq => sq.question.type === 'OPEN_TEXT');
 
-  // Calculate academic year (starts in September)
+  // Calculate academic year (current year → next year)
   const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth();
-  const academicYearStart = currentMonth >= 8 ? currentYear : currentYear - 1;
-  const academicYearEnd = academicYearStart + 1;
-  const academicYearText = `Anno accademico ${academicYearStart}/${academicYearEnd}`;
+  const academicYearText = `Anno accademico ${currentYear}/${currentYear + 1}`;
 
   return (
     <>
@@ -238,9 +235,11 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
             {/* Multiple choice / single choice questions */}
             {mcQuestions.length > 0 && (
               <>
-                <div className="text-center font-['Times_New_Roman',Times,serif] text-sm font-bold uppercase underline mb-5">
-                  DOMANDE A RISPOSTA MULTIPLA
-                </div>
+                {(mcQuestions.length > 0 && openTextQuestions.length > 0) && (
+                  <div className="text-center font-['Times_New_Roman',Times,serif] text-sm font-bold uppercase underline mb-5">
+                    DOMANDE A RISPOSTA MULTIPLA
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   {mcQuestions.map((sq, index) => (
                     <div key={sq.id} className="no-break">
@@ -290,9 +289,11 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
             {/* Open text questions */}
             {openTextQuestions.length > 0 && (
               <>
-                <div className={`text-center font-['Times_New_Roman',Times,serif] text-sm font-bold uppercase underline mb-5 ${mcQuestions.length > 0 ? 'mt-8' : ''}`}>
-                  DOMANDE A RISPOSTA CON MODALITÀ A COMPLETAMENTO
-                </div>
+                {(mcQuestions.length > 0 && openTextQuestions.length > 0) && (
+                  <div className={`text-center font-['Times_New_Roman',Times,serif] text-sm font-bold uppercase underline mb-5 mt-8`}>
+                    DOMANDE A RISPOSTA CON MODALITÀ A COMPLETAMENTO
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   {openTextQuestions.map((sq, index) => (
                     <div key={sq.id} className="no-break">
@@ -316,12 +317,17 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
                         </div>
                       )}
 
-                      <div className="ml-8 mt-2 min-h-[100px]" aria-hidden="true" />
+
                     </div>
                   ))}
                 </div>
               </>
             )}
+          </div>
+
+          {/* End of questions */}
+          <div className="text-center font-['Times_New_Roman',Times,serif] text-sm font-bold mt-8 pt-2">
+            ********** FINE DELLE DOMANDE **********
           </div>
         </div>
       </div>

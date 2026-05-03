@@ -253,7 +253,6 @@ describe('createQuestionSchema', () => {
       imageAlt: 'Bandiera italiana',
       subjectId: 'subj-1',
       topicId: 'topic-1',
-      subTopicId: 'subtopic-1',
       difficulty: 'EASY' as const,
       points: 2.0,
       negativePoints: -0.5,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Zap, Target, Award, Info, Sparkles, BookOpen, PenTool } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { Modal } from '@/components/ui/Modal';
@@ -11,39 +11,196 @@ import { ButtonLoader, Spinner } from '@/components/ui/loaders';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { useRouter } from 'next/navigation';
-import type { SmartRandomPreset, DifficultyMix } from '@/lib/validations/simulationValidation';
+import type { DifficultyMix } from '@/lib/validations/simulationValidation';
 
-/**
- * Test type templates: preset duration + scoring (correct/wrong/blank).
- * Values reflect typical published settings for the corresponding admission tests;
- * users can always override every field manually after picking a template.
- */
-type TestTemplateId = 'CUSTOM' | 'TOLC' | 'CENT_S' | 'SEMESTRE_APERTO' | 'PROF_SANITARIE' | 'ARCHED' | 'ALTRO';
-const TEST_TEMPLATES: Record<TestTemplateId, {
-  label: string;
-  durationMinutes: number;
-  correctPoints: number;
-  wrongPoints: number;
-  blankPoints: number;
-}> = {
-  CUSTOM: { label: 'Personalizzato', durationMinutes: 0, correctPoints: 1, wrongPoints: 0, blankPoints: 0 },
-  TOLC: { label: 'TOLC', durationMinutes: 50, correctPoints: 1, wrongPoints: -0.25, blankPoints: 0 },
-  CENT_S: { label: 'CEnT-S', durationMinutes: 100, correctPoints: 1.5, wrongPoints: -0.4, blankPoints: 0 },
-  SEMESTRE_APERTO: { label: 'Semestre Aperto', durationMinutes: 60, correctPoints: 1, wrongPoints: -0.25, blankPoints: 0 },
-  PROF_SANITARIE: { label: 'Professioni Sanitarie', durationMinutes: 100, correctPoints: 1.5, wrongPoints: -0.4, blankPoints: 0 },
-  ARCHED: { label: 'Arched', durationMinutes: 100, correctPoints: 1, wrongPoints: -0.25, blankPoints: 0 },
-  ALTRO: { label: 'Altro', durationMinutes: 0, correctPoints: 1, wrongPoints: 0, blankPoints: 0 },
-};
+type LanguageFilter = 'BOTH' | 'IT' | 'EN';
+
+interface QuestionCounts {
+  total: number;
+  IT: number;
+  EN: number;
+}
+
+interface TopicItem {
+  id: string;
+  name: string;
+  hasItalianQuestions: boolean;
+  hasEnglishQuestions: boolean;
+  questionCounts: QuestionCounts;
+  _count: { questions: number };
+}
+
+interface SubjectItem {
+  id: string;
+  name: string;
+  hasItalianQuestions: boolean;
+  hasEnglishQuestions: boolean;
+  questionCounts: QuestionCounts;
+  _count: { questions: number };
+  topics: TopicItem[];
+}
 
 interface SelfPracticeModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
+function parseScore(raw: string, fallback: number): number {
+  const v = parseFloat(raw.replace(',', '.'));
+  return Number.isFinite(v) ? v : fallback;
+}
+
+function getSelectedTopics(subjects: SubjectItem[], selectedSubjectIds: string[]) {
+  return subjects
+    .filter((s) => selectedSubjectIds.includes(s.id))
+    .flatMap((s) => s.topics.map((t) => ({ ...t, subjectName: s.name })));
+}
+
+function buildSubjectDistribution(subjectIds: string[], count: number): Record<string, number> {
+  return subjectIds.reduce((distribution, subjectId, index) => {
+    const baseCount = Math.floor(count / subjectIds.length);
+    const remainder = count % subjectIds.length;
+    distribution[subjectId] = baseCount + (index < remainder ? 1 : 0);
+    return distribution;
+  }, {} as Record<string, number>);
+}
+
+const LANGUAGE_OPTIONS: Array<{ value: LanguageFilter; label: string }> = [
+  { value: 'BOTH', label: '🌐 Entrambe' },
+  { value: 'IT', label: '🇮🇹 Solo italiano' },
+  { value: 'EN', label: '🇬🇧 Solo inglese' },
+];
+
+const EMPTY_SUBJECTS: SubjectItem[] = [];
+
+function getQuestionCountByLanguage(counts: QuestionCounts, language: LanguageFilter): number {
+  return language === 'BOTH' ? counts.total : counts[language];
+}
+
+function filterSubjectsByLanguage(subjects: SubjectItem[], language: LanguageFilter): SubjectItem[] {
+  return subjects
+    .map((subject) => ({
+      ...subject,
+      topics: subject.topics.filter((topic) => getQuestionCountByLanguage(topic.questionCounts, language) > 0),
+    }))
+    .filter((subject) => getQuestionCountByLanguage(subject.questionCounts, language) > 0 || subject.topics.length > 0);
+}
+
+function getQuestionCountError(count: number): string | null {
+  if (isNaN(count) || count < 5) return 'Inserisci un numero minimo di 5 domande.';
+  if (count > 60) return 'Il numero massimo è 60 domande.';
+  return null;
+}
+
+function EnBadge({ show }: { show: boolean }) {
+  if (!show) return null;
+  return <span className="text-xs px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 font-medium">EN</span>;
+}
+
+const DIFFICULTY_OPTIONS: Array<{
+  value: DifficultyMix;
+  emoji: string;
+  label: string;
+  activeClass: string;
+  textClass: string;
+}> = [
+  { value: 'EASY_FOCUS', emoji: '🟢', label: 'Facili', activeClass: 'border-green-500 bg-green-50 dark:bg-green-900/20', textClass: 'text-green-700 dark:text-green-300' },
+  { value: 'MEDIUM_ONLY', emoji: '🔵', label: 'Medie', activeClass: 'border-blue-500 bg-blue-50 dark:bg-blue-900/20', textClass: 'text-blue-700 dark:text-blue-300' },
+  { value: 'HARD_FOCUS', emoji: '🔴', label: 'Difficili', activeClass: 'border-red-500 bg-red-50 dark:bg-red-900/20', textClass: 'text-red-700 dark:text-red-300' },
+  { value: 'BALANCED', emoji: '⚖️', label: 'Mix', activeClass: 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20', textClass: 'text-yellow-700 dark:text-yellow-300' },
+];
+
+function DifficultySelector({ value, onChange }: { value: DifficultyMix; onChange: (v: DifficultyMix) => void }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        Difficoltà
+      </label>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {DIFFICULTY_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => onChange(opt.value)}
+            className={`p-3 rounded-xl border-2 text-center transition-all ${
+              value === opt.value ? opt.activeClass : 'border-gray-200 dark:border-gray-700'
+            }`}
+          >
+            <span className="text-lg block mb-1">{opt.emoji}</span>
+            <span className={`block text-xs font-medium ${
+              value === opt.value ? opt.textClass : 'text-gray-700 dark:text-gray-300'
+            }`}>
+              {opt.label}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface TemplateOption {
+  id: string;
+  title: string;
+  description?: string | null;
+  totalQuestions: number;
+  durationMinutes: number;
+  sections: unknown;
+}
+
+function TemplateInfoBox({ templates, selectedTemplateId }: { templates: TemplateOption[]; selectedTemplateId: string }) {
+  const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
+  if (!selectedTemplate) return null;
+  const sections = Array.isArray(selectedTemplate.sections)
+    ? (selectedTemplate.sections as Array<{ name?: string; questionCount?: number; durationMinutes?: number }>)
+    : [];
+  return (
+    <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4">
+      <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">{selectedTemplate.title}</p>
+      {selectedTemplate.description && (
+        <p className="mt-1 text-sm text-blue-800 dark:text-blue-200">{selectedTemplate.description}</p>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2 text-xs text-blue-800 dark:text-blue-200">
+        <span className="px-2 py-1 rounded-lg bg-white/70 dark:bg-slate-900/40">{selectedTemplate.totalQuestions} domande</span>
+        <span className="px-2 py-1 rounded-lg bg-white/70 dark:bg-slate-900/40">{selectedTemplate.durationMinutes} min</span>
+        <span className="px-2 py-1 rounded-lg bg-white/70 dark:bg-slate-900/40">{sections.length} sezioni</span>
+      </div>
+    </div>
+  );
+}
+
+function LanguageFilterSection({ show, value, onChange }: { show: boolean; value: LanguageFilter; onChange: (v: LanguageFilter) => void }) {
+  if (!show) return null;
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        Lingua delle domande
+      </label>
+      <div className="flex gap-2">
+        {LANGUAGE_OPTIONS.map(({ value: optValue, label }) => (
+          <button
+            key={optValue}
+            onClick={() => onChange(optValue)}
+            className={`flex-1 px-3 py-2 rounded-xl border-2 text-center text-xs font-medium transition-all ${
+              value === optValue
+                ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300'
+                : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModalProps) {
   const router = useRouter();
   const { handleMutationError } = useApiError();
   const { showSuccess, showError } = useToast();
+
+  const [selectedSelfPracticeTemplateId, setSelectedSelfPracticeTemplateId] = useState<string>('CUSTOM');
+  const isTemplateMode = selectedSelfPracticeTemplateId !== 'CUSTOM';
 
   // Modalità quiz o lettura
   const [quizMode, setQuizMode] = useState<'quiz' | 'reading'>('quiz');
@@ -55,12 +212,11 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
   const [durationMinutes, setDurationMinutes] = useState<string>('0');
 
   // Distribuzione materie
-  const [preset, setPreset] = useState<SmartRandomPreset>('PROPORTIONAL');
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
+  const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>([]);
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
+  const [languageFilter, setLanguageFilter] = useState<LanguageFilter>('BOTH');
 
-  // Tipo test (template) e scoring personalizzato
-  const [testTemplate, setTestTemplate] = useState<TestTemplateId>('CUSTOM');
+
   const [correctPoints, setCorrectPoints] = useState<string>('1');
   const [wrongPoints, setWrongPoints] = useState<string>('0');
   const [blankPoints, setBlankPoints] = useState<string>('0');
@@ -80,22 +236,48 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
   // Query
   const { data: subjectsData } = trpc.questions.getSubjects.useQuery();
   const { data: staff = [] } = trpc.users.getStaff.useQuery();
-  const { data: topicsData } = trpc.materials.getTopics.useQuery(
-    { subjectId: selectedSubjectId, includeInactive: false },
-    { enabled: preset === 'SINGLE_SUBJECT' && !!selectedSubjectId },
+  const { data: assignedSelfPracticeTemplates = [] } = trpc.simulationTemplates.listMySelfPracticeTemplates.useQuery(
+    undefined,
+    { enabled: isOpen },
   );
 
-  const subjects = subjectsData || [];
-  const topics = useMemo(() => topicsData ?? [], [topicsData]);
+  const subjects = subjectsData ?? EMPTY_SUBJECTS;
+  const filteredSubjects = useMemo(
+    () => filterSubjectsByLanguage(subjects, languageFilter),
+    [subjects, languageFilter],
+  );
+  const selectedSubjectTopics = useMemo(
+    () => getSelectedTopics(filteredSubjects, selectedSubjectIds),
+    [filteredSubjects, selectedSubjectIds],
+  );
+  const availableSubjectIds = useMemo(
+    () => new Set(filteredSubjects.map((subject) => subject.id)),
+    [filteredSubjects],
+  );
+  const availableTopicIds = useMemo(
+    () => new Set(filteredSubjects.flatMap((subject) => subject.topics.map((topic) => topic.id))),
+    [filteredSubjects],
+  );
 
-  const applyTemplate = (id: TestTemplateId) => {
-    setTestTemplate(id);
-    if (id === 'CUSTOM') return;
-    const tpl = TEST_TEMPLATES[id];
-    setDurationMinutes(String(tpl.durationMinutes));
-    setCorrectPoints(String(tpl.correctPoints));
-    setWrongPoints(String(tpl.wrongPoints));
-    setBlankPoints(String(tpl.blankPoints));
+  useEffect(() => {
+    setSelectedSubjectIds((prev) => {
+      const next = prev.filter((id) => availableSubjectIds.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+    setSelectedTopicIds((prev) => {
+      const next = prev.filter((id) => availableTopicIds.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [availableSubjectIds, availableTopicIds]);
+
+  const handleSubjectToggle = (subjectId: string, checked: boolean) => {
+    const topicIds = filteredSubjects.find((s) => s.id === subjectId)?.topics.map((t) => t.id) ?? [];
+    setSelectedSubjectIds((prev) => checked ? [...prev, subjectId] : prev.filter((id) => id !== subjectId));
+    setSelectedTopicIds((prev) => prev.filter((topicId) => checked || !topicIds.includes(topicId)));
+  };
+
+  const handleTopicToggle = (topicId: string, checked: boolean) => {
+    setSelectedTopicIds((prev) => checked ? [...prev, topicId] : prev.filter((id) => id !== topicId));
   };
 
   // Mutations
@@ -112,16 +294,36 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
     onError: handleMutationError,
   });
 
+  const createSelfPracticeFromTemplate = trpc.simulations.createSelfPracticeFromTemplate.useMutation({
+    onSuccess: (data) => {
+      showSuccess('Quiz creato!', 'Inizia ora il tuo quiz!');
+      onClose();
+      router.push(`/simulazioni/${data.id}`);
+    },
+    onError: handleMutationError,
+  });
+
   const handleGenerate = async () => {
     try {
-      const count = parseInt(questionCount, 10);
-      if (isNaN(count) || count < 5) {
-        showError('Errore', 'Inserisci un numero minimo di 5 domande.');
+      if (isTemplateMode) {
+        if (openQuestionCorrection === 'staff' && !selectedStaffId) {
+          showError('Errore', 'Seleziona un collaboratore per la correzione.');
+          return;
+        }
+
+        await createSelfPracticeFromTemplate.mutateAsync({
+          templateId: selectedSelfPracticeTemplateId,
+          difficultyMix,
+          openQuestionCorrection,
+          requestCorrectionFromId: openQuestionCorrection === 'staff' ? selectedStaffId : undefined,
+        });
         return;
       }
 
-      if (preset === 'SINGLE_SUBJECT' && !selectedSubjectId) {
-        showError('Errore', 'Seleziona una materia.');
+      const count = parseInt(questionCount, 10);
+      const countError = getQuestionCountError(count);
+      if (countError) {
+        showError('Errore', countError);
         return;
       }
 
@@ -130,14 +332,20 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
         return;
       }
 
+      const customSubjectDistribution = selectedSubjectIds.length > 0
+        ? buildSubjectDistribution(selectedSubjectIds, count)
+        : undefined;
+
       const result = await generateSmartQuestions.mutateAsync({
         totalQuestions: count,
-        preset,
+        preset: selectedSubjectIds.length > 0 ? 'CUSTOM' : 'PROPORTIONAL',
         difficultyMix,
         maximizeTopicCoverage: maximizeCoverage,
         avoidRecentlyUsed: avoidRecent,
-        focusSubjectId: preset === 'SINGLE_SUBJECT' ? selectedSubjectId : undefined,
-        topicIds: preset === 'SINGLE_SUBJECT' && selectedTopicIds.length > 0 ? selectedTopicIds : undefined,
+        customSubjectDistribution,
+        subjectIds: selectedSubjectIds.length > 0 ? selectedSubjectIds : undefined,
+        topicIds: selectedTopicIds.length > 0 ? selectedTopicIds : undefined,
+        language: languageFilter !== 'BOTH' ? languageFilter : undefined,
       });
 
       if (!result || result.questions.length === 0) {
@@ -154,12 +362,7 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
         return;
       }
 
-      // Modalità quiz: crea una simulazione
       const duration = parseInt(durationMinutes, 10);
-      const parseScore = (raw: string, fallback: number) => {
-        const v = parseFloat(raw.replace(',', '.'));
-        return Number.isFinite(v) ? v : fallback;
-      };
       await createSelfPractice.mutateAsync({
         questionIds: result.questions.map((q) => q.questionId),
         durationMinutes: isNaN(duration) || duration < 0 ? 0 : duration,
@@ -169,14 +372,13 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
         correctPoints: parseScore(correctPoints, 1),
         wrongPoints: parseScore(wrongPoints, 0),
         blankPoints: parseScore(blankPoints, 0),
-        testTemplate: testTemplate === 'CUSTOM' ? undefined : TEST_TEMPLATES[testTemplate].label,
       });
     } catch (error) {
       console.error(error);
     }
   };
 
-  const isCreating = createSelfPractice.isPending || generateSmartQuestions.isPending;
+  const isCreating = createSelfPractice.isPending || createSelfPracticeFromTemplate.isPending || generateSmartQuestions.isPending;
 
   return (
     <Modal
@@ -214,8 +416,47 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
       }
     >
       <div className="space-y-5">
-        {/* Selezione modalità: Quiz vs Lettura */}
         <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Tipo autoesercitazione
+          </label>
+          <CustomSelect
+            value={selectedSelfPracticeTemplateId}
+            onChange={(value) => {
+              setSelectedSelfPracticeTemplateId(value);
+              if (value !== 'CUSTOM') {
+                setQuizMode('quiz');
+              }
+            }}
+            options={[
+              { value: 'CUSTOM', label: 'Personalizzato' },
+              ...assignedSelfPracticeTemplates.map((template) => ({
+                value: template.id,
+                label: `${template.title} (${template.totalQuestions} domande)`,
+              })),
+            ]}
+            className="w-full"
+          />
+        </div>
+
+        {isTemplateMode && (
+          <TemplateInfoBox
+            templates={assignedSelfPracticeTemplates
+              .filter((t) => t.id && t.title != null)
+              .map((t) => ({
+                id: t.id!,
+                title: t.title!,
+                description: t.description,
+                totalQuestions: t.totalQuestions ?? 0,
+                durationMinutes: t.durationMinutes ?? 0,
+                sections: t.sections,
+              }))}
+            selectedTemplateId={selectedSelfPracticeTemplateId}
+          />
+        )}
+
+        {/* Selezione modalità: Quiz vs Lettura */}
+        {!isTemplateMode && <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Come vuoi esercitarti?
           </label>
@@ -262,48 +503,30 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
               </span>
             </button>
           </div>
-        </div>
+        </div>}
 
         {/* Numero domande - semplice input */}
-        <div>
+        {!isTemplateMode && <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Numero di domande
           </label>
           <input
             type="number"
             min="5"
+            max="60"
             value={questionCount}
             onChange={(e) => setQuestionCount(e.target.value)}
             className="w-full px-4 py-3 text-base rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
             placeholder="Minimo 5 domande"
           />
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Minimo 5 domande
+            Minimo 5, massimo 60 domande
           </p>
-        </div>
+        </div>}
 
         {/* Durata quiz (solo per modalità quiz) */}
-        {quizMode === 'quiz' && (
+        {!isTemplateMode && quizMode === 'quiz' && (
           <>
-            {/* Tipo test (template) */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Tipo test
-              </label>
-              <CustomSelect
-                value={testTemplate}
-                onChange={(value) => applyTemplate(value as TestTemplateId)}
-                options={(Object.keys(TEST_TEMPLATES) as TestTemplateId[]).map((id) => ({
-                  value: id,
-                  label: TEST_TEMPLATES[id].label,
-                }))}
-                className="w-full"
-              />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Il template imposta durata e punteggi tipici. Puoi sempre modificarli sotto.
-              </p>
-            </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Durata quiz (minuti)
@@ -323,209 +546,136 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
           </>
         )}
 
-        {/* Distribuzione materie */}
-        <div>
+        {!isTemplateMode && (
+          <LanguageFilterSection show value={languageFilter} onChange={setLanguageFilter} />
+        )}
+
+        {/* Materie */}
+        {!isTemplateMode && <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Materie
           </label>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              onClick={() => {
-                setPreset('PROPORTIONAL');
-                setSelectedSubjectId('');
-              }}
-              className={`p-3 rounded-xl border-2 text-center transition-all ${
-                preset === 'PROPORTIONAL'
-                  ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
-                  : 'border-gray-200 dark:border-gray-700'
-              }`}
-            >
-              <span className="text-lg block mb-1">📊</span>
-              <span className={`block text-xs font-medium ${
-                preset === 'PROPORTIONAL' ? 'text-purple-700 dark:text-purple-300' : 'text-gray-700 dark:text-gray-300'
-              }`}>
-                Tutte
-              </span>
-            </button>
-
-            <button
-              onClick={() => {
-                setPreset('BALANCED');
-                setSelectedSubjectId('');
-              }}
-              className={`p-3 rounded-xl border-2 text-center transition-all ${
-                preset === 'BALANCED'
-                  ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
-                  : 'border-gray-200 dark:border-gray-700'
-              }`}
-            >
-              <span className="text-lg block mb-1">⚖️</span>
-              <span className={`block text-xs font-medium ${
-                preset === 'BALANCED' ? 'text-purple-700 dark:text-purple-300' : 'text-gray-700 dark:text-gray-300'
-              }`}>
-                Equo
-              </span>
-            </button>
-
-            <button
-              onClick={() => setPreset('SINGLE_SUBJECT')}
-              className={`p-3 rounded-xl border-2 text-center transition-all ${
-                preset === 'SINGLE_SUBJECT'
-                  ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
-                  : 'border-gray-200 dark:border-gray-700'
-              }`}
-            >
-              <span className="text-lg block mb-1">🎯</span>
-              <span className={`block text-xs font-medium ${
-                preset === 'SINGLE_SUBJECT' ? 'text-purple-700 dark:text-purple-300' : 'text-gray-700 dark:text-gray-300'
-              }`}>
-                Una sola
-              </span>
-            </button>
+          <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-4 py-3 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300">
+              {selectedSubjectIds.length === 0
+                ? 'Tutte le materie disponibili'
+                : `${selectedSubjectIds.length} materia/e selezionata/e`}
+            </div>
+            <div className="max-h-44 overflow-y-auto border-t border-gray-200 dark:border-gray-700 p-2 space-y-1">
+              {filteredSubjects.length === 0 && (
+                <p className="px-2 py-3 text-sm text-gray-500 dark:text-gray-400">
+                  Nessuna materia disponibile per la lingua selezionata.
+                </p>
+              )}
+              {filteredSubjects.map((subject) => {
+                const checked = selectedSubjectIds.includes(subject.id);
+                return (
+                  <div key={subject.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <Checkbox
+                      id={`subject-${subject.id}`}
+                      checked={checked}
+                      onChange={(e) => handleSubjectToggle(subject.id, e.target.checked)}
+                    />
+                    <label htmlFor={`subject-${subject.id}`} className="flex-1 flex items-center gap-2 cursor-pointer">
+                      <span className="text-sm text-gray-700 dark:text-gray-300">{subject.name}</span>
+                      <EnBadge show={subject.hasEnglishQuestions} />
+                    </label>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      {getQuestionCountByLanguage(subject.questionCounts, languageFilter)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Descrizione preset selezionato */}
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-            {preset === 'PROPORTIONAL' && '📊 Mix di tutte le materie in base alla quantità di domande disponibili'}
-            {preset === 'BALANCED' && '⚖️ Stesso numero di domande per ogni materia'}
-            {preset === 'SINGLE_SUBJECT' && '🎯 Seleziona una materia specifica su cui concentrarti'}
-          </p>
-
-          {/* Selezione materia se SINGLE_SUBJECT */}
-          {preset === 'SINGLE_SUBJECT' && (
-            <div className="mt-3 space-y-3">
-              <CustomSelect
-                value={selectedSubjectId}
-                onChange={(value) => {
-                  setSelectedSubjectId(value);
-                  setSelectedTopicIds([]);
-                }}
-                options={[
-                  { value: '', label: 'Seleziona materia...' },
-                  ...subjects.map((subject) => ({
-                    value: subject.id,
-                    label: subject.name,
-                  })),
-                ]}
-                className="w-full"
-              />
-
-              {/* Selezione argomenti (multi) */}
-              {selectedSubjectId && topics.length > 0 && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Argomenti (opzionale)
-                  </label>
-                  <div className="max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-xl p-2 space-y-1">
-                    {topics.map((topic) => {
-                      const checked = selectedTopicIds.includes(topic.id);
-                      return (
-                        <label
-                          key={topic.id}
-                          className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              setSelectedTopicIds((prev) =>
-                                e.target.checked
-                                  ? [...prev, topic.id]
-                                  : prev.filter((id) => id !== topic.id),
-                              );
-                            }}
-                            className="rounded border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-500"
-                          />
-                          <span className="text-sm text-gray-700 dark:text-gray-300">{topic.name}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    {selectedTopicIds.length === 0
-                      ? 'Nessun filtro: tutti gli argomenti della materia'
-                      : `${selectedTopicIds.length} argomento/i selezionato/i`}
-                  </p>
-                </div>
-              )}
+          {selectedSubjectTopics.length > 0 && (
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Argomenti (opzionale)
+              </label>
+              <div className="max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-xl p-2 space-y-1">
+                {selectedSubjectTopics.map((topic) => {
+                  const checked = selectedTopicIds.includes(topic.id);
+                  return (
+                    <div key={topic.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                      <Checkbox
+                        id={`topic-${topic.id}`}
+                        checked={checked}
+                        onChange={(e) => handleTopicToggle(topic.id, e.target.checked)}
+                      />
+                      <label htmlFor={`topic-${topic.id}`} className="flex-1 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                        <span>{topic.name}</span>
+                        <EnBadge show={topic.hasEnglishQuestions} />
+                      </label>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{topic.subjectName}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {selectedTopicIds.length === 0
+                  ? 'Nessun filtro: tutti gli argomenti delle materie selezionate'
+                  : `${selectedTopicIds.length} argomento/i selezionato/i`}
+              </p>
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Difficoltà */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Difficoltà
-          </label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <button
-              onClick={() => setDifficultyMix('EASY_FOCUS')}
-              className={`p-3 rounded-xl border-2 text-center transition-all ${
-                difficultyMix === 'EASY_FOCUS'
-                  ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                  : 'border-gray-200 dark:border-gray-700'
-              }`}
-            >
-              <span className="text-lg block mb-1">🟢</span>
-              <span className={`block text-xs font-medium ${
-                difficultyMix === 'EASY_FOCUS' ? 'text-green-700 dark:text-green-300' : 'text-gray-700 dark:text-gray-300'
-              }`}>
-                Facili
-              </span>
-            </button>
+        <DifficultySelector value={difficultyMix} onChange={setDifficultyMix} />
 
-            <button
-              onClick={() => setDifficultyMix('MEDIUM_ONLY')}
-              className={`p-3 rounded-xl border-2 text-center transition-all ${
-                difficultyMix === 'MEDIUM_ONLY'
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                  : 'border-gray-200 dark:border-gray-700'
-              }`}
-            >
-              <span className="text-lg block mb-1">🔵</span>
-              <span className={`block text-xs font-medium ${
-                difficultyMix === 'MEDIUM_ONLY' ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'
-              }`}>
-                Medie
-              </span>
-            </button>
+        {isTemplateMode && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Correzione domande aperte
+            </label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setOpenQuestionCorrection('self')}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  openQuestionCorrection === 'self'
+                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 ring-2 ring-purple-500'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                }`}
+              >
+                <Target className="w-4 h-4" />
+                Auto
+              </button>
+              <button
+                onClick={() => setOpenQuestionCorrection('staff')}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  openQuestionCorrection === 'staff'
+                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 ring-2 ring-purple-500'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                }`}
+              >
+                <Award className="w-4 h-4" />
+                Docente
+              </button>
+            </div>
 
-            <button
-              onClick={() => setDifficultyMix('HARD_FOCUS')}
-              className={`p-3 rounded-xl border-2 text-center transition-all ${
-                difficultyMix === 'HARD_FOCUS'
-                  ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
-                  : 'border-gray-200 dark:border-gray-700'
-              }`}
-            >
-              <span className="text-lg block mb-1">🔴</span>
-              <span className={`block text-xs font-medium ${
-                difficultyMix === 'HARD_FOCUS' ? 'text-red-700 dark:text-red-300' : 'text-gray-700 dark:text-gray-300'
-              }`}>
-                Difficili
-              </span>
-            </button>
-
-                        <button
-              onClick={() => setDifficultyMix('BALANCED')}
-              className={`p-3 rounded-xl border-2 text-center transition-all ${
-                difficultyMix === 'BALANCED'
-                  ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20'
-                  : 'border-gray-200 dark:border-gray-700'
-              }`}
-            >
-              <span className="text-lg block mb-1">⚖️</span>
-              <span className={`block text-xs font-medium ${
-                difficultyMix === 'BALANCED' ? 'text-yellow-700 dark:text-yellow-300' : 'text-gray-700 dark:text-gray-300'
-              }`}>
-                Mix
-              </span>
-            </button>
+            {openQuestionCorrection === 'staff' && (
+              <div className="mt-3">
+                <CustomSelect
+                  value={selectedStaffId}
+                  onChange={(value) => setSelectedStaffId(value)}
+                  options={[
+                    { value: '', label: 'Seleziona collaboratore...' },
+                    ...staff.map((member) => ({
+                      value: member.id,
+                      label: member.name,
+                    })),
+                  ]}
+                  className="w-full"
+                />
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
         {/* Opzioni avanzate (collassabili) */}
-        <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+        {!isTemplateMode && <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
             className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
@@ -656,7 +806,7 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
               )}
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Info box - diverso per modalità */}
         <div className={`rounded-xl p-3 ${
@@ -675,7 +825,9 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
                 ? 'text-green-900 dark:text-green-100' 
                 : 'text-blue-900 dark:text-blue-100'
             }`}>
-              {quizMode === 'reading' 
+              {isTemplateMode
+                ? 'Le domande verranno generate automaticamente in base alle sezioni e agli argomenti del template assegnato.'
+                : quizMode === 'reading' 
                 ? 'Vedrai le domande con le risposte corrette evidenziate. Perfetto per ripassare!'
                 : 'Rispondi alle domande e verifica le tue conoscenze. Vedrai il punteggio alla fine.'
               }

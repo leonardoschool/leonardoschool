@@ -35,11 +35,13 @@ import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import { Modal } from '@/components/ui/Modal';
 import {
   questionTypeLabels,
+  questionLanguageLabels,
   difficultyLabels,
   openValidationTypeLabels,
   validateQuestionAnswers,
   validateQuestionKeywords,
   type QuestionType,
+  type QuestionLanguage,
   type QuestionStatus,
   type DifficultyLevel,
   type OpenAnswerValidationType,
@@ -57,9 +59,9 @@ interface QuestionFormProps {
     textLatex?: string | null;
     description?: string | null;
     imageUrl?: string | null;
+    language?: QuestionLanguage | null;
     subjectId?: string | null;
     topicId?: string | null;
-    subTopicId?: string | null;
     difficulty: DifficultyLevel;
     timeLimitSeconds?: number | null;
     correctExplanation?: string | null;
@@ -108,12 +110,11 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
   const [textLatex, setTextLatex] = useState(initialData?.textLatex ?? '');
   const [description, setDescription] = useState(initialData?.description ?? '');
   const [imageUrl, setImageUrl] = useState(initialData?.imageUrl ?? '');
+  const [language, setLanguage] = useState<QuestionLanguage>(initialData?.language ?? 'IT');
   const [subjectId, setSubjectId] = useState(initialData?.subjectId ?? '');
   const [topicId, setTopicId] = useState(initialData?.topicId ?? '');
-  const [subTopicId, setSubTopicId] = useState(initialData?.subTopicId ?? '');
   const [difficulty, setDifficulty] = useState<DifficultyLevel>(initialData?.difficulty ?? 'MEDIUM');
-  // eslint-disable-next-line sonarjs/no-unused-vars, sonarjs/no-dead-store -- setter is used in form input
-  const [timeLimitSeconds, setTimeLimitSeconds] = useState<number | ''>(
+  const [timeLimitSeconds] = useState<number | ''>(
     initialData?.timeLimitSeconds ?? ''
   );
 
@@ -275,8 +276,6 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
 
   // Computed values
   const topics = useMemo(() => topicsData ?? [], [topicsData]);
-  const selectedTopic = useMemo(() => topics.find((t) => t.id === topicId), [topics, topicId]);
-  const subTopics = useMemo(() => selectedTopic?.subTopics ?? [], [selectedTopic?.subTopics]);
 
   const subjectOptions = useMemo(
     () => [
@@ -292,14 +291,6 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
       ...topics.map((t) => ({ value: t.id, label: t.name })),
     ],
     [topics]
-  );
-
-  const subTopicOptions = useMemo(
-    () => [
-      { value: '', label: 'Seleziona sotto-argomento' },
-      ...subTopics.map((st) => ({ value: st.id, label: st.name })),
-    ],
-    [subTopics]
   );
 
   // Handlers
@@ -441,7 +432,6 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
         imageUrl: finalImageUrl,
         subjectId: subjectId || null,
         topicId: topicId || null,
-        subTopicId: subTopicId || null,
         difficulty,
         points: 1, // Default, managed in simulation
         negativePoints: 0, // Default, managed in simulation
@@ -460,6 +450,7 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
         tags: [], // Legacy tags removed - using new tag system
         year: year ? Number(year) : null,
         source: source || null,
+        language,
         answers: type !== 'OPEN_TEXT' ? answers : [],
         keywords: type === 'OPEN_TEXT' ? keywords : [],
       };
@@ -482,7 +473,6 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
       imageMode,
       subjectId,
       topicId,
-      subTopicId,
       difficulty,
       timeLimitSeconds,
       correctExplanation,
@@ -496,6 +486,7 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
       keywords,
       year,
       source,
+      language,
       questionId,
       createMutation,
       updateMutation,
@@ -707,7 +698,7 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
         )}
 
         {/* Categorization */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <CustomSelect
             label="Materia"
             options={subjectOptions}
@@ -715,30 +706,19 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
             onChange={(val) => {
               setSubjectId(val);
               setTopicId('');
-              setSubTopicId('');
             }}
           />
           <CustomSelect
             label="Argomento"
             options={topicOptions}
             value={topicId}
-            onChange={(val) => {
-              setTopicId(val);
-              setSubTopicId('');
-            }}
+            onChange={setTopicId}
             disabled={!subjectId}
-          />
-          <CustomSelect
-            label="Sotto-argomento"
-            options={subTopicOptions}
-            value={subTopicId}
-            onChange={setSubTopicId}
-            disabled={!topicId}
           />
         </div>
 
-        {/* Difficulty */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Difficulty and language */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <CustomSelect
             label="Difficoltà"
             options={[
@@ -748,6 +728,15 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
             ]}
             value={difficulty}
             onChange={(val) => setDifficulty(val as DifficultyLevel)}
+          />
+          <CustomSelect
+            label="Lingua"
+            options={[
+              { value: 'IT', label: questionLanguageLabels.IT },
+              { value: 'EN', label: questionLanguageLabels.EN },
+            ]}
+            value={language}
+            onChange={(val) => setLanguage(val as QuestionLanguage)}
           />
           <div className={`flex items-center p-4 rounded-lg ${colors.background.secondary} border ${colors.border.primary}`}>
             <p className={`text-sm ${colors.text.muted}`}>

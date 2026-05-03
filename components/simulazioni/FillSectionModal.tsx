@@ -2,13 +2,13 @@
 
 /**
  * FillSectionModal — Bulk-fill a simulation section with random questions
- * matching the chosen filters (subject, topics, sub-topics, difficulty).
+ * matching the chosen filters (subject, topics, difficulty).
  *
  * Used in the simulation creation wizard to speed up the manual flow
  * (instead of assigning each question individually to a section).
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Sparkles, Wand2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
@@ -29,7 +29,6 @@ export interface PickedQuestion {
   difficulty: string;
   subject?: { id: string; name: string; color: string | null } | null;
   topic?: { id: string; name: string } | null;
-  subTopic?: { id: string; name: string } | null;
 }
 
 interface FillSectionModalProps {
@@ -47,7 +46,7 @@ interface FillSectionModalProps {
 }
 
 // Stable reference to avoid creating a new [] on every render when query data is undefined
-const EMPTY_TOPICS: { id: string; name: string; subTopics?: { id: string; name: string }[] }[] = [];
+const EMPTY_TOPICS: { id: string; name: string }[] = [];
 
 const DIFFICULTY_OPTIONS = [
   { value: '', label: 'Tutte le difficoltà' },
@@ -88,7 +87,6 @@ export default function FillSectionModal({
   const [count, setCount] = useState<string>(String(defaultCount));
   const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>(defaultSubjectId ? [defaultSubjectId] : []);
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
-  const [selectedSubTopicIds, setSelectedSubTopicIds] = useState<string[]>([]);
   const [selectedDifficulties, setSelectedDifficulties] = useState<string[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
@@ -103,7 +101,6 @@ export default function FillSectionModal({
       setMode('random');
       setSelectedSubjectIds(defaultSubjectId ? [defaultSubjectId] : []);
       setSelectedTopicIds([]);
-      setSelectedSubTopicIds([]);
       setSelectedDifficulties([]);
       setSelectedTypes([]);
       setSelectedTagIds([]);
@@ -130,31 +127,6 @@ export default function FillSectionModal({
     { subjectId: primarySubjectId },
     { enabled: isOpen && !!primarySubjectId }
   );
-
-  // Derived sub-topics from selected topics
-  const availableSubTopics = useMemo(() => {
-    if (selectedTopicIds.length === 0) return [];
-    return topics
-      .filter((t) => selectedTopicIds.includes(t.id))
-      .flatMap((t) =>
-        (t.subTopics || []).map((st) => ({
-          id: st.id,
-          name: st.name,
-          topicName: t.name,
-        }))
-      );
-  }, [topics, selectedTopicIds]);
-
-  // Reset sub-topic selection when topics change to keep selection valid.
-  // Return prev unchanged when nothing is filtered out so React bails out
-  // of re-rendering and avoids an infinite update loop.
-  useEffect(() => {
-    const validIds = new Set(availableSubTopics.map((st) => st.id));
-    setSelectedSubTopicIds((prev) => {
-      const next = prev.filter((id) => validIds.has(id));
-      return next.length === prev.length ? prev : next;
-    });
-  }, [availableSubTopics]);
 
   // Mutation
   const pickMutation = trpc.questions.pickRandomForSection.useMutation({
@@ -193,7 +165,6 @@ export default function FillSectionModal({
               types: selectedTypes.length > 0 ? selectedTypes as ('SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT')[] : undefined,
               subjectIds: selectedSubjectIds.length > 1 ? selectedSubjectIds : undefined,
               topicIds: selectedTopicIds.length > 0 ? selectedTopicIds : undefined,
-              subTopicIds: selectedSubTopicIds.length > 0 ? selectedSubTopicIds : undefined,
               excludeQuestionIds,
             });
 
@@ -212,7 +183,6 @@ export default function FillSectionModal({
               subjectIds: selectedSubjectIds.length > 0 ? selectedSubjectIds : undefined,
               types: selectedTypes.length > 0 ? selectedTypes as ('SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT')[] : undefined,
               topicIds: selectedTopicIds.length > 0 ? selectedTopicIds : undefined,
-              subTopicIds: selectedSubTopicIds.length > 0 ? selectedSubTopicIds : undefined,
               difficulties: selectedDifficulties.length > 0 ? selectedDifficulties as ('EASY' | 'MEDIUM' | 'HARD')[] : undefined,
               tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
               excludeQuestionIds,
@@ -313,7 +283,6 @@ export default function FillSectionModal({
             onChange={(vals) => {
               setSelectedSubjectIds(vals);
               setSelectedTopicIds([]);
-              setSelectedSubTopicIds([]);
             }}
             placeholder="Tutte le materie"
           />
@@ -336,17 +305,6 @@ export default function FillSectionModal({
             options={topics.map((t) => ({ value: t.id, label: t.name }))}
             onChange={setSelectedTopicIds}
             placeholder="Tutti gli argomenti"
-          />
-        )}
-
-        {/* Sub-topics multi-select */}
-        {availableSubTopics.length > 0 && (
-          <MultiSelect
-            label="Sotto-argomenti"
-            values={selectedSubTopicIds}
-            options={availableSubTopics.map((st) => ({ value: st.id, label: `${st.name} (${st.topicName})` }))}
-            onChange={setSelectedSubTopicIds}
-            placeholder="Tutti i sotto-argomenti"
           />
         )}
 

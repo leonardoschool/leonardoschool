@@ -5,15 +5,14 @@
  * The materials router handles:
  * - Category CRUD operations
  * - Subject CRUD operations
- * - Topic and SubTopic management
+ * - Topic management
  * - Material CRUD and access control
  * - View/download tracking
  *
  * Procedures tested:
  * - Category: getCategories, getAllCategories, createCategory, updateCategory, deleteCategory
  * - Subject: getSubjects, getAllSubjects, getHierarchy, createSubject, updateSubject, deleteSubject
- * - Topic: getTopics, getSubjectWithTopics, createTopic, updateTopic, deleteTopic
- * - SubTopic: createSubTopic, updateSubTopic, deleteSubTopic, reorderTopics, reorderSubTopics
+ * - Topic: getTopics, getSubjectWithTopics, createTopic, updateTopic, deleteTopic, reorderTopics
  * - Material: getAll, getById, create, createBatch, update, delete, recordView, recordDownload
  * - Access: addStudentAccess, removeStudentAccess, addGroupAccess, removeGroupAccess
  * - Student: getMyMaterials, getMaterial, getStats
@@ -27,7 +26,6 @@ import type {
   MaterialCategory,
   CustomSubject,
   Topic,
-  SubTopic,
   MaterialType,
   MaterialVisibility,
   DifficultyLevel,
@@ -98,25 +96,6 @@ function createMockTopic(overrides: Partial<Topic> = {}): Topic {
 }
 
 /**
- * Create a mock subtopic
- */
-function _createMockSubTopic(overrides: Partial<SubTopic> = {}): SubTopic {
-  return {
-    id: faker.string.uuid(),
-    name: faker.lorem.words(2),
-    description: faker.lorem.sentence(),
-    difficulty: 'MEDIUM' as DifficultyLevel,
-    order: faker.number.int({ min: 0, max: 10 }),
-    isActive: true,
-    topicId: faker.string.uuid(),
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    createdBy: faker.string.uuid(),
-    ...overrides,
-  };
-}
-
-/**
  * Create a mock material
  */
 function createMockMaterial(overrides: Partial<Material> = {}): Material {
@@ -133,7 +112,6 @@ function createMockMaterial(overrides: Partial<Material> = {}): Material {
     visibility: 'ALL_STUDENTS' as MaterialVisibility,
     subjectId: faker.string.uuid(),
     topicId: null,
-    subTopicId: null,
     tags: [faker.lorem.word(), faker.lorem.word()],
     order: 0,
     isActive: true,
@@ -328,13 +306,10 @@ describe('Materials Router', () => {
       it('should return nested structure', () => {
         const include = {
           topics: {
-            include: {
-              subTopics: true,
-            },
             orderBy: { order: 'asc' },
           },
         };
-        expect(include.topics.include.subTopics).toBe(true);
+        expect(include.topics.orderBy.order).toBe('asc');
       });
     });
 
@@ -383,11 +358,11 @@ describe('Materials Router', () => {
         expect(input.subjectId).toBeDefined();
       });
 
-      it('should include subtopic count', () => {
+      it('should include material count', () => {
         const include = {
-          _count: { select: { subTopics: true } },
+          _count: { select: { materials: true } },
         };
-        expect(include._count.select.subTopics).toBe(true);
+        expect(include._count.select.materials).toBe(true);
       });
     });
 
@@ -437,52 +412,6 @@ describe('Materials Router', () => {
       });
     });
 
-    describe('deleteTopic (protectedProcedure)', () => {
-      it('should cascade delete subtopics', () => {
-        const cascadeRule = 'Cascade';
-        expect(cascadeRule).toBe('Cascade');
-      });
-    });
-  });
-
-  // ==================== SUBTOPIC OPERATIONS ====================
-  describe('SubTopic Operations', () => {
-    describe('createSubTopic (protectedProcedure)', () => {
-      it('should require name and topicId', () => {
-        const input = {
-          name: 'DNA Replicazione',
-          topicId: faker.string.uuid(),
-        };
-        expect(input.name).toBeDefined();
-        expect(input.topicId).toBeDefined();
-      });
-
-      it('should enforce unique name within topic', () => {
-        const error = new TRPCError({
-          code: 'CONFLICT',
-          message: 'Un sotto-argomento con questo nome esiste già',
-        });
-        expect(error.code).toBe('CONFLICT');
-      });
-    });
-
-    describe('updateSubTopic (protectedProcedure)', () => {
-      it('should require subtopic id', () => {
-        const input = { id: faker.string.uuid() };
-        expect(input.id).toBeDefined();
-      });
-    });
-
-    describe('deleteSubTopic (protectedProcedure)', () => {
-      it('should throw NOT_FOUND for non-existent subtopic', () => {
-        const error = new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Sotto-argomento non trovato',
-        });
-        expect(error.code).toBe('NOT_FOUND');
-      });
-    });
-
     describe('reorderTopics (protectedProcedure)', () => {
       it('should accept array of topic IDs with new orders', () => {
         const input = {
@@ -494,19 +423,6 @@ describe('Materials Router', () => {
           ],
         };
         expect(input.topics).toHaveLength(3);
-      });
-    });
-
-    describe('reorderSubTopics (protectedProcedure)', () => {
-      it('should accept array of subtopic IDs with new orders', () => {
-        const input = {
-          topicId: faker.string.uuid(),
-          subTopics: [
-            { id: 'sub1', order: 0 },
-            { id: 'sub2', order: 1 },
-          ],
-        };
-        expect(input.subTopics).toHaveLength(2);
       });
     });
   });
@@ -582,7 +498,6 @@ describe('Materials Router', () => {
         const include = {
           subject: true,
           topic: true,
-          subTopic: true,
           categories: { include: { category: true } },
           groupAccess: { include: { group: true } },
           studentAccess: { include: { student: { include: { user: true } } } },
@@ -892,7 +807,7 @@ describe('Materials Router', () => {
   // ==================== ERROR HANDLING ====================
   describe('Error Handling', () => {
     it('should use NOT_FOUND for missing resources', () => {
-      const resources = ['material', 'category', 'subject', 'topic', 'subtopic'];
+      const resources = ['material', 'category', 'subject', 'topic'];
       resources.forEach(() => {
         const error = new TRPCError({
           code: 'NOT_FOUND',

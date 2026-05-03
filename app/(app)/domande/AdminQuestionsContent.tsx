@@ -33,12 +33,15 @@ import {
   Eye,
   Tag,
   Download,
+  Languages,
 } from 'lucide-react';
 import {
   questionTypeLabels,
+  questionLanguageLabels,
   questionStatusLabels,
   difficultyLabels,
   type QuestionType,
+  type QuestionLanguage,
   type QuestionStatus,
   type DifficultyLevel,
 } from '@/lib/validations/questionValidation';
@@ -64,6 +67,11 @@ const difficultyColors: Record<DifficultyLevel, string> = {
   HARD: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
 };
 
+const languageColors: Record<QuestionLanguage, string> = {
+  IT: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300',
+  EN: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
+};
+
 export default function AdminQuestionsContent() {
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
@@ -76,6 +84,7 @@ export default function AdminQuestionsContent() {
   const [type, setType] = useState<QuestionType | ''>('');
   const [status, setStatus] = useState<QuestionStatus | ''>('');
   const [difficulty, setDifficulty] = useState<DifficultyLevel | ''>('');
+  const [language, setLanguage] = useState<QuestionLanguage | ''>('');
   const [selectedTagId, setSelectedTagId] = useState<string>('');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
@@ -84,6 +93,7 @@ export default function AdminQuestionsContent() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showFilters, setShowFilters] = useState(false);
   const [showBulkSubjectSelect, setShowBulkSubjectSelect] = useState(false);
+  const [showBulkLanguageSelect, setShowBulkLanguageSelect] = useState(false);
   const [showBulkTagSelect, setShowBulkTagSelect] = useState(false);
   const [bulkTagMode, setBulkTagMode] = useState<'add' | 'remove'>('add');
   const [selectedBulkTagIds, setSelectedBulkTagIds] = useState<Set<string>>(new Set());
@@ -125,6 +135,21 @@ export default function AdminQuestionsContent() {
     return () => document.removeEventListener('click', handleClick);
   }, [showBulkSubjectSelect]);
 
+  // Close bulk language dropdown on click outside
+  useEffect(() => {
+    if (!showBulkLanguageSelect) return;
+
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-bulk-language-dropdown]')) {
+        setShowBulkLanguageSelect(false);
+      }
+    };
+
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [showBulkLanguageSelect]);
+
   // Close bulk tag dropdown on click outside
   useEffect(() => {
     if (!showBulkTagSelect) return;
@@ -151,6 +176,7 @@ export default function AdminQuestionsContent() {
     type: type || undefined,
     status: status || undefined,
     difficulty: difficulty || undefined,
+    language: (language as QuestionLanguage) || undefined,
     tagIds: selectedTagId ? [selectedTagId] : undefined,
     includeAnswers: false,
     includeDrafts: true,
@@ -249,6 +275,19 @@ export default function AdminQuestionsContent() {
     onError: handleMutationError,
   });
 
+  const bulkLanguageMutation = trpc.questions.bulkUpdateLanguage.useMutation({
+    onSuccess: (result) => {
+      showSuccess(
+        'Lingua aggiornata',
+        `${result.updated} domande impostate su ${questionLanguageLabels[result.language as QuestionLanguage]}.`
+      );
+      utils.questions.getQuestions.invalidate();
+      setSelectedIds(new Set());
+      setShowBulkLanguageSelect(false);
+    },
+    onError: handleMutationError,
+  });
+
   const bulkTagMutation = trpc.questions.bulkAddTags.useMutation({
     onSuccess: (result) => {
       const modeText = bulkTagMode === 'add' ? 'aggiunti a' : 'rimossi da';
@@ -327,11 +366,12 @@ export default function AdminQuestionsContent() {
     setType('');
     setStatus('');
     setDifficulty('');
+    setLanguage('');
     setSelectedTagId('');
     setPage(1);
   };
 
-  const hasActiveFilters = search || subjectId || topicId || type || status || difficulty || selectedTagId;
+  const hasActiveFilters = search || subjectId || topicId || type || status || difficulty || language || selectedTagId;
 
   // Get unique tags from selected questions for replace mode
   const selectedQuestionsTags = useMemo(() => {
@@ -520,7 +560,7 @@ export default function AdminQuestionsContent() {
             Filtri
             {hasActiveFilters && (
               <span className={`w-5 h-5 rounded-full ${colors.primary.bg} text-white text-xs flex items-center justify-center`}>
-                {[subjectId, topicId, type, status, difficulty, selectedTagId].filter(Boolean).length}
+                {[subjectId, topicId, type, status, difficulty, language, selectedTagId].filter(Boolean).length}
               </span>
             )}
           </button>
@@ -529,7 +569,7 @@ export default function AdminQuestionsContent() {
         {/* Expanded Filters */}
         {showFilters && (
           <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
               <CustomSelect
                 label="Materia"
                 options={subjectOptions}
@@ -593,6 +633,19 @@ export default function AdminQuestionsContent() {
                 }}
               />
               <CustomSelect
+                label="Lingua"
+                options={[
+                  { value: '', label: 'Tutte le lingue' },
+                  { value: 'IT', label: questionLanguageLabels.IT },
+                  { value: 'EN', label: questionLanguageLabels.EN },
+                ]}
+                value={language}
+                onChange={(val) => {
+                  setLanguage(val as QuestionLanguage | '');
+                  setPage(1);
+                }}
+              />
+              <CustomSelect
                 label="Tag"
                 options={tagOptions}
                 value={selectedTagId}
@@ -651,6 +704,38 @@ export default function AdminQuestionsContent() {
                         style={{ backgroundColor: subject.color || '#6b7280' }}
                       />
                       {subject.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* Change Language Dropdown */}
+            <div className="relative" data-bulk-language-dropdown>
+              <button
+                onClick={() => setShowBulkLanguageSelect(!showBulkLanguageSelect)}
+                disabled={bulkLanguageMutation.isPending}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 hover:bg-sky-200 dark:hover:bg-sky-900/50 transition-colors text-sm"
+              >
+                <Languages className="w-4 h-4" />
+                Cambia Lingua
+              </button>
+              {showBulkLanguageSelect && (
+                <div className={`absolute top-full left-0 mt-1 z-50 min-w-[180px] ${colors.background.card} ${colors.effects.shadow.lg} rounded-lg border ${colors.border.primary} py-1`}>
+                  {(['IT', 'EN'] as QuestionLanguage[]).map((languageOption) => (
+                    <button
+                      key={languageOption}
+                      onClick={() => {
+                        bulkLanguageMutation.mutate({
+                          ids: [...selectedIds],
+                          language: languageOption,
+                        });
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:${colors.background.secondary} ${colors.text.primary} flex items-center gap-2 transition-colors`}
+                    >
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${languageColors[languageOption]}`}>
+                        {languageOption}
+                      </span>
+                      {questionLanguageLabels[languageOption]}
                     </button>
                   ))}
                 </div>
@@ -824,6 +909,9 @@ export default function AdminQuestionsContent() {
                 <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden xl:table-cell`}>
                   Tipo
                 </th>
+                <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden lg:table-cell`}>
+                  Lingua
+                </th>
                 <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden sm:table-cell`}>
                   Stato
                 </th>
@@ -841,7 +929,7 @@ export default function AdminQuestionsContent() {
             <tbody>
               {questions.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center">
+                  <td colSpan={10} className="px-4 py-12 text-center">
                     <div className="flex flex-col items-center">
                       <FileText className={`w-12 h-12 ${colors.text.muted} mb-3`} />
                       <p className={`font-medium ${colors.text.primary}`}>Nessuna domanda trovata</p>
@@ -932,6 +1020,11 @@ export default function AdminQuestionsContent() {
                     <td className="px-3 py-3 hidden xl:table-cell">
                       <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${typeColors[question.type as QuestionType]}`}>
                         {questionTypeLabels[question.type as QuestionType]}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 hidden lg:table-cell">
+                      <span className={`text-xs px-2 py-1 rounded-full font-semibold whitespace-nowrap ${languageColors[question.language as QuestionLanguage]}`}>
+                        {question.language}
                       </span>
                     </td>
                     <td className="px-3 py-3 hidden sm:table-cell">

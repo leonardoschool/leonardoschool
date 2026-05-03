@@ -31,6 +31,11 @@ enum QuestionType {
   OPEN_TEXT // Risposta aperta/libera
 }
 
+enum QuestionLanguage {
+  IT // Italiano
+  EN // Inglese
+}
+
 enum QuestionStatus {
   DRAFT // Bozza, non visibile agli studenti
   PUBLISHED // Pubblicata, visibile e utilizzabile
@@ -378,6 +383,7 @@ model Student {
   groupMemberships       GroupMember[] // Gruppi a cui appartiene
   referenceGroups        Group[]                         @relation("GroupReferenceStudent") // Gruppi di cui è riferimento
   groupReferenceLinks    GroupStudentReference[]
+  simulationTemplateAssignments SimulationTemplateAssignment[]
 
   // Question-related relations
   questionFeedbacks     QuestionFeedback[] // Segnalazioni domande
@@ -514,7 +520,6 @@ model Question {
   // Collegamento a CustomSubject invece di enum (più flessibile)
   subjectId  String?
   topicId    String? // Argomento
-  subTopicId String? // Sotto-argomento
   difficulty DifficultyLevel @default(MEDIUM)
 
   // === SCORING ===
@@ -549,6 +554,7 @@ model Question {
   year       Int? // Anno in cui è apparsa (es. esame 2023)
   source     String? // Fonte ("Medicina 2023", "Veterinaria 2022")
   externalId String? // ID esterno per import
+  language   QuestionLanguage @default(IT) // Lingua della domanda
 
   // === STATISTICS ===
   timesUsed      Int    @default(0) // Volte usata in simulazioni
@@ -573,7 +579,6 @@ model Question {
   // === RELATIONS ===
   subject   CustomSubject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
   topic     Topic?         @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  subTopic  SubTopic?      @relation(fields: [subTopicId], references: [id], onDelete: SetNull)
   createdBy User?          @relation("QuestionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   answers               QuestionAnswer[] // Risposte possibili
@@ -587,11 +592,11 @@ model Question {
 
   @@index([subjectId])
   @@index([topicId])
-  @@index([subTopicId])
   @@index([difficulty])
   @@index([type])
   @@index([status])
   @@index([year])
+  @@index([language])
   @@index([createdById])
   @@map("questions")
 }
@@ -998,6 +1003,8 @@ model SimulationTemplate {
   hasSections Boolean @default(true)
   sections    Json?
 
+  isSelfPracticeTemplate Boolean @default(false)
+
   enableAntiCheat     Boolean @default(false)
   forceFullscreen     Boolean @default(false)
   blockTabChange      Boolean @default(false)
@@ -1009,11 +1016,33 @@ model SimulationTemplate {
 
   createdBy          User?        @relation("SimulationTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   simulationsCreated Simulation[] @relation("SimulationsFromTemplate")
+  templateAssignments SimulationTemplateAssignment[]
 
   @@index([status])
   @@index([type])
   @@index([createdById])
+  @@index([isSelfPracticeTemplate])
   @@map("simulation_templates")
+}
+
+model SimulationTemplateAssignment {
+  id          String   @id @default(cuid())
+  templateId  String
+  studentId   String?
+  groupId     String?
+  assignedById String?
+  createdAt   DateTime @default(now())
+
+  template SimulationTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  student  Student?           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  group    Group?             @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, studentId])
+  @@unique([templateId, groupId])
+  @@index([templateId])
+  @@index([studentId])
+  @@index([groupId])
+  @@map("simulation_template_assignments")
 }
 
 // Flexible assignment to students, groups
@@ -1960,6 +1989,7 @@ model CustomSubject {
   icon        String? // Lucide icon name
   order       Int     @default(0)
   isActive    Boolean @default(true)
+  hasEnglishQuestions Boolean @default(false) // True when the subject contains EN questions
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1986,7 +2016,6 @@ model Topic {
   subjectId String
   subject   CustomSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
-  subTopics SubTopic[]
   questions Question[] // Domande di questo argomento
   materials Material[] // Materiali di questo argomento
 
@@ -1999,32 +2028,6 @@ model Topic {
   @@index([isActive])
   @@index([order])
   @@map("topics")
-}
-
-// SubTopics (Sotto-argomenti) - Sub-topics within a topic
-model SubTopic {
-  id          String          @id @default(cuid())
-  name        String
-  description String?
-  difficulty  DifficultyLevel @default(MEDIUM)
-  order       Int             @default(0)
-  isActive    Boolean         @default(true)
-
-  topicId String
-  topic   Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
-
-  questions Question[] // Domande di questo sotto-argomento
-  materials Material[] // Materiali di questo sotto-argomento
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  createdBy String? // userId who created it
-
-  @@unique([topicId, name])
-  @@index([topicId])
-  @@index([isActive])
-  @@index([order])
-  @@map("sub_topics")
 }
 
 model Material {
@@ -2043,10 +2046,9 @@ model Material {
   // Visibility settings
   visibility MaterialVisibility @default(ALL_STUDENTS)
 
-  // Classification: Subject > Topic > SubTopic
+  // Classification: Subject > Topic
   subjectId  String?
   topicId    String?
-  subTopicId String?
 
   // Metadata
   tags     String[]
@@ -2064,7 +2066,6 @@ model Material {
   // Relations
   subject       CustomSubject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
   topic         Topic?                  @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  subTopic      SubTopic?               @relation(fields: [subTopicId], references: [id], onDelete: SetNull)
   categories    MaterialCategoryLink[]
   groupAccess   MaterialGroupAccess[]
   studentAccess MaterialStudentAccess[]
@@ -2073,7 +2074,6 @@ model Material {
   @@index([visibility])
   @@index([subjectId])
   @@index([topicId])
-  @@index([subTopicId])
   @@index([isActive])
   @@map("materials")
 }
@@ -2250,6 +2250,7 @@ model Group {
 
   // Simulation assignments
   simulationAssignments SimulationAssignment[]
+  simulationTemplateAssignments SimulationTemplateAssignment[]
 
   // Material access
   materialAccess         MaterialGroupAccess[]

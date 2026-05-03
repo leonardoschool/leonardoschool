@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import type { Prisma } from '@prisma/client';
-import { router, staffProcedure } from '../init';
+import type { Prisma, PrismaClient } from '@prisma/client';
+import { router, staffProcedure, studentProcedure } from '../init';
 import {
   createSimulationTemplateSchema,
   simulationTemplateFilterSchema,
@@ -17,8 +17,105 @@ function cleanTemplateSections(sections: z.infer<typeof createSimulationTemplate
     ...section,
     order: section.order ?? index,
     questionCount: section.questionCount ?? 0,
+    topicIds: section.topicIds ?? [],
     questionIds: [],
   }));
+}
+
+async function validateTemplateAssignments(
+  ctx: { prisma: Prisma.TransactionClient | PrismaClient; user: { id: string; role: string; collaborator?: { id: string } | null } },
+  isSelfPracticeTemplate: boolean,
+  assignedStudentIds: string[],
+  assignedGroupIds: string[]
+) {
+  if (!isSelfPracticeTemplate) return;
+
+  if (assignedStudentIds.length === 0 && assignedGroupIds.length === 0) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Seleziona almeno uno studente o un gruppo per il template di autoesercitazione',
+    });
+  }
+
+  if (assignedStudentIds.length > 0) {
+    const count = await ctx.prisma.student.count({ where: { id: { in: assignedStudentIds } } });
+    if (count !== assignedStudentIds.length) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Uno o più studenti non sono stati trovati' });
+    }
+  }
+
+  if (assignedGroupIds.length > 0) {
+    const count = await ctx.prisma.group.count({ where: { id: { in: assignedGroupIds }, isActive: true } });
+    if (count !== assignedGroupIds.length) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Uno o più gruppi non sono stati trovati' });
+    }
+  }
+
+  if (ctx.user.role !== 'COLLABORATOR') return;
+
+  const collaboratorId = ctx.user.collaborator?.id;
+  if (!collaboratorId) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Collaboratore non trovato' });
+  }
+
+  const allowedGroups = await ctx.prisma.group.findMany({
+    where: {
+      OR: [
+        { referenceCollaboratorId: collaboratorId },
+        { referenceCollaborators: { some: { collaboratorId } } },
+      ],
+    },
+    select: { id: true },
+  });
+  const allowedGroupIds = new Set(allowedGroups.map((group) => group.id));
+
+  if (assignedGroupIds.some((groupId) => !allowedGroupIds.has(groupId))) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Non puoi assegnare template a gruppi che non gestisci' });
+  }
+
+  if (assignedStudentIds.length > 0) {
+    const allowedStudents = await ctx.prisma.groupMember.findMany({
+      where: { groupId: { in: Array.from(allowedGroupIds) }, studentId: { not: null } },
+      select: { studentId: true },
+    });
+    const allowedStudentIds = new Set(allowedStudents.map((member) => member.studentId).filter(Boolean));
+
+    if (assignedStudentIds.some((studentId) => !allowedStudentIds.has(studentId))) {
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'Non puoi assegnare template a studenti che non sono nei tuoi gruppi' });
+    }
+  }
+}
+
+async function replaceTemplateAssignments(
+  tx: Prisma.TransactionClient,
+  templateId: string,
+  assignedById: string,
+  isSelfPracticeTemplate: boolean,
+  assignedStudentIds: string[],
+  assignedGroupIds: string[]
+) {
+  await tx.simulationTemplateAssignment.deleteMany({ where: { templateId } });
+
+  if (!isSelfPracticeTemplate) return;
+
+  const assignmentRows = [
+    ...Array.from(new Set(assignedStudentIds)).map((studentId) => ({
+      templateId,
+      studentId,
+      groupId: null,
+      assignedById,
+    })),
+    ...Array.from(new Set(assignedGroupIds)).map((groupId) => ({
+      templateId,
+      studentId: null,
+      groupId,
+      assignedById,
+    })),
+  ];
+
+  if (assignmentRows.length > 0) {
+    await tx.simulationTemplateAssignment.createMany({ data: assignmentRows, skipDuplicates: true });
+  }
 }
 
 function buildTemplateWhereClause(
@@ -82,7 +179,7 @@ export const simulationTemplatesRouter = router({
           orderBy: { [sortBy]: sortOrder },
           include: {
             createdBy: { select: { id: true, name: true, role: true } },
-            _count: { select: { simulationsCreated: true } },
+            _count: { select: { simulationsCreated: true, templateAssignments: true } },
           },
         }),
       ]);
@@ -105,6 +202,16 @@ export const simulationTemplatesRouter = router({
         where: { id: input.id },
         include: {
           createdBy: { select: { id: true, name: true, role: true, email: true } },
+          templateAssignments: {
+            select: {
+              id: true,
+              studentId: true,
+              groupId: true,
+              student: { select: { id: true, matricola: true, user: { select: { name: true, email: true } } } },
+              group: { select: { id: true, name: true } },
+            },
+            orderBy: { createdAt: 'asc' },
+          },
           simulationsCreated: {
             select: { id: true, title: true, status: true, type: true, createdAt: true },
             orderBy: { createdAt: 'desc' },
@@ -122,42 +229,60 @@ export const simulationTemplatesRouter = router({
     .mutation(async ({ ctx, input }) => {
       const sections = cleanTemplateSections(input.sections);
       const totalQuestions = input.totalQuestions || sumTemplateQuestions(sections);
+      const assignedStudentIds = input.assignedStudentIds ?? [];
+      const assignedGroupIds = input.assignedGroupIds ?? [];
 
-      return ctx.prisma.simulationTemplate.create({
-        data: {
-          title: input.title,
-          description: input.description,
-          type: 'CUSTOM',
-          status: 'PUBLISHED',
-          createdBy: { connect: { id: ctx.user.id } },
-          creatorRole: ctx.user.role,
-          isOfficial: false,
-          durationMinutes: input.durationMinutes,
-          totalQuestions,
-          showResults: input.showResults,
-          showCorrectAnswers: input.showCorrectAnswers,
-          allowReview: input.allowReview,
-          randomizeOrder: input.randomizeOrder,
-          randomizeAnswers: input.randomizeAnswers,
-          useQuestionPoints: input.useQuestionPoints,
-          correctPoints: input.correctPoints,
-          wrongPoints: input.wrongPoints,
-          blankPoints: input.blankPoints,
-          maxScore: input.maxScore,
-          passingScore: input.passingScore,
-          isRepeatable: input.isRepeatable,
-          maxAttempts: input.maxAttempts,
-          isPaperBased: false,
-          showSectionsInPaper: true,
-          trackAttendance: false,
-          hasSections: true,
-          sections: sections as Prisma.InputJsonValue,
-          enableAntiCheat: false,
-          forceFullscreen: false,
-          blockTabChange: false,
-          blockCopyPaste: false,
-          logSuspiciousEvents: false,
-        },
+      await validateTemplateAssignments(ctx, input.isSelfPracticeTemplate, assignedStudentIds, assignedGroupIds);
+
+      return ctx.prisma.$transaction(async (tx) => {
+        const template = await tx.simulationTemplate.create({
+          data: {
+            title: input.title,
+            description: input.description,
+            type: 'CUSTOM',
+            status: 'PUBLISHED',
+            createdBy: { connect: { id: ctx.user.id } },
+            creatorRole: ctx.user.role,
+            isOfficial: false,
+            durationMinutes: input.durationMinutes,
+            totalQuestions,
+            showResults: input.showResults,
+            showCorrectAnswers: input.showCorrectAnswers,
+            allowReview: input.allowReview,
+            randomizeOrder: input.randomizeOrder,
+            randomizeAnswers: input.randomizeAnswers,
+            useQuestionPoints: input.useQuestionPoints,
+            correctPoints: input.correctPoints,
+            wrongPoints: input.wrongPoints,
+            blankPoints: input.blankPoints,
+            maxScore: input.maxScore,
+            passingScore: input.passingScore,
+            isRepeatable: input.isRepeatable,
+            maxAttempts: input.maxAttempts,
+            isPaperBased: false,
+            showSectionsInPaper: true,
+            trackAttendance: false,
+            hasSections: true,
+            sections: sections as Prisma.InputJsonValue,
+            isSelfPracticeTemplate: input.isSelfPracticeTemplate,
+            enableAntiCheat: false,
+            forceFullscreen: false,
+            blockTabChange: false,
+            blockCopyPaste: false,
+            logSuspiciousEvents: false,
+          },
+        });
+
+        await replaceTemplateAssignments(
+          tx,
+          template.id,
+          ctx.user.id,
+          input.isSelfPracticeTemplate,
+          assignedStudentIds,
+          assignedGroupIds
+        );
+
+        return template;
       });
     }),
 
@@ -176,30 +301,53 @@ export const simulationTemplatesRouter = router({
 
       const sections = input.sections ? cleanTemplateSections(input.sections) : undefined;
       const totalQuestions = sections ? (input.totalQuestions || sumTemplateQuestions(sections)) : input.totalQuestions;
+      const nextIsSelfPracticeTemplate = input.isSelfPracticeTemplate ?? false;
+      const assignedStudentIds = input.assignedStudentIds ?? [];
+      const assignedGroupIds = input.assignedGroupIds ?? [];
 
-      return ctx.prisma.simulationTemplate.update({
-        where: { id: input.id },
-        data: {
-          ...(input.title !== undefined && { title: input.title }),
-          ...(input.description !== undefined && { description: input.description }),
-          ...(input.status !== undefined && { status: input.status }),
-          ...(input.durationMinutes !== undefined && { durationMinutes: input.durationMinutes }),
-          ...(totalQuestions !== undefined && { totalQuestions }),
-          ...(input.showResults !== undefined && { showResults: input.showResults }),
-          ...(input.showCorrectAnswers !== undefined && { showCorrectAnswers: input.showCorrectAnswers }),
-          ...(input.allowReview !== undefined && { allowReview: input.allowReview }),
-          ...(input.randomizeOrder !== undefined && { randomizeOrder: input.randomizeOrder }),
-          ...(input.randomizeAnswers !== undefined && { randomizeAnswers: input.randomizeAnswers }),
-          ...(input.useQuestionPoints !== undefined && { useQuestionPoints: input.useQuestionPoints }),
-          ...(input.correctPoints !== undefined && { correctPoints: input.correctPoints }),
-          ...(input.wrongPoints !== undefined && { wrongPoints: input.wrongPoints }),
-          ...(input.blankPoints !== undefined && { blankPoints: input.blankPoints }),
-          ...(input.maxScore !== undefined && { maxScore: input.maxScore }),
-          ...(input.passingScore !== undefined && { passingScore: input.passingScore }),
-          ...(input.isRepeatable !== undefined && { isRepeatable: input.isRepeatable }),
-          ...(input.maxAttempts !== undefined && { maxAttempts: input.maxAttempts }),
-          ...(sections !== undefined && { sections: sections as Prisma.InputJsonValue, hasSections: true }),
-        },
+      if (input.isSelfPracticeTemplate !== undefined || input.assignedStudentIds !== undefined || input.assignedGroupIds !== undefined) {
+        await validateTemplateAssignments(ctx, nextIsSelfPracticeTemplate, assignedStudentIds, assignedGroupIds);
+      }
+
+      return ctx.prisma.$transaction(async (tx) => {
+        const updated = await tx.simulationTemplate.update({
+          where: { id: input.id },
+          data: {
+            ...(input.title !== undefined && { title: input.title }),
+            ...(input.description !== undefined && { description: input.description }),
+            ...(input.status !== undefined && { status: input.status }),
+            ...(input.durationMinutes !== undefined && { durationMinutes: input.durationMinutes }),
+            ...(totalQuestions !== undefined && { totalQuestions }),
+            ...(input.showResults !== undefined && { showResults: input.showResults }),
+            ...(input.showCorrectAnswers !== undefined && { showCorrectAnswers: input.showCorrectAnswers }),
+            ...(input.allowReview !== undefined && { allowReview: input.allowReview }),
+            ...(input.randomizeOrder !== undefined && { randomizeOrder: input.randomizeOrder }),
+            ...(input.randomizeAnswers !== undefined && { randomizeAnswers: input.randomizeAnswers }),
+            ...(input.useQuestionPoints !== undefined && { useQuestionPoints: input.useQuestionPoints }),
+            ...(input.correctPoints !== undefined && { correctPoints: input.correctPoints }),
+            ...(input.wrongPoints !== undefined && { wrongPoints: input.wrongPoints }),
+            ...(input.blankPoints !== undefined && { blankPoints: input.blankPoints }),
+            ...(input.maxScore !== undefined && { maxScore: input.maxScore }),
+            ...(input.passingScore !== undefined && { passingScore: input.passingScore }),
+            ...(input.isRepeatable !== undefined && { isRepeatable: input.isRepeatable }),
+            ...(input.maxAttempts !== undefined && { maxAttempts: input.maxAttempts }),
+            ...(input.isSelfPracticeTemplate !== undefined && { isSelfPracticeTemplate: input.isSelfPracticeTemplate }),
+            ...(sections !== undefined && { sections: sections as Prisma.InputJsonValue, hasSections: true }),
+          },
+        });
+
+        if (input.isSelfPracticeTemplate !== undefined || input.assignedStudentIds !== undefined || input.assignedGroupIds !== undefined) {
+          await replaceTemplateAssignments(
+            tx,
+            input.id,
+            ctx.user.id,
+            nextIsSelfPracticeTemplate,
+            assignedStudentIds,
+            assignedGroupIds
+          );
+        }
+
+        return updated;
       });
     }),
 
@@ -237,9 +385,45 @@ export const simulationTemplatesRouter = router({
           ...rest,
           title: `Copia di ${original!.title}`,
           status: 'DRAFT',
+          isSelfPracticeTemplate: false,
           createdBy: { connect: { id: ctx.user.id } },
           creatorRole: ctx.user.role,
         },
       });
     }),
+
+  listMySelfPracticeTemplates: studentProcedure.query(async ({ ctx }) => {
+    const student = await ctx.prisma.student.findUnique({
+      where: { userId: ctx.user.id },
+      select: {
+        id: true,
+        groupMemberships: { select: { groupId: true } },
+      },
+    });
+
+    if (!student) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Profilo studente non trovato' });
+    }
+
+    const groupIds = student.groupMemberships.map((membership) => membership.groupId);
+
+    return ctx.prisma.simulationTemplate.findMany({
+      where: {
+        status: 'PUBLISHED',
+        isSelfPracticeTemplate: true,
+        templateAssignments: {
+          some: {
+            OR: [
+              { studentId: student.id },
+              ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
+            ],
+          },
+        },
+      },
+      orderBy: { title: 'asc' },
+      include: {
+        createdBy: { select: { name: true, role: true } },
+      },
+    });
+  }),
 });

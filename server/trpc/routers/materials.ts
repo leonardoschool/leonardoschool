@@ -349,7 +349,7 @@ export const materialsRouter = router({
     }));
   }),
 
-  // Get full hierarchy: Subjects → Topics → SubTopics (for material classification)
+  // Get full hierarchy: Subjects → Topics (for material classification)
   getHierarchy: protectedProcedure
     .input(z.object({
       includeInactive: z.boolean().optional().default(false),
@@ -365,23 +365,8 @@ export const materialsRouter = router({
             where: activeFilter,
             orderBy: { order: 'asc' },
             include: {
-              subTopics: {
-                where: activeFilter,
-                orderBy: { order: 'asc' },
-                select: {
-                  id: true,
-                  name: true,
-                  description: true,
-                  difficulty: true,
-                  order: true,
-                  isActive: true,
-                  _count: {
-                    select: { materials: true },
-                  },
-                },
-              },
               _count: {
-                select: { materials: true, subTopics: true },
+                select: { materials: true },
               },
             },
           },
@@ -490,7 +475,7 @@ export const materialsRouter = router({
 
   // ==================== TOPICS (Argomenti) ====================
 
-  // Get all topics for a subject with subtopics
+  // Get all topics for a subject
   getTopics: protectedProcedure
     .input(z.object({
       subjectId: z.string(),
@@ -504,18 +489,14 @@ export const materialsRouter = router({
         },
         orderBy: { order: 'asc' },
         include: {
-          subTopics: {
-            where: input.includeInactive ? {} : { isActive: true },
-            orderBy: { order: 'asc' },
-          },
           _count: {
-            select: { subTopics: true },
+            select: { materials: true },
           },
         },
       });
     }),
 
-  // Get subject with all topics and subtopics (for editing)
+  // Get subject with all topics (for editing)
   getSubjectWithTopics: protectedProcedure
     .input(z.object({ subjectId: z.string() }))
     .query(async ({ ctx, input }) => {
@@ -524,11 +505,6 @@ export const materialsRouter = router({
         include: {
           topics: {
             orderBy: { order: 'asc' },
-            include: {
-              subTopics: {
-                orderBy: { order: 'asc' },
-              },
-            },
           },
         },
       });
@@ -579,9 +555,6 @@ export const materialsRouter = router({
           order: maxOrder,
           subjectId: input.subjectId,
           createdBy: userId,
-        },
-        include: {
-          subTopics: true,
         },
       });
     }),
@@ -636,9 +609,6 @@ export const materialsRouter = router({
       return ctx.prisma.topic.update({
         where: { id },
         data,
-        include: {
-          subTopics: true,
-        },
       });
     }),
 
@@ -679,174 +649,7 @@ export const materialsRouter = router({
         }
       }
 
-      // Delete topic (cascades to subtopics)
       return ctx.prisma.topic.delete({
-        where: { id: input.id },
-      });
-    }),
-
-  // ==================== SUBTOPICS (Sotto-argomenti) ====================
-
-  // Create subtopic
-  createSubTopic: protectedProcedure
-    .input(z.object({
-      topicId: z.string(),
-      name: z.string().min(1).max(200),
-      description: z.string().optional(),
-      difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']).default('MEDIUM'),
-      order: z.number().optional(),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      const userId = ctx.user.id;
-      const userRole = ctx.user.role;
-
-      // Get topic with subject
-      const topic = await ctx.prisma.topic.findUnique({
-        where: { id: input.topicId },
-        include: { subject: true },
-      });
-
-      if (!topic) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Argomento non trovato.',
-        });
-      }
-
-      // Check permissions
-      if (userRole !== 'ADMIN') {
-        const collaborator = await ctx.prisma.collaborator.findFirst({
-          where: {
-            userId,
-            subjects: {
-              some: { subjectId: topic.subjectId },
-            },
-          },
-        });
-        
-        if (!collaborator) {
-          throw new TRPCError({
-            code: 'FORBIDDEN',
-            message: 'Non hai i permessi per gestire questa materia.',
-          });
-        }
-      }
-
-      // Get max order if not provided
-      const maxOrder = input.order ?? await ctx.prisma.subTopic.count({
-        where: { topicId: input.topicId },
-      });
-
-      return ctx.prisma.subTopic.create({
-        data: {
-          name: input.name,
-          description: input.description,
-          difficulty: input.difficulty,
-          order: maxOrder,
-          topicId: input.topicId,
-          createdBy: userId,
-        },
-      });
-    }),
-
-  // Update subtopic
-  updateSubTopic: protectedProcedure
-    .input(z.object({
-      id: z.string(),
-      name: z.string().min(1).max(200).optional(),
-      description: z.string().optional().nullable(),
-      difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']).optional(),
-      order: z.number().optional(),
-      isActive: z.boolean().optional(),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      const userId = ctx.user.id;
-      const userRole = ctx.user.role;
-
-      // Get subtopic with topic and subject
-      const subTopic = await ctx.prisma.subTopic.findUnique({
-        where: { id: input.id },
-        include: {
-          topic: {
-            include: { subject: true },
-          },
-        },
-      });
-
-      if (!subTopic) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Sotto-argomento non trovato.',
-        });
-      }
-
-      // Check permissions
-      if (userRole !== 'ADMIN') {
-        const collaborator = await ctx.prisma.collaborator.findFirst({
-          where: {
-            userId,
-            subjects: {
-              some: { subjectId: subTopic.topic.subjectId },
-            },
-          },
-        });
-        
-        if (!collaborator) {
-          throw new TRPCError({
-            code: 'FORBIDDEN',
-            message: 'Non hai i permessi per modificare questo sotto-argomento.',
-          });
-        }
-      }
-
-      const { id, ...data } = input;
-      return ctx.prisma.subTopic.update({
-        where: { id },
-        data,
-      });
-    }),
-
-  // Delete subtopic
-  deleteSubTopic: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const userId = ctx.user.id;
-      const userRole = ctx.user.role;
-
-      const subTopic = await ctx.prisma.subTopic.findUnique({
-        where: { id: input.id },
-        include: {
-          topic: true,
-        },
-      });
-
-      if (!subTopic) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Sotto-argomento non trovato.',
-        });
-      }
-
-      // Check permissions
-      if (userRole !== 'ADMIN') {
-        const collaborator = await ctx.prisma.collaborator.findFirst({
-          where: {
-            userId,
-            subjects: {
-              some: { subjectId: subTopic.topic.subjectId },
-            },
-          },
-        });
-        
-        if (!collaborator) {
-          throw new TRPCError({
-            code: 'FORBIDDEN',
-            message: 'Non hai i permessi per eliminare questo sotto-argomento.',
-          });
-        }
-      }
-
-      return ctx.prisma.subTopic.delete({
         where: { id: input.id },
       });
     }),
@@ -893,60 +696,6 @@ export const materialsRouter = router({
       return { success: true };
     }),
 
-  // Reorder subtopics
-  reorderSubTopics: protectedProcedure
-    .input(z.object({
-      topicId: z.string(),
-      subTopicIds: z.array(z.string()),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      const userId = ctx.user.id;
-      const userRole = ctx.user.role;
-
-      // Get topic
-      const topic = await ctx.prisma.topic.findUnique({
-        where: { id: input.topicId },
-      });
-
-      if (!topic) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Argomento non trovato.',
-        });
-      }
-
-      // Check permissions
-      if (userRole !== 'ADMIN') {
-        const collaborator = await ctx.prisma.collaborator.findFirst({
-          where: {
-            userId,
-            subjects: {
-              some: { subjectId: topic.subjectId },
-            },
-          },
-        });
-        
-        if (!collaborator) {
-          throw new TRPCError({
-            code: 'FORBIDDEN',
-            message: 'Non hai i permessi per riordinare i sotto-argomenti.',
-          });
-        }
-      }
-
-      // Update order for each subtopic
-      await ctx.prisma.$transaction(
-        input.subTopicIds.map((id, index) =>
-          ctx.prisma.subTopic.update({
-            where: { id },
-            data: { order: index },
-          })
-        )
-      );
-
-      return { success: true };
-    }),
-
   // ==================== MATERIALS ====================
 
   // Get all materials (staff: admin + collaborator)
@@ -955,7 +704,6 @@ export const materialsRouter = router({
       type: z.enum(['PDF', 'VIDEO', 'LINK', 'DOCUMENT']).optional(),
       categoryId: z.string().optional(),  // Container category filter
       topicId: z.string().optional(),     // Classification filter
-      subTopicId: z.string().optional(),  // Classification filter
       visibility: z.enum(['NONE', 'ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).optional(),
       isActive: z.boolean().optional(),
       subjectId: z.string().optional(),
@@ -970,14 +718,12 @@ export const materialsRouter = router({
             }
           }),
           topicId: input?.topicId,
-          subTopicId: input?.subTopicId,
           visibility: input?.visibility,
           isActive: input?.isActive,
           subjectId: input?.subjectId,
         },
         orderBy: [
           { topic: { order: 'asc' } },
-          { subTopic: { order: 'asc' } },
           { order: 'asc' },
           { createdAt: 'desc' },
         ],
@@ -997,7 +743,6 @@ export const materialsRouter = router({
             },
           },
           topic: true,     // Classification
-          subTopic: true,  // Classification
           subject: true,
           groupAccess: {
             include: {
@@ -1056,7 +801,6 @@ export const materialsRouter = router({
             },
           },
           topic: true,
-          subTopic: true,
           subject: true,
           groupAccess: {
             include: {
@@ -1102,7 +846,6 @@ export const materialsRouter = router({
       categoryIds: z.array(z.string()).optional(),  // Multiple container categories
       subjectId: z.string().optional(),      // Classification (required for proper organization)
       topicId: z.string().optional(),        // Classification
-      subTopicId: z.string().optional(),     // Classification
       tags: z.array(z.string()).optional(),
       order: z.number().optional(),
       // For group-based visibility
@@ -1111,7 +854,7 @@ export const materialsRouter = router({
       studentIds: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { groupIds, studentIds, categoryIds, subjectId, topicId, subTopicId, ...materialData } = input;
+      const { groupIds, studentIds, categoryIds, subjectId, topicId, ...materialData } = input;
 
       // Use nested writes to create material with all relations atomically
       const material = await ctx.prisma.material.create({
@@ -1140,8 +883,6 @@ export const materialsRouter = router({
           ...(subjectId ? { subject: { connect: { id: subjectId } } } : {}),
           // Connect topic (classification) if provided
           ...(topicId ? { topic: { connect: { id: topicId } } } : {}),
-          // Connect subtopic (classification) if provided
-          ...(subTopicId ? { subTopic: { connect: { id: subTopicId } } } : {}),
           // If GROUP_BASED, create group access records with nested write
           ...(input.visibility === 'GROUP_BASED' && groupIds?.length ? {
             groupAccess: {
@@ -1213,7 +954,6 @@ export const materialsRouter = router({
       categoryId: z.string().optional(),     // Container category
       subjectId: z.string().optional(),      // Classification
       topicId: z.string().optional(),        // Classification
-      subTopicId: z.string().optional(),     // Classification
       visibility: z.enum(['NONE', 'ALL_STUDENTS', 'GROUP_BASED', 'SELECTED_STUDENTS']).default('NONE'),
       groupIds: z.array(z.string()).optional(),
       studentIds: z.array(z.string()).optional(),
@@ -1230,7 +970,7 @@ export const materialsRouter = router({
       })).min(1).max(20), // Max 20 files at once
     }))
     .mutation(async ({ ctx, input }) => {
-      const { files, groupIds, studentIds, categoryId, subjectId, topicId, subTopicId, visibility, tags } = input;
+      const { files, groupIds, studentIds, categoryId, subjectId, topicId, visibility, tags } = input;
 
       // Create all materials with nested writes (no interactive transaction needed)
       const createdMaterials = await Promise.all(
@@ -1250,7 +990,6 @@ export const materialsRouter = router({
               ...(categoryId ? { category: { connect: { id: categoryId } } } : {}),
               ...(subjectId ? { subject: { connect: { id: subjectId } } } : {}),
               ...(topicId ? { topic: { connect: { id: topicId } } } : {}),
-              ...(subTopicId ? { subTopic: { connect: { id: subTopicId } } } : {}),
               // Create group access records with nested write
               ...(visibility === 'GROUP_BASED' && groupIds?.length ? {
                 groupAccess: {
@@ -1332,7 +1071,6 @@ export const materialsRouter = router({
       categoryIds: z.array(z.string()).optional(),     // Multiple container categories
       subjectId: z.string().optional().nullable(),      // Classification
       topicId: z.string().optional().nullable(),        // Classification
-      subTopicId: z.string().optional().nullable(),     // Classification
       tags: z.array(z.string()).optional(),
       order: z.number().optional(),
       isActive: z.boolean().optional(),
@@ -1342,7 +1080,7 @@ export const materialsRouter = router({
       studentIds: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { id, groupIds, studentIds, subjectId, categoryIds, topicId, subTopicId, ...materialData } = input;
+      const { id, groupIds, studentIds, subjectId, categoryIds, topicId, ...materialData } = input;
 
       // Get the current material to compare visibility changes
       const currentMaterial = await ctx.prisma.material.findUnique({
@@ -1396,10 +1134,6 @@ export const materialsRouter = router({
             // Handle topic connection
             ...(topicId !== undefined ? (
               topicId ? { topic: { connect: { id: topicId } } } : { topic: { disconnect: true } }
-            ) : {}),
-            // Handle subtopic connection
-            ...(subTopicId !== undefined ? (
-              subTopicId ? { subTopic: { connect: { id: subTopicId } } } : { subTopic: { disconnect: true } }
             ) : {}),
             // Handle categories - create new links
             ...(categoryIds !== undefined && categoryIds.length ? {
@@ -1603,7 +1337,6 @@ export const materialsRouter = router({
       categoryId: z.string().optional(),   // Container category filter
       subjectId: z.string().optional(),    // Classification filter
       topicId: z.string().optional(),      // Classification filter
-      subTopicId: z.string().optional(),   // Classification filter
       type: z.enum(['PDF', 'VIDEO', 'LINK', 'DOCUMENT']).optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
@@ -1663,7 +1396,6 @@ export const materialsRouter = router({
           }),
           subjectId: input?.subjectId,
           topicId: input?.topicId,
-          subTopicId: input?.subTopicId,
           OR: [
             // Materials with explicit visibility
             { visibility: 'ALL_STUDENTS' },
@@ -1693,7 +1425,6 @@ export const materialsRouter = router({
         },
         orderBy: [
           { topic: { order: 'asc' } },
-          { subTopic: { order: 'asc' } },
           { order: 'asc' },
           { createdAt: 'desc' },
         ],
@@ -1713,7 +1444,6 @@ export const materialsRouter = router({
             },
           },
           topic: true,
-          subTopic: true,
           subject: true,
         },
       });
@@ -1781,7 +1511,6 @@ export const materialsRouter = router({
             },
           },
           topic: true,
-          subTopic: true,
           subject: true,
         },
       });

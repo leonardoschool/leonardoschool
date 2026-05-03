@@ -438,14 +438,6 @@ export default function DettaglioDomandaPage() {
                   </span>
                 </div>
               )}
-              {question.subTopic && (
-                <div className="flex items-center justify-between">
-                  <span className={`text-sm ${colors.text.muted}`}>Sotto-argomento</span>
-                  <span className={`font-medium ${colors.text.primary}`}>
-                    {question.subTopic.name}
-                  </span>
-                </div>
-              )}
             </div>
           </div>
 

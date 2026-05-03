@@ -2,6 +2,7 @@
 import { router, adminProcedure, staffProcedure, protectedProcedure, studentProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import type { PrismaClient } from '@prisma/client';
 import { secureShuffleArray } from '@/lib/utils';
 import {
   createQuestionSchema,
@@ -58,12 +59,12 @@ function buildQuestionBasicFilters(input: QuestionFilterInput): Record<string, u
   
   if (input.subjectId) where.subjectId = input.subjectId;
   if (input.topicId) where.topicId = input.topicId;
-  if (input.subTopicId) where.subTopicId = input.subTopicId;
   if (input.type) where.type = input.type;
   if (input.difficulty) where.difficulty = input.difficulty;
   if (input.year) where.year = input.year;
   if (input.source) where.source = { contains: input.source, mode: 'insensitive' };
   if (input.createdById) where.createdById = input.createdById;
+  if (input.language) where.language = input.language;
   if (input.tags && input.tags.length > 0) where.legacyTags = { hasEvery: input.tags };
   
   return where;
@@ -240,6 +241,24 @@ function parseLegacyTags(tags: string | undefined | null): string[] {
   return tags.split(',').map(t => t.trim());
 }
 
+async function syncSubjectEnglishQuestionFlags(
+  prisma: PrismaClient,
+  subjectIds: Array<string | null | undefined>
+): Promise<void> {
+  const uniqueSubjectIds = [...new Set(subjectIds.filter((id): id is string => Boolean(id)))];
+
+  await Promise.all(uniqueSubjectIds.map(async (subjectId) => {
+    const englishQuestionsCount = await prisma.question.count({
+      where: { subjectId, language: 'EN' },
+    });
+
+    await prisma.customSubject.updateMany({
+      where: { id: subjectId },
+      data: { hasEnglishQuestions: englishQuestionsCount > 0 },
+    });
+  }));
+}
+
 // Type for subject with question count
 type SubjectWithCount = {
   id: string;
@@ -351,11 +370,15 @@ function buildSmartRandomBaseWhere(
   tagIds?: string[],
   types?: string[],
   topicIds?: string[],
-  subTopicIds?: string[]
+  language?: string | null
 ): Record<string, unknown> {
   const baseWhere: Record<string, unknown> = {
     status: 'PUBLISHED',
   };
+
+  if (language) {
+    baseWhere.language = language;
+  }
 
   if (excludeQuestionIds && excludeQuestionIds.length > 0) {
     baseWhere.id = { notIn: excludeQuestionIds };
@@ -375,10 +398,6 @@ function buildSmartRandomBaseWhere(
 
   if (topicIds && topicIds.length > 0) {
     baseWhere.topicId = { in: topicIds };
-  }
-
-  if (subTopicIds && subTopicIds.length > 0) {
-    baseWhere.subTopicId = { in: subTopicIds };
   }
 
   return baseWhere;
@@ -746,9 +765,6 @@ export const questionsRouter = router({
           topic: {
             select: { id: true, name: true },
           },
-          subTopic: {
-            select: { id: true, name: true },
-          },
           createdBy: {
             select: { id: true, name: true, role: true },
           },
@@ -799,7 +815,6 @@ export const questionsRouter = router({
         subjectIds: z.array(z.string()).optional(),
         types: z.array(z.enum(['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'OPEN_TEXT'])).optional(),
         topicIds: z.array(z.string()).optional(),
-        subTopicIds: z.array(z.string()).optional(),
         difficulties: z.array(z.enum(['EASY', 'MEDIUM', 'HARD'])).optional(),
         tagIds: z.array(z.string()).optional(),
         excludeQuestionIds: z.array(z.string()).optional(),
@@ -818,9 +833,6 @@ export const questionsRouter = router({
         where.difficulty = input.difficulties.length === 1 ? input.difficulties[0] : { in: input.difficulties };
       if (input.topicIds && input.topicIds.length > 0) {
         where.topicId = { in: input.topicIds };
-      }
-      if (input.subTopicIds && input.subTopicIds.length > 0) {
-        where.subTopicId = { in: input.subTopicIds };
       }
       if (input.excludeQuestionIds && input.excludeQuestionIds.length > 0) {
         where.id = { notIn: input.excludeQuestionIds };
@@ -851,7 +863,6 @@ export const questionsRouter = router({
         include: {
           subject: { select: { id: true, name: true, color: true } },
           topic: { select: { id: true, name: true } },
-          subTopic: { select: { id: true, name: true } },
         },
       });
 
@@ -870,10 +881,7 @@ export const questionsRouter = router({
         where: { id: input.id },
         include: {
           subject: true,
-          topic: {
-            include: { subTopics: { where: { isActive: true }, orderBy: { order: 'asc' } } },
-          },
-          subTopic: true,
+          topic: true,
           answers: { orderBy: { order: 'asc' } },
           keywords: { orderBy: { weight: 'desc' } },
           questionTags: {
@@ -941,7 +949,6 @@ export const questionsRouter = router({
           },
           subject: true,
           topic: true,
-          subTopic: true,
         },
       });
 
@@ -993,7 +1000,6 @@ export const questionsRouter = router({
           imageAlt: questionData.imageAlt,
           subjectId: questionData.subjectId,
           topicId: questionData.topicId,
-          subTopicId: questionData.subTopicId,
           difficulty: questionData.difficulty,
           points: questionData.points,
           negativePoints: questionData.negativePoints,
@@ -1015,6 +1021,7 @@ export const questionsRouter = router({
           year: questionData.year,
           source: questionData.source,
           externalId: questionData.externalId,
+          language: questionData.language,
           createdById: ctx.user.id,
           updatedById: ctx.user.id,
           publishedAt: questionData.status === 'PUBLISHED' ? new Date() : null,
@@ -1051,12 +1058,13 @@ export const questionsRouter = router({
         },
       });
 
+      await syncSubjectEnglishQuestionFlags(ctx.prisma, [question.subjectId]);
+
       return ctx.prisma.question.findUnique({
         where: { id: question.id },
         include: {
           subject: true,
           topic: true,
-          subTopic: true,
           answers: { orderBy: { order: 'asc' } },
           keywords: true,
         },
@@ -1145,17 +1153,16 @@ export const questionsRouter = router({
         }
 
         // Extract relation IDs and legacy tags from questionData
-        const { subjectId, topicId, subTopicId, tags, ...restData } = questionData;
+        const { subjectId, topicId, tags, ...restData } = questionData;
 
         // Update question with nested creates for answers and keywords
         const updated = await ctx.prisma.question.update({
           where: { id },
           data: {
             ...restData,
-            // Handle subject/topic/subTopic relations using helper
+            // Handle subject/topic relations using helper
             subject: buildRelationUpdate(subjectId),
             topic: buildRelationUpdate(topicId),
-            subTopic: buildRelationUpdate(subTopicId),
             // Handle legacy tags
             legacyTags: tags,
             updatedById: ctx.user.id,
@@ -1200,12 +1207,16 @@ export const questionsRouter = router({
         return updated;
       });
 
+      await syncSubjectEnglishQuestionFlags(ctx.prisma, [
+        currentQuestion.subjectId,
+        updatedQuestion.subjectId,
+      ]);
+
       return ctx.prisma.question.findUnique({
         where: { id: updatedQuestion.id },
         include: {
           subject: true,
           topic: true,
-          subTopic: true,
           answers: { orderBy: { order: 'asc' } },
           keywords: true,
         },
@@ -1247,6 +1258,8 @@ export const questionsRouter = router({
       }
 
       await ctx.prisma.question.delete({ where: { id: input.id } });
+
+      await syncSubjectEnglishQuestionFlags(ctx.prisma, [question.subjectId]);
 
       return { success: true };
     }),
@@ -1409,12 +1422,13 @@ export const questionsRouter = router({
         },
       });
 
+      await syncSubjectEnglishQuestionFlags(ctx.prisma, [duplicate.subjectId]);
+
       return ctx.prisma.question.findUnique({
         where: { id: duplicate.id },
         include: {
           subject: true,
           topic: true,
-          subTopic: true,
           answers: { orderBy: { order: 'asc' } },
           keywords: true,
         },
@@ -1525,19 +1539,56 @@ export const questionsRouter = router({
         });
       }
 
-      // When changing subject, we need to clear topicId and subTopicId
+      const questionsToMove = await ctx.prisma.question.findMany({
+        where: { id: { in: input.ids } },
+        select: { subjectId: true },
+      });
+
+      // When changing subject, we need to clear topicId
       // since topics are subject-specific
       const result = await ctx.prisma.question.updateMany({
         where: { id: { in: input.ids } },
         data: {
           subjectId: input.subjectId,
           topicId: null,
-          subTopicId: null,
           updatedById: ctx.user.id,
         },
       });
 
+      await syncSubjectEnglishQuestionFlags(ctx.prisma, [
+        input.subjectId,
+        ...questionsToMove.map((question) => question.subjectId),
+      ]);
+
       return { updated: result.count, subjectName: subject.name };
+    }),
+
+  // Bulk update language
+  bulkUpdateLanguage: adminProcedure
+    .input(z.object({
+      ids: z.array(z.string()),
+      language: z.enum(['IT', 'EN']),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const questionsToUpdate = await ctx.prisma.question.findMany({
+        where: { id: { in: input.ids } },
+        select: { subjectId: true },
+      });
+
+      const result = await ctx.prisma.question.updateMany({
+        where: { id: { in: input.ids } },
+        data: {
+          language: input.language,
+          updatedById: ctx.user.id,
+        },
+      });
+
+      await syncSubjectEnglishQuestionFlags(
+        ctx.prisma,
+        questionsToUpdate.map((question) => question.subjectId)
+      );
+
+      return { updated: result.count, language: input.language };
     }),
 
   // Bulk delete
@@ -1560,9 +1611,19 @@ export const questionsRouter = router({
         });
       }
 
+      const questionsToDelete = await ctx.prisma.question.findMany({
+        where: { id: { in: deletableIds } },
+        select: { subjectId: true },
+      });
+
       const result = await ctx.prisma.question.deleteMany({
         where: { id: { in: deletableIds } },
       });
+
+      await syncSubjectEnglishQuestionFlags(
+        ctx.prisma,
+        questionsToDelete.map((question) => question.subjectId)
+      );
 
       return {
         deleted: result.count,
@@ -1594,7 +1655,6 @@ export const questionsRouter = router({
         include: {
           subject: { select: { code: true, name: true } },
           topic: { select: { name: true } },
-          subTopic: { select: { name: true } },
           answers: { orderBy: { order: 'asc' } },
           keywords: true,
         },
@@ -1611,7 +1671,6 @@ export const questionsRouter = router({
           difficulty: q.difficulty,
           subjectCode: q.subject?.code ?? '',
           topicName: q.topic?.name ?? '',
-          subTopicName: q.subTopic?.name ?? '',
           answerA: q.answers[0]?.text ?? '',
           answerB: q.answers[1]?.text ?? '',
           answerC: q.answers[2]?.text ?? '',
@@ -1803,6 +1862,7 @@ export const questionsRouter = router({
               text: row.text,
               type: row.type ?? 'SINGLE_CHOICE',
               status: 'DRAFT',
+              language: 'IT',
               difficulty: row.difficulty ?? 'MEDIUM',
               subjectId,
               topicId,
@@ -2255,45 +2315,93 @@ export const questionsRouter = router({
 
   // Get subjects with topics for simulation creation
   getSubjects: protectedProcedure.query(async ({ ctx }) => {
-    const subjects = await ctx.prisma.customSubject.findMany({
-      select: {
-        id: true,
-        name: true,
-        color: true,
-        _count: {
-          select: {
-            questions: {
-              where: { status: 'PUBLISHED' },
-            },
-          },
-        },
-        topics: {
-          select: {
-            id: true,
-            name: true,
-            _count: {
-              select: {
-                questions: {
-                  where: { status: 'PUBLISHED' },
-                },
+    const [subjects, subjectLanguageCounts, topicLanguageCounts] = await Promise.all([
+      ctx.prisma.customSubject.findMany({
+        select: {
+          id: true,
+          name: true,
+          color: true,
+          _count: {
+            select: {
+              questions: {
+                where: { status: 'PUBLISHED' },
               },
             },
           },
-          orderBy: { name: 'asc' },
+          topics: {
+            select: {
+              id: true,
+              name: true,
+              _count: {
+                select: {
+                  questions: {
+                    where: { status: 'PUBLISHED' },
+                  },
+                },
+              },
+            },
+            orderBy: { name: 'asc' },
+          },
         },
-      },
-      orderBy: { name: 'asc' },
+        orderBy: { name: 'asc' },
+      }),
+      ctx.prisma.question.groupBy({
+        by: ['subjectId', 'language'],
+        where: {
+          status: 'PUBLISHED',
+          subjectId: { not: null },
+        },
+        _count: { _all: true },
+      }),
+      ctx.prisma.question.groupBy({
+        by: ['topicId', 'language'],
+        where: {
+          status: 'PUBLISHED',
+          topicId: { not: null },
+        },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const subjectCountsByLanguage = new Map<string, { IT: number; EN: number }>();
+    subjectLanguageCounts.forEach((count) => {
+      if (!count.subjectId) return;
+      const current = subjectCountsByLanguage.get(count.subjectId) ?? { IT: 0, EN: 0 };
+      current[count.language] = count._count._all;
+      subjectCountsByLanguage.set(count.subjectId, current);
+    });
+
+    const topicCountsByLanguage = new Map<string, { IT: number; EN: number }>();
+    topicLanguageCounts.forEach((count) => {
+      if (!count.topicId) return;
+      const current = topicCountsByLanguage.get(count.topicId) ?? { IT: 0, EN: 0 };
+      current[count.language] = count._count._all;
+      topicCountsByLanguage.set(count.topicId, current);
     });
 
     return subjects.map(s => ({
       id: s.id,
       name: s.name,
       color: s.color,
+      hasItalianQuestions: (subjectCountsByLanguage.get(s.id)?.IT ?? 0) > 0,
+      hasEnglishQuestions: (subjectCountsByLanguage.get(s.id)?.EN ?? 0) > 0,
+      questionCounts: {
+        total: s._count.questions,
+        IT: subjectCountsByLanguage.get(s.id)?.IT ?? 0,
+        EN: subjectCountsByLanguage.get(s.id)?.EN ?? 0,
+      },
       _count: { questions: s._count.questions },
       topics: s.topics.map(t => ({
         id: t.id,
         name: t.name,
         _count: { questions: t._count.questions },
+        hasItalianQuestions: (topicCountsByLanguage.get(t.id)?.IT ?? 0) > 0,
+        hasEnglishQuestions: (topicCountsByLanguage.get(t.id)?.EN ?? 0) > 0,
+        questionCounts: {
+          total: t._count.questions,
+          IT: topicCountsByLanguage.get(t.id)?.IT ?? 0,
+          EN: topicCountsByLanguage.get(t.id)?.EN ?? 0,
+        },
       })),
     }));
   }),
@@ -2367,7 +2475,6 @@ export const questionsRouter = router({
         types,
         subjectIds,
         topicIds,
-        subTopicIds,
         excludeQuestionIds,
       } = input;
 
@@ -2409,7 +2516,7 @@ export const questionsRouter = router({
         tagIds ?? undefined,
         types ?? undefined,
         topicIds ?? undefined,
-        subTopicIds ?? undefined,
+        input.language ?? undefined,
       );
 
       // Build selection config

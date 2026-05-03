@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { stripHtml } from '@/lib/utils/sanitizeHtml';
@@ -135,6 +135,13 @@ export default function NewSimulationPage() {
   const [currentStep, setCurrentStep] = useState(0);
 
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [isSelfPracticeTemplate, setIsSelfPracticeTemplate] = useState(false);
+  const [assignedStudentIds, setAssignedStudentIds] = useState<string[]>([]);
+  const [assignedGroupIds, setAssignedGroupIds] = useState<string[]>([]);
+  // Filter/search state for the self-practice assignment panel
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [studentGroupFilter, setStudentGroupFilter] = useState('');
+  const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set());
 
   // Form data
   const [simulationType, setSimulationType] = useState<SimulationType>('PRACTICE');
@@ -247,6 +254,14 @@ export default function NewSimulationPage() {
   // Fetch data
   const { data: subjectsData } = trpc.questions.getSubjects.useQuery();
   const { data: tagCategoriesData } = trpc.questionTags.getCategories.useQuery({});
+  const { data: templateGroupsData } = trpc.groups.getAll.useQuery(
+    { onlyMyGroups: userRole === 'COLLABORATOR' },
+    { enabled: creationMode === 'template' }
+  );
+  const { data: templateStudentsData } = trpc.students.getStudents.useQuery(
+    { pageSize: 500, isActive: true, ...(userRole === 'COLLABORATOR' && { onlyMyGroups: true }) },
+    { enabled: creationMode === 'template' && isSelfPracticeTemplate }
+  );
   const { data: templatesData } = trpc.simulationTemplates.list.useQuery({
     page: 1,
     pageSize: 100,
@@ -254,6 +269,22 @@ export default function NewSimulationPage() {
     sortBy: 'title',
     sortOrder: 'asc',
   });
+
+  // Derived: filtered students for the self-practice assignment panel
+  const allTemplateStudents = templateStudentsData?.students ?? [];
+  const filteredTemplateStudents = useMemo(() => {
+    let list = allTemplateStudents;
+    if (studentSearchQuery.trim()) {
+      const q = studentSearchQuery.toLowerCase();
+      list = list.filter((s) => s.name.toLowerCase().includes(q));
+    }
+    if (studentGroupFilter) {
+      const group = (templateGroupsData ?? []).find((g) => g.id === studentGroupFilter);
+      const memberStudentIds = new Set((group?.studentMembers ?? []).map((m) => m.id));
+      list = list.filter((s) => s.studentId && memberStudentIds.has(s.studentId));
+    }
+    return list;
+  }, [allTemplateStudents, studentSearchQuery, studentGroupFilter, templateGroupsData]);
 
   // Load existing template data when editing
   const { data: editTemplateData, isLoading: editTemplateLoading } = trpc.simulationTemplates.get.useQuery(
@@ -283,6 +314,9 @@ export default function NewSimulationPage() {
     setPassingScore(tpl.passingScore);
     setIsRepeatable(tpl.isRepeatable);
     setMaxAttempts(tpl.maxAttempts);
+    setIsSelfPracticeTemplate(Boolean(tpl.isSelfPracticeTemplate));
+    setAssignedStudentIds((tpl.templateAssignments ?? []).map((assignment) => assignment.studentId).filter((id): id is string => Boolean(id)));
+    setAssignedGroupIds((tpl.templateAssignments ?? []).map((assignment) => assignment.groupId).filter((id): id is string => Boolean(id)));
     setHasSections(true);
     setSectionMode('manual');
     setSections(rawSections.map((section, index) => ({
@@ -291,6 +325,7 @@ export default function NewSimulationPage() {
       durationMinutes: section.durationMinutes ?? 10,
       questionCount: section.questionCount ?? 0,
       subjectId: section.subjectId ?? null,
+      topicIds: section.topicIds ?? [],
       questionIds: [],
       order: section.order ?? index,
     })));
@@ -475,6 +510,7 @@ export default function NewSimulationPage() {
       durationMinutes: section.durationMinutes ?? 10,
       questionCount: section.questionCount ?? 0,
       subjectId: section.subjectId ?? null,
+      topicIds: section.topicIds ?? [],
       questionIds: [],
       order: section.order ?? index,
     })));
@@ -604,6 +640,7 @@ export default function NewSimulationPage() {
       questionIds: [],
       questionCount: 0,
       subjectId: null,
+      topicIds: [],
       order: sections.length,
     };
     setSections([...sections, newSection]);
@@ -791,12 +828,9 @@ export default function NewSimulationPage() {
 
   // Open print window directly with questions
   const openPrintWindow = (questions: PrintQuestion[]) => {
-    // Calculate academic year
+    // Calculate academic year (current year → next year)
     const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth();
-    const academicYearStart = currentMonth >= 8 ? currentYear : currentYear - 1;
-    const academicYearEnd = academicYearStart + 1;
-    const academicYearText = `Anno accademico ${academicYearStart}/${academicYearEnd}`;
+    const academicYearText = `Anno accademico ${currentYear}/${currentYear + 1}`;
 
     const escapeHtmlAttribute = (value: string) => value
       .replaceAll('&', '&amp;')
@@ -831,7 +865,8 @@ export default function NewSimulationPage() {
     // Helper to render questions grouped by type
     const renderQuestionsByType = (
       questionsToRender: PrintQuestion[],
-      startNumber: number
+      startNumber: number,
+      showTypeHeaders: boolean = true
     ): { html: string; nextNumber: number } => {
       let html = '';
       let questionNumber = startNumber;
@@ -842,7 +877,7 @@ export default function NewSimulationPage() {
       
       // Render choice questions
       if (choiceQuestions.length > 0) {
-        html += `<div class="question-type-header">DOMANDE A RISPOSTA MULTIPLA</div>`;
+        if (showTypeHeaders) html += `<div class="question-type-header">DOMANDE A RISPOSTA MULTIPLA</div>`;
         for (const question of choiceQuestions) {
           html += `<div class="question">`;
           html += `<div class="question-text"><strong>${questionNumber}.</strong> ${removeLatexImageReferences(question.text)}</div>`;
@@ -862,7 +897,7 @@ export default function NewSimulationPage() {
       
       // Render OPEN_TEXT
       if (openText.length > 0) {
-        html += `<div class="question-type-header">DOMANDE A RISPOSTA CON MODALITÀ A COMPLETAMENTO</div>`;
+        if (showTypeHeaders) html += `<div class="question-type-header">DOMANDE A RISPOSTA CON MODALITÀ A COMPLETAMENTO</div>`;
         for (const question of openText) {
           html += `<div class="question">`;
           html += `<div class="question-text"><strong>${questionNumber}.</strong> ${removeLatexImageReferences(question.text)}</div>`;
@@ -879,10 +914,22 @@ export default function NewSimulationPage() {
     
     // Build questions HTML
     let questionsHtml = '';
+
+    // Determine globally if multiple question types exist
+    const hasMultipleTypes =
+      questions.some(q => q.type !== 'OPEN_TEXT') &&
+      questions.some(q => q.type === 'OPEN_TEXT');
     
     if (hasSections && showSectionsInPaper && effectiveSections.length > 0) {
       // Render with sections - grouped by type within each section
       const sortedSections = [...effectiveSections].sort((a, b) => a.order - b.order);
+
+      // Count sections that actually have questions
+      const sectionsWithQuestions = sortedSections.filter(section =>
+        (section.questionIds || []).some(id => questions.find(q => q.id === id))
+      );
+      const showSectionHeaders = sectionsWithQuestions.length > 1;
+
       let globalQuestionNumber = 1;
       
       for (const section of sortedSections) {
@@ -893,11 +940,11 @@ export default function NewSimulationPage() {
         
         if (sectionQuestions.length === 0) continue;
         
-        // Section header
-        questionsHtml += `<div class="section-header">${section.name}</div>`;
+        // Section header only if multiple sections
+        if (showSectionHeaders) questionsHtml += `<div class="section-header">${section.name}</div>`;
         
         // Render questions grouped by type
-        const result = renderQuestionsByType(sectionQuestions, globalQuestionNumber);
+        const result = renderQuestionsByType(sectionQuestions, globalQuestionNumber, hasMultipleTypes);
         questionsHtml += result.html;
         globalQuestionNumber = result.nextNumber;
       }
@@ -913,7 +960,7 @@ export default function NewSimulationPage() {
           .filter((q): q is typeof questions[0] => q !== undefined);
         
         questionsHtml += `<div class="section-header">ALTRE DOMANDE</div>`;
-        const result = renderQuestionsByType(unassignedQuestions, globalQuestionNumber);
+        const result = renderQuestionsByType(unassignedQuestions, globalQuestionNumber, hasMultipleTypes);
         questionsHtml += result.html;
         // globalQuestionNumber updated but not used after this point
       }
@@ -923,7 +970,7 @@ export default function NewSimulationPage() {
         .map(sq => questions.find(q => q.id === sq.questionId))
         .filter((q): q is typeof questions[0] => q !== undefined);
       
-      const result = renderQuestionsByType(allQuestions, 1);
+      const result = renderQuestionsByType(allQuestions, 1, hasMultipleTypes);
       questionsHtml = result.html;
     }
 
@@ -1044,8 +1091,7 @@ export default function NewSimulationPage() {
     
     /* Open answer space for OPEN_TEXT questions */
     .open-answer-space {
-      min-height: 120px;
-      margin: 8px 0 8px 25px;
+      display: none;
     }
     .question-text { 
       margin-bottom: 4px;
@@ -1088,6 +1134,16 @@ export default function NewSimulationPage() {
     /* KaTeX */
     .katex { font-size: 1em; }
     .katex-display { margin: 6px 0; }
+    
+    /* End of questions */
+    .end-of-questions {
+      text-align: center;
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 11pt;
+      font-weight: bold;
+      margin-top: 30px;
+      padding-top: 10px;
+    }
   </style>
 </head>
 <body>
@@ -1106,6 +1162,7 @@ export default function NewSimulationPage() {
     <div class="academic-year">${academicYearText}</div>
     
     ${questionsHtml}
+    <div class="end-of-questions">********** FINE DELLE DOMANDE **********</div>
   </div>
   
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"><\/script>
@@ -1224,7 +1281,12 @@ export default function NewSimulationPage() {
       case 0: // Type
         return creationMode === 'template' || !!simulationType;
       case 1: // Config
-        return !!title && durationMinutes >= 0;
+        return !!title && durationMinutes >= 0 && (
+          creationMode !== 'template'
+          || !isSelfPracticeTemplate
+          || assignedStudentIds.length > 0
+          || assignedGroupIds.length > 0
+        );
       case 2: // Questions
         if (creationMode === 'template') {
           return sections.length > 0 && sections.every((section) => (section.questionCount || 0) > 0);
@@ -1246,6 +1308,7 @@ export default function NewSimulationPage() {
           ...section,
           order: index,
           questionIds: [],
+          topicIds: section.topicIds ?? [],
           questionCount: section.questionCount || 0,
         }));
 
@@ -1270,6 +1333,9 @@ export default function NewSimulationPage() {
               isRepeatable,
               maxAttempts,
               hasSections: true,
+              isSelfPracticeTemplate,
+              assignedStudentIds: isSelfPracticeTemplate ? assignedStudentIds : [],
+              assignedGroupIds: isSelfPracticeTemplate ? assignedGroupIds : [],
               sections: templateSections,
             })
           : createTemplateMutation.mutateAsync({
@@ -1291,6 +1357,9 @@ export default function NewSimulationPage() {
               isRepeatable,
               maxAttempts,
               hasSections: true,
+              isSelfPracticeTemplate,
+              assignedStudentIds: isSelfPracticeTemplate ? assignedStudentIds : [],
+              assignedGroupIds: isSelfPracticeTemplate ? assignedGroupIds : [],
               sections: templateSections,
             }));
         return;
@@ -1638,6 +1707,180 @@ export default function NewSimulationPage() {
                     className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
                   />
                 </div>
+                {creationMode === 'template' && (
+                  <div className={`md:col-span-2 rounded-xl border ${colors.border.light} ${colors.background.secondary} p-4 space-y-4`}>
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="isSelfPracticeTemplate"
+                        checked={isSelfPracticeTemplate}
+                        onChange={(e) => {
+                          setIsSelfPracticeTemplate(e.target.checked);
+                          if (!e.target.checked) {
+                            setAssignedStudentIds([]);
+                            setAssignedGroupIds([]);
+                          }
+                        }}
+                      />
+                      <div>
+                        <label htmlFor="isSelfPracticeTemplate" className={`font-medium ${colors.text.primary} cursor-pointer`}>
+                          Template per autoesercitazione studente
+                        </label>
+                        <p className={`mt-1 text-sm ${colors.text.muted}`}>
+                          Se attivo, gli studenti assegnati vedranno questo template nel menu Autoesercitazione della dashboard.
+                        </p>
+                      </div>
+                    </div>
+
+                    {isSelfPracticeTemplate && (
+                      <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                        {/* ── Studenti ── */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className={`text-sm font-semibold ${colors.text.primary}`}>
+                              Studenti
+                            </h4>
+                            <span className={`text-xs ${colors.text.muted}`}>{assignedStudentIds.length} selezionati</span>
+                          </div>
+
+                          {/* Search + group filter */}
+                          <div className="flex gap-2 mb-2">
+                            <div className="relative flex-1">
+                              <Search className={`absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 ${colors.text.muted}`} />
+                              <input
+                                type="text"
+                                value={studentSearchQuery}
+                                onChange={(e) => setStudentSearchQuery(e.target.value)}
+                                placeholder="Cerca per nome…"
+                                className={`w-full pl-8 pr-3 py-1.5 text-sm rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
+                              />
+                            </div>
+                            <CustomSelect
+                              value={studentGroupFilter}
+                              onChange={(value) => setStudentGroupFilter(value)}
+                              options={[
+                                { value: '', label: 'Tutti i gruppi' },
+                                ...(templateGroupsData ?? []).map((g) => ({ value: g.id, label: g.name })),
+                              ]}
+                              className="min-w-[140px]"
+                            />                          </div>
+
+                          <div className={`rounded-lg border ${colors.border.light} ${colors.background.card} max-h-48 overflow-y-auto divide-y divide-gray-100 dark:divide-slate-700`}>
+                            {filteredTemplateStudents.length === 0 ? (
+                              <p className={`p-3 text-sm ${colors.text.muted}`}>Nessuno studente trovato</p>
+                            ) : (
+                              filteredTemplateStudents.map((student) => {
+                                if (!student.studentId) return null;
+                                const checked = assignedStudentIds.includes(student.studentId);
+                                return (
+                                  <label key={student.studentId} className={`flex items-center gap-3 px-3 py-2 cursor-pointer hover:${colors.background.secondary}`}>
+                                    <Checkbox
+                                      id={`spt-student-${student.studentId}`}
+                                      checked={checked}
+                                      onChange={(e) => {
+                                        setAssignedStudentIds((prev) => e.target.checked
+                                          ? [...prev, student.studentId!]
+                                          : prev.filter((id) => id !== student.studentId));
+                                      }}
+                                    />
+                                    <span className={`text-sm ${colors.text.primary}`}>{student.name}</span>
+                                  </label>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+
+                        {/* ── Gruppi ── */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className={`text-sm font-semibold ${colors.text.primary}`}>Gruppi</h4>
+                            <span className={`text-xs ${colors.text.muted}`}>{assignedGroupIds.length} selezionati</span>
+                          </div>
+                          <div className={`rounded-lg border ${colors.border.light} ${colors.background.card} divide-y divide-gray-100 dark:divide-slate-700`}>
+                            {(templateGroupsData ?? []).length === 0 ? (
+                              <p className={`p-3 text-sm ${colors.text.muted}`}>Nessun gruppo disponibile</p>
+                            ) : (
+                              (templateGroupsData ?? []).map((group) => {
+                                const checked = assignedGroupIds.includes(group.id);
+                                const isExpanded = expandedGroupIds.has(group.id);
+                                const studentMembersList = group.studentMembers ?? [];
+                                const referentNames: string[] = Array.from(
+                                  new Map([
+                                    ...(group.referenceCollaborator ? [[`${group.referenceCollaborator.user.name}-COLLABORATOR`, `${group.referenceCollaborator.user.name} (Collaboratore)`]] : []),
+                                    ...(group.referenceAdmin ? [[`${group.referenceAdmin.user.name}-ADMIN`, `${group.referenceAdmin.user.name} (Admin)`]] : []),
+                                    ...((group.referenceCollaborators ?? []).map((rc) => [`${rc.collaborator.user.name}-COLLABORATOR`, `${rc.collaborator.user.name} (Collaboratore)`])),
+                                    ...((group.referenceAdmins ?? []).map((ra) => [`${ra.admin.user.name}-ADMIN`, `${ra.admin.user.name} (Admin)`])),
+                                  ] as [string, string][]).values()
+                                );
+                                return (
+                                  <div key={group.id}>
+                                    <div className={`flex items-center gap-3 px-3 py-2 hover:${colors.background.secondary}`}>
+                                      <Checkbox
+                                        id={`spt-group-${group.id}`}
+                                        checked={checked}
+                                        onChange={(e) => {
+                                          setAssignedGroupIds((prev) => e.target.checked
+                                            ? [...prev, group.id]
+                                            : prev.filter((id) => id !== group.id));
+                                        }}
+                                      />
+                                      <label htmlFor={`spt-group-${group.id}`} className={`flex-1 text-sm ${colors.text.primary} cursor-pointer`}>
+                                        {group.name}
+                                      </label>
+                                      <span className={`text-xs ${colors.text.muted}`}>{group.memberCount} studenti</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setExpandedGroupIds((prev) => {
+                                          const next = new Set(prev);
+                                          next.has(group.id) ? next.delete(group.id) : next.add(group.id);
+                                          return next;
+                                        })}
+                                        className={`p-0.5 rounded ${colors.text.muted} hover:${colors.text.secondary}`}
+                                        aria-label={isExpanded ? 'Nascondi dettagli' : 'Mostra dettagli'}
+                                      >
+                                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                      </button>
+                                    </div>
+                                    {isExpanded && (
+                                      <div className={`px-4 pb-3 pt-1 space-y-2 ${colors.background.secondary} border-t border-gray-100 dark:border-slate-700`}>
+                                        {referentNames.length > 0 && (
+                                          <div>
+                                            <p className={`text-xs font-medium ${colors.text.muted} mb-1`}>Referenti</p>
+                                            <ul className="space-y-0.5">
+                                              {referentNames.map((name, i) => (
+                                                <li key={i} className={`text-xs ${colors.text.secondary} flex items-center gap-1.5`}>
+                                                  <Users className="w-3 h-3 flex-shrink-0" />
+                                                  {name}
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        )}
+                                        {studentMembersList.length > 0 && (
+                                          <div>
+                                            <p className={`text-xs font-medium ${colors.text.muted} mb-1`}>Studenti partecipanti ({studentMembersList.length})</p>
+                                            <ul className="space-y-0.5 max-h-32 overflow-y-auto">
+                                              {studentMembersList.map((member) => (
+                                                <li key={member.id} className={`text-xs ${colors.text.secondary}`}>{member.name}</li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        )}
+                                        {referentNames.length === 0 && studentMembersList.length === 0 && (
+                                          <p className={`text-xs ${colors.text.muted}`}>Nessun membro</p>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="md:col-span-2">
                   <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
                     Descrizione
@@ -2151,6 +2394,49 @@ export default function NewSimulationPage() {
                         <div className="flex-1 min-w-0">
                           <p className={`font-medium ${colors.text.primary} truncate`}>{section.name}</p>
                           <p className={`text-xs ${colors.text.muted}`}>{section.durationMinutes} minuti</p>
+                          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <CustomSelect
+                              value={section.subjectId ?? ''}
+                              onChange={(value) => updateSection(section.id, { subjectId: value || null, topicIds: [] })}
+                              options={[
+                                { value: '', label: 'Materia opzionale' },
+                                ...(subjectsData ?? []).map((subject) => ({
+                                  value: subject.id,
+                                  label: subject.name,
+                                })),
+                              ]}
+                              className="w-full"
+                            />
+
+                            {section.subjectId && (
+                              <div className={`rounded-lg border ${colors.border.light} ${colors.background.input} p-2 max-h-24 overflow-y-auto`}>
+                                {((subjectsData ?? []).find((subject) => subject.id === section.subjectId)?.topics ?? []).length === 0 ? (
+                                  <p className={`text-xs ${colors.text.muted}`}>Nessun argomento disponibile</p>
+                                ) : (
+                                  ((subjectsData ?? []).find((subject) => subject.id === section.subjectId)?.topics ?? []).map((topic) => {
+                                    const checked = (section.topicIds ?? []).includes(topic.id);
+                                    return (
+                                      <div key={topic.id} className="flex items-center gap-2 py-1">
+                                        <Checkbox
+                                          id={`topic-${section.id}-${topic.id}`}
+                                          checked={checked}
+                                          onChange={(e) => {
+                                            const currentTopicIds = section.topicIds ?? [];
+                                            updateSection(section.id, {
+                                              topicIds: e.target.checked
+                                                ? [...currentTopicIds, topic.id]
+                                                : currentTopicIds.filter((id) => id !== topic.id),
+                                            });
+                                          }}
+                                          label={topic.name}
+                                        />
+                                      </div>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                         <label className="flex items-center gap-2">
                           <span className={`text-xs ${colors.text.muted}`}>Domande</span>
@@ -2836,6 +3122,66 @@ export default function NewSimulationPage() {
                       ⚠️ Attenzione: {getUnassignedQuestions().length} domande non assegnate a nessuna sezione
                     </p>
                   )}
+                </div>
+              )}
+
+              {/* Self-practice assignment summary */}
+              {creationMode === 'template' && (
+                <div className={`p-6 rounded-xl ${colors.background.secondary} md:col-span-2`}>
+                  <h3 className={`font-medium ${colors.text.primary} mb-4 flex items-center gap-2`}>
+                    <Users className="w-4 h-4 text-pink-500" />
+                    Autoesercitazione studenti
+                  </h3>
+                  <dl className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <dt className={colors.text.muted}>Template per studenti</dt>
+                      <dd className={`font-medium ${isSelfPracticeTemplate ? 'text-green-600 dark:text-green-400' : colors.text.muted}`}>
+                        {isSelfPracticeTemplate ? 'Sì' : 'No'}
+                      </dd>
+                    </div>
+                    {isSelfPracticeTemplate && (
+                      <>
+                        <div className="flex justify-between items-start gap-4">
+                          <dt className={`${colors.text.muted} shrink-0`}>Studenti assegnati</dt>
+                          <dd className="text-right">
+                            {assignedStudentIds.length === 0 ? (
+                              <span className={colors.text.muted}>Nessuno</span>
+                            ) : (
+                              <div className="flex flex-wrap gap-1 justify-end">
+                                {assignedStudentIds.map((id) => {
+                                  const student = allTemplateStudents.find((s) => s.studentId === id);
+                                  return student ? (
+                                    <span key={id} className={`text-xs px-2 py-0.5 rounded-full ${colors.background.card} border ${colors.border.light} ${colors.text.primary}`}>
+                                      {student.name}
+                                    </span>
+                                  ) : null;
+                                })}
+                              </div>
+                            )}
+                          </dd>
+                        </div>
+                        <div className="flex justify-between items-start gap-4">
+                          <dt className={`${colors.text.muted} shrink-0`}>Gruppi assegnati</dt>
+                          <dd className="text-right">
+                            {assignedGroupIds.length === 0 ? (
+                              <span className={colors.text.muted}>Nessuno</span>
+                            ) : (
+                              <div className="flex flex-wrap gap-1 justify-end">
+                                {assignedGroupIds.map((id) => {
+                                  const group = (templateGroupsData ?? []).find((g) => g.id === id);
+                                  return group ? (
+                                    <span key={id} className={`text-xs px-2 py-0.5 rounded-full ${colors.background.card} border ${colors.border.light} ${colors.text.primary}`}>
+                                      {group.name}
+                                    </span>
+                                  ) : null;
+                                })}
+                              </div>
+                            )}
+                          </dd>
+                        </div>
+                      </>
+                    )}
+                  </dl>
                 </div>
               )}
 
