@@ -74,6 +74,7 @@ function createMockContractTemplate(
     price: faker.number.float({ min: 100, max: 2000, fractionDigits: 2 }),
     duration: '12 mesi',
     targetRole: 'STUDENT' as ContractTargetRole,
+    sortOrder: 0,
     isActive: true,
     createdBy: faker.string.uuid(),
     createdAt: new Date(),
