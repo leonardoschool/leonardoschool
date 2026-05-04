@@ -38,6 +38,7 @@
     "migrate:questions:inspect": "tsx --env-file .env scripts/migrate-questions-from-firestore.ts --inspect"
   },
   "dependencies": {
+    "@next/third-parties": "^16.2.4",
     "@hookform/resolvers": "^3.9.1",
     "@prisma/adapter-pg": "^7.3.0",
     "@prisma/client": "^7.3.0",

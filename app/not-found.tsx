@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@/components/ui/MarketingLink';
 import { Home, Search, BookOpen, Mail, ArrowLeft } from 'lucide-react';
 
 export default function NotFound() {

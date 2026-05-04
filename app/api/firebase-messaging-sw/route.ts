@@ -1,9 +1,9 @@
 /**
  * Dynamic Firebase Messaging Service Worker
- * 
- * Genera dinamicamente il service worker con le variabili d'ambiente corrette.
- * Questo è necessario perché i service worker sono file statici e non possono
- * accedere direttamente alle variabili d'ambiente di Next.js.
+ *
+ * Generates the service worker with the correct public environment variables.
+ * Service workers are static files, so they cannot read Next.js environment
+ * variables directly at runtime.
  */
 
 import { NextResponse } from 'next/server';
@@ -111,7 +111,7 @@ console.log('[SW] Firebase Messaging Service Worker loaded');
 
   return new NextResponse(serviceWorkerContent, {
     headers: {
-      'Content-Type': 'application/javascript',
+      'Content-Type': 'application/javascript; charset=utf-8',
       'Cache-Control': 'public, max-age=86400', // Cache for 24 hours
       'Service-Worker-Allowed': '/',
     },

@@ -1,6 +1,7 @@
 'use client';
 
 import ContactForm from '@/components/ui/ContactForm';
+import Link from '@/components/ui/MarketingLink';
 import { Spinner } from '@/components/ui/loaders';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';

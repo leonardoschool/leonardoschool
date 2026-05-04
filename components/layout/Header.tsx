@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import Link from '@/components/ui/MarketingLink';
 import Image from 'next/image';
 import { NAVIGATION } from '@/lib/constants';
 import { cn } from '@/lib/utils';

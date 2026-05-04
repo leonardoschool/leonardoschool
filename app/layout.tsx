@@ -5,6 +5,7 @@ import Preloader from "@/components/ui/Preloader";
 import { ToastProvider } from "@/components/ui/Toast";
 import { SITE_NAME, SITE_DESCRIPTION, SITE_KEYWORDS } from "@/lib/constants";
 import { Analytics } from '@vercel/analytics/next';
+import { GoogleAnalytics } from '@next/third-parties/google';
 import { TRPCProvider } from "@/lib/trpc/Provider";
 
 const inter = Inter({
@@ -112,6 +113,7 @@ export default function RootLayout({
           </ToastProvider>
         </TRPCProvider>
       </body>
+      <GoogleAnalytics gaId="G-T1XMZ5PS9S" />
     </html>
   );
 }
