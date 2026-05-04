@@ -5,7 +5,7 @@
  * Styled to match CustomSelect.
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { colors } from '@/lib/theme/colors';
 
@@ -49,6 +49,8 @@ export default function MultiSelect({
   const [isMounted, setIsMounted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
+  const internalId = useId();
+  const listboxId = `${id ?? internalId}-listbox`;
 
   useEffect(() => {
     setIsMounted(true);
@@ -149,6 +151,7 @@ export default function MultiSelect({
         ref={triggerRef}
         id={id}
         role="combobox"
+        aria-controls={listboxId}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         tabIndex={disabled ? -1 : 0}
@@ -202,7 +205,7 @@ export default function MultiSelect({
           )}
 
           {/* Options */}
-          <div role="listbox" aria-multiselectable="true" className="max-h-60 overflow-y-auto overscroll-contain">
+          <div role="listbox" id={listboxId} aria-multiselectable="true" className="max-h-60 overflow-y-auto overscroll-contain">
             {options.map((option) => {
               const isSelected = values.includes(option.value);
               return (

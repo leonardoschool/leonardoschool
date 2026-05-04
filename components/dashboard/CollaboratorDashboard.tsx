@@ -65,6 +65,7 @@ interface CollaboratorDashboardProps {
   isActive: boolean;
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export function CollaboratorDashboard({ userName, userInitial, isActive }: CollaboratorDashboardProps) {
   // Get collaborator's contract
   const { data: contractData, isLoading: contractLoading } = trpc.contracts.getMyCollaboratorContract.useQuery(

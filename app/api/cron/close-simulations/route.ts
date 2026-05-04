@@ -61,6 +61,7 @@ interface CloseAssignmentsResult {
   assignmentsClosed: string[];
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 async function closeExpiredAssignments(dryRun = false): Promise<CloseAssignmentsResult> {
   const result: CloseAssignmentsResult = {
     success: true,

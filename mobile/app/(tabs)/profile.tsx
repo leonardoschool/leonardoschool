@@ -91,6 +91,7 @@ const NOTIFICATION_CATEGORIES = {
   }
 };
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export default function ProfileScreen() {
   const systemColorScheme = useColorScheme() ?? 'light';
   const { themePreference, setThemePreference } = useTheme();

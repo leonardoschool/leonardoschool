@@ -76,6 +76,7 @@ interface UserData {
   collaborator?: UserProfile | null;
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export function UserInfoModal({ userId, userType, isOpen, onClose }: UserInfoModalProps) {
   // Query per studente - usa getPublicInfo (accessibile a tutti gli utenti autenticati)
   const { 

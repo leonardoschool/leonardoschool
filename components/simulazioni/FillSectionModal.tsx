@@ -22,6 +22,9 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import type { DifficultyMix } from '@/lib/validations/simulationValidation';
 
+const ACTIVE_MODE_BTN = `${colors.primary.bg} text-white`;
+const INACTIVE_MODE_BTN = `${colors.text.secondary} hover:${colors.background.hover}`;
+
 export interface PickedQuestion {
   id: string;
   text: string;
@@ -255,14 +258,14 @@ export default function FillSectionModal({
             <button
               type="button"
               onClick={() => setMode('random')}
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'random' ? `${colors.primary.bg} text-white` : `${colors.text.secondary} hover:${colors.background.hover}`}`}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'random' ? ACTIVE_MODE_BTN : INACTIVE_MODE_BTN}`}
             >
               Casuale
             </button>
             <button
               type="button"
               onClick={() => setMode('smart')}
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'smart' ? `${colors.primary.bg} text-white` : `${colors.text.secondary} hover:${colors.background.hover}`}`}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'smart' ? ACTIVE_MODE_BTN : INACTIVE_MODE_BTN}`}
             >
               Smart
             </button>

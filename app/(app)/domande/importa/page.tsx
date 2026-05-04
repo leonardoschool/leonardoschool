@@ -130,7 +130,6 @@ export default function ImportaDomandePage() {
       if (char === '"') {
         if (inQuotes && line[i + 1] === '"') {
           current += '"';
-          // eslint-disable-next-line sonarjs/updated-loop-counter -- intentional skip of escaped quote
           i++;
         } else {
           inQuotes = !inQuotes;

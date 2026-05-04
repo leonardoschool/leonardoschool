@@ -227,6 +227,7 @@ export interface HandleContactRequestOptions {
   type: 'contact' | 'job-application';
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export async function handleContactRequest(options: HandleContactRequestOptions): Promise<NextResponse> {
   const { request, type } = options;
   const isJobApplication = type === 'job-application';

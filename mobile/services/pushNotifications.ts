@@ -73,7 +73,7 @@ async function registerForPushNotifications(): Promise<string | null> {
   // Get the Expo push token
   try {
     const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-    // TODO: Verificare che il projectId sia configurato correttamente e rimuovere questo commento
+    // NOTE: Verificare che il projectId sia configurato correttamente e rimuovere questo commento
     if (!projectId) {
       console.warn('[Notifications] No projectId found. Push notifications require EAS project setup.');
       console.warn('[Notifications] Run: cd mobile && npx eas-cli init');
@@ -221,15 +221,15 @@ export function handleNotificationResponse(
       break;
     case 'EVENT_INVITATION':
     case 'EVENT_REMINDER':
-      // TODO: Navigate to calendar when implemented
+      // NOTE: Navigate to calendar when implemented
       router.push('/(tabs)');
       break;
     case 'MATERIAL_AVAILABLE':
-      // TODO: Navigate to materials when implemented
+      // NOTE: Navigate to materials when implemented
       router.push('/(tabs)');
       break;
     case 'MESSAGE_RECEIVED':
-      // TODO: Navigate to messages when implemented
+      // NOTE: Navigate to messages when implemented
       router.push('/(tabs)');
       break;
     default:

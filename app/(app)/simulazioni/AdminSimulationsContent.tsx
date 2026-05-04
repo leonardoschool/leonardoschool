@@ -46,6 +46,8 @@ import TemplatesContent from './TemplatesContent';
 
 type TabType = 'simulations' | 'assignments' | 'templates';
 type AssignmentStatus = 'ACTIVE' | 'CLOSED';
+type SimulationAccessType = 'OPEN' | 'ROOM';
+type NullableDate = string | Date | null;
 
 // Type labels
 const typeLabels: Record<SimulationType, string> = {
@@ -280,9 +282,9 @@ export default function AdminSimulationsContent() {
     simulationId: string;
     simulationTitle: string;
     simulationType: SimulationType;
-    simulationAccessType: 'OPEN' | 'ROOM';
-    startDate: string | Date | null;
-    endDate: string | Date | null;
+    simulationAccessType: SimulationAccessType;
+    startDate: NullableDate;
+    endDate: NullableDate;
     status: AssignmentStatus;
     students: Array<{
       id: string;
@@ -327,7 +329,7 @@ export default function AdminSimulationsContent() {
           simulationId: assignment.simulationId,
           simulationTitle: assignment.simulation?.title || '-',
           simulationType: (assignment.simulation?.type || 'PRACTICE') as SimulationType,
-          simulationAccessType: (assignment.simulation?.accessType || 'OPEN') as 'OPEN' | 'ROOM',
+          simulationAccessType: (assignment.simulation?.accessType || 'OPEN') as SimulationAccessType,
           startDate: assignment.startDate || null,
           endDate: assignment.endDate || null,
           status: (assignment.status || 'ACTIVE') as AssignmentStatus,

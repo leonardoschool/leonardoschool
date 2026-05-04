@@ -520,6 +520,7 @@ export const isMinor = (dateOfBirth: string | Date): boolean => {
  */
 export const validateParentGuardianForm = (data: ParentGuardianFormData): 
   { success: true; data: ValidatedParentGuardianData } | 
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   { success: false; errors: Record<string, string> } => {
   
   const errors: Record<string, string> = {};

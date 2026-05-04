@@ -19,12 +19,6 @@ const themeOptions = [
   { value: 'system' as Theme, label: 'Sistema', icon: Monitor },
 ];
 
-function getThemeIcon(theme: Theme) {
-  if (theme === 'dark') return Moon;
-  if (theme === 'light') return Sun;
-  return Monitor;
-}
-
 export function ThemeToggle({
   isOpen,
   onClose,

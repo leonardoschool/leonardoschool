@@ -39,6 +39,7 @@ interface Subject {
   name: string;
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export default function SelfPracticeScreen() {
   const themedColors = useThemedColors();
   

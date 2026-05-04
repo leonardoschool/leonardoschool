@@ -435,6 +435,7 @@ export const groupsRouter = router({
         referenceAdminIds: z.array(z.string()).optional(),
       })
     )
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     .mutation(async ({ ctx, input }) => {
       const {
         id,

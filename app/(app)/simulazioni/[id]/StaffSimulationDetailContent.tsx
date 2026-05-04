@@ -1128,7 +1128,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
                               className={`p-3 rounded-lg ${colors.background.secondary} border ${colors.border.light}`}
                             >
                               <span
-                                className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${assignment.group?.color ? '' : `${colors.background.tertiary} ${colors.text.secondary}`}`}
+                                className={['inline-flex px-2 py-1 rounded-full text-xs font-medium', assignment.group?.color ? '' : `${colors.background.tertiary} ${colors.text.secondary}`].join(' ')}
                                 style={assignment.group?.color ? {
                                   backgroundColor: `${assignment.group.color}20`,
                                   color: assignment.group.color,

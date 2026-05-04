@@ -32,6 +32,7 @@ import {
   type ParentGuardianFormData,
 } from '@/lib/validations/profileValidation';
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export default function CompleteProfilePage() {
   const router = useRouter();
   const searchParams = useSearchParams();

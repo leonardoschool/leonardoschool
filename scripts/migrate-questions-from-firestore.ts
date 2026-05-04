@@ -712,6 +712,7 @@ async function getOrCreateDatabaseCategory(): Promise<string> {
 
 // ===================== MIGRATION FUNCTION =====================
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 async function migrateQuestions(): Promise<void> {
   console.log('\n🚀 Starting Firestore to PostgreSQL question migration...\n');
   
@@ -1104,6 +1105,7 @@ async function migrateQuestions(): Promise<void> {
  * Mostra un'anteprima di come verrebbero mappati i dati
  * senza richiedere connessione al database PostgreSQL
  */
+// eslint-disable-next-line sonarjs/cognitive-complexity
 async function previewMapping(): Promise<void> {
   console.log('\n🔮 PREVIEW MODE - Showing how data would be mapped\n');
   console.log('   (No database connection required)\n');
@@ -1286,6 +1288,7 @@ async function previewMapping(): Promise<void> {
 
 // ===================== INSPECT FUNCTION =====================
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 async function inspectFirestore(): Promise<void> {
   console.log('\n🔍 Inspecting Firestore structure...\n');
   

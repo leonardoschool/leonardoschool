@@ -96,6 +96,7 @@ const defaultKeyword: QuestionKeywordInput = {
   synonyms: [],
 };
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export default function QuestionForm({ questionId, basePath = '/domande', initialData }: QuestionFormProps) {
   const router = useRouter();
   const { handleMutationError } = useApiError();

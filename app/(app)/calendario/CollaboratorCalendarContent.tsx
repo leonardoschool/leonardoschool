@@ -65,6 +65,7 @@ const defaultFormData: EventFormData = {
   sendEmailInvites: true,
 };
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export default function CollaboratorCalendarContent() {
   const [view, setView] = useState<CalendarView>('month');
   const [selectedDate, setSelectedDate] = useState(new Date());

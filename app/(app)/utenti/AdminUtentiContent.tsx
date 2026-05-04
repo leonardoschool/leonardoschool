@@ -57,6 +57,8 @@ import CustomSelect from '@/components/ui/CustomSelect';
 
 type RoleFilter = 'ALL' | 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
 type StatusFilter = 'all' | 'active' | 'inactive' | 'pending_profile' | 'pending_contract' | 'pending_sign' | 'pending_activation' | 'no_signed_contract';
+type ConfirmModalType = 'delete' | 'toggleActive' | 'changeRole' | 'revokeContract' | 'revokeSignedContract';
+type AssignableRole = 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
 
 const statusOptions: { value: StatusFilter; label: string; shortLabel: string; icon: any; color: string; bg: string; activeColor: string }[] = [
   { value: 'all', label: 'Tutti', shortLabel: 'Tutti', icon: Users, color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-100 dark:bg-gray-800', activeColor: 'bg-gray-600' },
@@ -1251,11 +1253,11 @@ export default function AdminUtentiContent() {
   // Modal states
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
-    type: 'delete' | 'toggleActive' | 'changeRole' | 'revokeContract' | 'revokeSignedContract';
+    type: ConfirmModalType;
     userId: string;
     userName: string;
     currentActive?: boolean;
-    newRole?: 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
+    newRole?: AssignableRole;
     contractId?: string;
     hasSignedContract?: boolean;
     userRole?: string;
@@ -1320,7 +1322,7 @@ export default function AdminUtentiContent() {
     isOpen: false,
     name: '',
     email: '',
-    role: 'STUDENT' as 'STUDENT' | 'COLLABORATOR' | 'ADMIN',
+    role: 'STUDENT' as AssignableRole,
     groupId: '',
   });
 

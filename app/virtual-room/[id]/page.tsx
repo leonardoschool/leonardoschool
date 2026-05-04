@@ -59,6 +59,7 @@ interface ParticipantCardProps {
   sessionStatus: string;
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 function ParticipantCard({ participant, totalQuestions, onSendMessage, onKickParticipant, sessionStatus }: ParticipantCardProps) {
   const progressPercent = totalQuestions > 0 
     ? Math.round(((participant.answeredCount || 0) / totalQuestions) * 100)

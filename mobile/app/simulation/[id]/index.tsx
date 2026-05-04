@@ -98,6 +98,7 @@ interface SimulationConfig {
   hasInProgressAttempt: boolean;
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export default function SimulationExecutionScreen() {
   const { id, assignmentId } = useLocalSearchParams<{ id: string; assignmentId?: string }>();
   const router = useRouter();

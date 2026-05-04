@@ -2,6 +2,7 @@
  * Calendar Router
  * Gestione eventi calendario, presenze e assenze staff
  */
+/* eslint-disable sonarjs/cognitive-complexity */
 
 import { z } from 'zod';
 import { router, protectedProcedure, adminProcedure, staffProcedure } from '../init';

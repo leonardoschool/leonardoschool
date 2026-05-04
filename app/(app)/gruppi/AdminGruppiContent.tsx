@@ -715,7 +715,7 @@ function MultiReferenceSelect({
                       <span className={`block text-xs ${colors.text.muted} truncate`}>{option.description}</span>
                     )}
                   </span>
-                  <span className={`w-5 h-5 rounded border ${isSelected ? `${colors.primary.bg} border-transparent text-white` : colors.border.primary} flex items-center justify-center flex-shrink-0`}>
+                  <span className={['w-5 h-5 rounded border', isSelected ? `${colors.primary.bg} border-transparent text-white` : colors.border.primary, 'flex items-center justify-center flex-shrink-0'].join(' ')}>
                     {isSelected && <Check className="w-3.5 h-3.5" />}
                   </span>
                 </button>

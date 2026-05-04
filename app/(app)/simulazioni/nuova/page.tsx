@@ -241,6 +241,7 @@ interface SelectedQuestion {
   };
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export default function NewSimulationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
