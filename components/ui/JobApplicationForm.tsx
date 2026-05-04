@@ -77,19 +77,25 @@ export default function JobApplicationForm() {
     }
 
     // Telefono: esattamente 10 cifre italiane o formato internazionale
-    const phoneDigits = formData.phone.replace(/[\s\-\+]/g, '');
+    const phoneDigits = formData.phone.replaceAll(/[\s+-]/g, '');
     if (phoneDigits.length < 10 || phoneDigits.length > 15) {
       newErrors.phone = 'Inserisci un numero valido (10-15 cifre)';
-    } else if (!/^[0-9+\s\-]+$/.test(formData.phone)) {
+    } else if (!/^[0-9+\s-]+$/.test(formData.phone)) {
       newErrors.phone = 'Il telefono può contenere solo numeri';
     }
 
-    // Email: validazione robusta
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
+    // Email: validazione robusta senza regex per evitare vulnerabilità DoS
+    const emailValid = (() => {
+      if (!formData.email || formData.email.length > 100) return false;
+      const atIdx = formData.email.indexOf('@');
+      if (atIdx < 1 || atIdx === formData.email.length - 1) return false;
+      const dotIdx = formData.email.lastIndexOf('.');
+      if (dotIdx < atIdx + 2 || dotIdx === formData.email.length - 1) return false;
+      return !formData.email.includes(' ');
+    })();
+    
+    if (!emailValid) {
       newErrors.email = "Inserisci un'Email valida";
-    } else if (formData.email.length > 100) {
-      newErrors.email = 'Email troppo lunga (max 100 caratteri)';
     }
 
     // Oggetto: min 6, max 200 caratteri
