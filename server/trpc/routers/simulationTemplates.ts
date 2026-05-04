@@ -18,6 +18,11 @@ function cleanTemplateSections(sections: z.infer<typeof createSimulationTemplate
     order: section.order ?? index,
     questionCount: section.questionCount ?? 0,
     topicIds: section.topicIds ?? [],
+    questionTypes: section.questionTypes ?? [],
+    questionTypeCounts: section.questionTypeCounts ?? {},
+    difficultyLevels: section.difficultyLevels ?? [],
+    tagIds: section.tagIds ?? [],
+    language: section.language ?? null,
     questionIds: [],
   }));
 }

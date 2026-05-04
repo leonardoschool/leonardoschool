@@ -66,6 +66,132 @@ const TEMPLATE_STEPS = [
 
 type CreationMode = 'simulation' | 'template';
 type QuestionTypeFilter = '' | 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT';
+type TemplateQuestionTypeValue = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT';
+type TemplateDifficultyValue = 'EASY' | 'MEDIUM' | 'HARD';
+type TemplateLanguageValue = 'IT' | 'EN';
+type TemplateLanguageFilter = '' | TemplateLanguageValue;
+
+interface TemplateQuestionCounts {
+  total: number;
+  IT: number;
+  EN: number;
+}
+
+interface TemplateTopicItem {
+  id: string;
+  name: string;
+  hasItalianQuestions: boolean;
+  hasEnglishQuestions: boolean;
+  questionCounts: TemplateQuestionCounts;
+  _count: { questions: number };
+}
+
+interface TemplateSubjectItem {
+  id: string;
+  name: string;
+  color: string | null;
+  hasItalianQuestions: boolean;
+  hasEnglishQuestions: boolean;
+  questionCounts: TemplateQuestionCounts;
+  _count: { questions: number };
+  topics: TemplateTopicItem[];
+}
+
+const TEMPLATE_QUESTION_TYPE_OPTIONS = [
+  { value: 'SINGLE_CHOICE', label: 'Risposta singola' },
+  { value: 'MULTIPLE_CHOICE', label: 'Risposta multipla' },
+  { value: 'OPEN_TEXT', label: 'Risposta aperta' },
+];
+
+const TEMPLATE_DIFFICULTY_OPTIONS = [
+  { value: 'EASY', label: 'Facile' },
+  { value: 'MEDIUM', label: 'Media' },
+  { value: 'HARD', label: 'Difficile' },
+];
+
+const TEMPLATE_LANGUAGE_OPTIONS = [
+  { value: '', label: 'Tutte le lingue' },
+  { value: 'IT', label: 'Italiano' },
+  { value: 'EN', label: 'Inglese' },
+];
+
+const TEMPLATE_QUESTION_TYPE_LABELS: Record<TemplateQuestionTypeValue, string> = {
+  SINGLE_CHOICE: 'Risposta singola',
+  MULTIPLE_CHOICE: 'Risposta multipla',
+  OPEN_TEXT: 'Risposta aperta',
+};
+
+const TEMPLATE_LANGUAGE_LABELS: Record<'IT' | 'EN', string> = {
+  IT: 'Italiano',
+  EN: 'Inglese',
+};
+
+const distributeCountEvenly = (total: number, ids: readonly string[]): Record<string, number> => {
+  if (total <= 0 || ids.length === 0) return {};
+  return ids.reduce((counts, id, index) => {
+    const base = Math.floor(total / ids.length);
+    const remainder = total % ids.length;
+    counts[id] = base + (index < remainder ? 1 : 0);
+    return counts;
+  }, {} as Record<string, number>);
+};
+
+const getCountTotal = (counts?: Record<string, number>): number =>
+  Object.values(counts ?? {}).reduce((total, count) => total + count, 0);
+
+const getQuestionCountForLanguage = (counts: TemplateQuestionCounts, language: TemplateLanguageFilter): number =>
+  language ? counts[language] : counts.total;
+
+const filterTemplateSubjectsByLanguage = (
+  subjects: TemplateSubjectItem[],
+  language: TemplateLanguageFilter
+): TemplateSubjectItem[] => {
+  if (!language) return subjects;
+  return subjects
+    .map((subject) => ({
+      ...subject,
+      topics: subject.topics.filter((topic) => getQuestionCountForLanguage(topic.questionCounts, language) > 0),
+    }))
+    .filter((subject) => getQuestionCountForLanguage(subject.questionCounts, language) > 0 || subject.topics.length > 0);
+};
+
+const buildTemplateSubjectOptions = (
+  subjects: TemplateSubjectItem[],
+  language: TemplateLanguageFilter
+) => subjects.map((subject) => {
+  const count = getQuestionCountForLanguage(subject.questionCounts, language);
+  const languageHint = language ? ` (${count} ${language})` : subject.hasEnglishQuestions ? ' (EN)' : '';
+  return {
+    value: subject.id,
+    label: `${subject.name}${languageHint}`,
+    color: subject.color ?? undefined,
+  };
+});
+
+const getTemplateTopicOptions = (
+  subjects: TemplateSubjectItem[],
+  selectedSubjectIds: string[],
+  language: TemplateLanguageFilter
+) => {
+  const selectedIds = new Set(selectedSubjectIds);
+  const selectedSubjects = subjects.filter((subject) => selectedIds.has(subject.id));
+  const showSubjectName = selectedSubjects.length > 1;
+
+  return selectedSubjects.flatMap((subject) =>
+    subject.topics
+      .filter((topic) => !language || getQuestionCountForLanguage(topic.questionCounts, language) > 0)
+      .map((topic) => {
+        const count = getQuestionCountForLanguage(topic.questionCounts, language);
+        const languageHint = language ? ` (${count} ${language})` : topic.hasEnglishQuestions ? ' (EN)' : '';
+        const subjectHint = showSubjectName ? ` - ${subject.name}` : '';
+        return {
+          value: topic.id,
+          label: `${topic.name}${subjectHint}${languageHint}`,
+          color: subject.color ?? undefined,
+        };
+      })
+  );
+};
 
 // Type options - staff creation supports Ufficiale / Esercitazione
 const primaryTypeOptions: { value: SimulationType; label: string; description: string; icon: React.ReactNode; badge?: string }[] = [
@@ -160,7 +286,6 @@ export default function NewSimulationPage() {
   const [randomizeAnswers, setRandomizeAnswers] = useState(false);
   
   // Scoring
-  // eslint-disable-next-line sonarjs/no-unused-vars -- setter reserved for future feature
   const [useQuestionPoints, _setUseQuestionPoints] = useState(false);
   const [correctPoints, setCorrectPoints] = useState(1.5);
   const [wrongPoints, setWrongPoints] = useState(-0.4);
@@ -272,7 +397,7 @@ export default function NewSimulationPage() {
   });
 
   // Derived: filtered students for the self-practice assignment panel
-  const allTemplateStudents = templateStudentsData?.students ?? [];
+  const allTemplateStudents = useMemo(() => templateStudentsData?.students ?? [], [templateStudentsData?.students]);
   const filteredTemplateStudents = useMemo(() => {
     let list = allTemplateStudents;
     if (studentSearchQuery.trim()) {
@@ -329,6 +454,11 @@ export default function NewSimulationPage() {
       subjectIds: (section as { subjectIds?: string[] }).subjectIds ?? (section.subjectId ? [section.subjectId] : []),
       subjectQuestionCounts: (section as { subjectQuestionCounts?: Record<string, number> }).subjectQuestionCounts ?? {},
       topicIds: section.topicIds ?? [],
+      questionTypes: (section as { questionTypes?: TemplateQuestionTypeValue[] }).questionTypes ?? [],
+      questionTypeCounts: (section as { questionTypeCounts?: Record<string, number> }).questionTypeCounts ?? {},
+      difficultyLevels: (section as { difficultyLevels?: TemplateDifficultyValue[] }).difficultyLevels ?? [],
+      tagIds: (section as { tagIds?: string[] }).tagIds ?? [],
+      language: (section as { language?: 'IT' | 'EN' | null }).language ?? null,
       questionIds: [],
       order: section.order ?? index,
     })));
@@ -520,6 +650,11 @@ export default function NewSimulationPage() {
       subjectIds: (section as { subjectIds?: string[] }).subjectIds ?? (section.subjectId ? [section.subjectId] : []),
       subjectQuestionCounts: (section as { subjectQuestionCounts?: Record<string, number> }).subjectQuestionCounts ?? {},
       topicIds: section.topicIds ?? [],
+      questionTypes: (section as { questionTypes?: TemplateQuestionTypeValue[] }).questionTypes ?? [],
+      questionTypeCounts: (section as { questionTypeCounts?: Record<string, number> }).questionTypeCounts ?? {},
+      difficultyLevels: (section as { difficultyLevels?: TemplateDifficultyValue[] }).difficultyLevels ?? [],
+      tagIds: (section as { tagIds?: string[] }).tagIds ?? [],
+      language: (section as { language?: 'IT' | 'EN' | null }).language ?? null,
       questionIds: [],
       order: section.order ?? index,
     })));
@@ -650,7 +785,13 @@ export default function NewSimulationPage() {
       questionCount: 0,
       subjectId: null,
       subjectIds: [],
+      subjectQuestionCounts: {},
       topicIds: [],
+      questionTypes: [],
+      questionTypeCounts: {},
+      difficultyLevels: [],
+      tagIds: [],
+      language: null,
       order: sections.length,
     };
     setSections([...sections, newSection]);
@@ -1324,6 +1465,13 @@ export default function NewSimulationPage() {
           order: index,
           questionIds: [],
           topicIds: section.topicIds ?? [],
+          subjectIds: section.subjectIds ?? (section.subjectId ? [section.subjectId] : []),
+          subjectQuestionCounts: section.subjectQuestionCounts ?? {},
+          questionTypes: section.questionTypes ?? [],
+          questionTypeCounts: section.questionTypeCounts ?? {},
+          difficultyLevels: section.difficultyLevels ?? [],
+          tagIds: section.tagIds ?? [],
+          language: section.language ?? null,
           questionCount: section.questionCount || 0,
         }));
 
@@ -1494,13 +1642,16 @@ export default function NewSimulationPage() {
                   const rawSections = Array.isArray(tpl.sections)
                     ? tpl.sections as Array<Partial<SimulationSection>>
                     : [];
+                  const repeatableLabel = tpl.isRepeatable
+                    ? `Sì${tpl.maxAttempts ? ' (max ' + tpl.maxAttempts + ')' : ''}`
+                    : 'No';
                   const settingRows: { label: string; value: string }[] = [
                     { label: 'Mostra risultati', value: tpl.showResults ? 'Sì' : 'No' },
                     { label: 'Mostra risposte corrette', value: tpl.showCorrectAnswers ? 'Sì' : 'No' },
                     { label: 'Revisione risposte', value: tpl.allowReview ? 'Sì' : 'No' },
                     { label: 'Ordine casuale domande', value: tpl.randomizeOrder ? 'Sì' : 'No' },
                     { label: 'Ordine casuale risposte', value: tpl.randomizeAnswers ? 'Sì' : 'No' },
-                    { label: 'Ripetibile', value: tpl.isRepeatable ? `Sì${tpl.maxAttempts ? ` (max ${tpl.maxAttempts})` : ''}` : 'No' },
+                    { label: 'Ripetibile', value: repeatableLabel },
                     { label: 'Punti corretta', value: String(tpl.correctPoints) },
                     { label: 'Punti errata', value: String(tpl.wrongPoints) },
                     { label: 'Punti bianca', value: String(tpl.blankPoints) },
@@ -1847,7 +1998,11 @@ export default function NewSimulationPage() {
                                         type="button"
                                         onClick={() => setExpandedGroupIds((prev) => {
                                           const next = new Set(prev);
-                                          next.has(group.id) ? next.delete(group.id) : next.add(group.id);
+                                          if (next.has(group.id)) {
+                                            next.delete(group.id);
+                                          } else {
+                                            next.add(group.id);
+                                          }
                                           return next;
                                         })}
                                         className={`p-0.5 rounded ${colors.text.muted} hover:${colors.text.secondary}`}
@@ -2373,6 +2528,7 @@ export default function NewSimulationPage() {
       case 2:
         if (creationMode === 'template') {
           const totalTemplateQuestions = sections.reduce((sum, section) => sum + (section.questionCount || 0), 0);
+          const templateSubjects = (subjectsData ?? []) as TemplateSubjectItem[];
 
           return (
             <div className="space-y-6">
@@ -2401,66 +2557,227 @@ export default function NewSimulationPage() {
                   </div>
                 ) : (
                   <div className={`divide-y ${colors.border.light}`}>
-                    {sections.map((section, index) => (
-                      <div key={section.id} className={`px-4 py-3 ${colors.background.card} flex items-center gap-3`}>
-                        <span className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-blue-400">
-                          {index + 1}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className={`font-medium ${colors.text.primary} truncate`}>{section.name}</p>
-                          <p className={`text-xs ${colors.text.muted}`}>{section.durationMinutes} minuti</p>
-                          <div className="mt-3 space-y-2">
-                            <MultiSelect
-                              values={section.subjectIds ?? (section.subjectId ? [section.subjectId] : [])}
-                              options={(subjectsData ?? []).map((subject) => ({
-                                value: subject.id,
-                                label: subject.name,
-                                color: subject.color ?? undefined,
-                              }))}
-                              onChange={(vals) => {
-                                const total = section.questionCount ?? 0;
-                                const newCounts: Record<string, number> = {};
-                                vals.forEach((sid, i) => {
-                                  const base = Math.floor(total / vals.length);
-                                  const remainder = total % vals.length;
-                                  newCounts[sid] = i < remainder ? base + 1 : base;
-                                });
-                                updateSection(section.id, {
-                                  subjectIds: vals,
-                                  subjectId: vals.length === 1 ? vals[0] : null,
-                                  subjectQuestionCounts: vals.length > 0 ? newCounts : {},
-                                  topicIds: [],
-                                });
-                              }}
-                              placeholder="Materia opzionale"
-                            />
+                    {sections.map((section, index) => {
+                      const sectionLanguage = (section.language ?? '') as TemplateLanguageFilter;
+                      const selectedSubjectIds = section.subjectIds ?? (section.subjectId ? [section.subjectId] : []);
+                      const languageFilteredSubjects = filterTemplateSubjectsByLanguage(templateSubjects, sectionLanguage);
+                      const topicOptions = getTemplateTopicOptions(languageFilteredSubjects, selectedSubjectIds, sectionLanguage);
+                      const hasLanguageFilter = Boolean(sectionLanguage);
+
+                      return (
+                      <div key={section.id} className={`px-4 py-4 ${colors.background.card}`}>
+                        <div className="flex flex-col gap-4">
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="flex items-start gap-3 min-w-0">
+                              <span className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-blue-400 flex-shrink-0">
+                                {index + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <p className={`font-medium ${colors.text.primary} truncate`}>{section.name}</p>
+                                <p className={`text-xs ${colors.text.muted}`}>{section.durationMinutes} minuti</p>
+                              </div>
+                            </div>
+
+                            <label className="flex items-center gap-2 flex-shrink-0 lg:justify-end">
+                              <span className={`text-xs ${colors.text.muted}`}>Domande</span>
+                              <input
+                                type="number"
+                                value={section.questionCount || 0}
+                                onChange={(e) => {
+                                  const total = parseInt(e.target.value) || 0;
+                                  const ids = section.subjectIds ?? [];
+                                  const selectedTypes = section.questionTypes ?? [];
+                                  const updates: Partial<SimulationSection> = { questionCount: total };
+                                  if (ids.length > 1) {
+                                    updates.subjectQuestionCounts = distributeCountEvenly(total, ids);
+                                  }
+                                  if (selectedTypes.length > 1) {
+                                    updates.questionTypeCounts = distributeCountEvenly(total, selectedTypes);
+                                  }
+                                  updateSection(section.id, updates);
+                                }}
+                                min={0}
+                                className={`w-20 px-2 py-1.5 rounded-lg border ${colors.border.input} ${colors.background.input} ${colors.text.primary} text-sm text-center`}
+                              />
+                            </label>
+                          </div>
+
+                          <div className={`rounded-lg border ${colors.border.light} ${colors.background.secondary} p-4 space-y-4`}>
+                            <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-3">
+                              <CustomSelect
+                                label="Lingua"
+                                value={section.language ?? ''}
+                                onChange={(value) => {
+                                  const nextLanguage = value as TemplateLanguageFilter;
+                                  const nextSubjects = filterTemplateSubjectsByLanguage(templateSubjects, nextLanguage);
+                                  const availableSubjectIds = new Set(nextSubjects.map((subject) => subject.id));
+                                  const nextSubjectIds = selectedSubjectIds.filter((subjectId) => availableSubjectIds.has(subjectId));
+                                  const nextTopicOptions = getTemplateTopicOptions(nextSubjects, nextSubjectIds, nextLanguage);
+                                  const availableTopicIds = new Set(nextTopicOptions.map((topic) => topic.value));
+                                  const total = section.questionCount ?? 0;
+
+                                  updateSection(section.id, {
+                                    language: nextLanguage || null,
+                                    subjectIds: nextSubjectIds,
+                                    subjectId: nextSubjectIds.length === 1 ? nextSubjectIds[0] : null,
+                                    subjectQuestionCounts: nextSubjectIds.length > 1 ? distributeCountEvenly(total, nextSubjectIds) : {},
+                                    topicIds: (section.topicIds ?? []).filter((topicId) => availableTopicIds.has(topicId)),
+                                  });
+                                }}
+                                options={TEMPLATE_LANGUAGE_OPTIONS}
+                                placeholder="Tutte le lingue"
+                                size="sm"
+                              />
+
+                              <MultiSelect
+                                label="Materie"
+                                values={selectedSubjectIds}
+                                options={buildTemplateSubjectOptions(languageFilteredSubjects, sectionLanguage)}
+                                onChange={(vals) => {
+                                  const total = section.questionCount ?? 0;
+                                  const nextTopicOptions = getTemplateTopicOptions(languageFilteredSubjects, vals, sectionLanguage);
+                                  const availableTopicIds = new Set(nextTopicOptions.map((topic) => topic.value));
+                                  updateSection(section.id, {
+                                    subjectIds: vals,
+                                    subjectId: vals.length === 1 ? vals[0] : null,
+                                    subjectQuestionCounts: vals.length > 1 ? distributeCountEvenly(total, vals) : {},
+                                    topicIds: (section.topicIds ?? []).filter((topicId) => availableTopicIds.has(topicId)),
+                                  });
+                                }}
+                                placeholder={hasLanguageFilter ? `Materie con domande ${sectionLanguage}` : 'Tutte le materie'}
+                                size="sm"
+                              />
+                            </div>
+
+                            {hasLanguageFilter && (
+                              <p className={`text-xs ${colors.text.muted}`}>
+                                Sono disponibili solo materie e argomenti con almeno una domanda pubblicata in {TEMPLATE_LANGUAGE_LABELS[sectionLanguage as TemplateLanguageValue]}.
+                              </p>
+                            )}
+
+                            {selectedSubjectIds.length > 0 && (
+                              topicOptions.length > 0 ? (
+                                <MultiSelect
+                                  label="Argomenti"
+                                  values={(section.topicIds ?? []).filter((topicId) => topicOptions.some((option) => option.value === topicId))}
+                                  options={topicOptions}
+                                  onChange={(vals) => updateSection(section.id, { topicIds: vals })}
+                                  placeholder="Tutti gli argomenti"
+                                  size="sm"
+                                />
+                              ) : (
+                                <div className={`rounded-lg border ${colors.border.light} ${colors.background.input} px-3 py-2 text-xs ${colors.text.muted}`}>
+                                  Nessun argomento disponibile per le materie e la lingua selezionate.
+                                </div>
+                              )
+                            )}
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                              <MultiSelect
+                                label="Tipologia domanda"
+                                values={section.questionTypes ?? []}
+                                options={TEMPLATE_QUESTION_TYPE_OPTIONS}
+                                onChange={(vals) => {
+                                  const selectedTypes = vals as TemplateQuestionTypeValue[];
+                                  const total = section.questionCount ?? 0;
+                                  updateSection(section.id, {
+                                    questionTypes: selectedTypes,
+                                    questionTypeCounts: selectedTypes.length > 1 ? distributeCountEvenly(total, selectedTypes) : {},
+                                  });
+                                }}
+                                placeholder="Tutte le tipologie"
+                                size="sm"
+                              />
+
+                              <MultiSelect
+                                label="Difficoltà"
+                                values={section.difficultyLevels ?? []}
+                                options={TEMPLATE_DIFFICULTY_OPTIONS}
+                                onChange={(vals) => updateSection(section.id, { difficultyLevels: vals as TemplateDifficultyValue[] })}
+                                placeholder="Tutte le difficoltà"
+                                size="sm"
+                              />
+
+                              {tagCategoriesData && tagCategoriesData.length > 0 && (
+                                <MultiSelect
+                                  label="Tag"
+                                  values={section.tagIds ?? []}
+                                  options={tagCategoriesData.flatMap((category) =>
+                                    category.tags.map((tag) => ({
+                                      value: tag.id,
+                                      label: tagCategoriesData.length > 1 ? `${tag.name} (${category.name})` : tag.name,
+                                      color: tag.color ?? undefined,
+                                    }))
+                                  )}
+                                  onChange={(vals) => updateSection(section.id, { tagIds: vals })}
+                                  placeholder="Tutti i tag"
+                                  size="sm"
+                                />
+                              )}
+                            </div>
+
+                            {(section.questionTypes ?? []).length > 1 && (
+                              <div className={`rounded-lg border ${colors.border.light} ${colors.background.input} p-3`}>
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                  <p className={`text-xs font-medium ${colors.text.muted}`}>Distribuzione per tipologia</p>
+                                  <div className={`text-xs ${getCountTotal(section.questionTypeCounts) > (section.questionCount ?? 0) ? 'text-red-500' : colors.text.muted}`}>
+                                    {getCountTotal(section.questionTypeCounts)} / {section.questionCount ?? 0}
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap gap-x-4 gap-y-2">
+                                  {(section.questionTypes ?? []).map((type) => {
+                                    const val = (section.questionTypeCounts ?? {})[type] ?? 0;
+                                    const total = section.questionCount ?? 0;
+                                    const otherTotal = getCountTotal(section.questionTypeCounts) - val;
+                                    return (
+                                      <div key={type} className="flex items-center gap-1">
+                                        <span className={`text-xs ${colors.text.secondary}`}>{TEMPLATE_QUESTION_TYPE_LABELS[type]}:</span>
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          max={Math.max(0, total - otherTotal)}
+                                          value={val}
+                                          onChange={(e) => {
+                                            const parsed = parseInt(e.target.value, 10) || 0;
+                                            const capped = Math.min(parsed, Math.max(0, total - otherTotal));
+                                            updateSection(section.id, {
+                                              questionTypeCounts: { ...(section.questionTypeCounts ?? {}), [type]: capped },
+                                            });
+                                          }}
+                                          className={`w-14 px-1 py-0.5 rounded border ${colors.border.input} ${colors.background.secondary} ${colors.text.primary} text-xs text-center`}
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                {getCountTotal(section.questionTypeCounts) < (section.questionCount ?? 0) && (
+                                  <p className={`mt-2 text-xs ${colors.text.muted}`}>
+                                    {(section.questionCount ?? 0) - getCountTotal(section.questionTypeCounts)} domande restano casuali tra le tipologie selezionate.
+                                  </p>
+                                )}
+                              </div>
+                            )}
 
                             {/* Editable per-subject distribution when 2+ subjects */}
-                            {(section.subjectIds ?? []).length > 1 && (
-                              <div className={`rounded-lg border ${colors.border.light} ${colors.background.input} p-2`}>
+                            {selectedSubjectIds.length > 1 && (
+                              <div className={`rounded-lg border ${colors.border.light} ${colors.background.input} p-3`}>
                                 <div className="flex items-center justify-between mb-2">
                                   <p className={`text-xs font-medium ${colors.text.muted}`}>Distribuzione domande</p>
                                   <button
                                     type="button"
                                     onClick={() => {
                                       const total = section.questionCount ?? 0;
-                                      const ids = section.subjectIds ?? [];
-                                      const balanced: Record<string, number> = {};
-                                      ids.forEach((sid, i) => {
-                                        const base = Math.floor(total / ids.length);
-                                        balanced[sid] = i < (total % ids.length) ? base + 1 : base;
-                                      });
-                                      updateSection(section.id, { subjectQuestionCounts: balanced });
+                                      updateSection(section.id, { subjectQuestionCounts: distributeCountEvenly(total, selectedSubjectIds) });
                                     }}
                                     className={`text-xs ${colors.text.muted} hover:${colors.text.primary} transition-colors flex items-center gap-1`}
                                     title="Ribilancia equamente"
                                   >
-                                    ⚖ Ribilancia
+                                    Ribilancia
                                   </button>
                                 </div>
-                                <div className="flex flex-wrap gap-x-4 gap-y-1">
-                                  {(section.subjectIds ?? []).map((sid) => {
-                                    const subjectName = (subjectsData ?? []).find((s) => s.id === sid)?.name ?? sid;
+                                <div className="flex flex-wrap gap-x-4 gap-y-2">
+                                  {selectedSubjectIds.map((sid) => {
+                                    const subjectName = languageFilteredSubjects.find((s) => s.id === sid)?.name ?? sid;
                                     const val = (section.subjectQuestionCounts ?? {})[sid] ?? 0;
                                     return (
                                       <div key={sid} className="flex items-center gap-1">
@@ -2473,7 +2790,13 @@ export default function NewSimulationPage() {
                                             const newVal = parseInt(e.target.value) || 0;
                                             const newCounts = { ...(section.subjectQuestionCounts ?? {}), [sid]: newVal };
                                             const newTotal = Object.values(newCounts).reduce((a, b) => a + b, 0);
-                                            updateSection(section.id, { subjectQuestionCounts: newCounts, questionCount: newTotal });
+                                            updateSection(section.id, {
+                                              subjectQuestionCounts: newCounts,
+                                              questionCount: newTotal,
+                                              ...(section.questionTypes && section.questionTypes.length > 1
+                                                ? { questionTypeCounts: distributeCountEvenly(newTotal, section.questionTypes) }
+                                                : {}),
+                                            });
                                           }}
                                           className={`w-14 px-1 py-0.5 rounded border ${colors.border.input} ${colors.background.secondary} ${colors.text.primary} text-xs text-center`}
                                         />
@@ -2483,63 +2806,11 @@ export default function NewSimulationPage() {
                                 </div>
                               </div>
                             )}
-
-                            {/* Topics — only when exactly one subject */}
-                            {(section.subjectIds ?? []).length === 1 && section.subjectId && (
-                              <div className={`rounded-lg border ${colors.border.light} ${colors.background.input} p-2 max-h-24 overflow-y-auto`}>
-                                {((subjectsData ?? []).find((subject) => subject.id === section.subjectId)?.topics ?? []).length === 0 ? (
-                                  <p className={`text-xs ${colors.text.muted}`}>Nessun argomento disponibile</p>
-                                ) : (
-                                  ((subjectsData ?? []).find((subject) => subject.id === section.subjectId)?.topics ?? []).map((topic) => {
-                                    const checked = (section.topicIds ?? []).includes(topic.id);
-                                    return (
-                                      <div key={topic.id} className="flex items-center gap-2 py-1">
-                                        <Checkbox
-                                          id={`topic-${section.id}-${topic.id}`}
-                                          checked={checked}
-                                          onChange={(e) => {
-                                            const currentTopicIds = section.topicIds ?? [];
-                                            updateSection(section.id, {
-                                              topicIds: e.target.checked
-                                                ? [...currentTopicIds, topic.id]
-                                                : currentTopicIds.filter((id) => id !== topic.id),
-                                            });
-                                          }}
-                                          label={topic.name}
-                                        />
-                                      </div>
-                                    );
-                                  })
-                                )}
-                              </div>
-                            )}
                           </div>
                         </div>
-                        <label className="flex items-center gap-2 flex-shrink-0">
-                          <span className={`text-xs ${colors.text.muted}`}>Domande</span>
-                          <input
-                            type="number"
-                            value={section.questionCount || 0}
-                            onChange={(e) => {
-                              const total = parseInt(e.target.value) || 0;
-                              const ids = section.subjectIds ?? [];
-                              if (ids.length > 1) {
-                                const newCounts: Record<string, number> = {};
-                                ids.forEach((sid, i) => {
-                                  const base = Math.floor(total / ids.length);
-                                  newCounts[sid] = i < (total % ids.length) ? base + 1 : base;
-                                });
-                                updateSection(section.id, { questionCount: total, subjectQuestionCounts: newCounts });
-                              } else {
-                                updateSection(section.id, { questionCount: total });
-                              }
-                            }}
-                            min={0}
-                            className={`w-20 px-2 py-1.5 rounded-lg border ${colors.border.input} ${colors.background.input} ${colors.text.primary} text-sm text-center`}
-                          />
-                        </label>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -3192,32 +3463,45 @@ export default function NewSimulationPage() {
                     Dettaglio Sezioni
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {sections.map((section, idx) => (
-                      <div 
-                        key={section.id} 
-                        className={`p-3 rounded-lg border ${colors.border.light} ${colors.background.card}`}
-                      >
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className={`w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-blue-400`}>
-                            {idx + 1}
-                          </span>
-                          <span className={`font-medium ${colors.text.primary} text-sm`}>{section.name}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className={colors.text.muted}>
-                            <Clock className="w-3 h-3 inline mr-1" />
-                            {section.durationMinutes} min
-                          </span>
-                          <span className={`px-1.5 py-0.5 rounded ${
-                            (creationMode === 'template' ? section.questionCount || 0 : section.questionIds?.length || 0) > 0 
-                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                              : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                          }`}>
-                            {creationMode === 'template' ? section.questionCount || 0 : section.questionIds?.length || 0} domande
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                    {sections.map((section, idx) => {
+                        const selectedTypeLabels = (section.questionTypes ?? [])
+                          .map((type) => TEMPLATE_QUESTION_TYPE_LABELS[type])
+                          .join(', ');
+                        const selectedLanguageLabel = section.language ? TEMPLATE_LANGUAGE_LABELS[section.language] : '';
+
+                        return (
+                          <div 
+                            key={section.id} 
+                            className={`p-3 rounded-lg border ${colors.border.light} ${colors.background.card}`}
+                          >
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className={`w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-blue-400`}>
+                                {idx + 1}
+                              </span>
+                              <span className={`font-medium ${colors.text.primary} text-sm`}>{section.name}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-xs">
+                              <span className={colors.text.muted}>
+                                <Clock className="w-3 h-3 inline mr-1" />
+                                {section.durationMinutes} min
+                              </span>
+                              <span className={`px-1.5 py-0.5 rounded ${
+                                (creationMode === 'template' ? section.questionCount || 0 : section.questionIds?.length || 0) > 0 
+                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                  : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                              }`}>
+                                {creationMode === 'template' ? section.questionCount || 0 : section.questionIds?.length || 0} domande
+                              </span>
+                            </div>
+                            {creationMode === 'template' && (selectedTypeLabels || selectedLanguageLabel) && (
+                              <div className={`mt-2 space-y-1 text-xs ${colors.text.muted}`}>
+                                {selectedTypeLabels && <p>Tipologie: {selectedTypeLabels}</p>}
+                                {selectedLanguageLabel && <p>Lingua: {selectedLanguageLabel}</p>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                   </div>
                   {creationMode === 'simulation' && getUnassignedQuestions().length > 0 && (
                     <p className="mt-3 text-sm text-yellow-600 dark:text-yellow-400">

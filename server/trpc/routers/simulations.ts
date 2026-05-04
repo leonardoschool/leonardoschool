@@ -12,7 +12,6 @@ import {
   submitSimulationSchema,
   quickQuizConfigSchema,
   bulkAssignmentSchema,
-  getDifficultyRatios,
 } from '@/lib/validations/simulationValidation';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { notifySimulationCreated, notifyNewAssignments } from '@/server/services/simulationNotificationService';
@@ -1779,10 +1778,25 @@ type SelfPracticeTemplateSection = {
   durationMinutes?: number;
   questionCount?: number;
   subjectId?: string | null;
+  subjectIds?: string[];
+  subjectQuestionCounts?: Record<string, number>;
   topicIds?: string[] | null;
+  questionTypes?: TemplateQuestionType[];
+  questionTypeCounts?: Partial<Record<TemplateQuestionType, number>>;
+  difficultyLevels?: TemplateDifficultyLevel[];
+  tagIds?: string[];
+  language?: TemplateQuestionLanguage | null;
   questionIds?: string[];
   order?: number;
 };
+
+type TemplateQuestionType = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT';
+type TemplateDifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD';
+type TemplateQuestionLanguage = 'IT' | 'EN';
+
+const TEMPLATE_QUESTION_TYPES: TemplateQuestionType[] = ['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'OPEN_TEXT'];
+const TEMPLATE_DIFFICULTY_LEVELS: TemplateDifficultyLevel[] = ['EASY', 'MEDIUM', 'HARD'];
+const TEMPLATE_QUESTION_LANGUAGES: TemplateQuestionLanguage[] = ['IT', 'EN'];
 
 type PickedTemplateQuestion = {
   id: string;
@@ -1790,6 +1804,183 @@ type PickedTemplateQuestion = {
   subject: { name: string } | null;
   type: string;
 };
+
+function parseStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function parseEnumArray<T extends string>(value: unknown, allowedValues: T[]): T[] {
+  const allowed = new Set<string>(allowedValues);
+  return parseStringArray(value).filter((item): item is T => allowed.has(item));
+}
+
+function parseCountRecord<T extends string>(value: unknown, allowedValues?: T[]): Partial<Record<T, number>> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+
+  const allowed = allowedValues ? new Set<string>(allowedValues) : null;
+  return Object.entries(value as Record<string, unknown>).reduce((record, [key, rawCount]) => {
+    if (allowed && !allowed.has(key)) return record;
+    if (typeof rawCount !== 'number' || !Number.isFinite(rawCount) || rawCount <= 0) return record;
+    record[key as T] = Math.floor(rawCount);
+    return record;
+  }, {} as Partial<Record<T, number>>);
+}
+
+function getSectionSubjectIds(section: SelfPracticeTemplateSection): string[] {
+  if (section.subjectIds && section.subjectIds.length > 0) return section.subjectIds;
+  return section.subjectId ? [section.subjectId] : [];
+}
+
+function sumCounts(counts: Array<{ count: number }>): number {
+  return counts.reduce((total, item) => total + item.count, 0);
+}
+
+function scaleCountsToTarget<T extends string>(
+  entries: Array<{ key: T; count: number }>,
+  targetTotal: number
+): Array<{ key: T; count: number }> {
+  const sourceTotal = sumCounts(entries);
+  if (sourceTotal <= 0 || targetTotal <= 0) return [];
+
+  const scaled = entries.map((entry) => {
+    const exact = (entry.count / sourceTotal) * targetTotal;
+    return { ...entry, count: Math.floor(exact), remainder: exact - Math.floor(exact) };
+  });
+
+  let remaining = targetTotal - sumCounts(scaled);
+  for (const entry of scaled.toSorted((first, second) => second.remainder - first.remainder)) {
+    if (remaining <= 0) break;
+    entry.count += 1;
+    remaining -= 1;
+  }
+
+  return scaled.filter((entry) => entry.count > 0).map(({ key, count }) => ({ key, count }));
+}
+
+function getSubjectTargets(section: SelfPracticeTemplateSection): Array<{ subjectId?: string; count: number }> {
+  const targetCount = section.questionCount ?? 0;
+  const subjectIds = getSectionSubjectIds(section);
+  const configuredCounts = section.subjectQuestionCounts ?? {};
+  const configuredTargets = subjectIds
+    .map((subjectId) => ({ subjectId, count: configuredCounts[subjectId] ?? 0 }))
+    .filter((target) => target.count > 0);
+
+  if (configuredTargets.length === 0) {
+    return [{ count: targetCount }];
+  }
+
+  const configuredTotal = sumCounts(configuredTargets);
+  const targets = configuredTotal > targetCount
+    ? scaleCountsToTarget(
+        configuredTargets.map((target) => ({ key: target.subjectId, count: target.count })),
+        targetCount
+      ).map((target) => ({ subjectId: target.key, count: target.count }))
+    : configuredTargets;
+
+  const remaining = targetCount - sumCounts(targets);
+  return remaining > 0 ? [...targets, { count: remaining }] : targets;
+}
+
+function getTypeTargets(
+  section: SelfPracticeTemplateSection,
+  targetCount: number,
+  shouldScaleToTarget: boolean
+): Array<{ type: TemplateQuestionType; count: number }> {
+  const configuredTypes = section.questionTypes ?? [];
+  const configuredCounts = section.questionTypeCounts ?? {};
+  const allowedTypes = configuredTypes.length > 0 ? configuredTypes : TEMPLATE_QUESTION_TYPES;
+  const targets = allowedTypes
+    .map((type) => ({ type, count: configuredCounts[type] ?? 0 }))
+    .filter((target) => target.count > 0);
+
+  if (targets.length === 0) return [];
+
+  const configuredTotal = sumCounts(targets);
+  if (configuredTotal > targetCount || shouldScaleToTarget) {
+    return scaleCountsToTarget(
+      targets.map((target) => ({ key: target.type, count: target.count })),
+      targetCount
+    ).map((target) => ({ type: target.key, count: target.count }));
+  }
+
+  return targets;
+}
+
+function buildTemplateQuestionWhere(
+  section: SelfPracticeTemplateSection,
+  overrides: { subjectId?: string; type?: TemplateQuestionType; difficulty?: TemplateDifficultyLevel } = {}
+): Prisma.QuestionWhereInput {
+  const subjectIds = getSectionSubjectIds(section);
+  const where: Prisma.QuestionWhereInput = {
+    status: 'PUBLISHED',
+  };
+
+  if (section.language) where.language = section.language;
+
+  if (overrides.subjectId) {
+    where.subjectId = overrides.subjectId;
+  } else if (subjectIds.length === 1) {
+    where.subjectId = subjectIds[0];
+  } else if (subjectIds.length > 1) {
+    where.subjectId = { in: subjectIds };
+  }
+
+  if (section.topicIds && section.topicIds.length > 0) {
+    where.topicId = { in: section.topicIds };
+  }
+
+  if (overrides.type) {
+    where.type = overrides.type;
+  } else if (section.questionTypes && section.questionTypes.length === 1) {
+    where.type = section.questionTypes[0];
+  } else if (section.questionTypes && section.questionTypes.length > 1) {
+    where.type = { in: section.questionTypes };
+  }
+
+  if (overrides.difficulty) {
+    where.difficulty = overrides.difficulty;
+  } else if (section.difficultyLevels && section.difficultyLevels.length === 1) {
+    where.difficulty = section.difficultyLevels[0];
+  } else if (section.difficultyLevels && section.difficultyLevels.length > 1) {
+    where.difficulty = { in: section.difficultyLevels };
+  }
+
+  if (section.tagIds && section.tagIds.length > 0) {
+    where.questionTags = {
+      some: { tagId: { in: section.tagIds } },
+    };
+  }
+
+  return where;
+}
+
+async function pickRandomTemplateQuestions(
+  prisma: PrismaClient,
+  sectionId: string,
+  where: Prisma.QuestionWhereInput,
+  count: number,
+  pickedIds: Set<string>
+): Promise<PickedTemplateQuestion[]> {
+  if (count <= 0) return [];
+
+  const candidates = await prisma.question.findMany({
+    where: {
+      ...where,
+      id: { notIn: Array.from(pickedIds) },
+    },
+    take: Math.max(count * 5, 20),
+    orderBy: [{ timesUsed: 'asc' }, { createdAt: 'desc' }],
+    select: {
+      id: true,
+      type: true,
+      subject: { select: { name: true } },
+    },
+  });
+
+  const picked = secureShuffleArray(candidates).slice(0, count);
+  picked.forEach((question) => pickedIds.add(question.id));
+  return picked.map((question) => ({ ...question, sectionId }));
+}
 
 function parseTemplateSections(sections: Prisma.JsonValue | null): SelfPracticeTemplateSection[] {
   if (!Array.isArray(sections)) return [];
@@ -1801,7 +1992,14 @@ function parseTemplateSections(sections: Prisma.JsonValue | null): SelfPracticeT
       durationMinutes: typeof section.durationMinutes === 'number' ? section.durationMinutes : 0,
       questionCount: typeof section.questionCount === 'number' ? section.questionCount : 0,
       subjectId: typeof section.subjectId === 'string' ? section.subjectId : null,
+      subjectIds: parseStringArray(section.subjectIds),
+      subjectQuestionCounts: parseCountRecord(section.subjectQuestionCounts) as Record<string, number>,
       topicIds: Array.isArray(section.topicIds) ? (section.topicIds as unknown[]).filter((id): id is string => typeof id === 'string') : [],
+      questionTypes: parseEnumArray(section.questionTypes, TEMPLATE_QUESTION_TYPES),
+      questionTypeCounts: parseCountRecord(section.questionTypeCounts, TEMPLATE_QUESTION_TYPES),
+      difficultyLevels: parseEnumArray(section.difficultyLevels, TEMPLATE_DIFFICULTY_LEVELS),
+      tagIds: parseStringArray(section.tagIds),
+      language: parseEnumArray([section.language], TEMPLATE_QUESTION_LANGUAGES)[0] ?? null,
       order: typeof section.order === 'number' ? section.order : index,
     }))
     .sort((first, second) => (first.order ?? 0) - (second.order ?? 0));
@@ -1810,83 +2008,49 @@ function parseTemplateSections(sections: Prisma.JsonValue | null): SelfPracticeT
 async function pickQuestionsForTemplateSection(
   prisma: PrismaClient,
   section: SelfPracticeTemplateSection,
-  difficultyMix: 'BALANCED' | 'EASY_FOCUS' | 'HARD_FOCUS' | 'MEDIUM_ONLY' | 'MIXED',
   alreadyPickedIds: string[]
 ): Promise<PickedTemplateQuestion[]> {
   const targetCount = section.questionCount ?? 0;
   if (targetCount <= 0) return [];
 
-  const baseWhere: Prisma.QuestionWhereInput = {
-    status: 'PUBLISHED',
-    ...(section.subjectId ? { subjectId: section.subjectId } : {}),
-    ...(section.topicIds && section.topicIds.length > 0 ? { topicId: { in: section.topicIds } } : {}),
-  };
-
-  const ratios = getDifficultyRatios(difficultyMix);
-  const rawTargets = {
-    EASY: Math.round(targetCount * ratios.EASY),
-    MEDIUM: Math.round(targetCount * ratios.MEDIUM),
-    HARD: Math.round(targetCount * ratios.HARD),
-  };
-  const rawTotal = rawTargets.EASY + rawTargets.MEDIUM + rawTargets.HARD;
-  if (rawTotal < targetCount) {
-    rawTargets.MEDIUM += targetCount - rawTotal;
-  } else if (rawTotal > targetCount) {
-    const excess = rawTotal - targetCount;
-    if (rawTargets.HARD >= excess) {
-      rawTargets.HARD -= excess;
-    } else {
-      rawTargets.MEDIUM -= excess - rawTargets.HARD;
-      rawTargets.HARD = 0;
-    }
-  }
-  const difficultyTargets = rawTargets;
   const picked: PickedTemplateQuestion[] = [];
   const pickedIds = new Set(alreadyPickedIds);
 
-  for (const [difficulty, count] of Object.entries(difficultyTargets)) {
-    if (count <= 0) continue;
-    const candidates = await prisma.question.findMany({
-      where: {
-        ...baseWhere,
-        difficulty: difficulty as 'EASY' | 'MEDIUM' | 'HARD',
-        id: { notIn: Array.from(pickedIds) },
-      },
-      take: count * 5,
-      orderBy: [{ timesUsed: 'asc' }, { createdAt: 'desc' }],
-      select: {
-        id: true,
-        type: true,
-        subject: { select: { name: true } },
-      },
-    });
+  for (const subjectTarget of getSubjectTargets(section)) {
+    const pickedBeforeSubject = picked.length;
+    const typeTargets = getTypeTargets(section, subjectTarget.count, Boolean(subjectTarget.subjectId));
+    for (const typeTarget of typeTargets) {
+      picked.push(...await pickRandomTemplateQuestions(
+        prisma,
+        section.id ?? 'section',
+        buildTemplateQuestionWhere(section, { subjectId: subjectTarget.subjectId, type: typeTarget.type }),
+        typeTarget.count,
+        pickedIds
+      ));
+    }
 
-    for (const question of secureShuffleArray(candidates).slice(0, count)) {
-      picked.push({ ...question, sectionId: section.id ?? 'section' });
-      pickedIds.add(question.id);
+    const subjectPickedCount = picked.length - pickedBeforeSubject;
+    const subjectRemaining = subjectTarget.count - subjectPickedCount;
+    if (subjectRemaining > 0) {
+      picked.push(...await pickRandomTemplateQuestions(
+        prisma,
+        section.id ?? 'section',
+        buildTemplateQuestionWhere(section, { subjectId: subjectTarget.subjectId }),
+        subjectRemaining,
+        pickedIds
+      ));
     }
   }
 
   const remaining = targetCount - picked.length;
   if (remaining > 0) {
-    const fillCandidates = await prisma.question.findMany({
-      where: {
-        ...baseWhere,
-        id: { notIn: Array.from(pickedIds) },
-      },
-      take: remaining * 5,
-      orderBy: [{ timesUsed: 'asc' }, { createdAt: 'desc' }],
-      select: {
-        id: true,
-        type: true,
-        subject: { select: { name: true } },
-      },
-    });
-
-    for (const question of secureShuffleArray(fillCandidates).slice(0, remaining)) {
-      picked.push({ ...question, sectionId: section.id ?? 'section' });
-      pickedIds.add(question.id);
-    }
+    picked.push(...await pickRandomTemplateQuestions(
+      prisma,
+      section.id ?? 'section',
+      buildTemplateQuestionWhere(section),
+      remaining,
+      pickedIds
+    ));
   }
 
   if (picked.length === 0) {
@@ -4498,7 +4662,6 @@ export const simulationsRouter = router({
         const picked = await pickQuestionsForTemplateSection(
           ctx.prisma,
           section,
-          input.difficultyMix,
           selectedQuestions.map((question) => question.id)
         );
         selectedQuestions.push(...picked);
@@ -4515,7 +4678,14 @@ export const simulationsRouter = router({
         durationMinutes: section.durationMinutes ?? 0,
         questionCount: sectionQuestionIds.get(section.id ?? 'section')?.length ?? 0,
         subjectId: section.subjectId ?? null,
+        subjectIds: section.subjectIds ?? [],
+        subjectQuestionCounts: section.subjectQuestionCounts ?? {},
         topicIds: section.topicIds ?? [],
+        questionTypes: section.questionTypes ?? [],
+        questionTypeCounts: section.questionTypeCounts ?? {},
+        difficultyLevels: section.difficultyLevels ?? [],
+        tagIds: section.tagIds ?? [],
+        language: section.language ?? null,
         questionIds: sectionQuestionIds.get(section.id ?? 'section') ?? [],
         order: index,
       }));

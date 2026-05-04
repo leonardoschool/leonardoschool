@@ -32,6 +32,15 @@ export const difficultyDistributionSchema = z.object({
 });
 export type DifficultyDistribution = z.infer<typeof difficultyDistributionSchema>;
 
+export const SectionQuestionTypeEnum = z.enum(['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'OPEN_TEXT']);
+export type SectionQuestionType = z.infer<typeof SectionQuestionTypeEnum>;
+
+export const SectionQuestionLanguageEnum = z.enum(['IT', 'EN']);
+export type SectionQuestionLanguage = z.infer<typeof SectionQuestionLanguageEnum>;
+
+export const SectionDifficultyLevelEnum = z.enum(['EASY', 'MEDIUM', 'HARD']);
+export type SectionDifficultyLevel = z.infer<typeof SectionDifficultyLevelEnum>;
+
 // ==================== SECTION SCHEMA (for TOLC-style simulations) ====================
 
 export const simulationSectionSchema = z.object({
@@ -43,6 +52,11 @@ export const simulationSectionSchema = z.object({
   subjectIds: z.array(z.string()).optional().default([]),
   subjectQuestionCounts: z.record(z.string(), z.number().int().min(0)).optional().default({}),
   topicIds: z.array(z.string()).optional().default([]),
+  questionTypes: z.array(SectionQuestionTypeEnum).optional().default([]),
+  questionTypeCounts: z.record(z.string(), z.number().int().min(0)).optional().default({}),
+  difficultyLevels: z.array(SectionDifficultyLevelEnum).optional().default([]),
+  tagIds: z.array(z.string()).optional().default([]),
+  language: SectionQuestionLanguageEnum.optional().nullable(),
   questionIds: z.array(z.string()).optional().default([]),
   order: z.number().int().min(0).default(0),
 });

@@ -423,7 +423,7 @@ export function generateSimulationPdf(data: SimulationPdfData): jsPDF {
     doc.setPage(i);
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
-    doc.text(`Pagina ${i} di ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+    doc.text(`${i} di ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
   }
 
   return doc;

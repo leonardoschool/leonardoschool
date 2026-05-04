@@ -244,7 +244,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
                 ${[...sq.question.answers]
                   .sort((firstAnswer, secondAnswer) => (firstAnswer.order ?? 0) - (secondAnswer.order ?? 0))
                   .map((answer, ansIndex) => `
-                    <div class="answer"><strong>${String.fromCharCode(65 + ansIndex)})</strong> ${removeLatexImageReferences(answer.text)}${renderImage(answer.imageUrl, 'answer-image')}</div>
+                    <div class="answer"><span class="answer-letter">${String.fromCharCode(65 + ansIndex)})</span><div class="answer-content">${removeLatexImageReferences(answer.text)}${renderImage(answer.imageUrl, 'answer-image')}</div></div>
                   `).join('')}
               </div>`
             : '';
@@ -336,7 +336,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
       margin: 10mm 15mm 20mm 15mm;
 
       @bottom-center {
-        content: "Pagina " counter(page);
+        content: counter(page);
         font-family: 'Times New Roman', Times, serif;
         font-size: 10pt;
       }
@@ -392,10 +392,12 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
       left: 50%;
       transform: translate(-50%, -50%);
       opacity: 0.06;
-      z-index: -1;
+      z-index: 0;
       width: 50%;
       max-width: 350px;
       pointer-events: none;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
     
     .container { 
@@ -481,22 +483,45 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
     .answers { 
       margin-left: 25px; 
       font-family: Arial, Helvetica, sans-serif;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
     .answer { 
-      margin: 2px 0; 
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      margin: 0; 
       font-size: 11pt;
+      line-height: 1.55;
     }
-    .answer strong {
-      font-weight: bold;
+    .answer-letter {
+      display: inline-block;
+      flex: 0 0 28px;
+      width: 28px;
+      font-family: Arial, Helvetica, sans-serif !important;
+      font-size: 11pt !important;
+      font-style: normal !important;
+      font-synthesis: none !important;
+      font-variation-settings: 'wght' 400 !important;
+      font-weight: 400 !important;
+      line-height: 1.55 !important;
+    }
+    .answer-content {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .answer-content p {
+      margin: 0;
     }
     
     /* Subscript and superscript */
-    sub { font-size: 0.7em; vertical-align: sub; }
-    sup { font-size: 0.7em; vertical-align: super; }
+    sub { font-size: 0.92em; vertical-align: sub; }
+    sup { font-size: 0.92em; vertical-align: super; }
     
     /* KaTeX */
-    .katex { font-size: 1em; }
-    .katex-display { margin: 6px 0; }
+    .katex { font-size: 1.2em !important; line-height: 1.18 !important; }
+    .katex-display { margin: 9px 0; }
     
     /* End of questions */
     .end-of-questions {

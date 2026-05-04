@@ -105,7 +105,7 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
             margin: 10mm 15mm 20mm 15mm;
 
             @bottom-center {
-              content: "Pagina " counter(page);
+              content: counter(page);
               font-family: 'Times New Roman', Times, serif;
               font-size: 10pt;
             }
@@ -131,6 +131,7 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
               top: 0 !important;
               left: 0 !important;
               width: 100% !important;
+              isolation: isolate !important;
             }
             
             .no-break {
@@ -166,16 +167,59 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
               left: 50% !important;
               transform: translate(-50%, -50%) !important;
               opacity: 0.06 !important;
-              z-index: -1 !important;
+              z-index: 0 !important;
               width: 60% !important;
               max-width: 400px !important;
               pointer-events: none !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+
+            .print-paper {
+              position: relative !important;
+              z-index: 1 !important;
+              isolation: isolate !important;
+              background: #fff !important;
+            }
+
+            .print-paper > :not(.watermark) {
+              position: relative;
+              z-index: 1;
             }
             
             /* Content starts below fixed header */
             .print-body {
               margin-top: 30px;
+              position: relative;
+              z-index: 1;
             }
+
+            .print-page-footer {
+              display: none;
+            }
+
+            @supports (font: -apple-system-body) {
+              .print-page-footer {
+                display: block !important;
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                z-index: 1000;
+                text-align: center;
+                font-family: 'Times New Roman', Times, serif;
+                font-size: 10pt;
+                color: #000;
+              }
+
+              .print-page-footer::after {
+                content: counter(page);
+              }
+            }
+          }
+
+          .print-page-footer {
+            display: none;
           }
           
           /* Screen preview styles */
@@ -185,20 +229,59 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
             left: 50%;
             transform: translate(-50%, -50%);
             opacity: 0.06;
-            z-index: -1;
+            z-index: 0;
             width: 60%;
             max-width: 400px;
             pointer-events: none;
           }
-          
-          /* KaTeX styling */
-          .katex {
-            font-size: 1em !important;
+
+          .print-paper {
+            position: relative;
+            z-index: 1;
+            isolation: isolate;
+            background: #fff;
+          }
+
+          .print-paper > :not(.watermark) {
+            position: relative;
+            z-index: 1;
           }
           
-          .katex-display {
-            margin: 0.5em 0 !important;
+          /* KaTeX styling */
+          .print-content .rich-text-content .katex {
+            font-size: 1.42em !important;
+            line-height: 1.12 !important;
+          }
+
+          .print-content .rich-text-content sub,
+          .print-content .rich-text-content sup {
+            font-size: 0.92em !important;
+            line-height: 0 !important;
+          }
+          
+          .print-content .rich-text-content .katex-display {
+            margin: 0.65em 0 !important;
             overflow-x: visible !important;
+          }
+
+          .print-content .rich-text-content .mfrac {
+            font-size: 1.08em !important;
+          }
+
+          .print-answer-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.58rem;
+          }
+
+          .print-answer-letter {
+            font-family: Arial, Helvetica, sans-serif !important;
+            font-size: 1em !important;
+            font-style: normal !important;
+            font-synthesis: none !important;
+            font-variation-settings: 'wght' 400 !important;
+            font-weight: 400 !important;
+            line-height: 1.35 !important;
           }
         `}</style>
 
@@ -213,15 +296,17 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
           {simulation.title}
         </div>
 
-        {/* Watermark logo - appears on every page */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img 
-          src="/images/logo.png" 
-          alt="" 
-          className="watermark"
-        />
+        <div className="print-page-footer" aria-hidden="true" />
 
-        <div className="max-w-4xl mx-auto px-8 py-6 bg-white text-black print:px-0 print:py-0 font-['Arial',Helvetica,sans-serif]">
+        <div className="print-paper max-w-4xl mx-auto px-8 py-6 bg-white text-black print:px-0 print:py-0 font-['Arial',Helvetica,sans-serif]">
+          {/* Watermark logo - appears on every page */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img 
+            src="/images/logo.png" 
+            alt="" 
+            className="watermark"
+          />
+
           {/* Space for fixed header */}
           <div className="h-12 print:h-6"></div>
           
@@ -272,12 +357,12 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
 
                       {/* Answers */}
                       {sq.question.answers && (
-                        <div className="ml-8 space-y-0.5">
+                        <div className="print-answer-list ml-8">
                           {[...sq.question.answers]
                             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
                             .map((answer, ansIndex) => (
-                              <div key={answer.id} className="flex items-start gap-2">
-                                <span className="font-bold w-5">
+                              <div key={answer.id} className="flex items-start gap-4">
+                                <span className="print-answer-letter w-5">
                                   {String.fromCodePoint(65 + ansIndex)})
                                 </span>
                                 <div className="flex-1">

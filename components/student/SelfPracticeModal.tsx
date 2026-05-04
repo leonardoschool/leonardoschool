@@ -313,7 +313,6 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
 
         await createSelfPracticeFromTemplate.mutateAsync({
           templateId: selectedSelfPracticeTemplateId,
-          difficultyMix,
           openQuestionCorrection,
           requestCorrectionFromId: openQuestionCorrection === 'staff' ? selectedStaffId : undefined,
         });
@@ -623,7 +622,7 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
         </div>}
 
         {/* Difficoltà */}
-        <DifficultySelector value={difficultyMix} onChange={setDifficultyMix} />
+        {!isTemplateMode && <DifficultySelector value={difficultyMix} onChange={setDifficultyMix} />}
 
         {isTemplateMode && (
           <div>

@@ -220,7 +220,27 @@ describe('simulationValidation', () => {
       const result = simulationSectionSchema.safeParse(minimal);
       expect(result.success).toBe(true);
       expect(result.data?.questionIds).toEqual([]);
+      expect(result.data?.questionTypes).toEqual([]);
+      expect(result.data?.questionTypeCounts).toEqual({});
+      expect(result.data?.difficultyLevels).toEqual([]);
+      expect(result.data?.tagIds).toEqual([]);
       expect(result.data?.order).toBe(0);
+    });
+
+    it('should accept optional template generation filters', () => {
+      const valid = {
+        id: 'section-1',
+        name: 'Test',
+        durationMinutes: 30,
+        questionCount: 12,
+        questionTypes: ['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'OPEN_TEXT'],
+        questionTypeCounts: { SINGLE_CHOICE: 5, MULTIPLE_CHOICE: 4, OPEN_TEXT: 3 },
+        difficultyLevels: ['EASY', 'MEDIUM'],
+        tagIds: ['tag-1'],
+        language: 'EN',
+      };
+      const result = simulationSectionSchema.safeParse(valid);
+      expect(result.success).toBe(true);
     });
   });
 

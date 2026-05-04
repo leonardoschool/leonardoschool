@@ -44,6 +44,8 @@ interface TemplateSection {
   durationMinutes?: number;
   questionCount?: number;
   subjectId?: string | null;
+  questionTypes?: Array<'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT'>;
+  language?: 'IT' | 'EN' | null;
   order?: number;
 }
 
@@ -112,6 +114,17 @@ const simulationTypeLabels: Record<string, string> = {
   PRACTICE: 'Esercitazione',
   CUSTOM: 'Personalizzata',
   QUICK_QUIZ: 'Quiz Veloce',
+};
+
+const questionTypeLabels: Record<'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT', string> = {
+  SINGLE_CHOICE: 'Risposta singola',
+  MULTIPLE_CHOICE: 'Risposta multipla',
+  OPEN_TEXT: 'Risposta aperta',
+};
+
+const languageLabels: Record<'IT' | 'EN', string> = {
+  IT: 'Italiano',
+  EN: 'Inglese',
 };
 
 // --- Component ---
@@ -341,12 +354,13 @@ export default function TemplatesContent() {
               const sections = Array.isArray(template.sections) ? (template.sections as unknown as TemplateSection[]) : [];
               const isExpanded = expandedId === template.id;
               const detail = isExpanded ? detailData : undefined;
+              const rowStateClass = isExpanded ? colors.background.secondary : `hover:${colors.background.secondary}`;
 
               return (
                 <div key={template.id}>
                   {/* Main row */}
                   <div
-                    className={`grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto_auto_auto] gap-4 px-6 py-4 items-center transition-colors cursor-pointer ${isExpanded ? `${colors.background.secondary}` : `hover:${colors.background.secondary}`}`}
+                    className={`grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto_auto_auto] gap-4 px-6 py-4 items-center transition-colors cursor-pointer ${rowStateClass}`}
                     onClick={() => setExpandedId(isExpanded ? null : template.id)}
                     role="button"
                     aria-expanded={isExpanded}
@@ -493,31 +507,44 @@ export default function TemplatesContent() {
                                   Sezioni ({(detail.sections as unknown as TemplateSection[]).length})
                                 </h3>
                                 <div className="space-y-2">
-                                  {(detail.sections as unknown as TemplateSection[]).map((section, idx) => (
-                                    <div
-                                      key={section.id ?? idx}
-                                      className={`flex items-center justify-between px-3 py-2 rounded-lg border ${colors.border.light} ${colors.background.card}`}
-                                    >
-                                      <div className="flex items-center gap-2 min-w-0">
-                                        <span className={`text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${colors.primary.softBg} ${colors.primary.text}`}>
-                                          {idx + 1}
-                                        </span>
-                                        <span className={`text-sm font-medium truncate ${colors.text.primary}`}>{section.name}</span>
+                                  {(detail.sections as unknown as TemplateSection[]).map((section, idx) => {
+                                    const typeLabels = (section.questionTypes ?? []).map((type) => questionTypeLabels[type]).join(', ');
+                                    const languageLabel = section.language ? languageLabels[section.language] : '';
+
+                                    return (
+                                      <div
+                                        key={section.id ?? idx}
+                                        className={`px-3 py-2 rounded-lg border ${colors.border.light} ${colors.background.card}`}
+                                      >
+                                        <div className="flex items-center justify-between gap-3">
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <span className={`text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${colors.primary.softBg} ${colors.primary.text}`}>
+                                              {idx + 1}
+                                            </span>
+                                            <span className={`text-sm font-medium truncate ${colors.text.primary}`}>{section.name}</span>
+                                          </div>
+                                          <div className={`flex items-center gap-3 text-xs ${colors.text.muted} flex-shrink-0`}>
+                                            <span className="flex items-center gap-1">
+                                              <Target className="w-3 h-3" />
+                                              {section.questionCount ?? 0}
+                                            </span>
+                                            {section.durationMinutes ? (
+                                              <span className="flex items-center gap-1">
+                                                <Clock className="w-3 h-3" />
+                                                {formatDuration(section.durationMinutes)}
+                                              </span>
+                                            ) : null}
+                                          </div>
+                                        </div>
+                                        {(typeLabels || languageLabel) && (
+                                          <div className={`mt-1 flex flex-wrap gap-1 text-xs ${colors.text.muted}`}>
+                                            {typeLabels && <span>{typeLabels}</span>}
+                                            {languageLabel && <span>{languageLabel}</span>}
+                                          </div>
+                                        )}
                                       </div>
-                                      <div className={`flex items-center gap-3 text-xs ${colors.text.muted} flex-shrink-0`}>
-                                        <span className="flex items-center gap-1">
-                                          <Target className="w-3 h-3" />
-                                          {section.questionCount ?? 0}
-                                        </span>
-                                        {section.durationMinutes ? (
-                                          <span className="flex items-center gap-1">
-                                            <Clock className="w-3 h-3" />
-                                            {formatDuration(section.durationMinutes)}
-                                          </span>
-                                        ) : null}
-                                      </div>
-                                    </div>
-                                  ))}
+                                    );
+                                  })}
                                 </div>
                               </div>
                             )}
