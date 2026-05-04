@@ -10,6 +10,8 @@ updates:
       time: "09:00"
       timezone: "Europe/Rome"
 
+    target-branch: "test"  # ← aggiunto
+
     open-pull-requests-limit: 5
 
     labels:
@@ -26,7 +28,6 @@ updates:
         dependency-type: "development"
 
     ignore:
-      # evita major automatici in prod
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
@@ -38,6 +39,8 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "Europe/Rome"
+
+    target-branch: "test"  # ← aggiunto
 
     labels:
       - "dependencies"

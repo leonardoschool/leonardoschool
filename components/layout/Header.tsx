@@ -10,16 +10,16 @@ export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
+  // Use true as initial state since component is always mounted client-side
+  const [isMounted] = useState(true);
 
   useEffect(() => {
-    setIsMounted(true);
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 50);
+      setIsScrolled(globalThis.scrollY > 50);
     };
 
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    globalThis.addEventListener('scroll', handleScroll);
+    return () => globalThis.removeEventListener('scroll', handleScroll);
   }, []);
 
   useEffect(() => {

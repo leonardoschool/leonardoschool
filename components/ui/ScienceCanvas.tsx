@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable sonarjs/pseudo-random -- Math.random() is acceptable for visual animations in this file */
+
 import { useEffect, useRef, useState } from 'react';
 
 interface Particle {
@@ -50,11 +52,11 @@ export default function ScienceCanvas() {
 
     // Set canvas size
     const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      canvas.width = globalThis.innerWidth;
+      canvas.height = globalThis.innerHeight;
     };
     resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
+    globalThis.addEventListener('resize', resizeCanvas);
 
     // Initialize particles
     const initParticles = () => {
@@ -208,7 +210,7 @@ export default function ScienceCanvas() {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
-      window.removeEventListener('resize', resizeCanvas);
+      globalThis.removeEventListener('resize', resizeCanvas);
       canvas.removeEventListener('mousemove', handleMouseMove);
       canvas.removeEventListener('mouseleave', handleMouseLeave);
     };
