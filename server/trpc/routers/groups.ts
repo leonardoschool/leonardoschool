@@ -3,21 +3,16 @@ import { TRPCError } from '@trpc/server';
 import { adminProcedure, protectedProcedure, router, staffProcedure } from '../init';
 import { notifications } from '@/lib/notifications/notificationHelpers';
 import { createCachedQuery, CACHE_TIMES } from '@/lib/cache/serverCache';
+import {
+  uniqueReferenceIds,
+  parseLegacyReference,
+  validateReferenceIds,
+  resolveUpdateReferenceIds,
+  notifyNewReferents,
+} from './groups.helpers';
 
 // Group Types
 const GroupTypeEnum = z.enum(['STUDENTS', 'COLLABORATORS', 'MIXED']);
-
-function uniqueReferenceIds(ids: Array<string | null | undefined> = []): string[] {
-  return Array.from(new Set(ids.filter((id): id is string => Boolean(id))));
-}
-
-function parseLegacyReference(value: string | null | undefined): { collaboratorIds: string[]; adminIds: string[] } {
-  if (!value) return { collaboratorIds: [], adminIds: [] };
-  if (value.startsWith('admin:')) {
-    return { collaboratorIds: [], adminIds: [value.replace('admin:', '')] };
-  }
-  return { collaboratorIds: [value], adminIds: [] };
-}
 
 // ==================== GROUPS ROUTER ====================
 export const groupsRouter = router({
@@ -349,26 +344,7 @@ export const groupsRouter = router({
       ]);
       const referenceAdminIds = uniqueReferenceIds([...(input.referenceAdminIds ?? []), ...legacyReference.adminIds]);
 
-      if (referenceStudentIds.length > 0) {
-        const count = await ctx.prisma.student.count({ where: { id: { in: referenceStudentIds } } });
-        if (count !== referenceStudentIds.length) {
-          throw new TRPCError({ code: 'NOT_FOUND', message: 'Uno o più studenti di riferimento non sono stati trovati' });
-        }
-      }
-
-      if (referenceCollaboratorIds.length > 0) {
-        const count = await ctx.prisma.collaborator.count({ where: { id: { in: referenceCollaboratorIds } } });
-        if (count !== referenceCollaboratorIds.length) {
-          throw new TRPCError({ code: 'NOT_FOUND', message: 'Uno o più collaboratori di riferimento non sono stati trovati' });
-        }
-      }
-
-      if (referenceAdminIds.length > 0) {
-        const count = await ctx.prisma.admin.count({ where: { id: { in: referenceAdminIds } } });
-        if (count !== referenceAdminIds.length) {
-          throw new TRPCError({ code: 'NOT_FOUND', message: 'Uno o più amministratori di riferimento non sono stati trovati' });
-        }
-      }
+      await validateReferenceIds(ctx.prisma, referenceStudentIds, referenceCollaboratorIds, referenceAdminIds);
 
       const group = await ctx.prisma.group.create({
         data: {
@@ -435,7 +411,6 @@ export const groupsRouter = router({
         referenceAdminIds: z.array(z.string()).optional(),
       })
     )
-    // eslint-disable-next-line sonarjs/cognitive-complexity
     .mutation(async ({ ctx, input }) => {
       const {
         id,
@@ -447,7 +422,6 @@ export const groupsRouter = router({
         ...data
       } = input;
 
-      // Check group exists
       const existing = await ctx.prisma.group.findUnique({
         where: { id },
         include: {
@@ -457,49 +431,24 @@ export const groupsRouter = router({
         },
       });
       if (!existing) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Gruppo non trovato',
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Gruppo non trovato' });
+      }
+
+      const { studentIds: referenceStudentIds, collaboratorIds: referenceCollaboratorIds, adminIds: referenceAdminIds } =
+        resolveUpdateReferenceIds({
+          referenceStudentId,
+          referenceCollaboratorId: rawCollaboratorId,
+          referenceStudentIds: rawStudentIds,
+          referenceCollaboratorIds: rawCollaboratorIds,
+          referenceAdminIds: rawAdminIds,
         });
-      }
 
-      const legacyReference = parseLegacyReference(rawCollaboratorId);
-      const referenceStudentIds = rawStudentIds !== undefined
-        ? uniqueReferenceIds(rawStudentIds)
-        : referenceStudentId !== undefined
-          ? uniqueReferenceIds([referenceStudentId])
-          : undefined;
-      const referenceCollaboratorIds = rawCollaboratorIds !== undefined
-        ? uniqueReferenceIds(rawCollaboratorIds)
-        : rawCollaboratorId !== undefined
-          ? uniqueReferenceIds(legacyReference.collaboratorIds)
-          : undefined;
-      const referenceAdminIds = rawAdminIds !== undefined
-        ? uniqueReferenceIds(rawAdminIds)
-        : rawCollaboratorId !== undefined
-          ? uniqueReferenceIds(legacyReference.adminIds)
-          : undefined;
-
-      if (referenceStudentIds && referenceStudentIds.length > 0) {
-        const count = await ctx.prisma.student.count({ where: { id: { in: referenceStudentIds } } });
-        if (count !== referenceStudentIds.length) {
-          throw new TRPCError({ code: 'NOT_FOUND', message: 'Uno o più studenti di riferimento non sono stati trovati' });
-        }
-      }
-
-      if (referenceCollaboratorIds && referenceCollaboratorIds.length > 0) {
-        const count = await ctx.prisma.collaborator.count({ where: { id: { in: referenceCollaboratorIds } } });
-        if (count !== referenceCollaboratorIds.length) {
-          throw new TRPCError({ code: 'NOT_FOUND', message: 'Uno o più collaboratori di riferimento non sono stati trovati' });
-        }
-      }
-
-      if (referenceAdminIds && referenceAdminIds.length > 0) {
-        const count = await ctx.prisma.admin.count({ where: { id: { in: referenceAdminIds } } });
-        if (count !== referenceAdminIds.length) {
-          throw new TRPCError({ code: 'NOT_FOUND', message: 'Uno o più amministratori di riferimento non sono stati trovati' });
-        }
-      }
+      await validateReferenceIds(
+        ctx.prisma,
+        referenceStudentIds ?? [],
+        referenceCollaboratorIds ?? [],
+        referenceAdminIds ?? []
+      );
 
       const group = await ctx.prisma.$transaction(async (tx) => {
         await tx.group.update({
@@ -575,61 +524,7 @@ export const groupsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Gruppo non trovato' });
       }
 
-      // Send notifications to newly assigned referents
-      const existingStudentIds = new Set(uniqueReferenceIds([
-        existing.referenceStudentId,
-        ...existing.referenceStudents.map((reference) => reference.studentId),
-      ]));
-      const existingCollaboratorIds = new Set(uniqueReferenceIds([
-        existing.referenceCollaboratorId,
-        ...existing.referenceCollaborators.map((reference) => reference.collaboratorId),
-      ]));
-      const existingAdminIds = new Set(uniqueReferenceIds([
-        existing.referenceAdminId,
-        ...existing.referenceAdmins.map((reference) => reference.adminId),
-      ]));
-
-      for (const reference of group.referenceCollaborators) {
-        if (!existingCollaboratorIds.has(reference.collaboratorId)) {
-          try {
-            await notifications.groupReferentAssigned(ctx.prisma, {
-              recipientUserId: reference.collaborator.user.id,
-              groupId: group.id,
-              groupName: group.name,
-            });
-          } catch (error) {
-            console.error('[Groups] Failed to send referent notification:', error);
-          }
-        }
-      }
-
-      for (const reference of group.referenceAdmins) {
-        if (!existingAdminIds.has(reference.adminId)) {
-          try {
-            await notifications.groupReferentAssigned(ctx.prisma, {
-              recipientUserId: reference.admin.user.id,
-              groupId: group.id,
-              groupName: group.name,
-            });
-          } catch (error) {
-            console.error('[Groups] Failed to send referent notification:', error);
-          }
-        }
-      }
-
-      for (const reference of group.referenceStudents) {
-        if (!existingStudentIds.has(reference.studentId)) {
-          try {
-            await notifications.groupReferentAssigned(ctx.prisma, {
-              recipientUserId: reference.student.user.id,
-              groupId: group.id,
-              groupName: group.name,
-            });
-          } catch (error) {
-            console.error('[Groups] Failed to send referent notification:', error);
-          }
-        }
-      }
+      await notifyNewReferents(ctx.prisma, group, existing);
 
       return group;
     }),

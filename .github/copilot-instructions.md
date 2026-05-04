@@ -146,6 +146,47 @@ Required in `.env`:
   - `adminProcedure` - Requires ADMIN role
   - `staffProcedure` - ADMIN or COLLABORATOR
   - `collaboratorProcedure` - COLLABORATOR only
+## Code Quality & Complexity Standards (2026)
+
+### Complexity Limits
+- Max cyclomatic complexity per function/component: **15**
+- Max lines per component file: **400** (excluding tests)
+- Max lines per tRPC router file: **500** — split into co-located `[router].helpers.ts` if exceeded
+- Max `useState` hooks per component: **8** — extract to custom hook if exceeded
+- Max `useMemo`/`useCallback` per component: **5**
+
+### Component Decomposition Rules
+- Every render branch with >50 lines → extract to named sub-component
+- Every stateful logic block reused 2+ times → extract to custom hook in `lib/hooks/`
+- Every pure computation >10 lines used in multiple places → extract to `lib/utils/`
+- Modal/form content → always in dedicated file (e.g., `XxxFormModal.tsx`)
+
+### Custom Hook Guidelines
+- Hooks managing tRPC queries + mutations for a feature → `use[Feature]Data.ts`
+- Hooks managing UI state for a complex component → `use[Component]State.ts`
+- Place in `lib/hooks/` (project-wide) or co-located in component folder (component-specific)
+- Hooks must be pure React hooks — no direct DOM manipulation
+
+### tRPC Router Guidelines
+- Business logic >20 lines → extract to `[router].helpers.ts` co-located file
+- Helper functions must be pure (no side effects) and unit-testable
+- Max 1 router per domain (calendar, groups, simulations, etc.)
+
+### File Naming Conventions
+- Components: `PascalCase.tsx`
+- Hooks: `useCamelCase.ts`
+- Helpers: `camelCase.helpers.ts`
+- Types: `camelCase.types.ts`
+
+### Modern React Patterns (2026)
+- Prefer `use()` hook for data fetching in Server Components where possible
+- Use `useOptimistic` for optimistic UI updates instead of manual state rollback
+- Use `startTransition` to wrap non-urgent state updates
+- Avoid prop drilling beyond 2 levels — use context or composition
+- `useMemo` only when profiling shows actual perf issue, not preemptively
+- Do not add comments explaining WHAT the code does — well-named identifiers suffice
+- Add a comment only when the WHY is non-obvious (hidden constraint, workaround, invariant)
+
 ------
 description: This file contains instructions for AI code generation specific to the Leonardo School project.
 

@@ -1,7 +1,5 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo } from 'react';
-import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { PageLoader, Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
@@ -9,9 +7,6 @@ import { Portal } from '@/components/ui/Portal';
 import { SimulationAssignModal } from '@/components/ui/SimulationAssignModal';
 import { StudentDetailModal } from '@/components/ui/StudentDetailModal';
 import DateTimePicker from '@/components/ui/DateTimePicker';
-import { useApiError } from '@/lib/hooks/useApiError';
-import { useToast } from '@/components/ui/Toast';
-import { useFocusAwarePolling } from '@/lib/hooks/useWindowFocus';
 import Link from 'next/link';
 import {
   Plus,
@@ -40,12 +35,10 @@ import {
   BookOpen,
 } from 'lucide-react';
 import type { SimulationType, SimulationStatus } from '@/lib/validations/simulationValidation';
+import { useSimulationsList } from '@/lib/hooks/useSimulationsList';
 import TemplatesContent from './TemplatesContent';
 
-type TabType = 'simulations' | 'assignments' | 'templates';
 type AssignmentStatus = 'ACTIVE' | 'CLOSED';
-type SimulationAccessType = 'OPEN' | 'ROOM';
-type NullableDate = string | Date | null;
 
 // Labels
 const typeLabels: Record<SimulationType, string> = {
@@ -88,364 +81,55 @@ const assignmentStatusColors: Record<AssignmentStatus, string> = {
 };
 
 export default function CollaboratorSimulationsContent() {
-  // Collaborators have READ-ONLY access - removed unused mutation hooks
-
-  // Focus-aware polling - 120 seconds for pending reviews badge, disabled when tab not visible
-  const pollingInterval = useFocusAwarePolling(120000, true);
-
-  // Fetch pending open answers count for badge
-  const { data: pendingReviewsData } = trpc.simulations.getResultsWithPendingReviews.useQuery(
-    { limit: 1, offset: 0 },
-    { refetchInterval: pollingInterval }
-  );
-  const pendingReviewsCount = pendingReviewsData?.total ?? 0;
-
-  // Filters state for simulations tab (templates only)
-  const [search, setSearch] = useState('');
-  const [type, setType] = useState<SimulationType | ''>('');
-  const [status, setStatus] = useState<SimulationStatus | ''>('');
-  const [page, setPage] = useState(1);
-  const [pageSize] = useState(20);
-  const [showFilters, setShowFilters] = useState(false);
-  // Tabs state
-  const [activeTab, setActiveTab] = useState<TabType>('simulations');
-  const [assignmentPage, setAssignmentPage] = useState(1);
-  const [assignmentGroupId, setAssignmentGroupId] = useState('');
-  const [assignmentSimulationId, setAssignmentSimulationId] = useState('');
-  const [assignmentStatusFilter, setAssignmentStatusFilter] = useState<AssignmentStatus | ''>('');
-
-  // Action menus state
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
-  const [assignModal, setAssignModal] = useState<{ id: string; title: string; isOfficial: boolean; durationMinutes: number } | null>(null);
-  
-  // Student detail modal state
-  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
-
-  // Edit assignment modal state
-  const [editingAssignment, setEditingAssignment] = useState<GroupedAssignment | null>(null);
-  const [editStartDate, setEditStartDate] = useState('');
-  const [editEndDate, setEditEndDate] = useState('');
-
-  // Assignment action menu state
-  const [openAssignmentMenuId, setOpenAssignmentMenuId] = useState<string | null>(null);
-  const [assignmentMenuPosition, setAssignmentMenuPosition] = useState<{ top: number; left: number } | null>(null);
-  
-  // Expanded groups state (for showing all students)
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-
-  const menuRef = useRef<HTMLDivElement>(null);
-  const assignmentMenuRef = useRef<HTMLDivElement>(null);
-
-  // Error handling and toast notifications
-  const { handleMutationError } = useApiError();
-  const { showSuccess } = useToast();
-
-  // Get current user to check permissions
-  const { data: currentUser } = trpc.users.me.useQuery();
-
-  // Fetch groups for filter
-  const { data: groupsData } = trpc.groups.getGroups.useQuery({ page: 1, pageSize: 100 });
-
-  // Fetch simulations (templates only, no group filter)
-  const { data: simulationsData, isLoading } = trpc.simulations.getSimulations.useQuery({
-    page,
-    pageSize,
-    search: search || undefined,
-    type: type || undefined,
-    status: status || undefined,
-  });
-
-  // Fetch assignments
-  const { data: assignmentsData, isLoading: assignmentsLoading } = trpc.simulations.getAssignments.useQuery(
-    {
-      page: assignmentPage,
-      pageSize: 20,
-      simulationId: assignmentSimulationId || undefined,
-      groupId: assignmentGroupId || undefined,
-      assignmentStatus: assignmentStatusFilter || 'ALL',
-    },
-    { enabled: activeTab === 'assignments' }
-  );
-
-  // Mutations for assignment actions (collaborators can act on their own assignments)
-  const utils = trpc.useUtils();
-  
-  const closeAssignmentMutation = trpc.simulations.closeAssignment.useMutation({
-    onSuccess: () => {
-      showSuccess('Assegnazione chiusa', 'L\'assegnazione è stata chiusa con successo.');
-      utils.simulations.getAssignments.invalidate();
-    },
-    onError: handleMutationError,
-  });
-
-  const reopenAssignmentMutation = trpc.simulations.reopenAssignment.useMutation({
-    onSuccess: () => {
-      showSuccess('Assegnazione riaperta', 'L\'assegnazione è stata riaperta con successo.');
-      utils.simulations.getAssignments.invalidate();
-    },
-    onError: handleMutationError,
-  });
-
-  const removeAssignmentMutation = trpc.simulations.removeAssignment.useMutation({
-    onSuccess: () => {
-      showSuccess('Assegnazione eliminata', 'L\'assegnazione è stata eliminata con successo.');
-      utils.simulations.getAssignments.invalidate();
-    },
-    onError: handleMutationError,
-  });
-
-  const updateAssignmentsMutation = trpc.simulations.updateAssignments.useMutation({
-    onSuccess: () => {
-      showSuccess('Salvata', 'Assegnazione aggiornata con successo.');
-      utils.simulations.getAssignments.invalidate();
-      setEditingAssignment(null);
-    },
-    onError: handleMutationError,
-  });
-
-  // Mutations for simulation status changes (collaborators can act on their own simulations)
-  const publishMutation = trpc.simulations.publish.useMutation({
-    onSuccess: () => {
-      showSuccess('Simulazione pubblicata', 'La simulazione è stata pubblicata con successo.');
-      utils.simulations.getSimulations.invalidate();
-    },
-    onError: handleMutationError,
-  });
-
-  const archiveMutation = trpc.simulations.archive.useMutation({
-    onSuccess: () => {
-      showSuccess('Simulazione archiviata', 'La simulazione è stata archiviata con successo.');
-      utils.simulations.getSimulations.invalidate();
-    },
-    onError: handleMutationError,
-  });
-
-  // Group assignments by simulation + dates (for assignments tab)
-  interface GroupedAssignment {
-    id: string; // Use first assignment id as group id
-    simulationId: string;
-    simulationTitle: string;
-    simulationType: SimulationType;
-    simulationAccessType: SimulationAccessType;
-    startDate: NullableDate;
-    endDate: NullableDate;
-    status: AssignmentStatus;
-    students: Array<{
-      id: string;
-      name: string;
-      assignmentId: string;
-      completedCount: number;
-      totalTargeted: number;
-      completionRate: number;
-    }>;
-    groups: Array<{
-      id: string;
-      name: string;
-      assignmentId: string;
-      completedCount: number;
-      totalTargeted: number;
-      completionRate: number;
-    }>;
-    completedCount: number;
-    totalTargeted: number;
-    completionRate: number;
-    createdBy: { id: string; name: string };
-  }
-
-  const groupedAssignments = useMemo((): GroupedAssignment[] => {
-    if (!assignmentsData?.assignments) return [];
-
-    const groups = new Map<string, GroupedAssignment>();
-
-    assignmentsData.assignments.forEach((assignment) => {
-      const startDateStr = assignment.startDate 
-        ? new Date(assignment.startDate).toISOString() 
-        : 'null';
-      const endDateStr = assignment.endDate 
-        ? new Date(assignment.endDate).toISOString() 
-        : 'null';
-      
-      // Group key: simulationId + startDate + endDate + status
-      const key = `${assignment.simulationId}-${startDateStr}-${endDateStr}-${assignment.status}`;
-
-      if (!groups.has(key)) {
-        groups.set(key, {
-          id: assignment.id,
-          simulationId: assignment.simulationId,
-          simulationTitle: assignment.simulation?.title || '-',
-          simulationType: (assignment.simulation?.type || 'PRACTICE') as SimulationType,
-          simulationAccessType: (assignment.simulation?.accessType || 'OPEN') as SimulationAccessType,
-          startDate: assignment.startDate || null,
-          endDate: assignment.endDate || null,
-          status: (assignment.status || 'ACTIVE') as AssignmentStatus,
-          students: [],
-          groups: [],
-          completedCount: 0,
-          totalTargeted: 0,
-          completionRate: 0,
-          createdBy: assignment.assignedBy || { id: '', name: 'Sconosciuto' },
-        });
-      }
-
-      const group = groups.get(key);
-      if (!group) return;
-
-      // Add student or group to the grouped assignment
-      if (assignment.student) {
-        group.students.push({
-          id: assignment.student.user.id,
-          name: assignment.student.user.name,
-          assignmentId: assignment.id,
-          completedCount: assignment.completedCount || 0,
-          totalTargeted: assignment.totalTargeted || 1,
-          completionRate: assignment.completionRate || 0,
-        });
-      } else if (assignment.group) {
-        group.groups.push({
-          id: assignment.group.id,
-          name: assignment.group.name,
-          assignmentId: assignment.id,
-          completedCount: assignment.completedCount || 0,
-          totalTargeted: assignment.totalTargeted || 0,
-          completionRate: assignment.completionRate || 0,
-        });
-      }
-
-      // Update totals
-      group.completedCount += assignment.completedCount || 0;
-      group.totalTargeted += assignment.totalTargeted || 0;
-    });
-
-    // Calculate overall completion rate for each group
-    return Array.from(groups.values()).map((group) => ({
-      ...group,
-      completionRate: group.totalTargeted > 0 
-        ? (group.completedCount / group.totalTargeted) * 100 
-        : 0,
-    }));
-  }, [assignmentsData]);
-
-  // Permission check helpers
-  // For collaborators: they can only act on items they created
-  const canTakeAction = (createdById: string) => {
-    // User can only act on items they created
-    return currentUser?.id === createdById;
-  };
-
-  // Check if user can modify simulation (only if they created it)
-  const canModifySimulation = (simulationId: string) => {
-    const simulation = simulations.find(s => s.id === simulationId);
-    return simulation?.createdById === currentUser?.id;
-  };
-
-  // Close simulation menu on click outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setOpenMenuId(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Close assignment menu on click outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (assignmentMenuRef.current && !assignmentMenuRef.current.contains(event.target as Node)) {
-        setOpenAssignmentMenuId(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Handle assignment menu open with smart positioning
-  const handleAssignmentMenuOpen = (id: string, event: React.MouseEvent) => {
-    event.stopPropagation();
-    const button = event.currentTarget as HTMLElement;
-    const rect = button.getBoundingClientRect();
-    const menuHeight = 280;
-    const menuWidth = 208;
-    const spaceBelow = globalThis.innerHeight - rect.bottom;
-    const spaceAbove = rect.top;
-    const openUpward = spaceBelow < menuHeight && spaceAbove > menuHeight + 20;
-    const top = openUpward
-      ? rect.top + globalThis.scrollY - menuHeight - 4
-      : rect.bottom + globalThis.scrollY + 4;
-    let left: number;
-    if (globalThis.innerWidth < 640 || globalThis.innerWidth - rect.right < menuWidth + 16) {
-      const idealLeft = rect.right + globalThis.scrollX - menuWidth;
-      left = Math.max(globalThis.scrollX + 8, idealLeft);
-    } else {
-      left = rect.right + globalThis.scrollX - menuWidth;
-    }
-    setAssignmentMenuPosition({ top, left });
-    setOpenAssignmentMenuId(openAssignmentMenuId === id ? null : id);
-  };
-
-  const handleMenuOpen = (id: string, event: React.MouseEvent) => {
-    event.stopPropagation();
-    const button = event.currentTarget as HTMLElement;
-    const rect = button.getBoundingClientRect();
-    
-    // Menu dimensions (approximate) - organized menu with sections
-    const menuHeight = 320; // Menu with navigation, actions and delete sections
-    const menuWidth = 208; // w-52 = 13rem = 208px
-    
-    // Calculate available space
-    const spaceBelow = globalThis.innerHeight - rect.bottom;
-    const spaceAbove = rect.top;
-    const spaceRight = globalThis.innerWidth - rect.right;
-    
-    // Determine if menu should open upward or downward
-    // Only open upward if there's really not enough space below
-    const openUpward = spaceBelow < menuHeight && spaceAbove > menuHeight + 20;
-    
-    // Calculate vertical position
-    const top = openUpward
-      ? rect.top + globalThis.scrollY - menuHeight - 4 // 4px gap
-      : rect.bottom + globalThis.scrollY + 4; // 4px gap
-    
-    // Calculate horizontal position with responsive logic
-    let left: number;
-    
-    // On mobile/small screens or when not enough space on right
-    if (globalThis.innerWidth < 640 || spaceRight < menuWidth + 16) {
-      // Align to right edge with padding, or center if very small screen
-      if (globalThis.innerWidth < menuWidth + 32) {
-        // Center on very small screens
-        left = globalThis.scrollX + (globalThis.innerWidth - menuWidth) / 2;
-      } else {
-        // Align to right edge of button but ensure it stays on screen
-        const idealLeft = rect.right + globalThis.scrollX - menuWidth;
-        const minLeft = globalThis.scrollX + 8; // 8px padding from left edge
-        left = Math.max(minLeft, idealLeft);
-      }
-    } else {
-      // Desktop: align to right edge of button
-      left = rect.right + globalThis.scrollX - menuWidth;
-    }
-    
-    setMenuPosition({ top, left });
-    setOpenMenuId(openMenuId === id ? null : id);
-  };
-
-  const formatDuration = (minutes: number) => {
-    if (minutes === 0) return 'Illimitato';
-    if (minutes < 60) return `${minutes} min`;
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-  };
+  const {
+    search, setSearch,
+    type, setType,
+    status, setStatus,
+    page, setPage,
+    showFilters, setShowFilters,
+    activeTab, setActiveTab,
+    assignmentPage, setAssignmentPage,
+    assignmentGroupId, setAssignmentGroupId,
+    assignmentSimulationId, setAssignmentSimulationId,
+    assignmentStatusFilter, setAssignmentStatusFilter,
+    openMenuId, setOpenMenuId,
+    menuPosition,
+    assignModal, setAssignModal,
+    selectedStudentId, setSelectedStudentId,
+    editingAssignment, setEditingAssignment,
+    editStartDate, setEditStartDate,
+    editEndDate, setEditEndDate,
+    openAssignmentMenuId, setOpenAssignmentMenuId,
+    assignmentMenuPosition,
+    expandedGroups,
+    menuRef,
+    assignmentMenuRef,
+    pendingReviewsCount,
+    groupsData,
+    simulationsData,
+    isLoading,
+    assignmentsData,
+    assignmentsLoading,
+    simulations,
+    pagination,
+    groupedAssignments,
+    closeAssignmentMutation,
+    reopenAssignmentMutation,
+    removeAssignmentMutation,
+    updateAssignmentsMutation,
+    publishMutation,
+    archiveMutation,
+    canTakeAction,
+    canModifySimulation,
+    formatDuration,
+    handleMenuOpen,
+    handleAssignmentMenuOpen,
+    toggleExpandGroup,
+  } = useSimulationsList();
 
   if (isLoading) {
     return <PageLoader />;
   }
-
-  const simulations = simulationsData?.simulations ?? [];
-  const pagination = simulationsData?.pagination ?? { page: 1, pageSize: 20, total: 0, totalPages: 0 };
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8">
@@ -851,17 +535,7 @@ export default function CollaboratorSimulationsContent() {
                       const visibleStudents = isExpanded ? group.students : group.students.slice(0, displayLimit);
                       const remainingCount = totalCount - displayLimit;
                       
-                      const toggleExpand = () => {
-                        setExpandedGroups(prev => {
-                          const next = new Set(prev);
-                          if (next.has(group.id)) {
-                            next.delete(group.id);
-                          } else {
-                            next.add(group.id);
-                          }
-                          return next;
-                        });
-                      };
+                      const toggleExpand = () => toggleExpandGroup(group.id);
                       
                       return (
                         <tr key={group.id} className={`${colors.background.hover}`}>

@@ -2,13 +2,9 @@
 
 import { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
-import { useAuth } from '@/lib/hooks/useAuth';
 import { Calendar, CalendarEvent, CalendarView, EventDetail, eventTypeLabels } from '@/components/ui/Calendar';
 import { Spinner } from '@/components/ui/loaders';
-import { useApiError } from '@/lib/hooks/useApiError';
-import { useToast } from '@/components/ui/Toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import CustomSelect from '@/components/ui/CustomSelect';
 import DateTimePicker from '@/components/ui/DateTimePicker';
@@ -16,6 +12,8 @@ import DatePicker from '@/components/ui/DatePicker';
 import Checkbox from '@/components/ui/Checkbox';
 import { UserInfoModal } from '@/components/ui/UserInfoModal';
 import { GroupInfoModal } from '@/components/ui/GroupInfoModal';
+import { useCalendarEvents } from '@/lib/hooks/useCalendarEvents';
+import { useCalendarFilters } from '@/lib/hooks/useCalendarFilters';
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -32,392 +30,47 @@ import {
   CheckSquare,
 } from 'lucide-react';
 
-// Event Form Modal
-interface EventFormData {
-  title: string;
-  description: string;
-  type: 'LESSON' | 'SIMULATION' | 'MEETING' | 'EXAM' | 'OTHER';
-  startDateTime: string;
-  endDateTime: string;
-  isAllDay: boolean;
-  locationType: 'ONLINE' | 'IN_PERSON' | 'HYBRID';
-  locationDetails: string;
-  onlineLink: string;
-  isPublic: boolean;
-  inviteUserIds: string[];
-  inviteGroupIds: string[];
-  sendEmailInvites: boolean;
-}
-
-const defaultFormData: EventFormData = {
-  title: '',
-  description: '',
-  type: 'OTHER',
-  startDateTime: '',
-  endDateTime: '',
-  isAllDay: false,
-  locationType: 'IN_PERSON',
-  locationDetails: '',
-  onlineLink: '',
-  isPublic: false,
-  inviteUserIds: [],
-  inviteGroupIds: [],
-  sendEmailInvites: true,
-};
-
-// eslint-disable-next-line sonarjs/cognitive-complexity
 export default function CollaboratorCalendarContent() {
   const [view, setView] = useState<CalendarView>('month');
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-  const [showEventForm, setShowEventForm] = useState(false);
-  const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [formData, setFormData] = useState<EventFormData>(defaultFormData);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
   const [filterType, setFilterType] = useState<string>('');
-
-  const utils = trpc.useUtils();
-  const { handleMutationError } = useApiError();
-  const { showSuccess, showWarning } = useToast();
-  const { user: currentUser } = useAuth();
-
-  // Calculate date range for query based on view
-  const dateRange = useMemo(() => {
-    const start = new Date(selectedDate);
-    const end = new Date(selectedDate);
-
-    if (view === 'month') {
-      start.setDate(1);
-      start.setMonth(start.getMonth());
-      end.setMonth(end.getMonth() + 1);
-      end.setDate(0);
-    } else if (view === 'week') {
-      const dayOfWeek = start.getDay() === 0 ? 6 : start.getDay() - 1;
-      start.setDate(start.getDate() - dayOfWeek);
-      end.setDate(start.getDate() + 6);
-      // Expand range to include multi-day events that might span into this week
-      start.setDate(start.getDate() - 30);
-      end.setDate(end.getDate() + 30);
-    } else if (view === 'day') {
-      // For day view, expand range to include multi-day events that might span this day
-      start.setDate(start.getDate() - 30);
-      end.setDate(end.getDate() + 30);
-    }
-
-    start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
-
-    return { start, end };
-  }, [selectedDate, view]);
-
-  // Queries - Collaboratore sees only their own events
-  const { data: eventsData, isLoading } = trpc.calendar.getEvents.useQuery({
-    startDate: dateRange.start,
-    endDate: dateRange.end,
-    type: filterType ? (filterType as CalendarEvent['type']) : undefined,
-    includeInvitations: true,
-    includeCancelled: false,
-    onlyMyEvents: true,
-  });
-
-  const { data: stats } = trpc.calendar.getStats.useQuery();
-
-  // Data for invites - collaborators only see their assigned groups/students
-  const { data: studentsData } = trpc.students.getStudents.useQuery({ 
-    page: 1, 
-    pageSize: 500, 
-    isActive: true,
-    onlyMyGroups: true,
-  });
-  const { data: collaboratorsData } = trpc.collaborators.getListForCalendar.useQuery();
-  const { data: groupsData } = trpc.groups.getGroups.useQuery({ 
-    page: 1, 
-    pageSize: 100,
-    onlyMyGroups: true,
-  });
-
-  // Search and filter state for invites
-  const [inviteSearch, setInviteSearch] = useState('');
-  const [inviteRoleFilter, setInviteRoleFilter] = useState<'all' | 'STUDENT' | 'COLLABORATOR'>('all');
-  const [groupSearch, setGroupSearch] = useState('');
-  
-  // User info modal state
   const [selectedUserInfo, setSelectedUserInfo] = useState<{ userId: string; userType: 'STUDENT' | 'COLLABORATOR' } | null>(null);
-  
-  // Group info modal state
   const [selectedGroupInfo, setSelectedGroupInfo] = useState<string | null>(null);
-
-  // Stats detail modal state
   const [statsModal, setStatsModal] = useState<{ type: 'total' | 'month' | 'upcoming' | 'absences'; title: string } | null>(null);
 
-  // Combined users list
-  const allUsers = useMemo(() => {
-    const users: { 
-      id: string; 
-      name: string; 
-      role: 'STUDENT' | 'COLLABORATOR'; 
-      extra?: string;
-      subjects?: string;
-    }[] = [];
-    
-    studentsData?.students?.forEach(student => {
-      users.push({
-        id: student.id,
-        name: student.name || 'Studente',
-        role: 'STUDENT',
-      });
-    });
-    
-    if (collaboratorsData && Array.isArray(collaboratorsData)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (collaboratorsData as any[]).forEach((collab: any) => {
-        if (collab.isActive) {
-          const subjects = collab.collaborator?.subjects || [];
-          const subjectNames = subjects
-            .map((s: { subject?: { code?: string; name?: string } }) => s.subject?.code || s.subject?.name)
-            .filter(Boolean)
-            .join(', ');
-          
-          users.push({
-            id: collab.id,
-            name: collab.name || 'Collaboratore',
-            role: 'COLLABORATOR',
-            extra: collab.collaborator?.specialization,
-            subjects: subjectNames || undefined,
-          });
-        }
-      });
-    }
-    
-    return users;
-  }, [studentsData, collaboratorsData]);
+  const {
+    events,
+    isLoading,
+    stats,
+    selectedEvent,
+    setSelectedEvent,
+    formData,
+    setFormData,
+    editingEventId,
+    showEventForm,
+    deleteConfirm,
+    setDeleteConfirm,
+    isCreating,
+    isUpdating,
+    isDeleting,
+    openAddEvent,
+    openEditEvent,
+    closeEventForm,
+    handleSubmit,
+    deleteEvent,
+  } = useCalendarEvents({ selectedDate, view, filterType });
 
-  // Filtered users
-  const filteredUsers = useMemo(() => {
-    return allUsers.filter(user => {
-      const matchesSearch = inviteSearch === '' || 
-        user.name.toLowerCase().includes(inviteSearch.toLowerCase()) ||
-        user.extra?.toLowerCase().includes(inviteSearch.toLowerCase());
-      const matchesRole = inviteRoleFilter === 'all' || user.role === inviteRoleFilter;
-      return matchesSearch && matchesRole;
-    });
-  }, [allUsers, inviteSearch, inviteRoleFilter]);
-
-  // Filtered groups
-  const filteredGroups = useMemo(() => {
-    if (!groupsData?.groups) return [];
-    return groupsData.groups.filter(group => 
-      groupSearch === '' || group.name.toLowerCase().includes(groupSearch.toLowerCase())
-    );
-  }, [groupsData, groupSearch]);
-
-  // Mutations
-  const createEventMutation = trpc.calendar.createEvent.useMutation({
-    onSuccess: () => {
-      utils.calendar.getEvents.invalidate();
-      utils.calendar.getStats.invalidate();
-      showSuccess('Evento creato', 'L\'evento è stato creato con successo.');
-      closeEventForm();
-    },
-    onError: handleMutationError,
-  });
-
-  const updateEventMutation = trpc.calendar.updateEvent.useMutation({
-    onSuccess: () => {
-      utils.calendar.getEvents.invalidate();
-      showSuccess('Evento aggiornato', 'L\'evento è stato aggiornato con successo.');
-      closeEventForm();
-    },
-    onError: handleMutationError,
-  });
-
-  // eslint-disable-next-line sonarjs/no-unused-vars -- reserved for future cancel button
-  const _cancelEventMutation = trpc.calendar.cancelEvent.useMutation({
-    onSuccess: () => {
-      utils.calendar.getEvents.invalidate();
-      utils.calendar.getStats.invalidate();
-      showSuccess('Evento annullato', 'L\'evento è stato annullato.');
-      setDeleteConfirm(null);
-      setSelectedEvent(null);
-    },
-    onError: handleMutationError,
-  });
-
-  const deleteEventMutation = trpc.calendar.deleteEvent.useMutation({
-    onSuccess: () => {
-      utils.calendar.getEvents.invalidate();
-      utils.calendar.getStats.invalidate();
-      showSuccess('Evento eliminato', 'L\'evento è stato eliminato definitivamente.');
-      setDeleteConfirm(null);
-      setSelectedEvent(null);
-    },
-    onError: handleMutationError,
-  });
-
-  // Transform events for Calendar component
-  const events: CalendarEvent[] = useMemo(() => {
-    const currentUserId = currentUser?.id;
-    
-    return (eventsData?.events || [])
-      .filter((e): e is typeof e & { id: string; title: string } => !!e.id && !!e.title)
-      .map((e) => {
-        const invitations = e.invitations as Array<{
-          id: string;
-          status?: string;
-          user?: { id: string; name: string; email: string } | null;
-          group?: { id: string; name: string } | null;
-        }> | undefined;
-
-        const isCreatedByMe = e.createdBy?.id === currentUserId;
-        // Per il collaboratore, isMine indica solo gli eventi CREATI da lui
-        // (la stellina appare solo per eventi che può modificare/eliminare)
-        const isMine = isCreatedByMe;
-
-        return {
-          id: e.id,
-          title: e.title,
-          description: e.description,
-          type: e.type || 'OTHER',
-          startDate: new Date(e.startDate!),
-          endDate: new Date(e.endDate!),
-          isAllDay: e.isAllDay || false,
-          locationType: e.locationType || 'IN_PERSON',
-          locationDetails: e.locationDetails,
-          onlineLink: e.onlineLink,
-          isCancelled: e.isCancelled || false,
-          isMine,
-          createdBy: e.createdBy,
-          invitations: invitations?.map((inv) => ({
-            id: inv.id,
-            status: inv.status,
-            user: inv.user,
-            group: inv.group,
-          })),
-          _count: e._count,
-        };
-      });
-  }, [eventsData, currentUser?.id]);
-
-  // Handlers
-  const formatDateTimeLocal = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
-
-  const openAddEvent = (date: Date) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const clickedDate = new Date(date);
-    clickedDate.setHours(0, 0, 0, 0);
-    
-    if (clickedDate < today) {
-      showWarning('Data non valida', 'Non puoi creare eventi per date passate.');
-      return;
-    }
-    
-    const startDate = new Date(date);
-    if (startDate.getHours() === 0) {
-      startDate.setHours(9, 0, 0, 0);
-    }
-    const endDate = new Date(startDate);
-    endDate.setHours(startDate.getHours() + 1);
-    
-    setFormData({
-      ...defaultFormData,
-      startDateTime: formatDateTimeLocal(startDate),
-      endDateTime: formatDateTimeLocal(endDate),
-    });
-    setEditingEventId(null);
-    setShowEventForm(true);
-  };
-
-  const openEditEvent = (event: CalendarEvent) => {
-    const startDate = new Date(event.startDate);
-    const endDate = new Date(event.endDate);
-    
-    setFormData({
-      title: event.title,
-      description: event.description || '',
-      type: event.type,
-      startDateTime: formatDateTimeLocal(startDate),
-      endDateTime: formatDateTimeLocal(endDate),
-      isAllDay: event.isAllDay,
-      locationType: event.locationType,
-      locationDetails: event.locationDetails || '',
-      onlineLink: event.onlineLink || '',
-      isPublic: false,
-      inviteUserIds: [],
-      inviteGroupIds: [],
-      sendEmailInvites: false,
-    });
-    setEditingEventId(event.id);
-    setSelectedEvent(null);
-    setShowEventForm(true);
-  };
-
-  const closeEventForm = () => {
-    setShowEventForm(false);
-    setEditingEventId(null);
-    setFormData(defaultFormData);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const startDateTime = new Date(formData.startDateTime);
-    const endDateTime = new Date(formData.endDateTime);
-    const now = new Date();
-    
-    if (!editingEventId) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const startDateOnly = new Date(startDateTime);
-      startDateOnly.setHours(0, 0, 0, 0);
-      
-      if (startDateOnly < today) {
-        showWarning('Data non valida', 'Non puoi creare eventi per date passate.');
-        return;
-      }
-      
-      if (!formData.isAllDay && startDateTime < now) {
-        showWarning('Orario non valido', 'Non puoi creare eventi per orari già passati.');
-        return;
-      }
-    }
-
-    if (formData.isAllDay) {
-      startDateTime.setHours(0, 0, 0, 0);
-      endDateTime.setHours(23, 59, 59, 999);
-    }
-
-    const eventData = {
-      title: formData.title,
-      description: formData.description || undefined,
-      type: formData.type,
-      startDate: startDateTime,
-      endDate: endDateTime,
-      isAllDay: formData.isAllDay,
-      locationType: formData.locationType,
-      locationDetails: formData.locationDetails || undefined,
-      onlineLink: formData.onlineLink || undefined,
-      isPublic: formData.isPublic,
-    };
-
-    if (editingEventId) {
-      updateEventMutation.mutate({ id: editingEventId, ...eventData });
-    } else {
-      createEventMutation.mutate({
-        ...eventData,
-        inviteUserIds: formData.inviteUserIds.length > 0 ? formData.inviteUserIds : undefined,
-        inviteGroupIds: formData.inviteGroupIds.length > 0 ? formData.inviteGroupIds : undefined,
-        sendEmailInvites: formData.sendEmailInvites,
-      });
-    }
-  };
+  const {
+    inviteSearch,
+    setInviteSearch,
+    inviteRoleFilter,
+    setInviteRoleFilter,
+    groupSearch,
+    setGroupSearch,
+    allUsers,
+    filteredUsers,
+    filteredGroups,
+  } = useCalendarFilters();
 
   return (
     <div className="space-y-6">
@@ -459,7 +112,7 @@ export default function CollaboratorCalendarContent() {
               </div>
             </div>
           </button>
-          
+
           <button
             onClick={() => setStatsModal({ type: 'month', title: 'Eventi questo mese' })}
             className={`p-4 rounded-xl ${colors.background.card} border ${colors.border.primary} hover:border-green-400 transition-all text-left`}
@@ -474,7 +127,7 @@ export default function CollaboratorCalendarContent() {
               </div>
             </div>
           </button>
-          
+
           <button
             onClick={() => setStatsModal({ type: 'upcoming', title: 'Prossimi eventi' })}
             className={`p-4 rounded-xl ${colors.background.card} border ${colors.border.primary} hover:border-blue-400 transition-all text-left`}
@@ -489,7 +142,7 @@ export default function CollaboratorCalendarContent() {
               </div>
             </div>
           </button>
-          
+
           <button
             onClick={() => setStatsModal({ type: 'absences', title: 'Assenze da gestire' })}
             className={`p-4 rounded-xl ${colors.background.card} border ${colors.border.primary} hover:border-amber-400 transition-all text-left`}
@@ -507,7 +160,7 @@ export default function CollaboratorCalendarContent() {
         </div>
       )}
 
-      {/* Filter Row - NO "I miei" toggle since all events are already filtered */}
+      {/* Filter Row */}
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
           <Filter className={`w-4 h-4 ${colors.icon.secondary}`} />
@@ -517,8 +170,8 @@ export default function CollaboratorCalendarContent() {
           <button
             onClick={() => setFilterType('')}
             className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-              filterType === '' 
-                ? colors.primary.bg + ' text-white' 
+              filterType === ''
+                ? colors.primary.bg + ' text-white'
                 : `${colors.background.secondary} ${colors.text.primary} hover:bg-gray-200 dark:hover:bg-slate-700`
             }`}
           >
@@ -529,8 +182,8 @@ export default function CollaboratorCalendarContent() {
               key={type}
               onClick={() => setFilterType(type)}
               className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                filterType === type 
-                  ? colors.primary.bg + ' text-white' 
+                filterType === type
+                  ? colors.primary.bg + ' text-white'
                   : `${colors.background.secondary} ${colors.text.primary} hover:bg-gray-200 dark:hover:bg-slate-700`
               }`}
             >
@@ -557,7 +210,6 @@ export default function CollaboratorCalendarContent() {
         <EventDetail
           event={selectedEvent}
           onClose={() => setSelectedEvent(null)}
-          // Only allow edit/delete for events created by the current user
           onEdit={selectedEvent.isMine ? () => openEditEvent(selectedEvent) : undefined}
           onDelete={selectedEvent.isMine ? () => setDeleteConfirm({ id: selectedEvent.id, title: selectedEvent.title }) : undefined}
           onUserClick={(userId, userType) => setSelectedUserInfo({ userId, userType })}
@@ -582,7 +234,6 @@ export default function CollaboratorCalendarContent() {
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {/* Title */}
               <div>
                 <label className={`block text-sm font-medium ${colors.text.primary} mb-1`}>
                   Titolo *
@@ -597,19 +248,17 @@ export default function CollaboratorCalendarContent() {
                 />
               </div>
 
-              {/* Type */}
               <div>
                 <label className={`block text-sm font-medium ${colors.text.primary} mb-1`}>
                   Tipo
                 </label>
                 <CustomSelect
                   value={formData.type}
-                  onChange={(value) => setFormData((prev) => ({ ...prev, type: value as EventFormData['type'] }))}
+                  onChange={(value) => setFormData((prev) => ({ ...prev, type: value as 'LESSON' | 'SIMULATION' | 'MEETING' | 'EXAM' | 'OTHER' }))}
                   options={Object.entries(eventTypeLabels).map(([value, label]) => ({ value, label }))}
                 />
               </div>
 
-              {/* All Day Toggle */}
               <Checkbox
                 id="isAllDay"
                 checked={formData.isAllDay}
@@ -617,7 +266,6 @@ export default function CollaboratorCalendarContent() {
                 label="Tutto il giorno"
               />
 
-              {/* Date & Time */}
               {formData.isAllDay ? (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -627,10 +275,7 @@ export default function CollaboratorCalendarContent() {
                     <DatePicker
                       id="startDate"
                       value={formData.startDateTime.split('T')[0]}
-                      onChange={(value) => setFormData((prev) => ({ 
-                        ...prev, 
-                        startDateTime: `${value}T00:00` 
-                      }))}
+                      onChange={(value) => setFormData((prev) => ({ ...prev, startDateTime: `${value}T00:00` }))}
                     />
                   </div>
                   <div>
@@ -640,10 +285,7 @@ export default function CollaboratorCalendarContent() {
                     <DatePicker
                       id="endDate"
                       value={formData.endDateTime.split('T')[0]}
-                      onChange={(value) => setFormData((prev) => ({ 
-                        ...prev, 
-                        endDateTime: `${value}T23:59` 
-                      }))}
+                      onChange={(value) => setFormData((prev) => ({ ...prev, endDateTime: `${value}T23:59` }))}
                     />
                   </div>
                 </div>
@@ -672,14 +314,13 @@ export default function CollaboratorCalendarContent() {
                 </div>
               )}
 
-              {/* Location Type */}
               <div>
                 <label className={`block text-sm font-medium ${colors.text.primary} mb-1`}>
                   Modalità
                 </label>
                 <CustomSelect
                   value={formData.locationType}
-                  onChange={(value) => setFormData((prev) => ({ ...prev, locationType: value as EventFormData['locationType'] }))}
+                  onChange={(value) => setFormData((prev) => ({ ...prev, locationType: value as 'ONLINE' | 'IN_PERSON' | 'HYBRID' }))}
                   options={[
                     { value: 'IN_PERSON', label: 'In presenza' },
                     { value: 'ONLINE', label: 'Online' },
@@ -688,7 +329,6 @@ export default function CollaboratorCalendarContent() {
                 />
               </div>
 
-              {/* Location Details */}
               {(formData.locationType === 'IN_PERSON' || formData.locationType === 'HYBRID') && (
                 <div>
                   <label className={`block text-sm font-medium ${colors.text.primary} mb-1`}>
@@ -704,7 +344,6 @@ export default function CollaboratorCalendarContent() {
                 </div>
               )}
 
-              {/* Online Link */}
               {(formData.locationType === 'ONLINE' || formData.locationType === 'HYBRID') && (
                 <div>
                   <label className={`block text-sm font-medium ${colors.text.primary} mb-1`}>
@@ -720,7 +359,6 @@ export default function CollaboratorCalendarContent() {
                 </div>
               )}
 
-              {/* Description */}
               <div>
                 <label className={`block text-sm font-medium ${colors.text.primary} mb-1`}>
                   Descrizione
@@ -734,7 +372,6 @@ export default function CollaboratorCalendarContent() {
                 />
               </div>
 
-              {/* Invites Section - Only for new events */}
               {!editingEventId && (
                 <div className={`space-y-4 p-4 rounded-lg ${colors.background.secondary} border ${colors.border.primary}`}>
                   <h3 className={`font-medium ${colors.text.primary} flex items-center gap-2`}>
@@ -742,12 +379,11 @@ export default function CollaboratorCalendarContent() {
                     Invita partecipanti
                   </h3>
 
-                  {/* Users (Students + Collaborators) */}
                   <div>
                     <label className={`block text-sm font-medium ${colors.text.secondary} mb-2`}>
                       Utenti
                     </label>
-                    
+
                     <div className="flex gap-2 mb-2">
                       <div className="flex-1 relative">
                         <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${colors.icon.muted}`} />
@@ -773,26 +409,18 @@ export default function CollaboratorCalendarContent() {
                       </div>
                     </div>
 
-                    {/* Quick select buttons */}
                     <div className="flex gap-2 mb-2">
                       <button
                         type="button"
                         onClick={() => {
                           const studentIds = allUsers.filter(u => u.role === 'STUDENT').map(u => u.id);
-                          const currentIds = formData.inviteUserIds;
-                          const allStudentsSelected = studentIds.every(id => currentIds.includes(id));
-                          
-                          if (allStudentsSelected) {
-                            setFormData(prev => ({
-                              ...prev,
-                              inviteUserIds: prev.inviteUserIds.filter(id => !studentIds.includes(id))
-                            }));
-                          } else {
-                            setFormData(prev => ({
-                              ...prev,
-                              inviteUserIds: [...new Set([...prev.inviteUserIds, ...studentIds])]
-                            }));
-                          }
+                          const allSelected = studentIds.every(id => formData.inviteUserIds.includes(id));
+                          setFormData(prev => ({
+                            ...prev,
+                            inviteUserIds: allSelected
+                              ? prev.inviteUserIds.filter(id => !studentIds.includes(id))
+                              : [...new Set([...prev.inviteUserIds, ...studentIds])],
+                          }));
                         }}
                         className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
                           allUsers.filter(u => u.role === 'STUDENT').every(u => formData.inviteUserIds.includes(u.id)) && allUsers.some(u => u.role === 'STUDENT')
@@ -808,20 +436,13 @@ export default function CollaboratorCalendarContent() {
                         type="button"
                         onClick={() => {
                           const collabIds = allUsers.filter(u => u.role === 'COLLABORATOR').map(u => u.id);
-                          const currentIds = formData.inviteUserIds;
-                          const allCollabsSelected = collabIds.every(id => currentIds.includes(id));
-                          
-                          if (allCollabsSelected) {
-                            setFormData(prev => ({
-                              ...prev,
-                              inviteUserIds: prev.inviteUserIds.filter(id => !collabIds.includes(id))
-                            }));
-                          } else {
-                            setFormData(prev => ({
-                              ...prev,
-                              inviteUserIds: [...new Set([...prev.inviteUserIds, ...collabIds])]
-                            }));
-                          }
+                          const allSelected = collabIds.every(id => formData.inviteUserIds.includes(id));
+                          setFormData(prev => ({
+                            ...prev,
+                            inviteUserIds: allSelected
+                              ? prev.inviteUserIds.filter(id => !collabIds.includes(id))
+                              : [...new Set([...prev.inviteUserIds, ...collabIds])],
+                          }));
                         }}
                         className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
                           allUsers.filter(u => u.role === 'COLLABORATOR').every(u => formData.inviteUserIds.includes(u.id)) && allUsers.some(u => u.role === 'COLLABORATOR')
@@ -851,13 +472,13 @@ export default function CollaboratorCalendarContent() {
                           />
                           <span className={`text-sm ${colors.text.primary} flex-1 truncate`}>{user.name}</span>
                           {user.role === 'COLLABORATOR' && user.subjects && (
-                            <span className={`text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 font-medium`}>
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 font-medium">
                               {user.subjects}
                             </span>
                           )}
                           <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${
-                            user.role === 'STUDENT' 
-                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' 
+                            user.role === 'STUDENT'
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
                               : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
                           }`}>
                             {user.role === 'STUDENT' ? (
@@ -884,7 +505,6 @@ export default function CollaboratorCalendarContent() {
                     </div>
                   </div>
 
-                  {/* Groups */}
                   <div>
                     <label className={`block text-sm font-medium ${colors.text.secondary} mb-2`}>
                       Gruppi
@@ -967,10 +587,10 @@ export default function CollaboratorCalendarContent() {
                 </button>
                 <button
                   type="submit"
-                  disabled={createEventMutation.isPending || updateEventMutation.isPending}
+                  disabled={isCreating || isUpdating}
                   className={`px-4 py-2 rounded-lg ${colors.primary.gradient} text-white font-medium disabled:opacity-50`}
                 >
-                  {(createEventMutation.isPending || updateEventMutation.isPending) ? (
+                  {(isCreating || isUpdating) ? (
                     <Spinner size="sm" variant="white" />
                   ) : editingEventId ? (
                     'Salva modifiche'
@@ -989,16 +609,14 @@ export default function CollaboratorCalendarContent() {
         isOpen={!!deleteConfirm}
         onClose={() => setDeleteConfirm(null)}
         onConfirm={() => {
-          if (deleteConfirm) {
-            deleteEventMutation.mutate({ id: deleteConfirm.id });
-          }
+          if (deleteConfirm) deleteEvent(deleteConfirm.id);
         }}
         title="Elimina evento"
         message={`Sei sicuro di voler eliminare l'evento "${deleteConfirm?.title}"? Questa azione è irreversibile.`}
         confirmLabel="Elimina"
         cancelLabel="Annulla"
         variant="danger"
-        isLoading={deleteEventMutation.isPending}
+        isLoading={isDeleting}
       />
 
       {selectedUserInfo && (
@@ -1055,7 +673,7 @@ function StatsDetailModal({ type, title, events, stats, onClose }: StatsDetailMo
           return eventDate >= startOfMonth && eventDate <= endOfMonth;
         });
       case 'upcoming':
-        return events.filter(e => new Date(e.startDate) > now).sort((a, b) => 
+        return events.filter(e => new Date(e.startDate) > now).sort((a, b) =>
           new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
         );
       case 'absences':
@@ -1077,7 +695,7 @@ function StatsDetailModal({ type, title, events, stats, onClose }: StatsDetailMo
   };
 
   return createPortal(
-    <div 
+    <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -1087,7 +705,7 @@ function StatsDetailModal({ type, title, events, stats, onClose }: StatsDetailMo
       >
         <div className={`px-6 py-4 border-b ${colors.border.primary} flex items-center justify-between`}>
           <h2 className={`text-lg font-semibold ${colors.text.primary}`}>{title}</h2>
-          <button 
+          <button
             onClick={onClose}
             className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 ${colors.text.secondary}`}
           >
@@ -1117,9 +735,7 @@ function StatsDetailModal({ type, title, events, stats, onClose }: StatsDetailMo
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        {event.isMine && (
-                          <span className="text-amber-400">★</span>
-                        )}
+                        {event.isMine && <span className="text-amber-400">★</span>}
                         <h4 className={`font-medium ${colors.text.primary} truncate`}>{event.title}</h4>
                       </div>
                       <div className={`text-sm ${colors.text.secondary} mt-1`}>

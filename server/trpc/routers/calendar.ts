@@ -20,10 +20,9 @@ import {
   sendEventModificationEmail,
   sendEventCancellationEmail,
   sendAbsenceStatusEmail,
-  type EventEmailData,
-  type InviteeData,
 } from '@/lib/email/eventEmails';
 import { notifications, createBulkNotifications } from '@/lib/notifications/notificationHelpers';
+import { resolveInvitees, buildEventEmailData } from './calendar.helpers';
 
 // ==================== CALENDAR EVENTS ====================
 
@@ -402,74 +401,17 @@ export const calendarRouter = router({
 
       // Send email invites and in-app notifications if there are invitations
       if (event.invitations.length > 0) {
-        // Collect all invitees with their IDs and emails
-        const invitees: (InviteeData & { id: string })[] = [];
-        const seenIds = new Set<string>();
+        const invitees = resolveInvitees(event.invitations);
+        const emailData = buildEventEmailData(event);
 
-        for (const invitation of event.invitations) {
-          // Direct user invite
-          if (invitation.user?.id && !seenIds.has(invitation.user.id)) {
-            invitees.push({
-              id: invitation.user.id,
-              email: invitation.user.email || '',
-              name: invitation.user.name || 'Utente',
-            });
-            seenIds.add(invitation.user.id);
-          }
-
-          // Group members (students and collaborators)
-          if (invitation.group?.members) {
-            for (const member of invitation.group.members) {
-              // Check student user
-              if (member.student?.user?.id && !seenIds.has(member.student.user.id)) {
-                invitees.push({
-                  id: member.student.user.id,
-                  email: member.student.user.email || '',
-                  name: member.student.user.name || 'Utente',
-                });
-                seenIds.add(member.student.user.id);
-              }
-              // Check collaborator user
-              if (member.collaborator?.user?.id && !seenIds.has(member.collaborator.user.id)) {
-                invitees.push({
-                  id: member.collaborator.user.id,
-                  email: member.collaborator.user.email || '',
-                  name: member.collaborator.user.name || 'Utente',
-                });
-                seenIds.add(member.collaborator.user.id);
-              }
-            }
-          }
-        }
-
-        // Send email invitations if we have invitees and valid dates
-        if (invitees.length > 0 && event.startDate && event.endDate) {
-          const eventEmailData: EventEmailData = {
-            id: event.id,
-            title: event.title,
-            description: event.description,
-            type: event.type,
-            startDate: event.startDate,
-            endDate: event.endDate,
-            isAllDay: event.isAllDay,
-            locationType: event.locationType,
-            locationDetails: event.locationDetails,
-            onlineLink: event.onlineLink,
-            createdByName: event.createdBy?.name || 'Staff',
-          };
-
-          // Send emails asynchronously if enabled (don't block the response)
+        if (invitees.length > 0 && emailData) {
           if (eventData.sendEmailInvites) {
-            const emailInvitees = invitees.filter(i => i.email);
-            sendEventInvitationEmail(eventEmailData, emailInvitees).catch((error) => {
+            sendEventInvitationEmail(emailData, invitees.filter(i => i.email)).catch((error) => {
               console.error('Error sending event invitation emails:', error);
             });
           }
-
-          // Create in-app notifications for all invitees
-          const userIds = invitees.map(i => i.id);
           createBulkNotifications(ctx.prisma, {
-            userIds,
+            userIds: invitees.map(i => i.id),
             type: 'EVENT_INVITATION',
             title: 'Nuovo invito evento',
             message: `Sei stato invitato all'evento "${event.title}"`,
@@ -571,67 +513,15 @@ export const calendarRouter = router({
 
       // Send modification notifications to invited users
       if (event.invitations.length > 0) {
-        const invitees: (InviteeData & { id: string })[] = [];
-        const seenIds = new Set<string>();
+        const invitees = resolveInvitees(event.invitations);
+        const emailData = buildEventEmailData(event);
 
-        for (const invitation of event.invitations) {
-          if (invitation.user?.id && !seenIds.has(invitation.user.id)) {
-            invitees.push({
-              id: invitation.user.id,
-              email: invitation.user.email || '',
-              name: invitation.user.name || 'Utente',
-            });
-            seenIds.add(invitation.user.id);
-          }
-
-          if (invitation.group?.members) {
-            for (const member of invitation.group.members) {
-              if (member.student?.user?.id && !seenIds.has(member.student.user.id)) {
-                invitees.push({
-                  id: member.student.user.id,
-                  email: member.student.user.email || '',
-                  name: member.student.user.name || 'Utente',
-                });
-                seenIds.add(member.student.user.id);
-              }
-              if (member.collaborator?.user?.id && !seenIds.has(member.collaborator.user.id)) {
-                invitees.push({
-                  id: member.collaborator.user.id,
-                  email: member.collaborator.user.email || '',
-                  name: member.collaborator.user.name || 'Utente',
-                });
-                seenIds.add(member.collaborator.user.id);
-              }
-            }
-          }
-        }
-
-        // Send modification emails if we have invitees and valid dates
-        if (invitees.length > 0 && event.startDate && event.endDate) {
-          const eventEmailData: EventEmailData = {
-            id: event.id,
-            title: event.title,
-            description: event.description,
-            type: event.type,
-            startDate: event.startDate,
-            endDate: event.endDate,
-            isAllDay: event.isAllDay,
-            locationType: event.locationType,
-            locationDetails: event.locationDetails,
-            onlineLink: event.onlineLink,
-            createdByName: event.createdBy?.name || 'Staff',
-          };
-
-          // Send modification emails
-          const emailInvitees = invitees.filter(i => i.email);
-          sendEventModificationEmail(eventEmailData, emailInvitees).catch((error) => {
+        if (invitees.length > 0 && emailData) {
+          sendEventModificationEmail(emailData, invitees.filter(i => i.email)).catch((error) => {
             console.error('Error sending event modification emails:', error);
           });
-
-          // Create in-app notifications
-          const userIds = invitees.map(i => i.id);
           createBulkNotifications(ctx.prisma, {
-            userIds,
+            userIds: invitees.map(i => i.id),
             type: 'EVENT_UPDATED',
             title: 'Evento modificato',
             message: `L'evento "${event.title}" è stato modificato`,
@@ -717,72 +607,19 @@ export const calendarRouter = router({
 
       // Send cancellation notifications to invited users
       if (eventWithInvitations && eventWithInvitations.invitations.length > 0) {
-        const invitees: (InviteeData & { id: string })[] = [];
-        const seenIds = new Set<string>();
+        const invitees = resolveInvitees(eventWithInvitations.invitations);
+        const emailData = buildEventEmailData(eventWithInvitations);
 
-        for (const invitation of eventWithInvitations.invitations) {
-          if (invitation.user?.id && !seenIds.has(invitation.user.id)) {
-            invitees.push({
-              id: invitation.user.id,
-              email: invitation.user.email || '',
-              name: invitation.user.name || 'Utente',
-            });
-            seenIds.add(invitation.user.id);
-          }
-
-          if (invitation.group?.members) {
-            for (const member of invitation.group.members) {
-              if (member.student?.user?.id && !seenIds.has(member.student.user.id)) {
-                invitees.push({
-                  id: member.student.user.id,
-                  email: member.student.user.email || '',
-                  name: member.student.user.name || 'Utente',
-                });
-                seenIds.add(member.student.user.id);
-              }
-              if (member.collaborator?.user?.id && !seenIds.has(member.collaborator.user.id)) {
-                invitees.push({
-                  id: member.collaborator.user.id,
-                  email: member.collaborator.user.email || '',
-                  name: member.collaborator.user.name || 'Utente',
-                });
-                seenIds.add(member.collaborator.user.id);
-              }
-            }
-          }
-        }
-
-        // Send cancellation emails if we have invitees and valid dates
-        if (invitees.length > 0 && eventWithInvitations.startDate && eventWithInvitations.endDate) {
-          const eventEmailData: EventEmailData = {
-            id: eventWithInvitations.id,
-            title: eventWithInvitations.title,
-            description: eventWithInvitations.description,
-            type: eventWithInvitations.type,
-            startDate: eventWithInvitations.startDate,
-            endDate: eventWithInvitations.endDate,
-            isAllDay: eventWithInvitations.isAllDay,
-            locationType: eventWithInvitations.locationType,
-            locationDetails: eventWithInvitations.locationDetails,
-            onlineLink: eventWithInvitations.onlineLink,
-            createdByName: eventWithInvitations.createdBy?.name || 'Staff',
-          };
-
-          // Send cancellation emails
-          const emailInvitees = invitees.filter(i => i.email);
-          sendEventCancellationEmail(eventEmailData, emailInvitees, input.reason).catch((error) => {
+        if (invitees.length > 0 && emailData) {
+          sendEventCancellationEmail(emailData, invitees.filter(i => i.email), input.reason).catch((error) => {
             console.error('Error sending event cancellation emails:', error);
           });
-
-          // Create in-app notifications
-          const userIds = invitees.map(i => i.id);
           const reasonSuffix = input.reason ? `: ${input.reason}` : '';
-          const notificationMessage = `L'evento "${eventWithInvitations.title}" è stato annullato${reasonSuffix}`;
           createBulkNotifications(ctx.prisma, {
-            userIds,
+            userIds: invitees.map(i => i.id),
             type: 'EVENT_CANCELLED',
             title: 'Evento annullato',
-            message: notificationMessage,
+            message: `L'evento "${eventWithInvitations.title}" è stato annullato${reasonSuffix}`,
             linkType: 'event',
             linkEntityId: eventWithInvitations.id,
           }).catch((error) => {

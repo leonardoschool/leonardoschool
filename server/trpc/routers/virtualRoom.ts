@@ -5,6 +5,12 @@ import { TRPCError } from '@trpc/server';
 import { CheatingEventType, SessionMessageSender } from '@prisma/client';
 import { createLogger } from '@/lib/utils/logger';
 import { notifySimulationStarted, notifySessionKicked } from '@/server/services/fcmService';
+import {
+  extractInvitedStudents,
+  extractInvitedStudentIds,
+  isParticipantConnected,
+  calculateTimeRemaining,
+} from './virtualRoom.helpers';
 
 const log = createLogger('VirtualRoom');
 
@@ -102,28 +108,7 @@ export const virtualRoomRouter = router({
       }
 
       // Get list of invited students for this specific assignment
-      const invitedStudents: { id: string; userId: string; name: string; email: string }[] = [];
-      
-      if (assignment.student) {
-        invitedStudents.push({
-          id: assignment.student.id,
-          userId: assignment.student.userId,
-          name: assignment.student.user.name,
-          email: assignment.student.user.email,
-        });
-      }
-      if (assignment.group) {
-        for (const member of assignment.group.members) {
-          if (member.student && !invitedStudents.find(s => s.id === member.student!.id)) {
-            invitedStudents.push({
-              id: member.student.id,
-              userId: member.student.userId,
-              name: member.student.user.name,
-              email: member.student.user.email,
-            });
-          }
-        }
-      }
+      const invitedStudents = extractInvitedStudents([assignment]);
 
       return {
         session,
@@ -175,21 +160,10 @@ export const virtualRoomRouter = router({
       }
 
       // Count invited students
-      const invitedStudentIds = new Set<string>();
-      for (const assignment of session.simulation.assignments) {
-        if (assignment.student) invitedStudentIds.add(assignment.student.id);
-        if (assignment.group) {
-          for (const member of assignment.group.members) {
-            if (member.student) invitedStudentIds.add(member.student.id);
-          }
-        }
-      }
+      const invitedStudentIds = extractInvitedStudentIds(session.simulation.assignments);
 
       // Use heartbeat timeout to determine real connection status
-      const heartbeatTimeout = 15 * 1000; // 15 seconds
-      const connectedCount = session.participants.filter(p => 
-        p.isConnected && p.lastHeartbeat && (Date.now() - p.lastHeartbeat.getTime()) < heartbeatTimeout
-      ).length;
+      const connectedCount = session.participants.filter(isParticipantConnected).length;
       
       if (!input.forceStart && connectedCount < invitedStudentIds.size) {
         throw new TRPCError({
@@ -343,37 +317,10 @@ export const virtualRoomRouter = router({
       }
 
       // Get list of all invited students
-      const invitedStudents: { id: string; userId: string; name: string; email: string }[] = [];
-      for (const assignment of session.simulation.assignments) {
-        if (assignment.student) {
-          invitedStudents.push({
-            id: assignment.student.id,
-            userId: assignment.student.userId,
-            name: assignment.student.user.name,
-            email: assignment.student.user.email,
-          });
-        }
-        if (assignment.group) {
-          for (const member of assignment.group.members) {
-            if (member.student && !invitedStudents.find(s => s.id === member.student!.id)) {
-              invitedStudents.push({
-                id: member.student.id,
-                userId: member.student.userId,
-                name: member.student.user.name,
-                email: member.student.user.email,
-              });
-            }
-          }
-        }
-      }
+      const invitedStudents = extractInvitedStudents(session.simulation.assignments);
 
       // Calculate time remaining
-      let timeRemaining: number | null = null;
-      if (session.status === 'STARTED' && session.actualStartAt) {
-        const elapsedMs = Date.now() - session.actualStartAt.getTime();
-        const totalMs = session.simulation.durationMinutes * 60 * 1000;
-        timeRemaining = Math.max(0, Math.floor((totalMs - elapsedMs) / 1000));
-      }
+      const timeRemaining = calculateTimeRemaining(session);
 
       return {
         session: {
@@ -390,11 +337,7 @@ export const virtualRoomRouter = router({
           totalQuestions: session.simulation.totalQuestions,
         },
         participants: session.participants.map(p => {
-          // Consider connected only if heartbeat is recent (within 15 seconds)
-          const heartbeatTimeout = 15 * 1000; // 15 seconds
-          const isReallyConnected = p.isConnected && 
-            p.lastHeartbeat && 
-            (Date.now() - p.lastHeartbeat.getTime()) < heartbeatTimeout;
+          const isReallyConnected = isParticipantConnected(p);
           
           return {
             id: p.id,
@@ -425,10 +368,7 @@ export const virtualRoomRouter = router({
           };
         }),
         invitedStudents,
-        connectedCount: session.participants.filter(p => {
-          const heartbeatTimeout = 15 * 1000;
-          return p.isConnected && p.lastHeartbeat && (Date.now() - p.lastHeartbeat.getTime()) < heartbeatTimeout;
-        }).length,
+        connectedCount: session.participants.filter(isParticipantConnected).length,
         totalInvited: invitedStudents.length,
         timeRemaining,
       };
@@ -626,22 +566,9 @@ export const virtualRoomRouter = router({
       });
 
       // Count all unique students invited (avoid duplicates)
-      const invitedStudentIds = new Set<string>();
-      if (session?.simulation.assignments) {
-        for (const assignment of session.simulation.assignments) {
-          if (assignment.student) {
-            invitedStudentIds.add(assignment.student.id);
-          }
-          if (assignment.group) {
-            for (const member of assignment.group.members) {
-              if (member.student) {
-                invitedStudentIds.add(member.student.id);
-              }
-            }
-          }
-        }
-      }
-      
+      const invitedStudentIds = session?.simulation.assignments
+        ? extractInvitedStudentIds(session.simulation.assignments)
+        : new Set<string>();
       const totalParticipants = invitedStudentIds.size || 1;
 
       // Debug log only - very verbose, only shown with LOG_VERBOSE=true
@@ -731,12 +658,7 @@ export const virtualRoomRouter = router({
       }
 
       // Calculate time remaining
-      let timeRemaining: number | null = null;
-      if (session.status === 'STARTED' && session.actualStartAt) {
-        const elapsedMs = Date.now() - session.actualStartAt.getTime();
-        const totalMs = session.simulation.durationMinutes * 60 * 1000;
-        timeRemaining = Math.max(0, Math.floor((totalMs - elapsedMs) / 1000));
-      }
+      const timeRemaining = calculateTimeRemaining(session);
 
       return {
         hasSession: true,
