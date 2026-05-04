@@ -374,10 +374,10 @@ export default function NewSimulationPage() {
   });
 
   const updateTemplateMutation = trpc.simulationTemplates.update.useMutation({
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       showSuccess('Template aggiornato', 'Le modifiche al template sono state salvate.');
       utils.simulationTemplates.list.invalidate();
-      if (variables.id) utils.simulationTemplates.get.invalidate({ id: variables.id });
+      if (editId) utils.simulationTemplates.get.invalidate({ id: editId });
       router.push('/simulazioni');
     },
     onError: handleMutationError,
