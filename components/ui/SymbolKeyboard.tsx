@@ -92,9 +92,10 @@ const symbolCategories: SymbolCategory[] = [
     ],
   },
   {
-    name: 'Operatori matematici',
+    name: 'Operatori e Relazioni',
     groups: [
       {
+        groupName: 'Operatori',
         symbols: [
           { symbol: '+', label: 'più' },
           { symbol: '−', label: 'meno' },
@@ -107,12 +108,8 @@ const symbolCategories: SymbolCategory[] = [
           { symbol: '%', label: 'percentuale' },
         ],
       },
-    ],
-  },
-  {
-    name: 'Relazioni',
-    groups: [
       {
+        groupName: 'Relazioni',
         symbols: [
           { symbol: '=', label: 'uguale' },
           { symbol: '≠', label: 'diverso' },
@@ -128,14 +125,12 @@ const symbolCategories: SymbolCategory[] = [
     ],
   },
   {
-    name: 'Frecce e direzioni',
+    name: 'Frecce',
     groups: [
       {
         symbols: [
           { symbol: '→', label: 'freccia destra' },
           { symbol: '←', label: 'freccia sinistra' },
-          { symbol: '↔', label: 'freccia doppia' },
-          { symbol: '⇌', label: 'equilibrio chimico' },
           { symbol: '↑', label: 'aumenta' },
           { symbol: '↓', label: 'diminuisce' },
         ],
@@ -143,10 +138,13 @@ const symbolCategories: SymbolCategory[] = [
     ],
   },
   {
-    name: 'Chimica',
+    name: 'Scienze',
     groups: [
       {
+        groupName: 'Chimica',
         symbols: [
+          { symbol: '↔', label: 'freccia doppia' },
+          { symbol: '⇌', label: 'equilibrio chimico' },
           { symbol: '−', label: 'legame singolo' },
           { symbol: '=', label: 'legame doppio' },
           { symbol: '≡', label: 'legame triplo' },
@@ -159,12 +157,8 @@ const symbolCategories: SymbolCategory[] = [
           { symbol: '³⁻', label: 'carica 3-' },
         ],
       },
-    ],
-  },
-  {
-    name: 'Biologia',
-    groups: [
       {
+        groupName: 'Biologia',
         symbols: [
           { symbol: "5'→3'", label: 'direzione 5-3' },
           { symbol: "3'→5'", label: 'direzione 3-5' },

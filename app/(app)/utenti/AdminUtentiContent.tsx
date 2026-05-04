@@ -53,6 +53,7 @@ import {
 } from 'lucide-react';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
+import CustomSelect from '@/components/ui/CustomSelect';
 
 type RoleFilter = 'ALL' | 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
 type StatusFilter = 'all' | 'active' | 'inactive' | 'pending_profile' | 'pending_contract' | 'pending_sign' | 'pending_activation' | 'no_signed_contract';
@@ -1315,6 +1316,14 @@ export default function AdminUtentiContent() {
     collaboratorName: '',
   });
 
+  const [createUserModal, setCreateUserModal] = useState({
+    isOpen: false,
+    name: '',
+    email: '',
+    role: 'STUDENT' as 'STUDENT' | 'COLLABORATOR' | 'ADMIN',
+    groupId: '',
+  });
+
   const utils = trpc.useUtils();
 
   // Get current user to hide self
@@ -1346,6 +1355,9 @@ export default function AdminUtentiContent() {
 
   // Fetch contract templates
   const { data: templates } = trpc.contracts.getTemplates.useQuery();
+
+  // Fetch groups for user creation modal
+  const { data: groupsData } = trpc.groups.getAll.useQuery({ onlyMyGroups: false }, { enabled: createUserModal.isOpen });
 
   // Mutations
   const toggleActiveMutation = trpc.users.toggleActive.useMutation({
@@ -1383,6 +1395,16 @@ export default function AdminUtentiContent() {
       utils.users.getAll.invalidate();
       setContractModal({ isOpen: false, targetId: '', targetType: 'STUDENT' });
       showSuccess('Contratto assegnato', 'Il contratto è stato assegnato con successo.');
+    },
+    onError: handleMutationError,
+  });
+
+  const adminCreateUserMutation = trpc.users.adminCreateUser.useMutation({
+    onSuccess: () => {
+      utils.users.getAll.invalidate();
+      utils.users.getStats.invalidate();
+      setCreateUserModal({ isOpen: false, name: '', email: '', role: 'STUDENT', groupId: '' });
+      showSuccess('Utente creato', 'L\'account è stato creato e l\'email di benvenuto è stata inviata.');
     },
     onError: handleMutationError,
   });
@@ -1645,14 +1667,23 @@ export default function AdminUtentiContent() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className={`text-2xl font-bold flex items-center gap-3 ${colors.text.primary}`}>
-          <Users className="w-8 h-8" />
-          Gestione Utenti
-        </h1>
-        <p className={`mt-1 ${colors.text.secondary}`}>
-          Visualizza tutti gli utenti, assegna ruoli, gestisci contratti e account
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className={`text-2xl font-bold flex items-center gap-3 ${colors.text.primary}`}>
+            <Users className="w-8 h-8" />
+            Gestione Utenti
+          </h1>
+          <p className={`mt-1 ${colors.text.secondary}`}>
+            Visualizza tutti gli utenti, assegna ruoli, gestisci contratti e account
+          </p>
+        </div>
+        <button
+          onClick={() => setCreateUserModal({ isOpen: true, name: '', email: '', role: 'STUDENT', groupId: '' })}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors flex-shrink-0"
+        >
+          <Plus className="w-4 h-4" />
+          Nuovo Utente
+        </button>
       </div>
 
       {/* Stats + Role Filters Combined */}
@@ -2913,6 +2944,125 @@ export default function AdminUtentiContent() {
           collaboratorId={subjectsModal.collaboratorId}
           collaboratorName={subjectsModal.collaboratorName}
         />
+      )}
+
+      {/* Create User Modal */}
+      {createUserModal.isOpen && (
+        <Portal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className={`w-full max-w-md ${colors.background.card} rounded-2xl shadow-2xl border ${colors.border.light}`}>
+              {/* Modal header */}
+              <div className={`flex items-center justify-between px-6 py-4 border-b ${colors.border.light}`}>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                    <User className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h2 className={`font-semibold ${colors.text.primary}`}>Crea nuovo utente</h2>
+                    <p className={`text-xs ${colors.text.muted}`}>L&apos;utente riceverà un&apos;email per impostare la password</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setCreateUserModal({ isOpen: false, name: '', email: '', role: 'STUDENT', groupId: '' })}
+                  className={`p-2 rounded-lg ${colors.background.hover} ${colors.text.muted} hover:${colors.text.primary}`}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Modal body */}
+              <div className="px-6 py-4 space-y-4">
+                {/* Name */}
+                <div>
+                  <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>Nome completo *</label>
+                  <input
+                    type="text"
+                    value={createUserModal.name}
+                    onChange={(e) => setCreateUserModal((m) => ({ ...m, name: e.target.value }))}
+                    placeholder="Es. Mario Rossi"
+                    className={`w-full px-3 py-2 rounded-lg border ${colors.border.input} ${colors.background.input} ${colors.text.primary} text-sm`}
+                  />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>Email *</label>
+                  <input
+                    type="email"
+                    value={createUserModal.email}
+                    onChange={(e) => setCreateUserModal((m) => ({ ...m, email: e.target.value }))}
+                    placeholder="mario.rossi@email.com"
+                    className={`w-full px-3 py-2 rounded-lg border ${colors.border.input} ${colors.background.input} ${colors.text.primary} text-sm`}
+                  />
+                </div>
+
+                {/* Role */}
+                <div>
+                  <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>Ruolo *</label>
+                  <CustomSelect
+                    value={createUserModal.role}
+                    onChange={(v) => setCreateUserModal((m) => ({ ...m, role: v as 'STUDENT' | 'COLLABORATOR' | 'ADMIN', groupId: '' }))}
+                    options={[
+                      { value: 'STUDENT', label: 'Studente' },
+                      { value: 'COLLABORATOR', label: 'Collaboratore' },
+                      { value: 'ADMIN', label: 'Amministratore' },
+                    ]}
+                  />
+                </div>
+
+                {/* Group (only for STUDENT or COLLABORATOR) */}
+                {createUserModal.role !== 'ADMIN' && groupsData && groupsData.length > 0 && (
+                  <div>
+                    <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>Gruppo (opzionale)</label>
+                    <CustomSelect
+                      value={createUserModal.groupId}
+                      onChange={(v) => setCreateUserModal((m) => ({ ...m, groupId: v }))}
+                      options={[
+                        { value: '', label: 'Nessun gruppo' },
+                        ...groupsData.map((g) => ({ value: g.id, label: g.name })),
+                      ]}
+                      placeholder="Nessun gruppo"
+                    />
+                  </div>
+                )}
+
+                {/* Info box */}
+                <div className={`text-xs ${colors.text.muted} p-3 rounded-lg ${colors.background.secondary} border ${colors.border.light}`}>
+                  L&apos;utente riceverà una email con un link per <strong>impostare la propria password</strong>. Dopo il primo accesso dovrà completare il profilo e seguire il normale flusso di onboarding.
+                </div>
+              </div>
+
+              {/* Modal footer */}
+              <div className={`flex items-center justify-end gap-3 px-6 py-4 border-t ${colors.border.light}`}>
+                <button
+                  onClick={() => setCreateUserModal({ isOpen: false, name: '', email: '', role: 'STUDENT', groupId: '' })}
+                  className={`px-4 py-2 rounded-lg border ${colors.border.light} ${colors.text.secondary} text-sm hover:${colors.background.hover} transition-colors`}
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={() => {
+                    if (!createUserModal.name.trim() || !createUserModal.email.trim()) return;
+                    adminCreateUserMutation.mutate({
+                      name: createUserModal.name.trim(),
+                      email: createUserModal.email.trim(),
+                      role: createUserModal.role,
+                      groupId: createUserModal.groupId || undefined,
+                    });
+                  }}
+                  disabled={adminCreateUserMutation.isPending || !createUserModal.name.trim() || !createUserModal.email.trim()}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+                >
+                  {adminCreateUserMutation.isPending ? (
+                    <><Spinner size="sm" /> Creazione...</>
+                  ) : (
+                    <><Send className="w-4 h-4" /> Crea e invia email</>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </Portal>
       )}
     </div>
   );

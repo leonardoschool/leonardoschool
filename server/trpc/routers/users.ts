@@ -9,6 +9,7 @@ import { getAdminAuth } from '@/lib/firebase/admin';
 import { Prisma } from '@prisma/client';
 import { generateMatricola } from '@/lib/utils/matricolaUtils';
 import { createCachedQuery, CACHE_TIMES, CACHE_TAGS } from '@/lib/cache/serverCache';
+import { sendWelcomeEmail } from '@/lib/email/userEmails';
 
 export const usersRouter = router({
   /**
@@ -1499,4 +1500,103 @@ export const usersRouter = router({
       students: studentStats,
     };
   }),
+
+  /**
+   * Admin creates a new user account and sends a set-password email
+   */
+  adminCreateUser: adminProcedure
+    .input(
+      z.object({
+        name: z.string().min(1, 'Nome obbligatorio'),
+        email: z.string().email('Email non valida'),
+        role: z.enum(['STUDENT', 'COLLABORATOR', 'ADMIN']),
+        groupId: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { name, email, role, groupId } = input;
+
+      // Check email not already in use in DB
+      const existing = await ctx.prisma.user.findUnique({ where: { email } });
+      if (existing) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'Questa email è già registrata.' });
+      }
+
+      // Get or create Firebase user.
+      // An "orphaned" Firebase user (exists in Firebase but not in DB) can occur when
+      // a previous registration failed mid-way. In that case we reuse the existing UID.
+      let firebaseUser: { uid: string };
+      try {
+        firebaseUser = await getAdminAuth().getUserByEmail(email);
+        // Orphan found — update display name and mark email as verified
+        await getAdminAuth().updateUser(firebaseUser.uid, {
+          displayName: name,
+          emailVerified: true,
+        });
+      } catch (err: any) {
+        if (err?.code === 'auth/user-not-found') {
+          // Normal case: create fresh Firebase user
+          firebaseUser = await getAdminAuth().createUser({
+            email,
+            displayName: name,
+            emailVerified: true,
+          });
+        } else {
+          throw err;
+        }
+      }
+
+      // Generate password-reset link — acts as "set your password" invite.
+      // No custom redirect URL to avoid Firebase domain whitelist issues in local dev.
+      const passwordSetLink = await getAdminAuth().generatePasswordResetLink(email);
+
+      // Create DB user + role profile
+      const matricola = role === 'STUDENT' ? await generateMatricola(ctx.prisma) : null;
+
+      const user = await ctx.prisma.user.create({
+        data: {
+          firebaseUid: firebaseUser.uid,
+          email,
+          name,
+          role,
+          emailVerified: true,
+          isActive: false,
+          profileCompleted: false,
+          ...(role === 'STUDENT' && matricola && {
+            student: { create: { matricola } },
+          }),
+          ...(role === 'COLLABORATOR' && {
+            collaborator: { create: {} },
+          }),
+          ...(role === 'ADMIN' && {
+            admin: { create: {} },
+          }),
+        } as any,
+        include: { student: true, collaborator: true, admin: true } as any,
+      });
+
+      // Optionally add to group (STUDENT or COLLABORATOR only)
+      if (groupId && (role === 'STUDENT' || role === 'COLLABORATOR')) {
+        const profile = role === 'STUDENT'
+          ? (user as any).student
+          : (user as any).collaborator;
+
+        if (profile) {
+          await ctx.prisma.groupMember.create({
+            data: {
+              groupId,
+              ...(role === 'STUDENT' ? { studentId: profile.id } : { collaboratorId: profile.id }),
+            },
+          });
+        }
+      }
+
+      // Send welcome email with set-password link
+      await sendWelcomeEmail({ name, email, passwordSetLink, role });
+
+      return {
+        userId: user.id,
+        matricola: (user as any).student?.matricola ?? null,
+      };
+    }),
 });

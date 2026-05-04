@@ -48,6 +48,12 @@ interface FillSectionModalProps {
 // Stable reference to avoid creating a new [] on every render when query data is undefined
 const EMPTY_TOPICS: { id: string; name: string }[] = [];
 
+const LANGUAGE_OPTIONS = [
+  { value: '', label: 'Tutte le lingue' },
+  { value: 'IT', label: 'Italiano' },
+  { value: 'EN', label: 'Inglese' },
+];
+
 const DIFFICULTY_OPTIONS = [
   { value: '', label: 'Tutte le difficoltà' },
   { value: 'EASY', label: 'Facile' },
@@ -90,6 +96,7 @@ export default function FillSectionModal({
   const [selectedDifficulties, setSelectedDifficulties] = useState<string[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('');
   const [difficultyMix, setDifficultyMix] = useState<DifficultyMix>('BALANCED');
   const [avoidRecentlyUsed, setAvoidRecentlyUsed] = useState(true);
   const [maximizeTopicCoverage, setMaximizeTopicCoverage] = useState(true);
@@ -104,6 +111,7 @@ export default function FillSectionModal({
       setSelectedDifficulties([]);
       setSelectedTypes([]);
       setSelectedTagIds([]);
+      setSelectedLanguage('');
       setDifficultyMix('BALANCED');
       setAvoidRecentlyUsed(true);
       setMaximizeTopicCoverage(true);
@@ -165,6 +173,7 @@ export default function FillSectionModal({
               types: selectedTypes.length > 0 ? selectedTypes as ('SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT')[] : undefined,
               subjectIds: selectedSubjectIds.length > 1 ? selectedSubjectIds : undefined,
               topicIds: selectedTopicIds.length > 0 ? selectedTopicIds : undefined,
+              language: selectedLanguage ? selectedLanguage as 'IT' | 'EN' : undefined,
               excludeQuestionIds,
             });
 
@@ -185,6 +194,7 @@ export default function FillSectionModal({
               topicIds: selectedTopicIds.length > 0 ? selectedTopicIds : undefined,
               difficulties: selectedDifficulties.length > 0 ? selectedDifficulties as ('EASY' | 'MEDIUM' | 'HARD')[] : undefined,
               tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+              language: selectedLanguage ? selectedLanguage as 'IT' | 'EN' : undefined,
               excludeQuestionIds,
             });
 
@@ -359,6 +369,15 @@ export default function FillSectionModal({
             placeholder="Tutti i tag"
           />
         )}
+
+        {/* Language */}
+        <CustomSelect
+          label="Lingua"
+          value={selectedLanguage}
+          onChange={setSelectedLanguage}
+          options={LANGUAGE_OPTIONS}
+          placeholder="Tutte le lingue"
+        />
 
         {/* Info */}
         <div

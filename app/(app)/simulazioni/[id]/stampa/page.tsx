@@ -99,13 +99,20 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
 
       {/* Printable Content */}
       <div className="print-content pt-20 print:pt-0">
+        <style>{`
+          @page {
+            size: A4;
+            margin: 10mm 15mm 20mm 15mm;
+
+            @bottom-center {
+              content: "Pagina " counter(page);
+              font-family: 'Times New Roman', Times, serif;
+              font-size: 10pt;
+            }
+          }
+        `}</style>
         <style jsx global>{`
           @media print {
-            @page {
-              size: A4;
-              margin: 25mm 25mm 20mm 25mm;
-            }
-            
             body {
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
@@ -326,7 +333,7 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
           </div>
 
           {/* End of questions */}
-          <div className="text-center font-['Times_New_Roman',Times,serif] text-sm font-bold mt-8 pt-2">
+          <div className="text-center font-['Times_New_Roman',Times,serif] text-sm mt-8 pt-2">
             ********** FINE DELLE DOMANDE **********
           </div>
         </div>

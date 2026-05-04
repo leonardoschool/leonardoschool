@@ -40,6 +40,8 @@ export const simulationSectionSchema = z.object({
   durationMinutes: z.number().int().min(1, 'Durata sezione obbligatoria'),
   questionCount: z.number().int().min(0).optional(),
   subjectId: z.string().optional().nullable(),
+  subjectIds: z.array(z.string()).optional().default([]),
+  subjectQuestionCounts: z.record(z.string(), z.number().int().min(0)).optional().default({}),
   topicIds: z.array(z.string()).optional().default([]),
   questionIds: z.array(z.string()).optional().default([]),
   order: z.number().int().min(0).default(0),

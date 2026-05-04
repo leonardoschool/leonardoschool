@@ -818,6 +818,7 @@ export const questionsRouter = router({
         difficulties: z.array(z.enum(['EASY', 'MEDIUM', 'HARD'])).optional(),
         tagIds: z.array(z.string()).optional(),
         excludeQuestionIds: z.array(z.string()).optional(),
+        language: z.enum(['IT', 'EN']).optional().nullable(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -825,6 +826,7 @@ export const questionsRouter = router({
         status: 'PUBLISHED',
       };
 
+      if (input.language) where.language = input.language;
       if (input.subjectIds && input.subjectIds.length > 0)
         where.subjectId = input.subjectIds.length === 1 ? input.subjectIds[0] : { in: input.subjectIds };
       if (input.types && input.types.length > 0)

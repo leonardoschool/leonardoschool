@@ -426,3 +426,14 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@page {
+  size: A4;
+  margin: 25mm 25mm 20mm 25mm;
+
+  @bottom-center {
+    content: "Pagina " counter(page);
+    font-family: 'Times New Roman', Times, serif;
+    font-size: 10pt;
+  }
+}

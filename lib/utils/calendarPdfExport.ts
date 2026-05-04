@@ -115,6 +115,17 @@ export function exportCalendarToPdf(options: CalendarExportOptions): void {
   <meta charset="UTF-8" />
   <title>${escapeHtml(title)}</title>
   <style>
+    @page {
+      size: A4;
+      margin: 12mm 12mm 18mm 12mm;
+
+      @bottom-center {
+        content: "Pagina " counter(page);
+        font-family: "Times New Roman", Times, serif;
+        font-size: 10pt;
+      }
+    }
+
     * { box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -149,7 +160,7 @@ export function exportCalendarToPdf(options: CalendarExportOptions): void {
     tr.cancelled td { color: #9ca3af; text-decoration: line-through; }
     .footer { margin-top: 24px; color: #9ca3af; font-size: 10px; }
     @media print {
-      body { margin: 12mm; }
+      body { margin: 0; }
       tr { page-break-inside: avoid; }
     }
   </style>

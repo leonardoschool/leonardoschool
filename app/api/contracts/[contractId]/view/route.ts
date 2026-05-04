@@ -152,6 +152,17 @@ export async function GET(
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Contratto - ${safeTemplateName}</title>
   <style>
+    @page {
+      size: A4;
+      margin: 15mm 15mm 20mm 15mm;
+
+      @bottom-center {
+        content: "Pagina " counter(page);
+        font-family: 'Times New Roman', Times, serif;
+        font-size: 10pt;
+      }
+    }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;

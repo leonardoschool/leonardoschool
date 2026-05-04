@@ -37,6 +37,17 @@ export function generateContractPdf(contract: ContractPdfData): void {
       <meta charset="UTF-8">
       <title>${fileName}</title>
       <style>
+        @page {
+          size: A4;
+          margin: 15mm 15mm 20mm 15mm;
+
+          @bottom-center {
+            content: "Pagina " counter(page);
+            font-family: 'Times New Roman', Times, serif;
+            font-size: 10pt;
+          }
+        }
+
         body { 
           font-family: 'Times New Roman', Times, serif; 
           line-height: 1.6; 
@@ -92,7 +103,7 @@ export function generateContractPdf(contract: ContractPdfData): void {
           margin: 5px 0; 
         }
         @media print { 
-          body { padding: 20px; }
+          body { padding: 0; }
           .logo-container { 
             -webkit-print-color-adjust: exact; 
             print-color-adjust: exact; 

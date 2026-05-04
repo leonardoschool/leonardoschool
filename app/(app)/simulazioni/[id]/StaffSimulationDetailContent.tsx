@@ -330,10 +330,16 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
-    /* Page margins - allows browser to show header/footer checkbox */
+    /* Page margins and page number footer */
     @page { 
       size: A4; 
-      margin: 10mm 15mm 15mm 15mm;
+      margin: 10mm 15mm 20mm 15mm;
+
+      @bottom-center {
+        content: "Pagina " counter(page);
+        font-family: 'Times New Roman', Times, serif;
+        font-size: 10pt;
+      }
     }
     
     @media print {
@@ -497,7 +503,6 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
       text-align: center;
       font-family: 'Times New Roman', Times, serif;
       font-size: 11pt;
-      font-weight: bold;
       margin-top: 30px;
       padding-top: 10px;
     }
@@ -506,7 +511,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
 <body>
   <!-- Instruction message - hidden when printing -->
   <div class="print-instruction">
-    <strong>💡 SUGGERIMENTO:</strong> Nelle opzioni di stampa, <strong>SELEZIONA "Intestazioni e piè di pagina"</strong> per vedere i numeri di pagina in basso.
+    I numeri di pagina vengono inseriti automaticamente in basso al centro nel PDF.
   </div>
 
   <!-- Header - centered logo (first page only) -->

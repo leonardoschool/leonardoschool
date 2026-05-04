@@ -8,6 +8,7 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
+import MultiSelect from '@/components/ui/MultiSelect';
 import Checkbox from '@/components/ui/Checkbox';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import { Modal } from '@/components/ui/Modal';
@@ -205,6 +206,7 @@ export default function NewSimulationPage() {
   const [questionDifficultyFilter, setQuestionDifficultyFilter] = useState('');
   const [questionTypeFilter, setQuestionTypeFilter] = useState<QuestionTypeFilter>('');
   const [questionTagFilter, setQuestionTagFilter] = useState<string[]>([]);
+  const [questionLanguageFilter, setQuestionLanguageFilter] = useState('');
   
   // Question detail modal
   const [previewQuestion, setPreviewQuestion] = useState<string | null>(null);
@@ -325,6 +327,8 @@ export default function NewSimulationPage() {
       durationMinutes: section.durationMinutes ?? 10,
       questionCount: section.questionCount ?? 0,
       subjectId: section.subjectId ?? null,
+      subjectIds: (section as { subjectIds?: string[] }).subjectIds ?? (section.subjectId ? [section.subjectId] : []),
+      subjectQuestionCounts: (section as { subjectQuestionCounts?: Record<string, number> }).subjectQuestionCounts ?? {},
       topicIds: section.topicIds ?? [],
       questionIds: [],
       order: section.order ?? index,
@@ -343,6 +347,7 @@ export default function NewSimulationPage() {
     difficulty: questionDifficultyFilter as 'EASY' | 'MEDIUM' | 'HARD' | undefined || undefined,
     status: 'PUBLISHED',
     tagIds: questionTagFilter.length > 0 ? questionTagFilter : undefined,
+    language: questionLanguageFilter as 'IT' | 'EN' | undefined || undefined,
   });
 
   // Query for question detail (with answers)
@@ -510,6 +515,8 @@ export default function NewSimulationPage() {
       durationMinutes: section.durationMinutes ?? 10,
       questionCount: section.questionCount ?? 0,
       subjectId: section.subjectId ?? null,
+      subjectIds: (section as { subjectIds?: string[] }).subjectIds ?? (section.subjectId ? [section.subjectId] : []),
+      subjectQuestionCounts: (section as { subjectQuestionCounts?: Record<string, number> }).subjectQuestionCounts ?? {},
       topicIds: section.topicIds ?? [],
       questionIds: [],
       order: section.order ?? index,
@@ -640,6 +647,7 @@ export default function NewSimulationPage() {
       questionIds: [],
       questionCount: 0,
       subjectId: null,
+      subjectIds: [],
       topicIds: [],
       order: sections.length,
     };
@@ -986,10 +994,16 @@ export default function NewSimulationPage() {
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
-    /* Page setup - margins allow browser to add page numbers */
+    /* Page setup and page number footer */
     @page { 
       size: A4; 
-      margin: 10mm 15mm 15mm 15mm;
+      margin: 10mm 15mm 20mm 15mm;
+
+      @bottom-center {
+        content: "Pagina " counter(page);
+        font-family: 'Times New Roman', Times, serif;
+        font-size: 10pt;
+      }
     }
     
     @media print {
@@ -1140,7 +1154,6 @@ export default function NewSimulationPage() {
       text-align: center;
       font-family: 'Times New Roman', Times, serif;
       font-size: 11pt;
-      font-weight: bold;
       margin-top: 30px;
       padding-top: 10px;
     }
@@ -2394,21 +2407,83 @@ export default function NewSimulationPage() {
                         <div className="flex-1 min-w-0">
                           <p className={`font-medium ${colors.text.primary} truncate`}>{section.name}</p>
                           <p className={`text-xs ${colors.text.muted}`}>{section.durationMinutes} minuti</p>
-                          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <CustomSelect
-                              value={section.subjectId ?? ''}
-                              onChange={(value) => updateSection(section.id, { subjectId: value || null, topicIds: [] })}
-                              options={[
-                                { value: '', label: 'Materia opzionale' },
-                                ...(subjectsData ?? []).map((subject) => ({
-                                  value: subject.id,
-                                  label: subject.name,
-                                })),
-                              ]}
-                              className="w-full"
+                          <div className="mt-3 space-y-2">
+                            <MultiSelect
+                              values={section.subjectIds ?? (section.subjectId ? [section.subjectId] : [])}
+                              options={(subjectsData ?? []).map((subject) => ({
+                                value: subject.id,
+                                label: subject.name,
+                                color: subject.color ?? undefined,
+                              }))}
+                              onChange={(vals) => {
+                                const total = section.questionCount ?? 0;
+                                const newCounts: Record<string, number> = {};
+                                vals.forEach((sid, i) => {
+                                  const base = Math.floor(total / vals.length);
+                                  const remainder = total % vals.length;
+                                  newCounts[sid] = i < remainder ? base + 1 : base;
+                                });
+                                updateSection(section.id, {
+                                  subjectIds: vals,
+                                  subjectId: vals.length === 1 ? vals[0] : null,
+                                  subjectQuestionCounts: vals.length > 0 ? newCounts : {},
+                                  topicIds: [],
+                                });
+                              }}
+                              placeholder="Materia opzionale"
                             />
 
-                            {section.subjectId && (
+                            {/* Editable per-subject distribution when 2+ subjects */}
+                            {(section.subjectIds ?? []).length > 1 && (
+                              <div className={`rounded-lg border ${colors.border.light} ${colors.background.input} p-2`}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <p className={`text-xs font-medium ${colors.text.muted}`}>Distribuzione domande</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const total = section.questionCount ?? 0;
+                                      const ids = section.subjectIds ?? [];
+                                      const balanced: Record<string, number> = {};
+                                      ids.forEach((sid, i) => {
+                                        const base = Math.floor(total / ids.length);
+                                        balanced[sid] = i < (total % ids.length) ? base + 1 : base;
+                                      });
+                                      updateSection(section.id, { subjectQuestionCounts: balanced });
+                                    }}
+                                    className={`text-xs ${colors.text.muted} hover:${colors.text.primary} transition-colors flex items-center gap-1`}
+                                    title="Ribilancia equamente"
+                                  >
+                                    ⚖ Ribilancia
+                                  </button>
+                                </div>
+                                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                  {(section.subjectIds ?? []).map((sid) => {
+                                    const subjectName = (subjectsData ?? []).find((s) => s.id === sid)?.name ?? sid;
+                                    const val = (section.subjectQuestionCounts ?? {})[sid] ?? 0;
+                                    return (
+                                      <div key={sid} className="flex items-center gap-1">
+                                        <span className={`text-xs ${colors.text.secondary}`}>{subjectName}:</span>
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          value={val}
+                                          onChange={(e) => {
+                                            const newVal = parseInt(e.target.value) || 0;
+                                            const newCounts = { ...(section.subjectQuestionCounts ?? {}), [sid]: newVal };
+                                            const newTotal = Object.values(newCounts).reduce((a, b) => a + b, 0);
+                                            updateSection(section.id, { subjectQuestionCounts: newCounts, questionCount: newTotal });
+                                          }}
+                                          className={`w-14 px-1 py-0.5 rounded border ${colors.border.input} ${colors.background.secondary} ${colors.text.primary} text-xs text-center`}
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Topics — only when exactly one subject */}
+                            {(section.subjectIds ?? []).length === 1 && section.subjectId && (
                               <div className={`rounded-lg border ${colors.border.light} ${colors.background.input} p-2 max-h-24 overflow-y-auto`}>
                                 {((subjectsData ?? []).find((subject) => subject.id === section.subjectId)?.topics ?? []).length === 0 ? (
                                   <p className={`text-xs ${colors.text.muted}`}>Nessun argomento disponibile</p>
@@ -2438,13 +2513,26 @@ export default function NewSimulationPage() {
                             )}
                           </div>
                         </div>
-                        <label className="flex items-center gap-2">
+                        <label className="flex items-center gap-2 flex-shrink-0">
                           <span className={`text-xs ${colors.text.muted}`}>Domande</span>
                           <input
                             type="number"
                             value={section.questionCount || 0}
-                            onChange={(e) => updateSection(section.id, { questionCount: parseInt(e.target.value) || 0 })}
-                            min={1}
+                            onChange={(e) => {
+                              const total = parseInt(e.target.value) || 0;
+                              const ids = section.subjectIds ?? [];
+                              if (ids.length > 1) {
+                                const newCounts: Record<string, number> = {};
+                                ids.forEach((sid, i) => {
+                                  const base = Math.floor(total / ids.length);
+                                  newCounts[sid] = i < (total % ids.length) ? base + 1 : base;
+                                });
+                                updateSection(section.id, { questionCount: total, subjectQuestionCounts: newCounts });
+                              } else {
+                                updateSection(section.id, { questionCount: total });
+                              }
+                            }}
+                            min={0}
                             className={`w-20 px-2 py-1.5 rounded-lg border ${colors.border.input} ${colors.background.input} ${colors.text.primary} text-sm text-center`}
                           />
                         </label>
@@ -2530,7 +2618,7 @@ export default function NewSimulationPage() {
                         className={`w-full pl-10 pr-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary} text-sm`}
                       />
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div className="flex-1">
                         <CustomSelect
                           value={questionSubjectFilter}
@@ -2566,6 +2654,18 @@ export default function NewSimulationPage() {
                             { value: 'HARD', label: 'Difficile' },
                           ]}
                           placeholder="Tutte le difficoltà"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <CustomSelect
+                          value={questionLanguageFilter}
+                          onChange={setQuestionLanguageFilter}
+                          options={[
+                            { value: '', label: 'Tutte le lingue' },
+                            { value: 'IT', label: 'Italiano' },
+                            { value: 'EN', label: 'Inglese' },
+                          ]}
+                          placeholder="Tutte le lingue"
                         />
                       </div>
                     </div>

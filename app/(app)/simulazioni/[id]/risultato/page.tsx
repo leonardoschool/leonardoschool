@@ -745,12 +745,12 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                               {answer.isCorrect ? (
                                 <>
                                   <CheckCircle className="w-5 h-5" />
-                                  <span className="font-medium">Hai valutato questa risposta come corretta</span>
+                                  <span className="font-medium">La tua risposta è corretta</span>
                                 </>
                               ) : (
                                 <>
                                   <XCircle className="w-5 h-5" />
-                                  <span className="font-medium">Hai valutato questa risposta come sbagliata</span>
+                                  <span className="font-medium">La tua risposta è errata</span>
                                 </>
                               )}
                             </div>
