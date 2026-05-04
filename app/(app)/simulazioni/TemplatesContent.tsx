@@ -31,6 +31,7 @@ import {
   Archive,
   Globe,
   Copy,
+  Send,
 } from 'lucide-react';
 import CustomSelect from '@/components/ui/CustomSelect';
 import type { SimulationStatus } from '@/lib/validations/simulationValidation';
@@ -183,7 +184,12 @@ export default function TemplatesContent() {
   const updateStatusMutation = trpc.simulationTemplates.update.useMutation({
     onSuccess: (_, variables) => {
       const vars = variables as { status?: string } | undefined;
-      const label = vars?.status === 'ARCHIVED' ? 'archiviato' : 'ripristinato';
+      const statusActionLabels: Record<string, string> = {
+        DRAFT: 'spostato in bozza',
+        PUBLISHED: 'pubblicato',
+        ARCHIVED: 'archiviato',
+      };
+      const label = vars?.status ? (statusActionLabels[vars.status] ?? 'aggiornato') : 'aggiornato';
       showSuccess('Aggiornato', `Template ${label} con successo`);
       utils.simulationTemplates.list.invalidate();
       if (expandedId) utils.simulationTemplates.get.invalidate({ id: expandedId });
@@ -679,24 +685,40 @@ export default function TemplatesContent() {
                   {/* Archive / Restore */}
                   {canAct && (
                     <>
-                      {template.status !== 'ARCHIVED' ? (
-                        <button
-                          onClick={() => {
-                            setArchiveConfirm({ id: template.id, title: template.title });
-                            setOpenMenuId(null);
-                          }}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm ${colors.text.secondary} hover:${colors.background.hover} transition-colors`}
-                        >
-                          <Archive className="w-4 h-4" />
-                          Archivia
-                        </button>
-                      ) : (
+                      {template.status === 'DRAFT' && (
                         <button
                           onClick={() => {
                             updateStatusMutation.mutate({ id: template.id, status: 'PUBLISHED' });
                             setOpenMenuId(null);
                           }}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm ${colors.text.secondary} hover:${colors.background.hover} transition-colors`}
+                          disabled={updateStatusMutation.isPending}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm ${colors.text.secondary} hover:${colors.background.hover} transition-colors disabled:opacity-50`}
+                        >
+                          <Send className="w-4 h-4" />
+                          Pubblica
+                        </button>
+                      )}
+                      {template.status === 'PUBLISHED' && (
+                        <button
+                          onClick={() => {
+                            setArchiveConfirm({ id: template.id, title: template.title });
+                            setOpenMenuId(null);
+                          }}
+                          disabled={updateStatusMutation.isPending}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm ${colors.text.secondary} hover:${colors.background.hover} transition-colors disabled:opacity-50`}
+                        >
+                          <Archive className="w-4 h-4" />
+                          Archivia
+                        </button>
+                      )}
+                      {template.status === 'ARCHIVED' && (
+                        <button
+                          onClick={() => {
+                            updateStatusMutation.mutate({ id: template.id, status: 'PUBLISHED' });
+                            setOpenMenuId(null);
+                          }}
+                          disabled={updateStatusMutation.isPending}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm ${colors.text.secondary} hover:${colors.background.hover} transition-colors disabled:opacity-50`}
                         >
                           <Globe className="w-4 h-4" />
                           Ripristina

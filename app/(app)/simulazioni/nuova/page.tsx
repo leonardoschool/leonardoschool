@@ -121,8 +121,7 @@ export default function NewSimulationPage() {
   const { user } = useAuth();
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
-  // eslint-disable-next-line sonarjs/no-unused-vars -- kept for future cache invalidation
-  const _utils = trpc.useUtils();
+  const utils = trpc.useUtils();
 
   // Check authorization
   const userRole = user?.role;
@@ -367,15 +366,18 @@ export default function NewSimulationPage() {
 
   const createTemplateMutation = trpc.simulationTemplates.create.useMutation({
     onSuccess: () => {
-      showSuccess('Template creato', 'Il template è stato salvato e può essere riutilizzato per nuove simulazioni.');
+      showSuccess('Template creato', 'Il template è stato salvato come bozza. Pubblicalo dalla lista template quando è pronto.');
+      utils.simulationTemplates.list.invalidate();
       router.push('/simulazioni');
     },
     onError: handleMutationError,
   });
 
   const updateTemplateMutation = trpc.simulationTemplates.update.useMutation({
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       showSuccess('Template aggiornato', 'Le modifiche al template sono state salvate.');
+      utils.simulationTemplates.list.invalidate();
+      if (variables.id) utils.simulationTemplates.get.invalidate({ id: variables.id });
       router.push('/simulazioni');
     },
     onError: handleMutationError,

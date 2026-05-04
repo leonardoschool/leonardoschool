@@ -240,7 +240,7 @@ export const simulationTemplatesRouter = router({
             title: input.title,
             description: input.description,
             type: 'CUSTOM',
-            status: 'PUBLISHED',
+            status: 'DRAFT',
             createdBy: { connect: { id: ctx.user.id } },
             creatorRole: ctx.user.role,
             isOfficial: false,
