@@ -1,7 +1,7 @@
 import TestCard from '@/components/ui/TestCard';
 import TestimonialsCarousel from '@/components/ui/TestimonialsCarousel';
 import Button from '@/components/ui/Button';
-import Link from 'next/link';
+import Link from '@/components/ui/MarketingLink';
 import ScienceCanvasLight from '@/components/ui/ScienceCanvasLight';
 import AnimatedStats from '@/components/ui/AnimatedStats';
 import { TestCard as TestCardType, Testimonial } from '@/types';

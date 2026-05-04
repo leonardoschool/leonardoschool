@@ -1,7 +1,7 @@
 'use client';
 
 import ContactForm from '@/components/ui/ContactForm';
-import Link from 'next/link';
+import Link from '@/components/ui/MarketingLink';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 

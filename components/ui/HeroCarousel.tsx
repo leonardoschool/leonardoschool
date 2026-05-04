@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect } from 'react';
 import useEmblaCarousel from 'embla-carousel-react';
-import Link from 'next/link';
+import Link from '@/components/ui/MarketingLink';
 import Button from './Button';
 
 const slides = [

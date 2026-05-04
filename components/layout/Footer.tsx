@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@/components/ui/MarketingLink';
 import Image from 'next/image';
 import { SITE_NAME, SOCIAL_LINKS } from '@/lib/constants';
 

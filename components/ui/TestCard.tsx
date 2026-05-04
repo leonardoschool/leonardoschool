@@ -20,14 +20,14 @@ export default function TestCard({ test, expandable = false }: TestCardProps) {
         {test.images && test.images.length > 0 ? (
           <div className="flex items-center justify-center gap-3 mb-4">
             {test.images.map((img, index) => (
-              <div key={index} className="flex items-center justify-center bg-gradient-to-br from-red-50 to-white rounded-xl w-16 h-16 group-hover:scale-110 transition-transform shadow-lg">
-                <Image src={img} alt={`${test.title} ${index + 1}`} width={50} height={50} className="object-contain" />
+              <div key={index} className="relative flex items-center justify-center bg-gradient-to-br from-red-50 to-white rounded-xl w-16 h-16 group-hover:scale-110 transition-transform shadow-lg">
+                <Image src={img} alt={`${test.title} ${index + 1}`} fill sizes="64px" className="object-contain p-2" />
               </div>
             ))}
           </div>
         ) : (
-          <div className="flex items-center justify-center bg-gradient-to-br from-red-50 to-white rounded-2xl w-20 h-20 mx-auto mb-4 group-hover:scale-110 transition-transform shadow-lg">
-            <Image src={test.image!} alt={test.title} width={90} height={40} className="object-contain" />
+          <div className="relative flex items-center justify-center bg-gradient-to-br from-red-50 to-white rounded-2xl w-20 h-20 mx-auto mb-4 group-hover:scale-110 transition-transform shadow-lg">
+            <Image src={test.image!} alt={test.title} fill sizes="80px" className="object-contain p-2" />
           </div>
         )}
         <h5 className="text-lg font-semibold text-gray-900 mb-3 text-center">

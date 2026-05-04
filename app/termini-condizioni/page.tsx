@@ -1,5 +1,5 @@
 import { Metadata } from 'next';
-import Link from 'next/link';
+import Link from '@/components/ui/MarketingLink';
 
 export const metadata: Metadata = {
   title: 'Termini e condizioni - Leonardo School',

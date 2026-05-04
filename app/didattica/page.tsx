@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
+import Link from '@/components/ui/MarketingLink';
 import Image from 'next/image';
 import { Suspense } from 'react';
 
