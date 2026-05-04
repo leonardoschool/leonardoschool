@@ -6,6 +6,7 @@ import Footer from "@/components/layout/Footer";
 import Preloader from "@/components/ui/Preloader";
 import { SITE_NAME, SITE_DESCRIPTION, SITE_KEYWORDS } from "@/lib/constants";
 import { Analytics } from '@vercel/analytics/next';
+import { GoogleAnalytics } from '@next/third-parties/google';
 
 const inter = Inter({
   variable: "--font-inter",
@@ -84,7 +85,9 @@ export default function RootLayout({
         <main className="min-h-screen">{children}</main>
         <Footer />
         <Analytics />
+        <GoogleAnalytics gaId="G-T1XMZ5PS9S" />
       </body>
+      <GoogleAnalytics gaId="G-T1XMZ5PS9S" />
     </html>
   );
 }
