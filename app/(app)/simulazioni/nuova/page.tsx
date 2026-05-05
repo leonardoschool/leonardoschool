@@ -126,6 +126,26 @@ const TEMPLATE_LANGUAGE_LABELS: Record<'IT' | 'EN', string> = {
   EN: 'Inglese',
 };
 
+const toNonNegativeInteger = (value: unknown): number => {
+  const parsed = typeof value === 'number'
+    ? value
+    : typeof value === 'string'
+      ? Number.parseInt(value, 10)
+      : 0;
+
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
+};
+
+const normalizeCountRecord = (counts?: Record<string, unknown> | null): Record<string, number> => {
+  if (!counts) return {};
+
+  return Object.entries(counts).reduce<Record<string, number>>((normalized, [key, value]) => {
+    const count = toNonNegativeInteger(value);
+    if (count > 0) normalized[key] = count;
+    return normalized;
+  }, {});
+};
+
 const distributeCountEvenly = (total: number, ids: readonly string[]): Record<string, number> => {
   if (total <= 0 || ids.length === 0) return {};
   return ids.reduce((counts, id, index) => {
@@ -136,8 +156,15 @@ const distributeCountEvenly = (total: number, ids: readonly string[]): Record<st
   }, {} as Record<string, number>);
 };
 
-const getCountTotal = (counts?: Record<string, number>): number =>
-  Object.values(counts ?? {}).reduce((total, count) => total + count, 0);
+const getCountTotal = (counts?: Record<string, unknown>): number =>
+  Object.values(counts ?? {}).reduce<number>((total, count) => total + toNonNegativeInteger(count), 0);
+
+const getSectionTargetQuestionCount = (section: Partial<SimulationSection>): number => {
+  const directCount = toNonNegativeInteger(section.questionCount);
+  if (directCount > 0) return directCount;
+
+  return getCountTotal((section as { subjectQuestionCounts?: Record<string, unknown> }).subjectQuestionCounts);
+};
 
 const getQuestionCountForLanguage = (counts: TemplateQuestionCounts, language: TemplateLanguageFilter): number =>
   language ? counts[language] : counts.total;
@@ -446,23 +473,28 @@ export default function NewSimulationPage() {
     setAssignedGroupIds((tpl.templateAssignments ?? []).map((assignment) => assignment.groupId).filter((id): id is string => Boolean(id)));
     setHasSections(true);
     setSectionMode('manual');
-    setSections(rawSections.map((section, index) => ({
-      id: section.id ?? `section-${Date.now()}-${index}`,
-      name: section.name ?? `Sezione ${index + 1}`,
-      durationMinutes: section.durationMinutes ?? 10,
-      questionCount: section.questionCount ?? 0,
-      subjectId: section.subjectId ?? null,
-      subjectIds: (section as { subjectIds?: string[] }).subjectIds ?? (section.subjectId ? [section.subjectId] : []),
-      subjectQuestionCounts: (section as { subjectQuestionCounts?: Record<string, number> }).subjectQuestionCounts ?? {},
-      topicIds: section.topicIds ?? [],
-      questionTypes: (section as { questionTypes?: TemplateQuestionTypeValue[] }).questionTypes ?? [],
-      questionTypeCounts: (section as { questionTypeCounts?: Record<string, number> }).questionTypeCounts ?? {},
-      difficultyLevels: (section as { difficultyLevels?: TemplateDifficultyValue[] }).difficultyLevels ?? [],
-      tagIds: (section as { tagIds?: string[] }).tagIds ?? [],
-      language: (section as { language?: 'IT' | 'EN' | null }).language ?? null,
-      questionIds: [],
-      order: section.order ?? index,
-    })));
+    setSections(rawSections.map((section, index) => {
+      const subjectQuestionCounts = normalizeCountRecord((section as { subjectQuestionCounts?: Record<string, unknown> }).subjectQuestionCounts);
+      const questionTypeCounts = normalizeCountRecord((section as { questionTypeCounts?: Record<string, unknown> }).questionTypeCounts);
+
+      return {
+        id: section.id ?? `section-${Date.now()}-${index}`,
+        name: section.name ?? `Sezione ${index + 1}`,
+        durationMinutes: section.durationMinutes ?? 10,
+        questionCount: getSectionTargetQuestionCount({ ...section, subjectQuestionCounts }),
+        subjectId: section.subjectId ?? null,
+        subjectIds: (section as { subjectIds?: string[] }).subjectIds ?? (section.subjectId ? [section.subjectId] : []),
+        subjectQuestionCounts,
+        topicIds: section.topicIds ?? [],
+        questionTypes: (section as { questionTypes?: TemplateQuestionTypeValue[] }).questionTypes ?? [],
+        questionTypeCounts,
+        difficultyLevels: (section as { difficultyLevels?: TemplateDifficultyValue[] }).difficultyLevels ?? [],
+        tagIds: (section as { tagIds?: string[] }).tagIds ?? [],
+        language: (section as { language?: 'IT' | 'EN' | null }).language ?? null,
+        questionIds: [],
+        order: section.order ?? index,
+      };
+    }));
     setRightPanelTab('sezioni');
     setEditFormApplied(true);
   }, [isEditMode, editTemplateData, editFormApplied]);
@@ -642,23 +674,28 @@ export default function NewSimulationPage() {
     setMaxAttempts(template.maxAttempts);
     setHasSections(true);
     setSectionMode('manual');
-    setSections(rawSections.map((section, index) => ({
-      id: section.id ?? `section-${Date.now()}-${index}`,
-      name: section.name ?? `Sezione ${index + 1}`,
-      durationMinutes: section.durationMinutes ?? 10,
-      questionCount: section.questionCount ?? 0,
-      subjectId: section.subjectId ?? null,
-      subjectIds: (section as { subjectIds?: string[] }).subjectIds ?? (section.subjectId ? [section.subjectId] : []),
-      subjectQuestionCounts: (section as { subjectQuestionCounts?: Record<string, number> }).subjectQuestionCounts ?? {},
-      topicIds: section.topicIds ?? [],
-      questionTypes: (section as { questionTypes?: TemplateQuestionTypeValue[] }).questionTypes ?? [],
-      questionTypeCounts: (section as { questionTypeCounts?: Record<string, number> }).questionTypeCounts ?? {},
-      difficultyLevels: (section as { difficultyLevels?: TemplateDifficultyValue[] }).difficultyLevels ?? [],
-      tagIds: (section as { tagIds?: string[] }).tagIds ?? [],
-      language: (section as { language?: 'IT' | 'EN' | null }).language ?? null,
-      questionIds: [],
-      order: section.order ?? index,
-    })));
+    setSections(rawSections.map((section, index) => {
+      const subjectQuestionCounts = normalizeCountRecord((section as { subjectQuestionCounts?: Record<string, unknown> }).subjectQuestionCounts);
+      const questionTypeCounts = normalizeCountRecord((section as { questionTypeCounts?: Record<string, unknown> }).questionTypeCounts);
+
+      return {
+        id: section.id ?? `section-${Date.now()}-${index}`,
+        name: section.name ?? `Sezione ${index + 1}`,
+        durationMinutes: section.durationMinutes ?? 10,
+        questionCount: getSectionTargetQuestionCount({ ...section, subjectQuestionCounts }),
+        subjectId: section.subjectId ?? null,
+        subjectIds: (section as { subjectIds?: string[] }).subjectIds ?? (section.subjectId ? [section.subjectId] : []),
+        subjectQuestionCounts,
+        topicIds: section.topicIds ?? [],
+        questionTypes: (section as { questionTypes?: TemplateQuestionTypeValue[] }).questionTypes ?? [],
+        questionTypeCounts,
+        difficultyLevels: (section as { difficultyLevels?: TemplateDifficultyValue[] }).difficultyLevels ?? [],
+        tagIds: (section as { tagIds?: string[] }).tagIds ?? [],
+        language: (section as { language?: 'IT' | 'EN' | null }).language ?? null,
+        questionIds: [],
+        order: section.order ?? index,
+      };
+    }));
     setSelectedQuestions([]);
     setRightPanelTab('sezioni');
   };
@@ -2456,11 +2493,11 @@ export default function NewSimulationPage() {
                                       </div>
                                     ) : (
                                       <span className={`px-2 py-0.5 rounded text-xs ${
-                                        (section.questionIds?.length || 0) > 0 
+                                        getSectionTargetQuestionCount(section) > 0 
                                           ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                                           : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
                                       }`}>
-                                        {section.questionIds?.length || 0} domande
+                                        {getSectionTargetQuestionCount(section)} domande
                                       </span>
                                     )}
                                     
@@ -4049,13 +4086,28 @@ export default function NewSimulationPage() {
       {fillSectionId && (() => {
         const targetSection = sections.find((s) => s.id === fillSectionId);
         if (!targetSection) return null;
+        const selectedTemplate = templatesData?.templates.find((template) => template.id === selectedTemplateId);
+        const selectedTemplateSections = Array.isArray(selectedTemplate?.sections)
+          ? selectedTemplate.sections as Array<Partial<SimulationSection>>
+          : [];
+        const sourceTemplateSection = selectedTemplateSections.find((section) => section.id === targetSection.id);
+        const defaultSectionQuestionCount =
+          (sourceTemplateSection ? getSectionTargetQuestionCount(sourceTemplateSection) : 0)
+          || getSectionTargetQuestionCount(targetSection)
+          || 10;
         return (
           <FillSectionModal
             isOpen={!!fillSectionId}
             onClose={() => setFillSectionId(null)}
             sectionName={targetSection.name}
             defaultSubjectId={targetSection.subjectId}
-            defaultCount={targetSection.questionCount || 10}
+            defaultSubjectIds={targetSection.subjectIds}
+            defaultTopicIds={targetSection.topicIds}
+            defaultTypes={targetSection.questionTypes}
+            defaultDifficulties={targetSection.difficultyLevels}
+            defaultTagIds={targetSection.tagIds}
+            defaultLanguage={targetSection.language}
+            defaultCount={defaultSectionQuestionCount}
             excludeQuestionIds={selectedQuestions.map((q) => q.questionId)}
             onPicked={(picked) => applyPickedQuestionsToSection(fillSectionId, picked)}
           />

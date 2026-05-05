@@ -34,12 +34,22 @@ export interface PickedQuestion {
   topic?: { id: string; name: string } | null;
 }
 
+type SectionQuestionTypeFilter = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT';
+type SectionDifficultyFilter = 'EASY' | 'MEDIUM' | 'HARD';
+type SectionLanguageFilter = 'IT' | 'EN';
+
 interface FillSectionModalProps {
   readonly isOpen: boolean;
   readonly onClose: () => void;
   readonly sectionName: string;
   /** Default subject for the section (if any) */
   readonly defaultSubjectId?: string | null;
+  readonly defaultSubjectIds?: string[];
+  readonly defaultTopicIds?: string[];
+  readonly defaultTypes?: SectionQuestionTypeFilter[];
+  readonly defaultDifficulties?: SectionDifficultyFilter[];
+  readonly defaultTagIds?: string[];
+  readonly defaultLanguage?: SectionLanguageFilter | null;
   /** IDs of questions already selected (to be excluded from the random pick) */
   readonly excludeQuestionIds: string[];
   /** Suggested count (e.g. existing section.questionCount or 10) */
@@ -47,9 +57,6 @@ interface FillSectionModalProps {
   /** Called with the picked questions when the user confirms */
   readonly onPicked: (questions: PickedQuestion[]) => void;
 }
-
-// Stable reference to avoid creating a new [] on every render when query data is undefined
-const EMPTY_TOPICS: { id: string; name: string }[] = [];
 
 const LANGUAGE_OPTIONS = [
   { value: '', label: 'Tutte le lingue' },
@@ -79,11 +86,31 @@ const DIFFICULTY_MIX_OPTIONS = [
   { value: 'MIXED', label: 'Equa' },
 ];
 
+function getDefaultSubjectSelection(defaultSubjectIds?: string[], defaultSubjectId?: string | null) {
+  return defaultSubjectIds && defaultSubjectIds.length > 0
+    ? [...defaultSubjectIds]
+    : defaultSubjectId ? [defaultSubjectId] : [];
+}
+
+function copyDefaultArray<T>(values?: T[]) {
+  return values ? [...values] : [];
+}
+
+function getLanguageFilter(value: string): SectionLanguageFilter | null {
+  return value === 'IT' || value === 'EN' ? value : null;
+}
+
 export default function FillSectionModal({
   isOpen,
   onClose,
   sectionName,
   defaultSubjectId,
+  defaultSubjectIds,
+  defaultTopicIds,
+  defaultTypes,
+  defaultDifficulties,
+  defaultTagIds,
+  defaultLanguage,
   excludeQuestionIds,
   defaultCount = 10,
   onPicked,
@@ -94,12 +121,12 @@ export default function FillSectionModal({
   // Form state
   const [mode, setMode] = useState<'random' | 'smart'>('random');
   const [count, setCount] = useState<string>(String(defaultCount));
-  const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>(defaultSubjectId ? [defaultSubjectId] : []);
-  const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
-  const [selectedDifficulties, setSelectedDifficulties] = useState<string[]>([]);
-  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('');
+  const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>(() => getDefaultSubjectSelection(defaultSubjectIds, defaultSubjectId));
+  const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>(() => copyDefaultArray(defaultTopicIds));
+  const [selectedDifficulties, setSelectedDifficulties] = useState<string[]>(() => copyDefaultArray(defaultDifficulties));
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(() => copyDefaultArray(defaultTypes));
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>(() => copyDefaultArray(defaultTagIds));
+  const [selectedLanguage, setSelectedLanguage] = useState<string>(defaultLanguage ?? '');
   const [difficultyMix, setDifficultyMix] = useState<DifficultyMix>('BALANCED');
   const [avoidRecentlyUsed, setAvoidRecentlyUsed] = useState(true);
   const [maximizeTopicCoverage, setMaximizeTopicCoverage] = useState(true);
@@ -109,20 +136,27 @@ export default function FillSectionModal({
     if (isOpen) {
       setCount(String(defaultCount));
       setMode('random');
-      setSelectedSubjectIds(defaultSubjectId ? [defaultSubjectId] : []);
-      setSelectedTopicIds([]);
-      setSelectedDifficulties([]);
-      setSelectedTypes([]);
-      setSelectedTagIds([]);
-      setSelectedLanguage('');
+      setSelectedSubjectIds(getDefaultSubjectSelection(defaultSubjectIds, defaultSubjectId));
+      setSelectedTopicIds(copyDefaultArray(defaultTopicIds));
+      setSelectedDifficulties(copyDefaultArray(defaultDifficulties));
+      setSelectedTypes(copyDefaultArray(defaultTypes));
+      setSelectedTagIds(copyDefaultArray(defaultTagIds));
+      setSelectedLanguage(defaultLanguage ?? '');
       setDifficultyMix('BALANCED');
       setAvoidRecentlyUsed(true);
       setMaximizeTopicCoverage(true);
     }
-  }, [isOpen, defaultCount, defaultSubjectId]);
-
-  // Topics are loaded only when exactly one subject is selected
-  const primarySubjectId = selectedSubjectIds.length === 1 ? selectedSubjectIds[0] : '';
+  }, [
+    isOpen,
+    defaultCount,
+    defaultSubjectId,
+    defaultSubjectIds,
+    defaultTopicIds,
+    defaultDifficulties,
+    defaultTypes,
+    defaultTagIds,
+    defaultLanguage,
+  ]);
 
   // Data
   const { data: subjects = [] } = trpc.questions.getSubjects.useQuery(undefined, {
@@ -134,9 +168,20 @@ export default function FillSectionModal({
     { enabled: isOpen }
   );
 
-  const { data: topics = EMPTY_TOPICS } = trpc.materials.getTopics.useQuery(
-    { subjectId: primarySubjectId },
-    { enabled: isOpen && !!primarySubjectId }
+  const languageFilter = getLanguageFilter(selectedLanguage);
+  const selectedSubjects = subjects.filter((subject) => selectedSubjectIds.includes(subject.id));
+  const showSubjectNameInTopic = selectedSubjects.length > 1;
+  const topicOptions = selectedSubjects.flatMap((subject) =>
+    subject.topics
+      .filter((topic) => !languageFilter || topic.questionCounts[languageFilter] > 0)
+      .map((topic) => {
+        const subjectHint = showSubjectNameInTopic ? ` - ${subject.name}` : '';
+        return {
+          value: topic.id,
+          label: `${topic.name}${subjectHint}`,
+          color: subject.color ?? undefined,
+        };
+      })
   );
 
   // Mutation
@@ -310,12 +355,12 @@ export default function FillSectionModal({
           placeholder="Tutte le tipologie"
         />
 
-        {/* Topics multi-select — only when a single subject is selected */}
-        {primarySubjectId && topics.length > 0 && (
+        {/* Topics multi-select */}
+        {selectedSubjectIds.length > 0 && topicOptions.length > 0 && (
           <MultiSelect
             label="Argomenti"
             values={selectedTopicIds}
-            options={topics.map((t) => ({ value: t.id, label: t.name }))}
+            options={topicOptions}
             onChange={setSelectedTopicIds}
             placeholder="Tutti gli argomenti"
           />
@@ -377,7 +422,20 @@ export default function FillSectionModal({
         <CustomSelect
           label="Lingua"
           value={selectedLanguage}
-          onChange={setSelectedLanguage}
+          onChange={(value) => {
+            const nextLanguage = getLanguageFilter(value) ?? '';
+            setSelectedLanguage(nextLanguage);
+            if (!nextLanguage) return;
+
+            const availableTopicIds = new Set(
+              selectedSubjects.flatMap((subject) =>
+                subject.topics
+                  .filter((topic) => topic.questionCounts[nextLanguage] > 0)
+                  .map((topic) => topic.id)
+              )
+            );
+            setSelectedTopicIds((current) => current.filter((topicId) => availableTopicIds.has(topicId)));
+          }}
           options={LANGUAGE_OPTIONS}
           placeholder="Tutte le lingue"
         />
