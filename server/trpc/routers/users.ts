@@ -848,17 +848,14 @@ export const usersRouter = router({
         });
       }
 
-      // Delete from Firebase
+      // Continue DB cleanup even if Firebase has a transient delete error.
+      let firebaseDeleteFailed = false;
       try {
         await getAdminAuth().deleteUser(user.firebaseUid);
       } catch (firebaseError: any) {
-        // If user doesn't exist in Firebase, continue with DB deletion
         if (firebaseError.code !== 'auth/user-not-found') {
           console.error('Firebase delete error:', firebaseError);
-          throw new TRPCError({
-            code: 'INTERNAL_SERVER_ERROR',
-            message: 'Errore durante l\'eliminazione da Firebase',
-          });
+          firebaseDeleteFailed = true;
         }
       }
 
@@ -917,6 +914,11 @@ export const usersRouter = router({
         // Finally delete user
         await ctx.prisma.user.delete({ where: { id: userId } });
       });
+
+      if (firebaseDeleteFailed) {
+        // DB is clean, but Firebase may still need manual cleanup.
+        console.warn(`[deleteUser] DB deleted for user ${userId} but Firebase deletion failed. Manual cleanup may be needed for firebaseUid: ${user.firebaseUid}`);
+      }
 
       return { success: true, message: 'Utente eliminato con successo' };
     }),

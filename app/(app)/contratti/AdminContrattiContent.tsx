@@ -394,6 +394,7 @@ Email: {{EMAIL}}</p>
     { tag: '{{EMAIL}}', desc: 'Email' },
     { tag: '{{CODICE_FISCALE}}', desc: 'Codice fiscale' },
     { tag: '{{DATA_NASCITA}}', desc: 'Data di nascita' },
+    { tag: '{{COMUNE_NASCITA}}', desc: 'Comune di nascita' },
     { tag: '{{TELEFONO}}', desc: 'Numero di telefono' },
     { tag: '{{INDIRIZZO}}', desc: 'Via e numero civico' },
     { tag: '{{CITTA}}', desc: 'Città' },

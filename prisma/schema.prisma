@@ -355,6 +355,7 @@ model Student {
   matricola   String?   @unique // Matricola studente (es: LS2025001) - nullable per migrazione, poi rendere required
   fiscalCode  String?   @unique
   dateOfBirth DateTime?
+  birthPlace  String?
   phone       String?
   address     String?
   city        String?
@@ -462,6 +463,7 @@ model Collaborator {
   userId      String    @unique
   fiscalCode  String?   @unique
   dateOfBirth DateTime?
+  birthPlace  String?
   phone       String?
   address     String?
   city        String?

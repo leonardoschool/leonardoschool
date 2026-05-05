@@ -62,6 +62,20 @@ const errorMessages: Record<string, { title: string; message: string }> = {
   },
 };
 
+const technicalErrorPatterns = [
+  /Invalid `.*prisma/i,
+  /PrismaClient/i,
+  /Unknown argument/i,
+  /Available options are marked/i,
+  /invocation in .*\.next/i,
+  /server[\\/]chunks/i,
+];
+
+function isTechnicalMessage(message: string): boolean {
+  return technicalErrorPatterns.some(pattern => pattern.test(message)) ||
+    (message.includes('\n') && message.length > 250);
+}
+
 /**
  * Extract error code from various error types
  */
@@ -167,7 +181,7 @@ function getCustomMessage(error: unknown): string | null {
     }
     
     // Generic message in data
-    if (typeof data.message === 'string') return data.message;
+    if (typeof data.message === 'string' && !isTechnicalMessage(data.message)) return data.message;
   }
   
   // tRPC custom message
@@ -177,7 +191,7 @@ function getCustomMessage(error: unknown): string | null {
     const isGeneric = genericMessages.some(g => 
       err.message?.toString().toLowerCase().includes(g)
     );
-    if (!isGeneric) return err.message;
+    if (!isGeneric && !isTechnicalMessage(err.message)) return err.message;
   }
   
   return null;

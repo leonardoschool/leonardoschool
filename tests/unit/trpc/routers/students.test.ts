@@ -133,6 +133,7 @@ function createMockStudent(overrides: Partial<Student> = {}): Student {
     matricola: `STU${Date.now().toString().slice(-6)}`,
     fiscalCode: generateValidFiscalCode(),
     dateOfBirth: generateValidDateOfBirth(),
+    birthPlace: faker.location.city(),
     phone: generateValidPhone(),
     address: faker.location.streetAddress(),
     city: faker.location.city(),

@@ -111,6 +111,10 @@ export default function CompleteProfilePage() {
     
     const profile = isStudent ? studentProfile : isCollaborator ? collaboratorProfile : null;
     if (profile) {
+      const birthPlace = 'birthPlace' in profile && typeof profile.birthPlace === 'string'
+        ? profile.birthPlace
+        : '';
+
       setFormData({
         fiscalCode: profile.fiscalCode || '',
         dateOfBirth: profile.dateOfBirth ? new Date(profile.dateOfBirth).toISOString().split('T')[0] : '',
@@ -119,7 +123,7 @@ export default function CompleteProfilePage() {
         city: profile.city || '',
         province: profile.province || '',
         postalCode: profile.postalCode || '',
-        birthPlace: '',
+        birthPlace,
         gender: undefined,
       });
     }
@@ -466,6 +470,7 @@ export default function CompleteProfilePage() {
       city: formData.city,
       province: formData.province,
       postalCode: formData.postalCode,
+      birthPlace: formData.birthPlace || undefined,
     };
 
     if (isCollaborator) {

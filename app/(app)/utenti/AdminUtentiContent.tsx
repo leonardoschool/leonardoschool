@@ -1946,6 +1946,7 @@ export default function AdminUtentiContent() {
                               canDownload: !lastContract?.canDownload 
                             })}
                             disabled={toggleDownloadMutation.isPending}
+                            aria-label={lastContract?.canDownload ? 'Disabilita download contratto' : 'Abilita download contratto'}
                             className={`p-2 rounded-lg ${
                               lastContract?.canDownload 
                                 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
@@ -1975,6 +1976,22 @@ export default function AdminUtentiContent() {
                             title="Visualizza contratto in attesa"
                           >
                             <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => toggleDownloadMutation.mutate({ 
+                              contractId, 
+                              canDownload: !lastContract?.canDownload 
+                            })}
+                            disabled={toggleDownloadMutation.isPending}
+                            aria-label={lastContract?.canDownload ? 'Disabilita download contratto dopo la firma' : 'Abilita download contratto dopo la firma'}
+                            className={`p-2 rounded-lg ${
+                              lastContract?.canDownload 
+                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                                : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                            }`}
+                            title={lastContract?.canDownload ? 'Download abilitato dopo la firma (clicca per disabilitare)' : 'Download disabilitato dopo la firma (clicca per abilitare)'}
+                          >
+                            <Download className="w-4 h-4" />
                           </button>
                           {!isSelf && (
                             <button
@@ -2255,6 +2272,7 @@ export default function AdminUtentiContent() {
                                     canDownload: !lastContract?.canDownload 
                                   })}
                                   disabled={toggleDownloadMutation.isPending}
+                                  aria-label={lastContract?.canDownload ? 'Disabilita download contratto' : 'Abilita download contratto'}
                                   className={`p-1.5 rounded-lg hover:opacity-80 transition-opacity ${
                                     lastContract?.canDownload 
                                       ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
@@ -2284,6 +2302,22 @@ export default function AdminUtentiContent() {
                                   title="Visualizza contratto in attesa"
                                 >
                                   <FileText className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => toggleDownloadMutation.mutate({ 
+                                    contractId, 
+                                    canDownload: !lastContract?.canDownload 
+                                  })}
+                                  disabled={toggleDownloadMutation.isPending}
+                                  aria-label={lastContract?.canDownload ? 'Disabilita download contratto dopo la firma' : 'Abilita download contratto dopo la firma'}
+                                  className={`p-1.5 rounded-lg hover:opacity-80 transition-opacity ${
+                                    lastContract?.canDownload 
+                                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                                      : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                                  }`}
+                                  title={lastContract?.canDownload ? 'Download abilitato dopo la firma (clicca per disabilitare)' : 'Download disabilitato dopo la firma (clicca per abilitare)'}
+                                >
+                                  <Download className="w-3.5 h-3.5" />
                                 </button>
                                 <button
                                   onClick={() => openRevokeContractModal(contractId, user.name)}

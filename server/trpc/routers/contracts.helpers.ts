@@ -9,6 +9,7 @@ export interface StudentWithUser {
   id: string;
   fiscalCode: string | null;
   dateOfBirth: Date | null;
+  birthPlace: string | null;
   phone: string | null;
   address: string | null;
   city: string | null;
@@ -27,6 +28,7 @@ export interface CollaboratorWithUser {
   id: string;
   fiscalCode: string | null;
   dateOfBirth: Date | null;
+  birthPlace: string | null;
   phone: string | null;
   address: string | null;
   city: string | null;
@@ -188,7 +190,9 @@ export function prepareContractContent(
     if (!check.valid) {
       throw new TRPCError({ code: 'BAD_REQUEST', message: check.message ?? 'Contenuto troppo lungo' });
     }
-    return sanitizeHtml(customContent);
+    // Sanitize first, then replace placeholders so {{DATA_ODIERNA}} and others are resolved
+    const sanitized = sanitizeHtml(customContent);
+    return generateContractContent(sanitized, targetUser, targetUser.user, extras);
   }
   return generateContractContent(templateContent, targetUser, targetUser.user, extras);
 }
@@ -223,6 +227,7 @@ export function generateContractContent(
   student: {
     fiscalCode: string | null;
     dateOfBirth: Date | null;
+    birthPlace: string | null;
     phone: string | null;
     address: string | null;
     city: string | null;
@@ -260,6 +265,7 @@ export function generateContractContent(
     .replaceAll('{{EMAIL}}', sanitizeText(user.email))
     .replaceAll('{{CODICE_FISCALE}}', sanitizeText(student.fiscalCode))
     .replaceAll('{{DATA_NASCITA}}', sanitizeText(fmt(student.dateOfBirth)))
+    .replaceAll('{{COMUNE_NASCITA}}', sanitizeText(student.birthPlace))
     .replaceAll('{{TELEFONO}}', sanitizeText(student.phone))
     .replaceAll('{{INDIRIZZO_COMPLETO}}', fullAddress)
     .replaceAll('{{INDIRIZZO}}', sanitizeText(student.address))

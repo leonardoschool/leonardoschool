@@ -449,6 +449,10 @@ export const studentsRouter = router({
             const num = Number.parseInt(val, 10);
             return num >= 10 && num <= 98168;
           }, 'CAP non valido'),
+        birthPlace: z.string()
+          .max(100, 'Il comune di nascita è troppo lungo')
+          .optional()
+          .transform(val => val ? capitalizeWords(val) : val),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -498,6 +502,7 @@ export const studentsRouter = router({
           data: {
             fiscalCode: input.fiscalCode,
             dateOfBirth: input.dateOfBirth,
+            birthPlace: input.birthPlace ?? null,
             phone: input.phone,
             address: input.address,
             city: input.city,
