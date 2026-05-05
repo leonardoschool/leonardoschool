@@ -7,9 +7,11 @@ import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
 import { Portal } from '@/components/ui/Portal';
+import ContractContentEditor from '@/components/admin/contracts/ContractContentEditor';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
+import { getContractPlaceholders } from '@/lib/constants/contractPlaceholders';
 import { 
   FileText, 
   Plus, 
@@ -21,7 +23,6 @@ import {
   Eye,
   AlertCircle,
   FileCode,
-  Info,
   GraduationCap,
   UserCog,
   Trash2,
@@ -389,35 +390,8 @@ Email: {{EMAIL}}</p>
     return targetRole === 'COLLABORATOR' ? defaultCollaboratorContent : defaultContent;
   };
 
-  const placeholders = [
-    { tag: '{{NOME_COMPLETO}}', desc: 'Nome e cognome' },
-    { tag: '{{EMAIL}}', desc: 'Email' },
-    { tag: '{{CODICE_FISCALE}}', desc: 'Codice fiscale' },
-    { tag: '{{DATA_NASCITA}}', desc: 'Data di nascita' },
-    { tag: '{{COMUNE_NASCITA}}', desc: 'Comune di nascita' },
-    { tag: '{{TELEFONO}}', desc: 'Numero di telefono' },
-    { tag: '{{INDIRIZZO}}', desc: 'Via e numero civico' },
-    { tag: '{{CITTA}}', desc: 'Città' },
-    { tag: '{{PROVINCIA}}', desc: 'Sigla provincia' },
-    { tag: '{{CAP}}', desc: 'CAP' },
-    { tag: '{{INDIRIZZO_COMPLETO}}', desc: 'Indirizzo completo' },
-    { tag: '{{DATA_ODIERNA}}', desc: 'Data firma contratto' },
-    { tag: '{{ANNO}}', desc: 'Anno corrente' },
-  ];
-
-  // Placeholders aggiuntivi solo per collaboratori
-  const collaboratorPlaceholders = [
-    { tag: '{{DATA_INIZIO}}', desc: 'Data inizio collaborazione' },
-    { tag: '{{DATA_FINE}}', desc: 'Data fine collaborazione' },
-    { tag: '{{COMPENSO}}', desc: 'Compenso pattuito' },
-    { tag: '{{SPECIALIZZAZIONE}}', desc: 'Area di competenza' },
-  ];
-
-  // Get placeholders based on target role
   const getPlaceholders = () => {
-    return formData.targetRole === 'COLLABORATOR' 
-      ? [...placeholders, ...collaboratorPlaceholders]
-      : placeholders;
+    return getContractPlaceholders(formData.targetRole);
   };
 
   return (
@@ -636,59 +610,16 @@ Email: {{EMAIL}}</p>
                 </h3>
               </div>
 
-              {/* Placeholder Info */}
-              <div className={`p-4 rounded-xl ${colors.status.info.softBg} border ${colors.status.info.border}`}>
-                <div className="flex items-start gap-3">
-                  <Info className={`w-5 h-5 ${colors.status.info.text} flex-shrink-0 mt-0.5`} />
-                  <div>
-                    <p className={`font-medium ${colors.status.info.text} mb-2`}>Placeholder disponibili</p>
-                    <div className="flex flex-wrap gap-2">
-                      {getPlaceholders().map((p) => (
-                        <span
-                          key={p.tag}
-                          className={`inline-flex items-center px-2 py-1 rounded text-xs font-mono ${colors.background.secondary} ${colors.text.secondary} cursor-help`}
-                          title={p.desc}
-                        >
-                          {p.tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className={`block text-sm font-medium ${colors.text.primary}`}>
-                    Contenuto HTML <span className={colors.status.error.text}>*</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setPreviewContent(formData.content)}
-                    className={`text-sm ${colors.primary.text} flex items-center gap-1 hover:underline font-medium`}
-                  >
-                    <Eye className="w-4 h-4" />
-                    Anteprima
-                  </button>
-                </div>
-                <textarea
-                  value={formData.content}
-                  onChange={(e) => handleChange('content', e.target.value)}
-                  onBlur={() => handleBlur('content')}
-                  rows={18}
-                  placeholder="Inserisci il contenuto HTML del contratto..."
-                  className={`${getInputClass('content')} font-mono text-sm leading-relaxed`}
-                />
-                {touched.content && fieldErrors.content && (
-                  <p className={`mt-1.5 text-sm ${colors.status.error.text} flex items-center gap-1`}>
-                    <AlertCircle className="w-4 h-4" />
-                    {fieldErrors.content}
-                  </p>
-                )}
-                <p className={`mt-1.5 text-xs ${colors.text.muted}`}>
-                  Usa i tag HTML standard (h2, h3, p, ul, li, strong, br, hr) per formattare il contratto
-                </p>
-              </div>
+              <ContractContentEditor
+                value={formData.content}
+                onChange={(value) => handleChange('content', value)}
+                onBlur={() => handleBlur('content')}
+                placeholders={getPlaceholders()}
+                label="Contenuto contratto"
+                required
+                minRows={18}
+                error={touched.content ? fieldErrors.content : ''}
+              />
             </div>
 
             {/* Actions */}

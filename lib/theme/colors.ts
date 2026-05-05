@@ -264,6 +264,29 @@ export const colors = {
   },
 
   /**
+   * Palette controllate per contenuti contrattuali editabili.
+   * Usate per stili inline salvati nell'HTML dei contratti.
+   */
+  contractEditor: {
+    textPalette: [
+      { label: 'Testo scuro', value: '#111827' },
+      { label: 'Bordeaux Leonardo', value: '#a8012b' },
+      { label: 'Blu istituzionale', value: '#1d4ed8' },
+      { label: 'Verde conferma', value: '#047857' },
+      { label: 'Ambra attenzione', value: '#b45309' },
+      { label: 'Rosso evidenza', value: '#b91c1c' },
+      { label: 'Grigio secondario', value: '#4b5563' },
+    ],
+    highlightPalette: [
+      { label: 'Giallo nota', value: '#fef3c7' },
+      { label: 'Blu nota', value: '#dbeafe' },
+      { label: 'Verde nota', value: '#dcfce7' },
+      { label: 'Rosa nota', value: '#fce7f3' },
+      { label: 'Grigio nota', value: '#e5e7eb' },
+    ],
+  },
+
+  /**
    * Colori per ruoli utente
    * Admin: rosso bordeaux (colore brand)
    * Collaboratore: viola/purple

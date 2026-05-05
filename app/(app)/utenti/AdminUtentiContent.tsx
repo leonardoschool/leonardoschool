@@ -10,7 +10,8 @@ import { colors } from '@/lib/theme/colors';
 import { Spinner, ButtonLoader } from '@/components/ui/loaders';
 import { Portal } from '@/components/ui/Portal';
 import Checkbox from '@/components/ui/Checkbox';
-import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
+import ContractContentEditor from '@/components/admin/contracts/ContractContentEditor';
+import { getContractPlaceholders } from '@/lib/constants/contractPlaceholders';
 import {
   Users,
   Search,
@@ -478,7 +479,6 @@ function AssignContractModal({
   const [customPrice, setCustomPrice] = useState<string>('');
   const [adminNotes, setAdminNotes] = useState('');
   const [expiresInDays, setExpiresInDays] = useState(7);
-  const [showPreview, setShowPreview] = useState(false);
   const [templateFilter, setTemplateFilter] = useState<'ALL' | 'STUDENT' | 'COLLABORATOR'>(targetType);
   const [canDownload, setCanDownload] = useState(false);
   const [startDate, setStartDate] = useState<string>(''); // yyyy-MM-dd
@@ -523,7 +523,6 @@ function AssignContractModal({
     setTemplateFilter(targetType);
     setAdminNotes('');
     setExpiresInDays(7);
-    setShowPreview(false);
     setCanDownload(false);
     setStartDate('');
     setEndDate('');
@@ -756,38 +755,13 @@ function AssignContractModal({
                     </div>
                   </div>
 
-                  {/* Contract Content Editor */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className={`font-semibold flex items-center gap-2 ${colors.text.primary}`}>
-                        <FileEdit className="w-4 h-4" />
-                        Contenuto Contratto
-                      </label>
-                      <button
-                        onClick={() => setShowPreview(!showPreview)}
-                        className={`text-sm px-3 py-1 rounded-lg ${colors.background.secondary} ${colors.text.primary}`}
-                      >
-                        {showPreview ? 'Modifica' : 'Anteprima'}
-                      </button>
-                    </div>
-                    {showPreview ? (
-                      <div 
-                        className={`p-4 rounded-xl border ${colors.border.primary} prose prose-sm max-w-none dark:prose-invert overflow-auto max-h-64`}
-                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(customContent) }}
-                      />
-                    ) : (
-                      <textarea
-                        value={customContent}
-                        onChange={(e) => setCustomContent(e.target.value)}
-                        rows={10}
-                        className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.text.primary} ${colors.border.primary} border focus:ring-2 focus:ring-red-500 focus:border-transparent font-mono text-sm`}
-                        placeholder="Contenuto del contratto..."
-                      />
-                    )}
-                    <p className={`text-xs ${colors.text.muted} mt-1`}>
-                      I placeholder come {'{{NOME_COMPLETO}}'} sono già stati sostituiti con i dati dell&apos;utente.
-                    </p>
-                  </div>
+                  <ContractContentEditor
+                    value={customContent}
+                    onChange={setCustomContent}
+                    placeholders={getContractPlaceholders(isCollaboratorTemplate ? 'COLLABORATOR' : 'STUDENT')}
+                    label="Contenuto contratto"
+                    minRows={10}
+                  />
 
                   {/* Price and Duration */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

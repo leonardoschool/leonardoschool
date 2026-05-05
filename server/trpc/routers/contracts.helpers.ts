@@ -29,6 +29,7 @@ export interface CollaboratorWithUser {
   fiscalCode: string | null;
   dateOfBirth: Date | null;
   birthPlace: string | null;
+  specialization: string | null;
   phone: string | null;
   address: string | null;
   city: string | null;
@@ -228,6 +229,7 @@ export function generateContractContent(
     fiscalCode: string | null;
     dateOfBirth: Date | null;
     birthPlace: string | null;
+    specialization?: string | null;
     phone: string | null;
     address: string | null;
     city: string | null;
@@ -259,6 +261,7 @@ export function generateContractContent(
     extras?.compensation != null && !Number.isNaN(extras.compensation)
       ? extras.compensation.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       : '';
+  const specialization = 'specialization' in student ? student.specialization : null;
 
   return template
     .replaceAll('{{NOME_COMPLETO}}', sanitizeText(user.name))
@@ -276,7 +279,8 @@ export function generateContractContent(
     .replaceAll('{{ANNO}}', today.getFullYear().toString())
     .replaceAll('{{DATA_INIZIO}}', sanitizeText(fmt(extras?.startDate)))
     .replaceAll('{{DATA_FINE}}', sanitizeText(fmt(extras?.endDate)))
-    .replaceAll('{{COMPENSO}}', sanitizeText(formattedCompensation));
+    .replaceAll('{{COMPENSO}}', sanitizeText(formattedCompensation))
+    .replaceAll('{{SPECIALIZZAZIONE}}', sanitizeText(specialization));
 }
 
 // ==================== SIGNING VALIDATION ====================
