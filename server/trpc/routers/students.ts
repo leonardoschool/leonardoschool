@@ -92,14 +92,15 @@ type SimulationResultWithSimulation = {
   completedAt: Date | null;
   subjectScores: unknown;
   answers: unknown;
-  simulation: {
+    simulation: {
     id: string;
     title: string;
     type: string;
     isOfficial: boolean;
     durationMinutes: number;
     totalQuestions: number;
-    subjectDistribution: unknown;
+      subjectDistribution: unknown;
+      sections: unknown;
     questions: Array<{
       questionId: string;
       question: {
@@ -234,6 +235,50 @@ function calculateSubjectStats(allResults: SimulationResultWithSimulation[]) {
     bestSubject: sortedByAccuracy[0] || null,
     worstSubject: sortedByAccuracy.at(-1) ?? null,
   };
+}
+
+function calculateSectionStats(allResults: SimulationResultWithSimulation[]) {
+  const sectionAccumulator: Record<string, { total: number; correct: number; wrong: number; blank: number; score: number }> = {};
+
+  for (const result of allResults) {
+    const sections = Array.isArray(result.simulation.sections)
+      ? result.simulation.sections as Array<{ name?: string; title?: string; questionIds?: string[] }>
+      : [];
+    const answers = Array.isArray(result.answers)
+      ? result.answers as Array<{ questionId?: string; isCorrect?: boolean | null; earnedPoints?: number }>
+      : [];
+    const questionToSection = new Map<string, string>();
+
+    sections.forEach((section, index) => {
+      const sectionName = section.name || section.title || `Sezione ${index + 1}`;
+      section.questionIds?.forEach((questionId) => questionToSection.set(questionId, sectionName));
+    });
+
+    for (const answer of answers) {
+      if (!answer.questionId) continue;
+      const sectionName = questionToSection.get(answer.questionId);
+      if (!sectionName) continue;
+      if (!sectionAccumulator[sectionName]) {
+        sectionAccumulator[sectionName] = { total: 0, correct: 0, wrong: 0, blank: 0, score: 0 };
+      }
+      const stats = sectionAccumulator[sectionName];
+      stats.total++;
+      stats.score += typeof answer.earnedPoints === 'number' ? answer.earnedPoints : 0;
+      if (answer.isCorrect === true) stats.correct++;
+      else if (answer.isCorrect === false) stats.wrong++;
+      else stats.blank++;
+    }
+  }
+
+  return Object.entries(sectionAccumulator).map(([section, data]) => ({
+    section,
+    totalQuestions: data.total,
+    correctAnswers: data.correct,
+    wrongAnswers: data.wrong,
+    blankAnswers: data.blank,
+    score: data.score,
+    accuracy: data.total > 0 ? (data.correct / data.total) * 100 : 0,
+  })).sort((a, b) => b.totalQuestions - a.totalQuestions);
 }
 
 /** Calculate difficulty breakdown from simulation results */
@@ -932,6 +977,7 @@ export const studentsRouter = router({
             durationMinutes: true,
             totalQuestions: true,
             subjectDistribution: true,
+            sections: true,
             questions: {
               include: {
                 question: {
@@ -954,6 +1000,7 @@ export const studentsRouter = router({
     const typeBreakdown = calculateTypeBreakdown(allResults);
     const monthlyTrend = calculateMonthlyTrend(allResults);
     const { subjectStats, bestSubject, worstSubject } = calculateSubjectStats(allResults);
+    const sectionStats = calculateSectionStats(allResults);
     const difficultyBreakdown = calculateDifficultyBreakdown(allResults);
     const { avgTimeSeconds, totalStudyMinutes } = calculateTimeStats(allResults, student.stats?.totalStudyTimeMinutes);
     const achievements = calculateAchievements(overview.totalSimulations, overview.bestScore, student.stats);
@@ -989,6 +1036,7 @@ export const studentsRouter = router({
       trendData,
       monthlyTrend,
       subjectStats,
+      sectionStats,
       bestSubject,
       worstSubject,
       answerDistribution: {
@@ -1008,6 +1056,7 @@ export const studentsRouter = router({
         correct: r.correctAnswers,
         total: r.totalQuestions,
         date: r.completedAt?.toISOString() || r.startedAt.toISOString(),
+        simulationId: r.simulationId,
       })),
     };
   }),

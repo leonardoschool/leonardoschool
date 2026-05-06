@@ -139,7 +139,7 @@ export default function StudentStatisticheContent() {
     );
   }
 
-  const { overview, typeBreakdown, trendData, monthlyTrend, subjectStats, bestSubject, worstSubject, answerDistribution, difficultyBreakdown, achievements, recentResults } = stats;
+  const { overview, typeBreakdown, trendData, monthlyTrend, subjectStats, sectionStats, bestSubject, worstSubject, answerDistribution, difficultyBreakdown, achievements, recentResults } = stats;
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 space-y-6 lg:space-y-8">
@@ -175,6 +175,35 @@ export default function StudentStatisticheContent() {
             {overview.totalSimulations}
           </p>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">completate</p>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 sm:p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+          <div className="flex items-center gap-3 mb-4">
+            <BarChart3 className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Performance per Sezione</h3>
+          </div>
+          {sectionStats?.length > 0 ? (
+            <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+              {sectionStats.map((section) => (
+                <div key={section.section} className="p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="font-medium text-gray-800 dark:text-white">{section.section}</p>
+                    <p className={`font-semibold ${colors.primary.text}`}>{section.accuracy.toFixed(1)}%</p>
+                  </div>
+                  <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                    <div className={`h-full ${colors.primary.bg}`} style={{ width: `${Math.min(section.accuracy, 100)}%` }} />
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                    {section.correctAnswers} corrette · {section.wrongAnswers} errate · {section.blankAnswers} vuote · {section.score.toFixed(2)} punti
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="h-64 flex items-center justify-center text-gray-500 dark:text-gray-400">
+              Dati sezione non disponibili
+            </div>
+          )}
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 sm:p-6 shadow-sm border border-gray-100 dark:border-gray-700">
@@ -468,8 +497,9 @@ export default function StudentStatisticheContent() {
           </div>
           <div className="space-y-3">
             {recentResults.map((result, index) => (
-              <div
+              <Link
                 key={index}
+                href={`/simulazioni/${result.simulationId}/risultato?resultId=${result.id}`}
                 className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50"
               >
                 <div className="flex items-center gap-4">
@@ -502,7 +532,7 @@ export default function StudentStatisticheContent() {
                     {result.correct}/{result.total} corrette
                   </p>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>

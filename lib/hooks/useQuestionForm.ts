@@ -211,7 +211,7 @@ export function useQuestionForm({ questionId, basePath = '/domande', initialData
   // Handlers
   const insertSymbolIntoTextarea = useCallback(
     (
-      ref: React.RefObject<HTMLTextAreaElement>,
+      ref: React.RefObject<HTMLTextAreaElement | HTMLInputElement | null>,
       value: string,
       setValue: (v: string) => void,
       symbol: string

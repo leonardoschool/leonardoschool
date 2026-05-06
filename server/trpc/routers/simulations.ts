@@ -5212,7 +5212,7 @@ export const simulationsRouter = router({
       simulationId: z.string(),
       assignmentId: z.string().optional(),
       groupId: z.string().optional(),
-      limit: z.number().int().min(1).max(100).default(50),
+      limit: z.number().int().min(1).max(1000).default(50),
     }))
     .query(async ({ ctx, input }) => {
       const simulation = await ctx.prisma.simulation.findUnique({
@@ -5225,6 +5225,17 @@ export const simulationsRouter = router({
           passingScore: true,
           totalQuestions: true,
           createdById: true, // For checking if current user is creator
+          sections: true,
+          questions: {
+            select: {
+              questionId: true,
+              question: {
+                select: {
+                  subject: { select: { id: true, name: true, color: true } },
+                },
+              },
+            },
+          },
         },
       });
 
@@ -5323,17 +5334,89 @@ export const simulationsRouter = router({
           // Tie-breaker: faster time wins
           return a.durationSeconds - b.durationSeconds;
         })
-        .slice(0, input.limit);
+      const totalParticipants = results.length;
+      const limitedResults = results.slice(0, input.limit);
+
+      const questionSubjects = new Map(
+        simulation.questions.map((sq) => [
+          sq.questionId,
+          sq.question.subject
+            ? {
+                id: sq.question.subject.id,
+                name: sq.question.subject.name,
+                color: sq.question.subject.color,
+              }
+            : null,
+        ])
+      );
+
+      const sectionConfigs = Array.isArray(simulation.sections)
+        ? (simulation.sections as Array<{ name?: string; title?: string; questionIds?: string[] }>)
+        : [];
+      const questionSections = new Map<string, { name: string }>();
+      sectionConfigs.forEach((section, index) => {
+        const sectionName = section.name || section.title || `Sezione ${index + 1}`;
+        section.questionIds?.forEach((questionId) => {
+          questionSections.set(questionId, { name: sectionName });
+        });
+      });
+
+      const buildBreakdowns = (answersValue: Prisma.JsonValue) => {
+        const answers = Array.isArray(answersValue)
+          ? answersValue as Array<{ questionId?: string; isCorrect?: boolean | null; earnedPoints?: number }>
+          : [];
+        const subjects = new Map<string, { name: string; color: string | null; correct: number; wrong: number; blank: number; score: number }>();
+        const sections = new Map<string, { name: string; correct: number; wrong: number; blank: number; score: number }>();
+
+        answers.forEach((answer) => {
+          if (!answer.questionId) return;
+          const category = answer.isCorrect === true ? 'correct' : answer.isCorrect === false ? 'wrong' : 'blank';
+          const earnedPoints = typeof answer.earnedPoints === 'number' ? answer.earnedPoints : 0;
+          const subject = questionSubjects.get(answer.questionId);
+          if (subject) {
+            const current = subjects.get(subject.id) ?? {
+              name: subject.name,
+              color: subject.color,
+              correct: 0,
+              wrong: 0,
+              blank: 0,
+              score: 0,
+            };
+            current[category] += 1;
+            current.score += earnedPoints;
+            subjects.set(subject.id, current);
+          }
+
+          const section = questionSections.get(answer.questionId);
+          if (section) {
+            const current = sections.get(section.name) ?? {
+              name: section.name,
+              correct: 0,
+              wrong: 0,
+              blank: 0,
+              score: 0,
+            };
+            current[category] += 1;
+            current.score += earnedPoints;
+            sections.set(section.name, current);
+          }
+        });
+
+        return {
+          subjectBreakdown: Array.from(subjects.values()),
+          sectionBreakdown: Array.from(sections.values()),
+        };
+      };
 
       // Calculate rankings with tie handling and anonymization
-      const leaderboard = results.map((result, index) => {
+      const leaderboard = limitedResults.map((result, index) => {
         // Check if this score ties with previous
         let rank = index + 1;
         if (index > 0) {
-          const prevResult = results[index - 1];
+          const prevResult = limitedResults[index - 1];
           if (result.totalScore === prevResult.totalScore) {
             // Find the rank of the first person with this score
-            const firstWithScore = results.findIndex(r => r.totalScore === result.totalScore);
+            const firstWithScore = limitedResults.findIndex(r => r.totalScore === result.totalScore);
             rank = firstWithScore + 1;
           }
         }
@@ -5368,6 +5451,7 @@ export const simulationsRouter = router({
           passed: simulation.passingScore 
             ? result.totalScore >= simulation.passingScore 
             : null,
+          ...buildBreakdowns(result.answers),
         };
       });
 
@@ -5379,9 +5463,10 @@ export const simulationsRouter = router({
           maxScore: simulation.maxScore,
           passingScore: simulation.passingScore,
           totalQuestions: simulation.totalQuestions,
+          hasSections: sectionConfigs.length > 0,
         },
         leaderboard,
-        totalParticipants: results.length,
+        totalParticipants,
         canSeeAllNames, // Let frontend know if user can see all names
       };
     }),
