@@ -106,15 +106,15 @@ function BreakdownList({ title, items }: { title: string; items?: BreakdownItem[
 function exportLeaderboardCsv(
   simulationTitle: string,
   leaderboard: Array<{
-    rank: number;
-    studentName: string | null;
+    rank?: number;
+    studentName?: string | null;
     studentEmail?: string | null;
     studentMatricola?: string | null;
-    totalScore: number;
-    percentageScore: number;
-    correctAnswers: number;
-    wrongAnswers: number;
-    blankAnswers: number;
+    totalScore?: number;
+    percentageScore?: number;
+    correctAnswers?: number;
+    wrongAnswers?: number;
+    blankAnswers?: number;
     durationSeconds?: number | null;
     completedAt?: string | Date | null;
     subjectBreakdown?: BreakdownItem[];
@@ -131,11 +131,11 @@ function exportLeaderboardCsv(
       entry.studentName,
       entry.studentEmail,
       entry.studentMatricola,
-      entry.totalScore.toFixed(2),
-      entry.percentageScore.toFixed(2),
-      entry.correctAnswers,
-      entry.wrongAnswers,
-      entry.blankAnswers,
+      (entry.totalScore ?? 0).toFixed(2),
+      (entry.percentageScore ?? 0).toFixed(2),
+      entry.correctAnswers ?? 0,
+      entry.wrongAnswers ?? 0,
+      entry.blankAnswers ?? 0,
       entry.durationSeconds ? formatDuration(entry.durationSeconds) : '',
       entry.completedAt ? new Date(entry.completedAt).toLocaleString('it-IT') : '',
       formatItems(entry.subjectBreakdown),
