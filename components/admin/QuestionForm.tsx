@@ -14,6 +14,7 @@ import LaTeXEditor from '@/components/ui/LaTeXEditor';
 import SymbolKeyboard from '@/components/ui/SymbolKeyboard';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import AnswerEditor from '@/components/admin/question-form/AnswerEditor';
+import HtmlShortcutMenu from '@/components/admin/question-form/HtmlShortcutMenu';
 import KeywordManager from '@/components/admin/question-form/KeywordManager';
 import { useQuestionForm, type QuestionFormInitialData } from '@/lib/hooks/useQuestionForm';
 import {
@@ -171,6 +172,9 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
             <SymbolKeyboard
               onInsert={(symbol) => form.insertSymbolIntoTextarea(questionTextRef, form.text, form.setText, symbol)}
             />
+            <HtmlShortcutMenu
+              onInsert={(snippet) => form.insertSymbolIntoTextarea(questionTextRef, form.text, form.setText, snippet)}
+            />
             <button
               type="button"
               onClick={() => form.setShowFormulaHelper(!form.showFormulaHelper)}
@@ -267,6 +271,9 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
             onRemove={form.removeAnswer}
             onUpdate={form.updateAnswer}
             onShuffleChange={form.setShuffleAnswers}
+            onInsertHtml={(index, field, value, snippet, ref) =>
+              form.insertSymbolIntoTextarea(ref, value, (nextValue) => form.updateAnswer(index, field, nextValue), snippet)
+            }
           />
         )}
 

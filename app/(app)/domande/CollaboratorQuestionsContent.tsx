@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
@@ -69,6 +69,7 @@ export default function CollaboratorQuestionsContent() {
 
   // Filters state
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [subjectId, setSubjectId] = useState<string>('');
   const [topicId, setTopicId] = useState<string>('');
   const [type, setType] = useState<QuestionType | ''>('');
@@ -92,11 +93,20 @@ export default function CollaboratorQuestionsContent() {
   // Get current user
   const { data: currentUser } = trpc.auth.me.useQuery();
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      setPage(1);
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [search]);
+
   // Fetch questions
   const { data: questionsData, isLoading } = trpc.questions.getQuestions.useQuery({
     page,
     pageSize,
-    search: search || undefined,
+    search: debouncedSearch || undefined,
     subjectId: subjectId || undefined,
     topicId: topicId || undefined,
     type: type || undefined,
@@ -201,6 +211,7 @@ export default function CollaboratorQuestionsContent() {
 
   const clearFilters = () => {
     setSearch('');
+    setDebouncedSearch('');
     setSubjectId('');
     setTopicId('');
     setType('');
@@ -348,10 +359,7 @@ export default function CollaboratorQuestionsContent() {
               type="text"
               placeholder="Cerca domande..."
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => setSearch(e.target.value)}
               className={`w-full pl-10 pr-4 py-2 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-[#a8012b]/20 focus:border-[#a8012b] transition-colors`}
             />
           </div>
