@@ -17,7 +17,7 @@ const AdminStatisticheContent = dynamic(
 );
 
 /**
- * Pagina Statistiche (Admin and Student)
+ * Pagina Statistiche (Admin, Collaborator and Student)
  * Admin sees platform-wide statistics
  * Students see their personal statistics
  */
@@ -27,16 +27,16 @@ export default function StatistichePage() {
   const userRole = user?.role;
 
   useEffect(() => {
-    if (!loading && userRole !== 'STUDENT' && userRole !== 'ADMIN') {
+    if (!loading && userRole !== 'STUDENT' && userRole !== 'ADMIN' && userRole !== 'COLLABORATOR') {
       router.replace('/dashboard');
     }
   }, [loading, userRole, router]);
 
-  if (loading || (userRole !== 'STUDENT' && userRole !== 'ADMIN')) {
+  if (loading || (userRole !== 'STUDENT' && userRole !== 'ADMIN' && userRole !== 'COLLABORATOR')) {
     return <PageLoader />;
   }
 
-  if (userRole === 'ADMIN') {
+  if (userRole === 'ADMIN' || userRole === 'COLLABORATOR') {
     return <AdminStatisticheContent />;
   }
 

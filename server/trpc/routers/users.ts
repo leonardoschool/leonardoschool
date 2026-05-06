@@ -2,7 +2,7 @@
 // Users Router - Handles user management for admin
 // Note: 'any' types are used for Prisma dynamic queries and include patterns
 // that cannot be strictly typed without significant complexity
-import { router, adminProcedure, protectedProcedure } from '../init';
+import { router, adminProcedure, protectedProcedure, staffProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { getAdminAuth } from '@/lib/firebase/admin';
@@ -1202,7 +1202,7 @@ export const usersRouter = router({
    * Get comprehensive admin platform statistics
    * Returns detailed analytics for the entire platform
    */
-  getAdminPlatformStats: adminProcedure.query(async ({ ctx }) => {
+  getAdminPlatformStats: staffProcedure.query(async ({ ctx }) => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -1427,6 +1427,20 @@ export const usersRouter = router({
       };
     }).sort((a, b) => b.avgScore - a.avgScore);
 
+    const recentSimulationResults = await ctx.prisma.simulationResult.findMany({
+      where: { completedAt: { not: null } },
+      orderBy: { completedAt: 'desc' },
+      take: 30,
+      include: {
+        simulation: { select: { id: true, title: true } },
+        student: {
+          include: {
+            user: { select: { name: true, email: true } },
+          },
+        },
+      },
+    });
+
     // ============ ACTIVITY TRENDS ============
     const activityByMonth = await Promise.all(
       Array.from({ length: 6 }, async (_, i) => {
@@ -1500,6 +1514,19 @@ export const usersRouter = router({
       // Detailed lists
       collaborators: collaboratorActivity.sort((a, b) => b.totalActivity - a.totalActivity),
       students: studentStats,
+      recentSimulationResults: recentSimulationResults.map((result) => ({
+        id: result.id,
+        simulationId: result.simulationId,
+        simulationTitle: result.simulation.title,
+        studentName: result.student.user.name,
+        studentEmail: result.student.user.email,
+        completedAt: result.completedAt,
+        totalScore: result.totalScore,
+        percentageScore: result.percentageScore,
+        correctAnswers: result.correctAnswers,
+        wrongAnswers: result.wrongAnswers,
+        blankAnswers: result.blankAnswers,
+      })),
     };
   }),
 

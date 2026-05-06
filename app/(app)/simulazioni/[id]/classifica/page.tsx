@@ -1,5 +1,6 @@
 'use client';
 
+import { Fragment, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import {
@@ -13,6 +14,9 @@ import {
   AlertCircle,
   Crown,
   User,
+  Download,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { colors } from '@/lib/theme/colors';
 import { PageLoader } from '@/components/ui/loaders';
@@ -62,11 +66,98 @@ function formatDuration(seconds: number): string {
   return `${secs}s`;
 }
 
+type BreakdownItem = {
+  name: string;
+  color?: string | null;
+  correct: number;
+  wrong: number;
+  blank: number;
+  score: number;
+};
+
+function BreakdownList({ title, items }: { title: string; items?: BreakdownItem[] }) {
+  if (!items?.length) return null;
+
+  return (
+    <div>
+      <p className={`text-xs font-semibold ${colors.text.secondary} mb-2`}>{title}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {items.map((item) => (
+          <div key={`${title}-${item.name}`} className={`rounded-lg ${colors.background.secondary} border ${colors.border.light} p-2`}>
+            <div className="flex items-center justify-between gap-2">
+              <span className={`text-xs font-medium ${colors.text.primary} truncate`}>
+                {item.color && (
+                  <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: item.color }} />
+                )}
+                {item.name}
+              </span>
+              <span className={`text-xs font-semibold ${colors.primary.text}`}>{item.score.toFixed(2)} pt</span>
+            </div>
+            <p className={`text-xs ${colors.text.muted} mt-1`}>
+              {item.correct} corrette · {item.wrong} errate · {item.blank} vuote
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function exportLeaderboardCsv(
+  simulationTitle: string,
+  leaderboard: Array<{
+    rank: number;
+    studentName: string | null;
+    studentEmail?: string | null;
+    studentMatricola?: string | null;
+    totalScore: number;
+    percentageScore: number;
+    correctAnswers: number;
+    wrongAnswers: number;
+    blankAnswers: number;
+    durationSeconds?: number | null;
+    completedAt?: string | Date | null;
+    subjectBreakdown?: BreakdownItem[];
+    sectionBreakdown?: BreakdownItem[];
+  }>
+) {
+  const escapeCsv = (value: string | number | null | undefined) => `"${String(value ?? '').replaceAll('"', '""')}"`;
+  const formatItems = (items?: BreakdownItem[]) =>
+    items?.map((item) => `${item.name}: ${item.score.toFixed(2)} (${item.correct}/${item.wrong}/${item.blank})`).join(' | ') ?? '';
+  const rows = [
+    ['Posizione', 'Studente', 'Email', 'Matricola', 'Punteggio', 'Percentuale', 'Corrette', 'Errate', 'Vuote', 'Durata', 'Completata il', 'Punteggi materia', 'Punteggi sezione'],
+    ...leaderboard.map((entry) => [
+      entry.rank,
+      entry.studentName,
+      entry.studentEmail,
+      entry.studentMatricola,
+      entry.totalScore.toFixed(2),
+      entry.percentageScore.toFixed(2),
+      entry.correctAnswers,
+      entry.wrongAnswers,
+      entry.blankAnswers,
+      entry.durationSeconds ? formatDuration(entry.durationSeconds) : '',
+      entry.completedAt ? new Date(entry.completedAt).toLocaleString('it-IT') : '',
+      formatItems(entry.subjectBreakdown),
+      formatItems(entry.sectionBreakdown),
+    ]),
+  ];
+  const csv = rows.map((row) => row.map(escapeCsv).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `classifica-${simulationTitle.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function ClassificaPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = params.id as string;
+  const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
   
   const assignmentId = searchParams.get('assignmentId') || undefined;
   const groupId = searchParams.get('groupId') || undefined;
@@ -76,7 +167,7 @@ export default function ClassificaPage() {
       simulationId: id, 
       assignmentId,
       groupId,
-      limit: 100 
+      limit: 1000
     },
     { enabled: !!id }
   );
@@ -139,11 +230,23 @@ export default function ClassificaPage() {
               </h1>
               <p className={`mt-1 ${colors.text.muted}`}>{simulation.title}</p>
             </div>
-            <div className="flex items-center gap-2 text-sm">
-              <User className={`w-4 h-4 ${colors.text.muted}`} />
-              <span className={colors.text.muted}>
-                {totalParticipants} partecipanti
-              </span>
+            <div className="flex items-center gap-3 text-sm">
+              <div className="flex items-center gap-2">
+                <User className={`w-4 h-4 ${colors.text.muted}`} />
+                <span className={colors.text.muted}>
+                  {totalParticipants} partecipanti
+                </span>
+              </div>
+              {canSeeAllNames && leaderboard.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => exportLeaderboardCsv(simulation.title, leaderboard)}
+                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${colors.border.primary} ${colors.text.secondary} hover:${colors.background.secondary} transition-colors`}
+                >
+                  <Download className="w-4 h-4" />
+                  Esporta CSV
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -186,10 +289,14 @@ export default function ClassificaPage() {
                     {myPosition.blankAnswers}
                   </span>
                 </div>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <BreakdownList title="Punteggi per materia" items={myPosition.subjectBreakdown as BreakdownItem[]} />
+                <BreakdownList title="Punteggi per sezione" items={myPosition.sectionBreakdown as BreakdownItem[]} />
               </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Podio */}
         {podium.length > 0 && (
@@ -221,6 +328,10 @@ export default function ClassificaPage() {
                       {podium[1].totalScore?.toFixed(2)}
                     </p>
                     <p className={`text-xs ${colors.text.muted}`}>punti</p>
+                    <div className="mt-4 w-full space-y-3">
+                      <BreakdownList title="Materie" items={podium[1].subjectBreakdown as BreakdownItem[]} />
+                      <BreakdownList title="Sezioni" items={podium[1].sectionBreakdown as BreakdownItem[]} />
+                    </div>
                   </div>
                 </div>
               )}
@@ -248,6 +359,10 @@ export default function ClassificaPage() {
                       {podium[0].totalScore?.toFixed(2)}
                     </p>
                     <p className={`text-xs ${colors.text.muted}`}>punti</p>
+                    <div className="mt-4 w-full space-y-3">
+                      <BreakdownList title="Materie" items={podium[0].subjectBreakdown as BreakdownItem[]} />
+                      <BreakdownList title="Sezioni" items={podium[0].sectionBreakdown as BreakdownItem[]} />
+                    </div>
                   </div>
                 </div>
               )}
@@ -275,6 +390,10 @@ export default function ClassificaPage() {
                       {podium[2].totalScore?.toFixed(2)}
                     </p>
                     <p className={`text-xs ${colors.text.muted}`}>punti</p>
+                    <div className="mt-4 w-full space-y-3">
+                      <BreakdownList title="Materie" items={podium[2].subjectBreakdown as BreakdownItem[]} />
+                      <BreakdownList title="Sezioni" items={podium[2].sectionBreakdown as BreakdownItem[]} />
+                    </div>
                   </div>
                 </div>
               )}
@@ -332,12 +451,20 @@ export default function ClassificaPage() {
                       >
                         <Clock className="w-4 h-4 text-zinc-400 inline" />
                       </th>
+                      <th
+                        className={`px-4 py-3 text-right text-xs font-medium ${colors.text.muted} uppercase tracking-wider`}
+                      >
+                        Dettagli
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-700/50">
-                    {restOfLeaderboard.map((entry) => (
+                    {restOfLeaderboard.map((entry) => {
+                      const entryKey = `${entry.rank}-${entry.studentName}`;
+                      const isExpanded = expandedEntry === entryKey;
+                      return (
+                      <Fragment key={entryKey}>
                       <tr
-                        key={entry.rank}
                         className={`${
                           entry.isCurrentUser
                             ? 'bg-pink-500/10'
@@ -386,8 +513,34 @@ export default function ClassificaPage() {
                         >
                           {entry.durationSeconds ? formatDuration(entry.durationSeconds) : '-'}
                         </td>
+                        <td className="px-4 py-3 text-right">
+                          {(entry.subjectBreakdown?.length || entry.sectionBreakdown?.length) ? (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedEntry(isExpanded ? null : entryKey)}
+                              className={`inline-flex items-center gap-1 text-sm ${colors.primary.text} hover:underline`}
+                            >
+                              Vedi
+                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            </button>
+                          ) : (
+                            <span className={colors.text.muted}>-</span>
+                          )}
+                        </td>
                       </tr>
-                    ))}
+                      {isExpanded && (
+                        <tr key={`${entryKey}-details`}>
+                          <td colSpan={canSeeAllNames ? 8 : 7} className={`px-4 py-4 ${colors.background.secondary}`}>
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                              <BreakdownList title="Punteggi per materia" items={entry.subjectBreakdown as BreakdownItem[]} />
+                              <BreakdownList title="Punteggi per sezione" items={entry.sectionBreakdown as BreakdownItem[]} />
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
+                    );
+                    })}
                   </tbody>
                 </table>
               </div>
