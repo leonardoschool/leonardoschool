@@ -24,6 +24,7 @@ import {
   RefreshCw,
   Shield,
   Lock,
+  Search,
 } from 'lucide-react';
 import type { SimulationType } from '@/lib/validations/simulationValidation';
 
@@ -98,6 +99,7 @@ export default function StudentSimulationsContent() {
   const [activeTab, setActiveTab] = useState<'assigned' | 'self'>('assigned');
 
   // Filters state
+  const [search, setSearch] = useState('');
   const [type, setType] = useState<SimulationType | ''>('');
   const [status, setStatus] = useState<string>('');
   const [isOfficial, setIsOfficial] = useState<boolean | ''>('');
@@ -112,6 +114,7 @@ export default function StudentSimulationsContent() {
   const handleTabChange = (tab: 'assigned' | 'self') => {
     setActiveTab(tab);
     setPage(1);
+    setSearch('');
     setType('');
     setStatus('');
     setIsOfficial('');
@@ -121,6 +124,7 @@ export default function StudentSimulationsContent() {
   const { data: simulationsData, isLoading } = trpc.simulations.getAvailableSimulations.useQuery({
     page,
     pageSize,
+    search: search || undefined,
     type: type || undefined,
     status: status as 'available' | 'in_progress' | 'completed' | 'expired' | undefined || undefined,
     isOfficial: isOfficial === '' ? undefined : isOfficial,
@@ -267,16 +271,29 @@ export default function StudentSimulationsContent() {
 
       {/* Filters */}
       <div className={`rounded-xl p-4 mb-6 ${colors.background.card} border ${colors.border.light}`}>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+          <div className="relative flex-1">
+            <Search className={`absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 ${colors.text.muted}`} />
+            <input
+              type="text"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+              placeholder="Cerca simulazioni..."
+              className={`w-full rounded-lg border ${colors.border.input} ${colors.background.input} ${colors.text.primary} py-2 pl-9 pr-3 text-sm outline-none ${colors.border.focus}`}
+            />
+          </div>
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.hover} ${colors.text.secondary}`}
           >
             <Filter className="w-4 h-4" />
             Filtri
-            {(type || status || (activeTab === 'assigned' && isOfficial !== '')) && (
+            {(search || type || status || (activeTab === 'assigned' && isOfficial !== '')) && (
               <span className="w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
-                {[type, status, activeTab === 'assigned' && isOfficial !== ''].filter(Boolean).length}
+                {[search, type, status, activeTab === 'assigned' && isOfficial !== ''].filter(Boolean).length}
               </span>
             )}
           </button>

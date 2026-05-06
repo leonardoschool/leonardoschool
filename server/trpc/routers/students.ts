@@ -238,14 +238,14 @@ function calculateSubjectStats(allResults: SimulationResultWithSimulation[]) {
 }
 
 function calculateSectionStats(allResults: SimulationResultWithSimulation[]) {
-  const sectionAccumulator: Record<string, { total: number; correct: number; wrong: number; blank: number; score: number }> = {};
+  const sectionAccumulator: Record<string, { total: number; correct: number; wrong: number; blank: number }> = {};
 
   for (const result of allResults) {
     const sections = Array.isArray(result.simulation.sections)
       ? result.simulation.sections as Array<{ name?: string; title?: string; questionIds?: string[] }>
       : [];
     const answers = Array.isArray(result.answers)
-      ? result.answers as Array<{ questionId?: string; isCorrect?: boolean | null; earnedPoints?: number }>
+      ? result.answers as Array<{ questionId?: string; answerId?: string | null; answerText?: string | null; isCorrect?: boolean | null }>
       : [];
     const questionToSection = new Map<string, string>();
 
@@ -259,12 +259,12 @@ function calculateSectionStats(allResults: SimulationResultWithSimulation[]) {
       const sectionName = questionToSection.get(answer.questionId);
       if (!sectionName) continue;
       if (!sectionAccumulator[sectionName]) {
-        sectionAccumulator[sectionName] = { total: 0, correct: 0, wrong: 0, blank: 0, score: 0 };
+        sectionAccumulator[sectionName] = { total: 0, correct: 0, wrong: 0, blank: 0 };
       }
       const stats = sectionAccumulator[sectionName];
       stats.total++;
-      stats.score += typeof answer.earnedPoints === 'number' ? answer.earnedPoints : 0;
       if (answer.isCorrect === true) stats.correct++;
+      else if (!answer.answerId && !answer.answerText) stats.blank++;
       else if (answer.isCorrect === false) stats.wrong++;
       else stats.blank++;
     }
@@ -276,7 +276,6 @@ function calculateSectionStats(allResults: SimulationResultWithSimulation[]) {
     correctAnswers: data.correct,
     wrongAnswers: data.wrong,
     blankAnswers: data.blank,
-    score: data.score,
     accuracy: data.total > 0 ? (data.correct / data.total) * 100 : 0,
   })).sort((a, b) => b.totalQuestions - a.totalQuestions);
 }

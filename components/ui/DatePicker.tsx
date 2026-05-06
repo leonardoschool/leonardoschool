@@ -13,6 +13,8 @@ interface DatePickerProps {
   placeholder?: string;
   minYear?: number;
   maxYear?: number;
+  /** Default month shown when no date is selected. Defaults to 18 years ago (birth-date context). */
+  defaultViewDate?: Date;
 }
 
 const MESI = [
@@ -32,6 +34,7 @@ export default function DatePicker({
   placeholder = 'Seleziona data',
   minYear = 1920,
   maxYear = new Date().getFullYear() - 14,
+  defaultViewDate,
 }: DatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
@@ -42,6 +45,7 @@ export default function DatePicker({
       const [year, month, day] = value.split('-').map(Number);
       return new Date(year, month - 1, day);
     }
+    if (defaultViewDate) return defaultViewDate;
     // Default to 18 years ago for birth date picker
     const d = new Date();
     d.setFullYear(d.getFullYear() - 18);

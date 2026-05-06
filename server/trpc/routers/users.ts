@@ -11,6 +11,78 @@ import { generateMatricola } from '@/lib/utils/matricolaUtils';
 import { createCachedQuery, CACHE_TIMES, CACHE_TAGS } from '@/lib/cache/serverCache';
 import { sendWelcomeEmail } from '@/lib/email/userEmails';
 
+const adminSimulationResultsInputSchema = z.object({
+  page: z.number().int().min(1).default(1),
+  pageSize: z.number().int().min(5).max(100).default(20),
+  simulationSearch: z.string().max(120).optional(),
+  studentSearch: z.string().max(120).optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  sortBy: z.enum(['date', 'score']).default('date'),
+  sortOrder: z.enum(['asc', 'desc']).default('desc'),
+}).optional();
+
+type AdminSimulationResultsInput = NonNullable<z.infer<typeof adminSimulationResultsInputSchema>>;
+
+function parseDateAtStartOfDay(value?: string) {
+  if (!value) return undefined;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+function parseDateAtEndOfDay(value?: string) {
+  if (!value) return undefined;
+  const date = new Date(`${value}T23:59:59.999`);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+function buildAdminSimulationResultsWhere(input: AdminSimulationResultsInput): Prisma.SimulationResultWhereInput {
+  const where: Prisma.SimulationResultWhereInput = {
+    completedAt: { not: null },
+  };
+  const simulationSearch = input.simulationSearch?.trim();
+  const studentSearch = input.studentSearch?.trim();
+  const dateFrom = parseDateAtStartOfDay(input.dateFrom);
+  const dateTo = parseDateAtEndOfDay(input.dateTo);
+
+  if (dateFrom || dateTo) {
+    where.completedAt = {
+      not: null,
+      ...(dateFrom ? { gte: dateFrom } : {}),
+      ...(dateTo ? { lte: dateTo } : {}),
+    };
+  }
+
+  if (simulationSearch) {
+    where.simulation = {
+      title: { contains: simulationSearch, mode: 'insensitive' },
+    };
+  }
+
+  if (studentSearch) {
+    where.student = {
+      OR: [
+        { matricola: { contains: studentSearch, mode: 'insensitive' } },
+        { user: { name: { contains: studentSearch, mode: 'insensitive' } } },
+        { user: { email: { contains: studentSearch, mode: 'insensitive' } } },
+      ],
+    };
+  }
+
+  return where;
+}
+
+function getAdminSimulationResultsOrderBy(
+  sortBy: AdminSimulationResultsInput['sortBy'],
+  sortOrder: AdminSimulationResultsInput['sortOrder']
+): Prisma.SimulationResultOrderByWithRelationInput[] {
+  if (sortBy === 'score') {
+    return [{ percentageScore: sortOrder }, { completedAt: 'desc' }];
+  }
+
+  return [{ completedAt: sortOrder }, { percentageScore: 'desc' }];
+}
+
 export const usersRouter = router({
   /**
    * Get current user information
@@ -1197,6 +1269,69 @@ export const usersRouter = router({
       upcomingEvents,
     };
   }),
+
+  getAdminSimulationResults: staffProcedure
+    .input(adminSimulationResultsInputSchema)
+    .query(async ({ ctx, input }) => {
+      const {
+        page = 1,
+        pageSize = 20,
+        sortBy = 'date',
+        sortOrder = 'desc',
+      } = input ?? {};
+      const normalizedInput: AdminSimulationResultsInput = {
+        page,
+        pageSize,
+        sortBy,
+        sortOrder,
+        simulationSearch: input?.simulationSearch,
+        studentSearch: input?.studentSearch,
+        dateFrom: input?.dateFrom,
+        dateTo: input?.dateTo,
+      };
+      const where = buildAdminSimulationResultsWhere(normalizedInput);
+
+      const [results, total] = await Promise.all([
+        ctx.prisma.simulationResult.findMany({
+          where,
+          orderBy: getAdminSimulationResultsOrderBy(sortBy, sortOrder),
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+          include: {
+            simulation: { select: { id: true, title: true } },
+            student: {
+              include: {
+                user: { select: { name: true, email: true } },
+              },
+            },
+          },
+        }),
+        ctx.prisma.simulationResult.count({ where }),
+      ]);
+
+      return {
+        results: results.map((result) => ({
+          id: result.id,
+          simulationId: result.simulationId,
+          simulationTitle: result.simulation.title,
+          studentName: result.student.user.name,
+          studentEmail: result.student.user.email,
+          studentMatricola: result.student.matricola,
+          completedAt: result.completedAt,
+          totalScore: result.totalScore,
+          percentageScore: result.percentageScore,
+          correctAnswers: result.correctAnswers,
+          wrongAnswers: result.wrongAnswers,
+          blankAnswers: result.blankAnswers,
+        })),
+        pagination: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize),
+        },
+      };
+    }),
 
   /**
    * Get comprehensive admin platform statistics

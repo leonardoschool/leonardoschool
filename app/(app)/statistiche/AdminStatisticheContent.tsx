@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { colors } from '@/lib/theme/colors';
 import { trpc } from '@/lib/trpc/client';
 import { PageLoader } from '@/components/ui/loaders';
+import AdminSimulationResultsTab from './AdminSimulationResultsTab';
 import { 
   Users, 
   BookOpen, 
@@ -198,101 +199,8 @@ export default function AdminStatisticheContent() {
         {/* Tab Content */}
         {activeTab === 'overview' && <OverviewTab data={data as unknown as AdminPlatformStats} />}
         {activeTab === 'students' && <StudentsTab data={data as unknown as AdminPlatformStats} />}
-        {activeTab === 'simulations' && <SimulationsTab data={data as unknown as AdminPlatformStats} />}
+        {activeTab === 'simulations' && <AdminSimulationResultsTab />}
         {activeTab === 'collaborators' && <CollaboratorsTab data={data as unknown as AdminPlatformStats} />}
-      </div>
-    </div>
-  );
-}
-
-function SimulationsTab({ data }: { data: AdminPlatformStats }) {
-  const [sortBy, setSortBy] = useState<'date' | 'score'>('date');
-  const sortedResults = useMemo(() => {
-    return [...data.recentSimulationResults].sort((a, b) => {
-      if (sortBy === 'score') return b.percentageScore - a.percentageScore;
-      return new Date(b.completedAt ?? 0).getTime() - new Date(a.completedAt ?? 0).getTime();
-    });
-  }, [data.recentSimulationResults, sortBy]);
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <div className={`${colors.background.card} rounded-xl border ${colors.border.primary} overflow-hidden`}>
-        <div className={`p-4 border-b ${colors.border.primary}`}>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${colors.primary.softBg}`}>
-                <ClipboardList className={`w-5 h-5 ${colors.primary.text}`} />
-              </div>
-              <div>
-                <h2 className={`text-lg font-semibold ${colors.text.primary}`}>Simulazioni svolte dagli studenti</h2>
-                <p className={`text-sm ${colors.text.muted}`}>Ordina per data e recupera rapidamente le classifiche.</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <SortButton active={sortBy === 'date'} onClick={() => setSortBy('date')} label="Data" />
-              <SortButton active={sortBy === 'score'} onClick={() => setSortBy('score')} label="Punteggio" />
-            </div>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className={colors.background.secondary}>
-              <tr>
-                <th className={`px-4 py-3 text-left text-xs font-medium ${colors.text.muted} uppercase`}>Data</th>
-                <th className={`px-4 py-3 text-left text-xs font-medium ${colors.text.muted} uppercase`}>Studente</th>
-                <th className={`px-4 py-3 text-left text-xs font-medium ${colors.text.muted} uppercase`}>Simulazione</th>
-                <th className={`px-4 py-3 text-center text-xs font-medium ${colors.text.muted} uppercase`}>Punteggio</th>
-                <th className={`px-4 py-3 text-right text-xs font-medium ${colors.text.muted} uppercase`}>Azioni</th>
-              </tr>
-            </thead>
-            <tbody className={`divide-y ${colors.border.primary}`}>
-              {sortedResults.map((result) => (
-                <tr key={result.id} className={`hover:${colors.background.secondary}`}>
-                  <td className={`px-4 py-3 text-sm ${colors.text.secondary}`}>
-                    {result.completedAt ? new Date(result.completedAt).toLocaleString('it-IT') : '-'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className={`font-medium ${colors.text.primary}`}>{result.studentName || result.studentEmail}</p>
-                    <p className={`text-xs ${colors.text.muted}`}>{result.studentEmail}</p>
-                  </td>
-                  <td className={`px-4 py-3 ${colors.text.secondary}`}>{result.simulationTitle}</td>
-                  <td className={`px-4 py-3 text-center font-semibold ${colors.text.primary}`}>
-                    {result.percentageScore.toFixed(1)}%
-                    <p className={`text-xs ${colors.text.muted}`}>
-                      {result.correctAnswers} / {result.wrongAnswers} / {result.blankAnswers}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      <Link
-                        href={`/simulazioni/${result.simulationId}/risultato?resultId=${result.id}`}
-                        className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border ${colors.border.primary} ${colors.text.secondary} hover:${colors.background.secondary} text-sm`}
-                      >
-                        <Eye className="w-4 h-4" />
-                        Risultato
-                      </Link>
-                      <Link
-                        href={`/simulazioni/${result.simulationId}/classifica`}
-                        className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg ${colors.primary.bg} text-white text-sm hover:opacity-90`}
-                      >
-                        <Award className="w-4 h-4" />
-                        Classifica
-                      </Link>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {sortedResults.length === 0 && (
-                <tr>
-                  <td colSpan={5} className={`px-4 py-8 text-center ${colors.text.muted}`}>
-                    Nessuna simulazione completata.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
       </div>
     </div>
   );
@@ -615,7 +523,8 @@ function StudentsTab({ data }: { data: AdminPlatformStats }) {
               </div>
               <h2 className={`text-lg font-semibold ${colors.text.primary}`}>Dettaglio Studenti</h2>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-medium ${colors.text.muted} hidden sm:inline`}>Ordina per:</span>
               <SortButton 
                 active={sortBy === 'avgScore'} 
                 onClick={() => setSortBy('avgScore')}
@@ -770,7 +679,8 @@ function CollaboratorsTab({ data }: { data: AdminPlatformStats }) {
               </div>
               <h2 className={`text-lg font-semibold ${colors.text.primary}`}>Attività Collaboratori</h2>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-medium ${colors.text.muted} hidden sm:inline`}>Ordina per:</span>
               <SortButton 
                 active={sortBy === 'totalActivity'} 
                 onClick={() => setSortBy('totalActivity')}

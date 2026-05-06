@@ -80,25 +80,57 @@ function BreakdownList({ title, items }: { title: string; items?: BreakdownItem[
 
   return (
     <div>
-      <p className={`text-xs font-semibold ${colors.text.secondary} mb-2`}>{title}</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <p className={`mb-2 text-xs font-semibold ${colors.text.secondary}`}>{title}</p>
+      <div className={`max-h-56 overflow-y-auto rounded-lg border ${colors.border.light} divide-y ${colors.border.light}`}>
         {items.map((item) => (
-          <div key={`${title}-${item.name}`} className={`rounded-lg ${colors.background.secondary} border ${colors.border.light} p-2`}>
-            <div className="flex items-center justify-between gap-2">
-              <span className={`text-xs font-medium ${colors.text.primary} truncate`}>
-                {item.color && (
-                  <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: item.color }} />
-                )}
-                {item.name}
-              </span>
+          <div key={`${title}-${item.name}`} className={`flex items-center justify-between gap-3 px-3 py-2 ${colors.background.card}`}>
+            <span className={`min-w-0 truncate text-xs font-medium ${colors.text.primary}`}>
+              {item.color && (
+                <span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+              )}
+              {item.name}
+            </span>
+            <div className="shrink-0 text-right">
               <span className={`text-xs font-semibold ${colors.primary.text}`}>{item.score.toFixed(2)} pt</span>
+              <p className={`text-xs ${colors.text.muted}`}>
+                {item.correct} / {item.wrong} / {item.blank}
+              </p>
             </div>
-            <p className={`text-xs ${colors.text.muted} mt-1`}>
-              {item.correct} corrette · {item.wrong} errate · {item.blank} vuote
-            </p>
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function BreakdownPreview({ title, items }: { title: string; items?: BreakdownItem[] }) {
+  if (!items?.length) return null;
+
+  const visibleItems = items.slice(0, 2);
+  const remainingCount = items.length - visibleItems.length;
+
+  return (
+    <div className="w-full text-left">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <p className={`text-xs font-semibold ${colors.text.secondary}`}>{title}</p>
+        <span className={`text-xs ${colors.text.muted}`}>{items.length}</span>
+      </div>
+      <div className="space-y-1.5">
+        {visibleItems.map((item) => (
+          <div key={`${title}-${item.name}`} className={`flex items-center justify-between gap-2 rounded-lg ${colors.background.secondary} px-2.5 py-1.5`}>
+            <span className={`min-w-0 truncate text-xs font-medium ${colors.text.primary}`}>
+              {item.color && (
+                <span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+              )}
+              {item.name}
+            </span>
+            <span className={`shrink-0 text-xs font-semibold ${colors.primary.text}`}>{item.score.toFixed(2)} pt</span>
+          </div>
+        ))}
+      </div>
+      {remainingCount > 0 && (
+        <p className={`mt-1.5 text-xs ${colors.text.muted}`}>+{remainingCount} altri dettagli</p>
+      )}
     </div>
   );
 }
@@ -329,8 +361,8 @@ export default function ClassificaPage() {
                     </p>
                     <p className={`text-xs ${colors.text.muted}`}>punti</p>
                     <div className="mt-4 w-full space-y-3">
-                      <BreakdownList title="Materie" items={podium[1].subjectBreakdown as BreakdownItem[]} />
-                      <BreakdownList title="Sezioni" items={podium[1].sectionBreakdown as BreakdownItem[]} />
+                      <BreakdownPreview title="Materie" items={podium[1].subjectBreakdown as BreakdownItem[]} />
+                      <BreakdownPreview title="Sezioni" items={podium[1].sectionBreakdown as BreakdownItem[]} />
                     </div>
                   </div>
                 </div>
@@ -360,8 +392,8 @@ export default function ClassificaPage() {
                     </p>
                     <p className={`text-xs ${colors.text.muted}`}>punti</p>
                     <div className="mt-4 w-full space-y-3">
-                      <BreakdownList title="Materie" items={podium[0].subjectBreakdown as BreakdownItem[]} />
-                      <BreakdownList title="Sezioni" items={podium[0].sectionBreakdown as BreakdownItem[]} />
+                      <BreakdownPreview title="Materie" items={podium[0].subjectBreakdown as BreakdownItem[]} />
+                      <BreakdownPreview title="Sezioni" items={podium[0].sectionBreakdown as BreakdownItem[]} />
                     </div>
                   </div>
                 </div>
@@ -391,8 +423,8 @@ export default function ClassificaPage() {
                     </p>
                     <p className={`text-xs ${colors.text.muted}`}>punti</p>
                     <div className="mt-4 w-full space-y-3">
-                      <BreakdownList title="Materie" items={podium[2].subjectBreakdown as BreakdownItem[]} />
-                      <BreakdownList title="Sezioni" items={podium[2].sectionBreakdown as BreakdownItem[]} />
+                      <BreakdownPreview title="Materie" items={podium[2].subjectBreakdown as BreakdownItem[]} />
+                      <BreakdownPreview title="Sezioni" items={podium[2].sectionBreakdown as BreakdownItem[]} />
                     </div>
                   </div>
                 </div>

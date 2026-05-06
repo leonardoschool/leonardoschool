@@ -12,6 +12,9 @@ import { sanitizeStudentOpenAnswerInput } from '@/lib/utils/studentOpenAnswer';
 import { auth } from '@/lib/firebase/config';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import SimulationResultBreakdown from './SimulationResultBreakdown';
+import CustomSelect from '@/components/ui/CustomSelect';
+import type { SelectOption } from '@/components/ui/CustomSelect';
 import {
   ArrowLeft,
   Trophy,
@@ -25,7 +28,6 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
-  BarChart3,
   Medal,
   Star,
   Edit3,
@@ -36,17 +38,37 @@ import {
 
 // --- Helper Components to reduce cognitive complexity ---
 
-// Helper functions for answer status
-function getAnswerStatusClass(isCorrect: boolean | null): string {
-  if (isCorrect === null) return 'bg-gray-100 text-gray-500 dark:bg-gray-800';
-  if (isCorrect) return 'bg-green-100 text-green-600 dark:bg-green-900/30';
-  return 'bg-red-100 text-red-600 dark:bg-red-900/30';
+type AnswerStatus = 'correct' | 'wrong' | 'blank' | 'pending';
+
+// Type for answer data
+type AnswerData = {
+  question: { subject: string; subjectColor?: string | null; section?: string | null };
+  selectedAnswerId?: string | null;
+  isCorrect: boolean | null;
+  answerText?: string | null;
+  earnedPoints?: number;
+};
+
+function getAnswerStatus(answer: AnswerData): AnswerStatus {
+  if (answer.isCorrect === true) return 'correct';
+  if (!answer.selectedAnswerId && !answer.answerText) return 'blank';
+  if (answer.isCorrect === false) return 'wrong';
+  return 'pending';
 }
 
-function getAnswerStatusIcon(isCorrect: boolean | null): React.ReactNode {
-  if (isCorrect === null) return <MinusCircle className="w-4 h-4" />;
-  if (isCorrect) return <CheckCircle className="w-4 h-4" />;
-  return <XCircle className="w-4 h-4" />;
+// Helper functions for answer status
+function getAnswerStatusClass(status: AnswerStatus): string {
+  if (status === 'correct') return 'bg-green-100 text-green-600 dark:bg-green-900/30';
+  if (status === 'wrong') return 'bg-red-100 text-red-600 dark:bg-red-900/30';
+  if (status === 'pending') return 'bg-amber-100 text-amber-600 dark:bg-amber-900/30';
+  return 'bg-gray-100 text-gray-500 dark:bg-gray-800';
+}
+
+function getAnswerStatusIcon(status: AnswerStatus): React.ReactNode {
+  if (status === 'correct') return <CheckCircle className="w-4 h-4" />;
+  if (status === 'wrong') return <XCircle className="w-4 h-4" />;
+  if (status === 'pending') return <Edit3 className="w-4 h-4" />;
+  return <MinusCircle className="w-4 h-4" />;
 }
 
 function getOpenQuestionBorderClass(isCorrect: boolean | null): string {
@@ -84,63 +106,37 @@ function formatTimeDisplay(seconds: number): string {
   return `${minutes}m ${secs}s`;
 }
 
-// Type for answer data
-type AnswerData = {
-  question: { subject: string; subjectColor?: string | null };
-  isCorrect: boolean | null;
-  answerText?: string | null;
-};
+// Helper for filtering answers
+function filterAnswersByType<T extends AnswerData>(
+  answers: T[],
+  filterType: 'all' | 'correct' | 'wrong' | 'blank' | 'pending',
+  subjectFilter: string,
+  sectionFilter: string
+): T[] {
+  return answers.filter((answer) => {
+    const status = getAnswerStatus(answer);
+    const matchesStatus = filterType === 'all' || filterType === status;
+    const matchesSubject = subjectFilter === 'all' || answer.question.subject === subjectFilter;
+    const matchesSection = sectionFilter === 'all' || answer.question.section === sectionFilter;
 
-// Helper for subject statistics calculation
-function calculateSubjectStats(answers: AnswerData[]): Array<{
-  subject: string;
-  correct: number;
-  wrong: number;
-  blank: number;
-  total: number;
-  color: string | null;
-  percentage: number;
-}> {
-  const stats: Record<string, { correct: number; wrong: number; blank: number; total: number; color: string | null }> = {};
-
-  for (const answer of answers) {
-    const subject = answer.question.subject;
-    if (!stats[subject]) {
-      stats[subject] = { correct: 0, wrong: 0, blank: 0, total: 0, color: answer.question.subjectColor || null };
-    }
-    stats[subject].total++;
-    if (answer.isCorrect === null) {
-      stats[subject].blank++;
-    } else if (answer.isCorrect) {
-      stats[subject].correct++;
-    } else {
-      stats[subject].wrong++;
-    }
-  }
-
-  return Object.entries(stats)
-    .map(([subject, data]) => ({
-      subject,
-      ...data,
-      percentage: Math.round((data.correct / data.total) * 100),
-    }))
-    .sort((a, b) => b.percentage - a.percentage);
+    return matchesStatus && matchesSubject && matchesSection;
+  });
 }
 
-// Helper for filtering answers
-function filterAnswersByType(answers: AnswerData[], filterType: 'all' | 'correct' | 'wrong' | 'blank' | 'pending'): AnswerData[] {
-  switch (filterType) {
-    case 'correct':
-      return answers.filter((a) => a.isCorrect === true);
-    case 'wrong':
-      return answers.filter((a) => a.isCorrect === false);
-    case 'blank':
-      return answers.filter((a) => a.isCorrect === null && !a.answerText);
-    case 'pending':
-      return answers.filter((a) => a.isCorrect === null && !!a.answerText);
-    default:
-      return answers;
-  }
+function getUniqueAnswerValues(answers: AnswerData[], getValue: (answer: AnswerData) => string | null | undefined) {
+  return Array.from(new Set(answers.map(getValue).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b));
+}
+
+function getEarnedPointClass(points?: number) {
+  if (!points) return colors.text.muted;
+  return points > 0 ? colors.status.success.text : colors.status.error.text;
+}
+
+function formatEarnedPoints(points?: number) {
+  return (points ?? 0).toLocaleString('it-IT', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 // Styling lookup for passed/failed states using array index (0=failed, 1=passed)
@@ -278,6 +274,8 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);
   const [showAllQuestions, setShowAllQuestions] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'correct' | 'wrong' | 'blank' | 'pending'>('all');
+  const [subjectFilter, setSubjectFilter] = useState('all');
+  const [sectionFilter, setSectionFilter] = useState('all');
 
   // Check authentication
   const { data: user, isLoading: userLoading, error: userError } = trpc.auth.me.useQuery();
@@ -321,17 +319,31 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
     { enabled: !!user && !!result }
   );
 
-  // Calculate statistics by subject
-  const subjectStats = useMemo(() => {
+  const subjectOptions = useMemo<SelectOption[]>(() => {
     if (!result?.answers) return [];
-    return calculateSubjectStats(result.answers);
+    return [
+      { value: 'all', label: 'Tutte le materie' },
+      ...getUniqueAnswerValues(result.answers, (answer) => answer.question.subject).map(
+        (s) => ({ value: s, label: s.replaceAll('_', ' ') })
+      ),
+    ];
+  }, [result]);
+
+  const sectionOptions = useMemo<SelectOption[]>(() => {
+    if (!result?.answers) return [];
+    return [
+      { value: 'all', label: 'Tutte le sezioni' },
+      ...getUniqueAnswerValues(result.answers, (answer) => answer.question.section).map(
+        (s) => ({ value: s, label: s })
+      ),
+    ];
   }, [result]);
 
   // Filter questions
   const filteredAnswers = useMemo(() => {
     if (!result?.answers) return [];
-    return filterAnswersByType(result.answers, filterType);
-  }, [result, filterType]);
+    return filterAnswersByType(result.answers, filterType, subjectFilter, sectionFilter);
+  }, [result, filterType, subjectFilter, sectionFilter]);
 
   if (userLoading || isLoading) {
     return <PageLoader />;
@@ -357,7 +369,7 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
     );
   }
 
-  const { id: currentResultId, simulation, score, totalScore, correctAnswers, wrongAnswers, blankAnswers, pendingOpenAnswers = 0, timeSpent, passed } = result;
+  const { id: currentResultId, simulation, score, totalScore, correctAnswers, wrongAnswers, blankAnswers, pendingOpenAnswers = 0, timeSpent, passed, breakdowns } = result;
   const showSelfCorrection = simulation.showCorrectAnswers;
 
   return (
@@ -470,57 +482,10 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
         </div>
       </div>
 
-      {/* Subject breakdown */}
-      {subjectStats.length > 0 && (
-        <div className={`rounded-xl ${colors.background.card} border ${colors.border.light} p-6 mb-8`}>
-          <h2 className={`text-lg font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
-            <BarChart3 className="w-5 h-5" />
-            Risultati per Materia
-          </h2>
-          <div className="space-y-4">
-            {subjectStats.map(({ subject, correct, wrong, blank, total, percentage }) => (
-              <div key={subject}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className={`font-medium ${colors.text.primary}`}>
-                    {subject.replaceAll('_', ' ')}
-                  </span>
-                  <span className={`text-sm ${colors.text.muted}`}>
-                    {correct}/{total} corrette ({percentage}%)
-                  </span>
-                </div>
-                <div className="h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden flex">
-                  <div
-                    className="bg-green-500"
-                    style={{ width: `${(correct / total) * 100}%` }}
-                  />
-                  <div
-                    className="bg-red-400"
-                    style={{ width: `${(wrong / total) * 100}%` }}
-                  />
-                  <div
-                    className="bg-gray-400"
-                    style={{ width: `${(blank / total) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center gap-4 mt-4 text-xs">
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 rounded bg-green-500" />
-              <span className={colors.text.muted}>Corrette</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 rounded bg-red-400" />
-              <span className={colors.text.muted}>Errate</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 rounded bg-gray-400" />
-              <span className={colors.text.muted}>Non date</span>
-            </div>
-          </div>
-        </div>
-      )}
+      <SimulationResultBreakdown
+        subjectBreakdown={breakdowns?.subjectBreakdown}
+        sectionBreakdown={breakdowns?.sectionBreakdown}
+      />
 
       {/* Leaderboard */}
       {leaderboardData && leaderboardData.leaderboard.length > 0 && (
@@ -581,7 +546,7 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                 { value: 'correct', label: 'Corrette', count: correctAnswers },
                 { value: 'wrong', label: 'Errate', count: wrongAnswers },
                 { value: 'blank', label: 'Non date', count: blankAnswers - pendingOpenAnswers },
-                ...(pendingOpenAnswers > 0 ? [{ value: 'pending', label: '⚡ Da valutare', count: pendingOpenAnswers }] : []),
+                ...(pendingOpenAnswers > 0 ? [{ value: 'pending', label: 'Da valutare', count: pendingOpenAnswers }] : []),
               ].map((filter) => {
                 const getFilterButtonClass = (): string => {
                   if (filterType === filter.value) {
@@ -604,27 +569,57 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
               );
               })}
             </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <span className={`block text-xs font-medium ${colors.text.muted}`}>Materia</span>
+                <CustomSelect
+                  id="filter-subject"
+                  value={subjectFilter}
+                  options={subjectOptions}
+                  onChange={setSubjectFilter}
+                  size="sm"
+                />
+              </div>
+
+              {sectionOptions.length > 1 && (
+                <div className="space-y-1.5">
+                  <span className={`block text-xs font-medium ${colors.text.muted}`}>Sezione</span>
+                  <CustomSelect
+                    id="filter-section"
+                    value={sectionFilter}
+                    options={sectionOptions}
+                    onChange={setSectionFilter}
+                    size="sm"
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="divide-y divide-gray-200 dark:divide-gray-700">
             {filteredAnswers.map((answer: {
               id: string;
+              order?: number;
               question: {
                 id: string;
                 text: string;
                 textLatex?: string | null;
                 subject: string;
                 subjectColor?: string | null;
+                section?: string | null;
                 answers: { id: string; text: string; textLatex?: string | null; isCorrect: boolean }[];
                 explanation?: string;
               };
               selectedAnswerId: string | null;
               answerText?: string | null;
               isCorrect: boolean | null;
+              earnedPoints?: number;
               timeSpent: number;
-            }, index: number) => {
+            }) => {
               const isExpanded = showAllQuestions || expandedQuestion === answer.id;
               const subjectColor = answer.question.subjectColor;
+              const answerStatus = getAnswerStatus(answer);
               const isOpenQuestion = !!answer.answerText && answer.question.answers.length === 0;
               const canSelfCorrect = isOpenQuestion && answer.isCorrect === null && simulation.showCorrectAnswers;
 
@@ -635,14 +630,14 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                     className="w-full text-left"
                   >
                     <div className="flex items-start gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getAnswerStatusClass(answer.isCorrect)}`}>
-                        {getAnswerStatusIcon(answer.isCorrect)}
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getAnswerStatusClass(answerStatus)}`}>
+                        {getAnswerStatusIcon(answerStatus)}
                       </div>
                       <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
                             <span className={`text-sm font-medium ${colors.text.primary}`}>
-                              Domanda {index + 1}
+                              Domanda {answer.order ?? '-'}
                             </span>
                             <span 
                               className="text-xs px-2 py-0.5 rounded-full text-white"
@@ -650,10 +645,20 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                             >
                               {answer.question.subject.replaceAll('_', ' ')}
                             </span>
+                            {answer.question.section && (
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${colors.background.secondary} ${colors.text.muted}`}>
+                                {answer.question.section}
+                              </span>
+                            )}
                           </div>
-                          {!showAllQuestions && (
-                            isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
-                          )}
+                          <div className="flex shrink-0 items-center gap-2">
+                            <span className={`text-xs font-semibold ${getEarnedPointClass(answer.earnedPoints)}`}>
+                              {formatEarnedPoints(answer.earnedPoints)} pt
+                            </span>
+                            {!showAllQuestions && (
+                              isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                            )}
+                          </div>
                         </div>
                         <div className={`text-sm ${colors.text.secondary} line-clamp-1 mt-1`}>
                           {answer.question.textLatex ? (

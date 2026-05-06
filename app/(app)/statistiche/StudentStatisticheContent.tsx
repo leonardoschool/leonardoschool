@@ -4,6 +4,7 @@ import { trpc } from '@/lib/trpc/client';
 import { colors, getSubjectColor } from '@/lib/theme/colors';
 import { PageLoader } from '@/components/ui/loaders';
 import Link from 'next/link';
+import SectionPerformanceCard from './SectionPerformanceCard';
 import {
   BarChart3,
   Target,
@@ -163,7 +164,7 @@ export default function StudentStatisticheContent() {
       </div>
 
       {/* Main Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 sm:p-6 shadow-sm border border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-3 mb-3">
             <div className={`p-2.5 rounded-xl ${colors.primary.gradient}`}>
@@ -175,35 +176,6 @@ export default function StudentStatisticheContent() {
             {overview.totalSimulations}
           </p>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">completate</p>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 sm:p-6 shadow-sm border border-gray-100 dark:border-gray-700">
-          <div className="flex items-center gap-3 mb-4">
-            <BarChart3 className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Performance per Sezione</h3>
-          </div>
-          {sectionStats?.length > 0 ? (
-            <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-              {sectionStats.map((section) => (
-                <div key={section.section} className="p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="font-medium text-gray-800 dark:text-white">{section.section}</p>
-                    <p className={`font-semibold ${colors.primary.text}`}>{section.accuracy.toFixed(1)}%</p>
-                  </div>
-                  <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
-                    <div className={`h-full ${colors.primary.bg}`} style={{ width: `${Math.min(section.accuracy, 100)}%` }} />
-                  </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                    {section.correctAnswers} corrette · {section.wrongAnswers} errate · {section.blankAnswers} vuote · {section.score.toFixed(2)} punti
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="h-64 flex items-center justify-center text-gray-500 dark:text-gray-400">
-              Dati sezione non disponibili
-            </div>
-          )}
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 sm:p-6 shadow-sm border border-gray-100 dark:border-gray-700">
@@ -258,6 +230,8 @@ export default function StudentStatisticheContent() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">giorni consecutivi</p>
         </div>
       </div>
+
+      <SectionPerformanceCard sectionStats={sectionStats} />
 
       {/* Secondary Stats Row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">

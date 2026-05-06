@@ -321,6 +321,7 @@ export const studentSimulationFilterSchema = z.object({
   pageSize: z.number().int().min(1).max(100).default(20),
   
   // Filters
+  search: z.string().optional(),
   type: SimulationTypeEnum.optional(),
   status: z.enum(['available', 'in_progress', 'completed', 'expired']).optional(),
   isOfficial: z.boolean().optional(),

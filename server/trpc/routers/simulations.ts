@@ -887,6 +887,155 @@ interface ScoringResult {
   evaluatedAnswers: EvaluatedAnswerResult[];
 }
 
+type ResultAnswerDetails = {
+  questionId: string;
+  answerId: string | null;
+  answerText: string | null;
+  isCorrect: boolean | null;
+  earnedPoints: number;
+  timeSpent: number;
+};
+
+type ResultQuestionForBreakdown = {
+  id: string;
+  subject: { name: string; color: string | null } | null;
+};
+
+type SimulationSectionForBreakdown = {
+  name: string;
+  questionIds: string[];
+};
+
+type ResultBreakdownAccumulator = {
+  name: string;
+  color: string | null;
+  totalQuestions: number;
+  correctAnswers: number;
+  wrongAnswers: number;
+  blankAnswers: number;
+  score: number;
+};
+
+function parseResultAnswers(value: Prisma.JsonValue): ResultAnswerDetails[] {
+  const rawAnswers = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object' && 'items' in value && Array.isArray((value as { items?: unknown }).items)
+      ? (value as { items: unknown[] }).items
+      : [];
+
+  return rawAnswers.flatMap((rawAnswer) => {
+    if (!rawAnswer || typeof rawAnswer !== 'object' || Array.isArray(rawAnswer)) return [];
+    const answer = rawAnswer as Record<string, unknown>;
+    if (typeof answer.questionId !== 'string') return [];
+
+    return [{
+      questionId: answer.questionId,
+      answerId: typeof answer.answerId === 'string' ? answer.answerId : null,
+      answerText: typeof answer.answerText === 'string' ? answer.answerText : null,
+      isCorrect: typeof answer.isCorrect === 'boolean' ? answer.isCorrect : null,
+      earnedPoints: typeof answer.earnedPoints === 'number' ? answer.earnedPoints : 0,
+      timeSpent: typeof answer.timeSpent === 'number' ? answer.timeSpent : 0,
+    }];
+  });
+}
+
+function parseSimulationSections(sectionsValue: Prisma.JsonValue | null): SimulationSectionForBreakdown[] {
+  if (!Array.isArray(sectionsValue)) return [];
+
+  return sectionsValue.flatMap((sectionValue, index) => {
+    if (!sectionValue || typeof sectionValue !== 'object' || Array.isArray(sectionValue)) return [];
+    const section = sectionValue as Record<string, unknown>;
+    const questionIds = Array.isArray(section.questionIds)
+      ? section.questionIds.filter((questionId): questionId is string => typeof questionId === 'string')
+      : [];
+
+    return [{
+      name: typeof section.name === 'string'
+        ? section.name
+        : typeof section.title === 'string'
+          ? section.title
+          : `Sezione ${index + 1}`,
+      questionIds,
+    }];
+  });
+}
+
+function buildQuestionSectionMap(sections: SimulationSectionForBreakdown[]) {
+  const questionSections = new Map<string, string>();
+
+  for (const section of sections) {
+    for (const questionId of section.questionIds) {
+      questionSections.set(questionId, section.name);
+    }
+  }
+
+  return questionSections;
+}
+
+function addAnswerToBreakdown(accumulator: ResultBreakdownAccumulator, answer: ResultAnswerDetails) {
+  accumulator.totalQuestions += 1;
+  accumulator.score += answer.earnedPoints;
+  if (answer.isCorrect === true) accumulator.correctAnswers += 1;
+  else if (!answer.answerId && !answer.answerText) accumulator.blankAnswers += 1;
+  else if (answer.isCorrect === false) accumulator.wrongAnswers += 1;
+  else accumulator.blankAnswers += 1;
+}
+
+function finalizeResultBreakdown(items: Iterable<ResultBreakdownAccumulator>) {
+  return Array.from(items)
+    .map((item) => ({
+      ...item,
+      accuracy: item.totalQuestions > 0 ? (item.correctAnswers / item.totalQuestions) * 100 : 0,
+    }))
+    .sort((a, b) => b.totalQuestions - a.totalQuestions || a.name.localeCompare(b.name));
+}
+
+function buildResultBreakdowns(
+  answers: ResultAnswerDetails[],
+  questions: ResultQuestionForBreakdown[],
+  questionSections: Map<string, string>
+) {
+  const questionsById = new Map(questions.map((question) => [question.id, question]));
+  const subjects = new Map<string, ResultBreakdownAccumulator>();
+  const sections = new Map<string, ResultBreakdownAccumulator>();
+
+  for (const answer of answers) {
+    const question = questionsById.get(answer.questionId);
+    const subjectName = question?.subject?.name ?? 'Senza materia';
+    const subject = subjects.get(subjectName) ?? {
+      name: subjectName,
+      color: question?.subject?.color ?? null,
+      totalQuestions: 0,
+      correctAnswers: 0,
+      wrongAnswers: 0,
+      blankAnswers: 0,
+      score: 0,
+    };
+    addAnswerToBreakdown(subject, answer);
+    subjects.set(subjectName, subject);
+
+    const sectionName = questionSections.get(answer.questionId);
+    if (sectionName) {
+      const section = sections.get(sectionName) ?? {
+        name: sectionName,
+        color: null,
+        totalQuestions: 0,
+        correctAnswers: 0,
+        wrongAnswers: 0,
+        blankAnswers: 0,
+        score: 0,
+      };
+      addAnswerToBreakdown(section, answer);
+      sections.set(sectionName, section);
+    }
+  }
+
+  return {
+    subjectBreakdown: finalizeResultBreakdown(subjects.values()),
+    sectionBreakdown: finalizeResultBreakdown(sections.values()),
+  };
+}
+
 /**
  * Evaluate a single submission answer and return scoring data
  */
@@ -1678,6 +1827,16 @@ function processSelfPracticeToCards(
   }
   
   return cards;
+}
+
+function filterSimulationCardsBySearch(cards: SimulationCard[], search?: string) {
+  const searchTerm = search?.trim().toLowerCase();
+  if (!searchTerm) return cards;
+
+  return cards.filter((card) => {
+    const searchableValues = [card.title, card.description, card.createdBy?.name, card.assignmentNotes];
+    return searchableValues.some((value) => value?.toLowerCase().includes(searchTerm));
+  });
 }
 
 /**
@@ -3367,7 +3526,7 @@ export const simulationsRouter = router({
   getAvailableSimulations: studentProcedure
     .input(studentSimulationFilterSchema)
     .query(async ({ ctx, input }) => {
-      const { page, pageSize, type, status, isOfficial, sortBy, sortOrder, selfCreated, assignedToMe } = input;
+      const { page, pageSize, search, type, status, isOfficial, sortBy, sortOrder, selfCreated, assignedToMe } = input;
 
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
       const studentId = student.id;
@@ -3434,7 +3593,10 @@ export const simulationsRouter = router({
         status
       );
 
-      const simulationCards = [...assignmentCards, ...publicCards, ...selfPracticeCards];
+      const simulationCards = filterSimulationCardsBySearch(
+        [...assignmentCards, ...publicCards, ...selfPracticeCards],
+        search
+      );
 
       // Sort cards using helper
       sortSimulationCards(simulationCards, sortBy, sortOrder);
@@ -4128,6 +4290,7 @@ export const simulationsRouter = router({
                 showCorrectAnswers: true,
                 allowReview: true,
                 isRepeatable: true,
+                sections: true,
               },
             },
             student: {
@@ -4174,6 +4337,7 @@ export const simulationsRouter = router({
                 showCorrectAnswers: true,
                 allowReview: true,
                 isRepeatable: true,
+                sections: true,
               },
             },
             student: {
@@ -4200,38 +4364,11 @@ export const simulationsRouter = router({
         ? result.simulation.maxScore
         : (result.simulation.totalQuestions ?? 0) * (result.simulation.correctPoints ?? 1.5);
 
-      // Check if review is allowed
-      if (!result.simulation.allowReview) {
-        return {
-          id: result.id,
-          simulation: result.simulation,
-          score: result.totalScore ?? 0,
-          totalScore: effectiveMaxScore,
-          correctAnswers: result.correctAnswers ?? 0,
-          wrongAnswers: result.wrongAnswers ?? 0,
-          blankAnswers: result.blankAnswers ?? 0,
-          pendingOpenAnswers: result.pendingOpenAnswers ?? 0,
-          timeSpent: result.durationSeconds ?? 0,
-          passed: result.simulation.passingScore 
-            ? (result.totalScore ?? 0) >= result.simulation.passingScore 
-            : null,
-          answers: [],
-          canReview: false,
-        };
-      }
-
-      // Get question details for review
-      const answersData = result.answers as Array<{
-        questionId: string;
-        answerId: string | null;
-        answerText: string | null;
-        isCorrect: boolean | null;
-        earnedPoints: number;
-        timeSpent: number;
-      }>;
-
-      // Fetch all questions with their answers
+      const answersData = parseResultAnswers(result.answers);
       const questionIds = answersData.map(a => a.questionId);
+      const sections = parseSimulationSections(result.simulation.sections);
+      const questionSections = buildQuestionSectionMap(sections);
+
       const questions = await ctx.prisma.question.findMany({
         where: { id: { in: questionIds } },
         include: {
@@ -4248,17 +4385,42 @@ export const simulationsRouter = router({
         },
       });
 
+      const breakdowns = buildResultBreakdowns(answersData, questions, questionSections);
+
+      // Check if review is allowed
+      if (!result.simulation.allowReview) {
+        return {
+          id: result.id,
+          simulation: result.simulation,
+          score: result.totalScore ?? 0,
+          totalScore: effectiveMaxScore,
+          correctAnswers: result.correctAnswers ?? 0,
+          wrongAnswers: result.wrongAnswers ?? 0,
+          blankAnswers: result.blankAnswers ?? 0,
+          pendingOpenAnswers: result.pendingOpenAnswers ?? 0,
+          timeSpent: result.durationSeconds ?? 0,
+          passed: result.simulation.passingScore 
+            ? (result.totalScore ?? 0) >= result.simulation.passingScore 
+            : null,
+          answers: [],
+          breakdowns,
+          canReview: false,
+        };
+      }
+
       // Build answers with question details
-      const detailedAnswers = answersData.map(answer => {
+      const detailedAnswers = answersData.map((answer, index) => {
         const question = questions.find(q => q.id === answer.questionId);
         return {
           id: answer.questionId,
+          order: index + 1,
           question: {
             id: question?.id || '',
             text: question?.text || '',
             textLatex: question?.textLatex || null,
             subject: question?.subject?.name || 'UNKNOWN',
             subjectColor: question?.subject?.color || null,
+            section: questionSections.get(answer.questionId) || null,
             explanation: question?.generalExplanation || question?.correctExplanation || null,
             answers: question?.answers || [],
           },
@@ -4283,6 +4445,7 @@ export const simulationsRouter = router({
         passed: result.simulation.passingScore 
           ? (result.totalScore ?? 0) >= result.simulation.passingScore 
           : null,
+        breakdowns,
         answers: detailedAnswers,
         canReview: true,
       };
@@ -5363,14 +5526,20 @@ export const simulationsRouter = router({
 
       const buildBreakdowns = (answersValue: Prisma.JsonValue) => {
         const answers = Array.isArray(answersValue)
-          ? answersValue as Array<{ questionId?: string; isCorrect?: boolean | null; earnedPoints?: number }>
+          ? answersValue as Array<{ questionId?: string; answerId?: string | null; answerText?: string | null; isCorrect?: boolean | null; earnedPoints?: number }>
           : [];
         const subjects = new Map<string, { name: string; color: string | null; correct: number; wrong: number; blank: number; score: number }>();
         const sections = new Map<string, { name: string; correct: number; wrong: number; blank: number; score: number }>();
 
         answers.forEach((answer) => {
           if (!answer.questionId) return;
-          const category = answer.isCorrect === true ? 'correct' : answer.isCorrect === false ? 'wrong' : 'blank';
+          const category = answer.isCorrect === true
+            ? 'correct'
+            : !answer.answerId && !answer.answerText
+              ? 'blank'
+              : answer.isCorrect === false
+                ? 'wrong'
+                : 'blank';
           const earnedPoints = typeof answer.earnedPoints === 'number' ? answer.earnedPoints : 0;
           const subject = questionSubjects.get(answer.questionId);
           if (subject) {

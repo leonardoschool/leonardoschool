@@ -1,5 +1,6 @@
 'use client';
 
+import { keepPreviousData } from '@tanstack/react-query';
 import { useState, useMemo, useEffect } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
@@ -103,20 +104,25 @@ export default function CollaboratorQuestionsContent() {
   }, [search]);
 
   // Fetch questions
-  const { data: questionsData, isLoading } = trpc.questions.getQuestions.useQuery({
-    page,
-    pageSize,
-    search: debouncedSearch || undefined,
-    subjectId: subjectId || undefined,
-    topicId: topicId || undefined,
-    type: type || undefined,
-    status: status || undefined,
-    difficulty: difficulty || undefined,
-    tagIds: selectedTagId ? [selectedTagId] : undefined,
-    includeAnswers: false,
-    includeDrafts: true,
-    includeArchived: true,
-  });
+  const { data: questionsData, isLoading } = trpc.questions.getQuestions.useQuery(
+    {
+      page,
+      pageSize,
+      search: debouncedSearch || undefined,
+      subjectId: subjectId || undefined,
+      topicId: topicId || undefined,
+      type: type || undefined,
+      status: status || undefined,
+      difficulty: difficulty || undefined,
+      tagIds: selectedTagId ? [selectedTagId] : undefined,
+      includeAnswers: false,
+      includeDrafts: true,
+      includeArchived: true,
+    },
+    {
+      placeholderData: keepPreviousData,
+    }
+  );
 
   // Fetch subjects for filter
   const { data: subjects } = trpc.materials.getAllSubjects.useQuery();
