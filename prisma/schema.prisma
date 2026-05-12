@@ -282,6 +282,9 @@ model User {
   updatedAt   DateTime  @updatedAt
   lastLoginAt DateTime?
 
+  // Single-device session enforcement (STUDENT only)
+  activeSessionToken String? @unique
+
   // Push notifications
   expoPushToken String? // Expo push notification token for mobile app
 

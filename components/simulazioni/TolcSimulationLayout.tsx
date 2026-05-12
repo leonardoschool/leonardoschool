@@ -550,19 +550,21 @@ export default function TolcSimulationLayout({
             {/* Legend */}
             <div className="mt-6 space-y-2 w-full">
               <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-cyan-500"></span>
-                <span className="text-sm text-gray-600 dark:text-gray-400">Tempo sezione</span>
+                <span className="w-4 h-4 rounded bg-gray-800 dark:bg-white ring-2 ring-gray-800 dark:ring-white shrink-0"></span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">Domanda corrente</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                <span className="w-4 h-4 rounded bg-green-500 shrink-0"></span>
                 <span className="text-sm text-gray-600 dark:text-gray-400">Risposta data</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded border-2 border-red-400 bg-white dark:bg-gray-700"></span>
+                <span className="relative w-4 h-4 rounded bg-white dark:bg-gray-700 shrink-0">
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-gray-800" />
+                </span>
                 <span className="text-sm text-gray-600 dark:text-gray-400">Senza risposta</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded border-2 border-orange-400 bg-orange-100 dark:bg-orange-900"></span>
+                <span className="w-4 h-4 rounded border-2 border-orange-400 bg-orange-100 dark:bg-orange-900 shrink-0"></span>
                 <span className="text-sm text-gray-600 dark:text-gray-400">Segnalata</span>
               </div>
             </div>

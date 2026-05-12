@@ -8,8 +8,9 @@ export const ALLOWED_TAGS = new Set([
   'p', 'br', 'b', 'i', 'u', 'strong', 'em', 'span', 'div',
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
   'ul', 'ol', 'li',
-  'table', 'thead', 'tbody', 'tr', 'th', 'td',
+  'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption',
   'a', 'blockquote', 'pre', 'code',
+  'img', 'hr',
 ]);
 
 // Allowed attributes per tag
@@ -21,6 +22,7 @@ const ALLOWED_ATTRIBUTES: Record<string, Set<string>> = {
   table: new Set(['class', 'style', 'border', 'cellpadding', 'cellspacing']),
   th: new Set(['class', 'style', 'colspan', 'rowspan']),
   td: new Set(['class', 'style', 'colspan', 'rowspan']),
+  img: new Set(['src', 'alt', 'width', 'height', 'style', 'class']),
 };
 
 // Dangerous CSS properties that could be used for attacks

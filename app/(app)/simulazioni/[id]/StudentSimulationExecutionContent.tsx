@@ -351,6 +351,14 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     };
   }, [hasStarted, simulation]);
 
+  // Stop timer when submission starts (prevents negative display)
+  useEffect(() => {
+    if (isSubmitting && timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, [isSubmitting]);
+
   // Keep answersRef in sync with answers state (for heartbeat interval)
   useEffect(() => {
     answersRef.current = answers;
@@ -703,15 +711,20 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     if (!hasSectionsMode || !currentSection) return null;
     const sectionDuration = currentSection.durationMinutes * 60;
     const sectionTimeUsed = sectionTimes[currentSectionIndex] || 0;
-    return sectionDuration - sectionTimeUsed;
+    return Math.max(0, sectionDuration - sectionTimeUsed);
   }, [hasSectionsMode, currentSection, currentSectionIndex, sectionTimes]);
 
   // Auto-advance section when section time runs out
   useEffect(() => {
     if (!hasSectionsMode || sectionTimeRemaining === null) return;
-    if (sectionTimeRemaining <= 0 && hasStarted && !completedSections.has(currentSectionIndex)) {
+    if (sectionTimeRemaining === 0 && hasStarted && !completedSections.has(currentSectionIndex)) {
       showError('Tempo sezione scaduto', `Il tempo per "${currentSection?.name}" è terminato`);
-      handleCompleteSection();
+      if (currentSectionIndex >= sections.length - 1) {
+        // Last section expired: submit immediately without confirmation dialog
+        autoSubmitRef.current?.();
+      } else {
+        handleCompleteSection();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sectionTimeRemaining, hasStarted, hasSectionsMode, currentSectionIndex]);
@@ -754,17 +767,16 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
 
   // Time remaining
   const timeRemaining = simulation?.durationMinutes
-    ? simulation.durationMinutes * 60 - timeSpent
+    ? Math.max(0, simulation.durationMinutes * 60 - timeSpent)
     : null;
 
   // Auto-submit when time runs out
   useEffect(() => {
-    if (timeRemaining !== null && timeRemaining <= 0 && hasStarted && !isSubmitting) {
+    if (timeRemaining !== null && timeRemaining === 0 && hasStarted && !isSubmitting) {
       showError('Tempo scaduto', 'La simulazione verrà inviata automaticamente');
-      handleSubmit();
+      autoSubmitRef.current?.();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeRemaining, hasStarted, isSubmitting]);
+  }, [timeRemaining, hasStarted, isSubmitting, showError]);
 
   // Loading state
   if (isLoading) {

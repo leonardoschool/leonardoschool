@@ -28,13 +28,13 @@ const isAuthed = t.middleware(({ ctx, next }) => {
   if (!ctx.user) {
     throw new TRPCError({
       code: 'UNAUTHORIZED',
-      message: 'Not authenticated',
+      message: ctx.sessionInvalidated ? 'SESSIONE_TERMINATA' : 'Not authenticated',
     });
   }
   return next({
     ctx: {
       ...ctx,
-      user: ctx.user, // Type-safe user
+      user: ctx.user,
     },
   });
 });

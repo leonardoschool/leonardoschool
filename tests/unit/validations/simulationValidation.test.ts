@@ -476,9 +476,9 @@ import {
   bulkPaperResultsSchema,
   // Smart random
   SmartRandomPresetEnum,
-  DifficultyMixEnum,
+  SectionDifficultyLevelEnum,
   smartRandomGenerationSchema,
-  getDifficultyRatios,
+  getDifficultyRatiosFromLevels,
   // Additional schemas
   createSimulationWithQuestionsSchema,
   createSimulationAutoSchema,
@@ -853,17 +853,15 @@ describe('simulationValidation - Smart Random Schemas', () => {
     });
   });
 
-  describe('DifficultyMixEnum', () => {
-    it('should accept valid difficulty mixes', () => {
-      expect(DifficultyMixEnum.safeParse('BALANCED').success).toBe(true);
-      expect(DifficultyMixEnum.safeParse('EASY_FOCUS').success).toBe(true);
-      expect(DifficultyMixEnum.safeParse('HARD_FOCUS').success).toBe(true);
-      expect(DifficultyMixEnum.safeParse('MEDIUM_ONLY').success).toBe(true);
-      expect(DifficultyMixEnum.safeParse('MIXED').success).toBe(true);
+  describe('SectionDifficultyLevelEnum', () => {
+    it('should accept valid difficulty levels', () => {
+      expect(SectionDifficultyLevelEnum.safeParse('EASY').success).toBe(true);
+      expect(SectionDifficultyLevelEnum.safeParse('MEDIUM').success).toBe(true);
+      expect(SectionDifficultyLevelEnum.safeParse('HARD').success).toBe(true);
     });
 
-    it('should reject invalid difficulty mixes', () => {
-      expect(DifficultyMixEnum.safeParse('VERY_HARD').success).toBe(false);
+    it('should reject invalid difficulty levels', () => {
+      expect(SectionDifficultyLevelEnum.safeParse('VERY_HARD').success).toBe(false);
     });
   });
 
@@ -872,7 +870,7 @@ describe('simulationValidation - Smart Random Schemas', () => {
       const result = smartRandomGenerationSchema.safeParse({
         totalQuestions: 30,
         preset: 'BALANCED',
-        difficultyMix: 'BALANCED',
+        difficultyLevels: ['EASY', 'MEDIUM'],
       });
       expect(result.success).toBe(true);
     });
@@ -891,7 +889,7 @@ describe('simulationValidation - Smart Random Schemas', () => {
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.preset).toBe('BALANCED');
-        expect(result.data.difficultyMix).toBe('BALANCED');
+        expect(result.data.difficultyLevels).toEqual(['EASY', 'MEDIUM', 'HARD']);
         expect(result.data.avoidRecentlyUsed).toBe(true);
         expect(result.data.maximizeTopicCoverage).toBe(true);
         expect(result.data.preferRecentQuestions).toBe(false);
@@ -926,36 +924,36 @@ describe('simulationValidation - Smart Random Schemas', () => {
     });
   });
 
-  describe('getDifficultyRatios', () => {
-    it('should return correct ratios for BALANCED', () => {
-      const ratios = getDifficultyRatios('BALANCED');
-      expect(ratios).toEqual({ EASY: 0.30, MEDIUM: 0.50, HARD: 0.20 });
+  describe('getDifficultyRatiosFromLevels', () => {
+    it('should return equal shares for all three levels', () => {
+      const ratios = getDifficultyRatiosFromLevels(['EASY', 'MEDIUM', 'HARD']);
+      expect(ratios.EASY).toBeCloseTo(1 / 3);
+      expect(ratios.MEDIUM).toBeCloseTo(1 / 3);
+      expect(ratios.HARD).toBeCloseTo(1 / 3);
     });
 
-    it('should return correct ratios for EASY_FOCUS', () => {
-      const ratios = getDifficultyRatios('EASY_FOCUS');
-      expect(ratios).toEqual({ EASY: 0.50, MEDIUM: 0.40, HARD: 0.10 });
+    it('should return 1.0 for a single level', () => {
+      expect(getDifficultyRatiosFromLevels(['EASY'])).toEqual({ EASY: 1, MEDIUM: 0, HARD: 0 });
+      expect(getDifficultyRatiosFromLevels(['MEDIUM'])).toEqual({ EASY: 0, MEDIUM: 1, HARD: 0 });
+      expect(getDifficultyRatiosFromLevels(['HARD'])).toEqual({ EASY: 0, MEDIUM: 0, HARD: 1 });
     });
 
-    it('should return correct ratios for HARD_FOCUS', () => {
-      const ratios = getDifficultyRatios('HARD_FOCUS');
-      expect(ratios).toEqual({ EASY: 0.10, MEDIUM: 0.40, HARD: 0.50 });
+    it('should return 0.5 each for two levels', () => {
+      const ratiosEM = getDifficultyRatiosFromLevels(['EASY', 'MEDIUM']);
+      expect(ratiosEM).toEqual({ EASY: 0.5, MEDIUM: 0.5, HARD: 0 });
+
+      const ratiosEH = getDifficultyRatiosFromLevels(['EASY', 'HARD']);
+      expect(ratiosEH).toEqual({ EASY: 0.5, MEDIUM: 0, HARD: 0.5 });
+
+      const rationsMH = getDifficultyRatiosFromLevels(['MEDIUM', 'HARD']);
+      expect(rationsMH).toEqual({ EASY: 0, MEDIUM: 0.5, HARD: 0.5 });
     });
 
-    it('should return correct ratios for MEDIUM_ONLY', () => {
-      const ratios = getDifficultyRatios('MEDIUM_ONLY');
-      expect(ratios).toEqual({ EASY: 0, MEDIUM: 1.0, HARD: 0 });
-    });
-
-    it('should return correct ratios for MIXED', () => {
-      const ratios = getDifficultyRatios('MIXED');
-      expect(ratios).toEqual({ EASY: 0.33, MEDIUM: 0.34, HARD: 0.33 });
-    });
-
-    it('should return default BALANCED for unknown type', () => {
-      // TypeScript would prevent this, but testing runtime behavior
-      const ratios = getDifficultyRatios('UNKNOWN' as 'BALANCED');
-      expect(ratios).toEqual({ EASY: 0.30, MEDIUM: 0.50, HARD: 0.20 });
+    it('should default to all three when array is empty', () => {
+      const ratios = getDifficultyRatiosFromLevels([]);
+      expect(ratios.EASY).toBeCloseTo(1 / 3);
+      expect(ratios.MEDIUM).toBeCloseTo(1 / 3);
+      expect(ratios.HARD).toBeCloseTo(1 / 3);
     });
   });
 });

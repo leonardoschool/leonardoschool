@@ -11,6 +11,7 @@ import { Spinner, ButtonLoader } from '@/components/ui/loaders';
 import { Portal } from '@/components/ui/Portal';
 import Checkbox from '@/components/ui/Checkbox';
 import ContractContentEditor from '@/components/admin/contracts/ContractContentEditor';
+import { uploadContractImages } from '@/lib/utils/contractImageUpload';
 import { getContractPlaceholders } from '@/lib/constants/contractPlaceholders';
 import {
   Users,
@@ -569,14 +570,15 @@ function AssignContractModal({
     setCompensation('');
   };
 
-  const handleAssign = () => {
+  const handleAssign = async () => {
     if (!selectedTemplate) return;
     const isoStart = toIsoDate(startDate);
     const isoEnd = toIsoDate(endDate);
     const compNum = compensation ? parseFloat(compensation) : NaN;
+    const processedContent = await uploadContractImages(customContent);
     onAssign({
       templateId: selectedTemplate,
-      customContent: customContent || undefined,
+      customContent: processedContent || undefined,
       customPrice: customPrice ? parseFloat(customPrice) : undefined,
       adminNotes: adminNotes || undefined,
       expiresInDays,

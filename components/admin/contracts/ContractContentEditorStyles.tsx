@@ -77,6 +77,20 @@ export function ContractContentEditorStyles() {
         color: rgb(107 114 128);
         pointer-events: none;
       }
+
+      .contract-rich-editor img {
+        max-width: 100%;
+        height: auto;
+        margin: 0.5rem 0;
+        display: block;
+        cursor: pointer;
+        border-radius: 4px;
+      }
+
+      .contract-rich-editor img.contract-img-selected {
+        outline: 2px solid ${colors.primary.main};
+        outline-offset: 2px;
+      }
     `}</style>
   );
 }

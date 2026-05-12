@@ -9,6 +9,7 @@ export async function POST() {
     response.cookies.delete('auth-token');
     response.cookies.delete('user-role');
     response.cookies.delete('profile-completed');
+    response.cookies.delete('session-device-token');
 
     return response;
   } catch (error) {

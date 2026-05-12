@@ -20,6 +20,7 @@ import {
   Heading2,
   Heading3,
   Highlighter,
+  ImagePlus,
   IndentDecrease,
   IndentIncrease,
   Italic,
@@ -113,8 +114,14 @@ export function ContractContentEditor({
   const [textColor, setTextColor] = useState<string>(colors.contractEditor.textPalette[0].value);
   const [highlightColor, setHighlightColor] = useState<string>(colors.contractEditor.highlightPalette[0].value);
   const [toolbarState, setToolbarState] = useState<ToolbarState>(initialToolbarState);
+  const [showResizePanel, setShowResizePanel] = useState(false);
+  const [imageWidthPct, setImageWidthPct] = useState(50);
+  const [imageAlign, setImageAlign] = useState<'left' | 'center' | 'right'>('center');
   const editorRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const selectedImageRef = useRef<HTMLImageElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const savedRangeRef = useRef<Range | null>(null);
 
   useEffect(() => {
     if (mode !== 'visual' || !editorRef.current) return;
@@ -235,6 +242,101 @@ export function ContractContentEditor({
     insertHtml('<p><br></p><p>Firma ______________________________</p>');
   };
 
+  const saveEditorSelection = () => {
+    const sel = window.getSelection();
+    if (sel?.rangeCount && editorRef.current?.contains(sel.anchorNode)) {
+      savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+    }
+  };
+
+  const restoreEditorSelection = () => {
+    const sel = window.getSelection();
+    if (savedRangeRef.current && sel && editorRef.current) {
+      editorRef.current.focus();
+      sel.removeAllRanges();
+      sel.addRange(savedRangeRef.current);
+    }
+  };
+
+  const triggerImageUpload = () => {
+    saveEditorSelection();
+    fileInputRef.current?.click();
+  };
+
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      restoreEditorSelection();
+      insertHtml(`<img src="${dataUrl}" style="width: 50%; height: auto;" alt="" />`);
+    };
+    reader.readAsDataURL(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const openResizePanel = (img: HTMLImageElement) => {
+    selectedImageRef.current = img;
+    const match = img.style.width.match(/^(\d+(\.\d+)?)%$/);
+    setImageWidthPct(match ? Math.round(Number(match[1])) : 50);
+    if (img.style.float === 'left') setImageAlign('left');
+    else if (img.style.float === 'right') setImageAlign('right');
+    else setImageAlign('center');
+    setShowResizePanel(true);
+  };
+
+  const closeResizePanel = () => {
+    selectedImageRef.current?.classList.remove('contract-img-selected');
+    selectedImageRef.current = null;
+    setShowResizePanel(false);
+  };
+
+  const handleWidthChange = (pct: number) => {
+    const clamped = Math.min(100, Math.max(5, Math.round(pct)));
+    setImageWidthPct(clamped);
+    if (selectedImageRef.current) {
+      selectedImageRef.current.style.width = `${clamped}%`;
+      emitVisualContent();
+    }
+  };
+
+  const handleAlignChange = (align: 'left' | 'center' | 'right') => {
+    setImageAlign(align);
+    const img = selectedImageRef.current;
+    if (!img) return;
+    if (align === 'left') {
+      img.style.float = 'left';
+      img.style.display = '';
+      img.style.marginLeft = '0';
+      img.style.marginRight = '1rem';
+      img.style.marginBottom = '0.5rem';
+    } else if (align === 'right') {
+      img.style.float = 'right';
+      img.style.display = '';
+      img.style.marginLeft = '1rem';
+      img.style.marginRight = '0';
+      img.style.marginBottom = '0.5rem';
+    } else {
+      img.style.float = '';
+      img.style.display = 'block';
+      img.style.marginLeft = 'auto';
+      img.style.marginRight = 'auto';
+      img.style.marginBottom = '0.5rem';
+    }
+    emitVisualContent();
+  };
+
+  const handleEditorClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.target instanceof HTMLImageElement) {
+      editorRef.current?.querySelectorAll('img.contract-img-selected').forEach(el => el.classList.remove('contract-img-selected'));
+      event.target.classList.add('contract-img-selected');
+      openResizePanel(event.target);
+    } else if (showResizePanel) {
+      closeResizePanel();
+    }
+  };
+
   const applyEditorColor = (command: 'foreColor' | 'hiliteColor', color: string) => {
     if (command === 'foreColor') setTextColor(color);
     else setHighlightColor(color);
@@ -243,6 +345,15 @@ export function ContractContentEditor({
 
   return (
     <div className="space-y-3">
+      {/* Hidden file input for image upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleImageFileChange}
+      />
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <label className={`block text-sm font-medium ${colors.text.primary}`}>
           {label} {required && <span className={colors.status.error.text}>*</span>}
@@ -333,6 +444,9 @@ export function ContractContentEditor({
               <ToolbarButton title="Tabella" onClick={insertSimpleTable}>
                 <Table2 className="w-4 h-4" />
               </ToolbarButton>
+              <ToolbarButton title="Inserisci immagine dal dispositivo" onClick={triggerImageUpload}>
+                <ImagePlus className="w-4 h-4" />
+              </ToolbarButton>
               <ToolbarButton title="Firma" onClick={insertSignatureBlock}>
                 <Braces className="w-4 h-4" />
               </ToolbarButton>
@@ -346,6 +460,68 @@ export function ContractContentEditor({
               <ToolbarButton title="Rimuovi formato" onClick={removeAllFormat}>
                 <Eraser className="w-4 h-4" />
               </ToolbarButton>
+            </div>
+          )}
+
+          {/* Image resize panel — appears when user clicks an existing image */}
+          {mode === 'visual' && showResizePanel && (
+            <div className={`border border-t-0 ${error ? colors.status.error.border : colors.border.primary} ${colors.background.secondary} px-4 py-3 flex flex-wrap items-center gap-4`}>
+              {/* Alignment */}
+              <div className="flex items-center gap-1 shrink-0">
+                <span className={`text-xs font-medium ${colors.text.muted} mr-1`}>Posizione</span>
+                {(['left', 'center', 'right'] as const).map((align) => {
+                  const Icon = align === 'left' ? AlignLeft : align === 'center' ? AlignCenter : AlignRight;
+                  const label = align === 'left' ? 'Sinistra' : align === 'center' ? 'Centro' : 'Destra';
+                  return (
+                    <button
+                      key={align}
+                      type="button"
+                      title={label}
+                      onClick={() => handleAlignChange(align)}
+                      className={`p-1.5 rounded-lg border transition-colors ${
+                        imageAlign === align
+                          ? `${colors.primary.bg} text-white border-transparent`
+                          : `${colors.border.primary} ${colors.background.card} ${colors.text.secondary} hover:${colors.primary.text}`
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                    </button>
+                  );
+                })}
+              </div>
+              <div className={`w-px h-5 ${colors.border.primary} bg-current opacity-30 shrink-0`} />
+              {/* Width */}
+              <span className={`text-xs font-medium ${colors.text.muted} shrink-0`}>
+                Larghezza
+              </span>
+              <div className="flex items-center gap-3 flex-1 min-w-48">
+                <input
+                  type="range"
+                  min="5"
+                  max="100"
+                  value={imageWidthPct}
+                  onChange={(e) => handleWidthChange(Number(e.target.value))}
+                  className="flex-1 accent-red-700 cursor-pointer"
+                />
+                <div className="flex items-center gap-1 shrink-0">
+                  <input
+                    type="number"
+                    min="5"
+                    max="100"
+                    value={imageWidthPct}
+                    onChange={(e) => handleWidthChange(Number(e.target.value))}
+                    className={`w-14 px-2 py-1 text-sm text-center rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:outline-none focus:ring-1 focus:ring-red-600`}
+                  />
+                  <span className={`text-sm ${colors.text.muted}`}>%</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeResizePanel}
+                className={`px-3 py-1.5 text-sm rounded-lg border ${colors.border.primary} ${colors.background.card} ${colors.text.secondary} shrink-0`}
+              >
+                Chiudi
+              </button>
             </div>
           )}
 
@@ -363,6 +539,7 @@ export function ContractContentEditor({
               onMouseUp={updateToolbarState}
               onBlur={onBlur}
               onPaste={handlePaste}
+              onClick={handleEditorClick}
               data-placeholder="Scrivi il contratto..."
               style={{ minHeight: `${minRows * 1.75}rem` }}
               className={`contract-rich-editor max-h-[34rem] overflow-auto px-4 py-4 text-sm leading-relaxed ${colors.background.input} ${colors.text.primary} focus:outline-none focus:ring-2 focus:ring-red-700`}

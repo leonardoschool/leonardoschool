@@ -20,7 +20,6 @@ import MultiSelect from '@/components/ui/MultiSelect';
 import { ButtonLoader } from '@/components/ui/loaders';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
-import type { DifficultyMix } from '@/lib/validations/simulationValidation';
 
 const ACTIVE_MODE_BTN = `${colors.primary.bg} text-white`;
 const INACTIVE_MODE_BTN = `${colors.text.secondary} hover:${colors.background.hover}`;
@@ -65,7 +64,6 @@ const LANGUAGE_OPTIONS = [
 ];
 
 const DIFFICULTY_OPTIONS = [
-  { value: '', label: 'Tutte le difficoltà' },
   { value: 'EASY', label: 'Facile' },
   { value: 'MEDIUM', label: 'Media' },
   { value: 'HARD', label: 'Difficile' },
@@ -78,13 +76,6 @@ const QUESTION_TYPE_OPTIONS = [
   { value: 'OPEN_TEXT', label: 'Risposta aperta' },
 ];
 
-const DIFFICULTY_MIX_OPTIONS = [
-  { value: 'BALANCED', label: 'Bilanciata' },
-  { value: 'EASY_FOCUS', label: 'Più facili' },
-  { value: 'HARD_FOCUS', label: 'Più difficili' },
-  { value: 'MEDIUM_ONLY', label: 'Solo medie' },
-  { value: 'MIXED', label: 'Equa' },
-];
 
 function getDefaultSubjectSelection(defaultSubjectIds?: string[], defaultSubjectId?: string | null) {
   return defaultSubjectIds && defaultSubjectIds.length > 0
@@ -127,7 +118,6 @@ export default function FillSectionModal({
   const [selectedTypes, setSelectedTypes] = useState<string[]>(() => copyDefaultArray(defaultTypes));
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>(() => copyDefaultArray(defaultTagIds));
   const [selectedLanguage, setSelectedLanguage] = useState<string>(defaultLanguage ?? '');
-  const [difficultyMix, setDifficultyMix] = useState<DifficultyMix>('BALANCED');
   const [avoidRecentlyUsed, setAvoidRecentlyUsed] = useState(true);
   const [maximizeTopicCoverage, setMaximizeTopicCoverage] = useState(true);
 
@@ -142,7 +132,6 @@ export default function FillSectionModal({
       setSelectedTypes(copyDefaultArray(defaultTypes));
       setSelectedTagIds(copyDefaultArray(defaultTagIds));
       setSelectedLanguage(defaultLanguage ?? '');
-      setDifficultyMix('BALANCED');
       setAvoidRecentlyUsed(true);
       setMaximizeTopicCoverage(true);
     }
@@ -214,7 +203,7 @@ export default function FillSectionModal({
               totalQuestions: parsedCount,
               preset: selectedSubjectIds.length === 1 ? 'SINGLE_SUBJECT' : 'BALANCED',
               focusSubjectId: selectedSubjectIds.length === 1 ? selectedSubjectIds[0] : undefined,
-              difficultyMix,
+              difficultyLevels: selectedDifficulties.length > 0 ? selectedDifficulties as ('EASY' | 'MEDIUM' | 'HARD')[] : ['EASY', 'MEDIUM', 'HARD'],
               avoidRecentlyUsed,
               maximizeTopicCoverage,
               tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
@@ -366,35 +355,26 @@ export default function FillSectionModal({
           />
         )}
 
-        {mode === 'random' ? (
-          <MultiSelect
-            label="Difficoltà"
-            values={selectedDifficulties}
-            options={DIFFICULTY_OPTIONS.filter((o) => o.value !== '')}
-            onChange={setSelectedDifficulties}
-            placeholder="Tutte le difficoltà"
-          />
-        ) : (
-          <div className="space-y-3">
-            <CustomSelect
-              label="Mix difficoltà"
-              value={difficultyMix}
-              onChange={(value) => setDifficultyMix(value as DifficultyMix)}
-              options={DIFFICULTY_MIX_OPTIONS}
-              placeholder="Bilanciata"
+        <MultiSelect
+          label="Difficoltà"
+          values={selectedDifficulties}
+          options={DIFFICULTY_OPTIONS}
+          onChange={setSelectedDifficulties}
+          placeholder="Tutte le difficoltà"
+        />
+
+        {mode === 'smart' && (
+          <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border ${colors.border.light} ${colors.background.secondary} p-3`}>
+            <Checkbox
+              checked={avoidRecentlyUsed}
+              onChange={(e) => setAvoidRecentlyUsed(e.target.checked)}
+              label="Evita già usate"
             />
-            <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border ${colors.border.light} ${colors.background.secondary} p-3`}>
-              <Checkbox
-                checked={avoidRecentlyUsed}
-                onChange={(e) => setAvoidRecentlyUsed(e.target.checked)}
-                label="Evita già usate"
-              />
-              <Checkbox
-                checked={maximizeTopicCoverage}
-                onChange={(e) => setMaximizeTopicCoverage(e.target.checked)}
-                label="Copri più argomenti"
-              />
-            </div>
+            <Checkbox
+              checked={maximizeTopicCoverage}
+              onChange={(e) => setMaximizeTopicCoverage(e.target.checked)}
+              label="Copri più argomenti"
+            />
           </div>
         )}
 

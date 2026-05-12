@@ -53,6 +53,7 @@ function createMockUser(overrides: Partial<User> = {}): User {
     profileCompleted: true,
     emailVerified: true,
     lastLoginAt: new Date(),
+    activeSessionToken: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     expoPushToken: null,

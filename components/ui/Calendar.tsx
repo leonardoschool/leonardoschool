@@ -594,22 +594,25 @@ export function Calendar({
                     return (
                       <div
                         key={dayIndex}
-                        className={`h-12 border-t ${colors.border.primary} relative cursor-pointer transition-colors group
-                          hover:bg-[#a8012b]/5 dark:hover:bg-[#a8012b]/10
+                        className={`h-12 border-t ${colors.border.primary} relative transition-colors group
+                          ${onAddEvent ? 'cursor-pointer hover:bg-[#a8012b]/5 dark:hover:bg-[#a8012b]/10' : ''}
                         `}
                         onClick={() => {
+                          if (!onAddEvent) return;
                           const clickDate = new Date(day);
                           clickDate.setHours(hour, 0, 0, 0);
-                          onAddEvent?.(clickDate);
+                          onAddEvent(clickDate);
                         }}
                       >
                         {/* Hover indicator */}
+                        {onAddEvent && (
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                           <div className="flex items-center gap-1 text-xs text-[#a8012b] bg-white dark:bg-slate-800 px-2 py-1 rounded shadow-sm border border-[#a8012b]/20">
                             <Plus className="w-3 h-3" />
                             <span className="font-medium">{hour.toString().padStart(2, '0')}:00</span>
                           </div>
                         </div>
+                        )}
                         {dayEvents.map((event) => (
                           <div
                             key={event.id}
@@ -664,22 +667,25 @@ export function Calendar({
               {Array.from({ length: 24 }, (_, hour) => (
                 <div
                   key={hour}
-                  className={`h-16 border-t ${colors.border.primary} cursor-pointer transition-colors group relative
-                    hover:bg-[#a8012b]/5 dark:hover:bg-[#a8012b]/10
+                  className={`h-16 border-t ${colors.border.primary} transition-colors group relative
+                    ${onAddEvent ? 'cursor-pointer hover:bg-[#a8012b]/5 dark:hover:bg-[#a8012b]/10' : ''}
                   `}
                   onClick={() => {
+                    if (!onAddEvent) return;
                     const clickDate = new Date(selectedDate);
                     clickDate.setHours(hour, 0, 0, 0);
-                    onAddEvent?.(clickDate);
+                    onAddEvent(clickDate);
                   }}
                 >
                   {/* Hover indicator */}
+                  {onAddEvent && (
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
                     <div className="flex items-center gap-2 text-sm text-[#a8012b] bg-white dark:bg-slate-800 px-3 py-1.5 rounded-lg shadow-md border border-[#a8012b]/20">
                       <Plus className="w-4 h-4" />
                       <span className="font-medium">Crea evento alle {hour.toString().padStart(2, '0')}:00</span>
                     </div>
                   </div>
+                  )}
                 </div>
               ))}
 

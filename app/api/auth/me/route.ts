@@ -1,5 +1,6 @@
 // API route to get current user data after login
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { getAdminAuth } from '@/lib/firebase/admin';
 import { prisma } from '@/lib/prisma/client';
 import { checkRateLimit, getClientIp, rateLimitExceededResponse } from '@/lib/middleware/rateLimit';
@@ -78,6 +79,17 @@ export async function POST(request: NextRequest) {
     // Check if student needs to provide parent data
     // Already calculated above
 
+    // Genera un nuovo session token per gli studenti (single-device enforcement).
+    // Ogni login invalida la sessione precedente su altri dispositivi.
+    let sessionToken: string | null = null;
+    if (user.role === 'STUDENT') {
+      sessionToken = randomUUID();
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { activeSessionToken: sessionToken },
+      });
+    }
+
     // Check if user has a pending contract to sign
     let pendingContractToken: string | null = null;
     if (user.role === 'STUDENT' && user.student) {
@@ -117,6 +129,17 @@ export async function POST(request: NextRequest) {
 
     // Cookie duration: 7 days (refresh happens on each /api/auth/me call)
     const cookieMaxAge = 60 * 60 * 24 * 7; // 7 giorni
+
+    // Cookie session-device-token per single-device enforcement (solo STUDENT)
+    if (sessionToken) {
+      response.cookies.set('session-device-token', sessionToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: cookieMaxAge,
+        path: '/',
+      });
+    }
 
     // Setta cookie HttpOnly e Secure con il token (non accessibile da JS)
     response.cookies.set('auth-token', token, {

@@ -563,8 +563,10 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
           </div>
         )}
 
-        <div className={`text-lg ${colors.text.primary} mb-6`}>
-          {form.text ? <RichTextRenderer text={form.text} /> : <p className="text-gray-400">Nessun testo inserito</p>}
+        <div className="mb-6">
+          {form.text
+            ? <RichTextRenderer text={form.text} className={`prose prose-sm max-w-none ${colors.text.primary}`} />
+            : <p className="text-gray-400">Nessun testo inserito</p>}
         </div>
 
         {form.description && (

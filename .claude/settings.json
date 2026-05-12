@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "PowerShell(\\(Get-Content \"c:\\\\Users\\\\marce\\\\Desktop\\\\Marci Progetti\\\\leonardoschool\\\\server\\\\trpc\\\\routers\\\\contracts.ts\"\\).Count)",
-      "Bash(pnpm tsc *)"
+      "Bash(pnpm tsc *)",
+      "Bash(pnpm prisma:generate)"
     ]
   }
 }

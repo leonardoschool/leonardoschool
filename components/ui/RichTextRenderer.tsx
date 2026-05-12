@@ -99,7 +99,10 @@ export default function RichTextRenderer({ text, className = '' }: RichTextRende
     const sanitized = DOMPurify.sanitize(processed, {
       ALLOWED_TAGS: [
         'b', 'i', 'u', 'strong', 'em', 'sub', 'sup', 'br', 'span', 'p', 'div',
-        'ul', 'ol', 'li', 'math', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'msup',
+        'ul', 'ol', 'li', 'h3', 'h4', 'blockquote', 'hr',
+        'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption', 'colgroup', 'col',
+        'img',
+        'math', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'msup',
         'msub', 'mfrac', 'msqrt', 'mroot', 'munder', 'mover', 'munderover',
         'mtable', 'mtr', 'mtd', 'annotation', 'svg', 'path', 'line', 'g',
       ],
@@ -107,6 +110,8 @@ export default function RichTextRenderer({ text, className = '' }: RichTextRende
         'class', 'style', 'href', 'xmlns', 'width', 'height', 'viewBox',
         'd', 'fill', 'stroke', 'stroke-width', 'preserveAspectRatio',
         'aria-hidden', 'focusable', 'role',
+        'border', 'cellpadding', 'cellspacing', 'colspan', 'rowspan',
+        'src', 'alt',
       ],
       ADD_TAGS: ['foreignObject'],
     });

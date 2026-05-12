@@ -427,6 +427,61 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* ===== Rich-text content (question/answer preview) ===== */
+.rich-text-content p {
+  margin-bottom: 0.75rem;
+}
+.rich-text-content p:last-child {
+  margin-bottom: 0;
+}
+.rich-text-content ul,
+.rich-text-content ol {
+  margin: 0.4rem 0;
+  padding-left: 1.5rem;
+}
+.rich-text-content ul {
+  list-style-type: disc;
+}
+.rich-text-content ol {
+  list-style-type: decimal;
+}
+.rich-text-content li {
+  margin-bottom: 0.2rem;
+}
+.rich-text-content table {
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+  width: 100%;
+}
+.rich-text-content th,
+.rich-text-content td {
+  border: 1px solid #d1d5db;
+  padding: 0.35rem 0.6rem;
+  vertical-align: top;
+  text-align: left;
+}
+.dark .rich-text-content th,
+.dark .rich-text-content td {
+  border-color: #374151;
+}
+.rich-text-content th {
+  font-weight: 600;
+  background-color: #f3f4f6;
+}
+.dark .rich-text-content th {
+  background-color: #1f2937;
+}
+.rich-text-content img {
+  max-width: 100%;
+  height: auto;
+}
+.rich-text-content blockquote {
+  border-left: 3px solid #a8012b;
+  padding-left: 0.75rem;
+  margin: 0.5rem 0;
+  color: #6b7280;
+}
+
 @page {
   size: A4;
   margin: 25mm 25mm 20mm 25mm;

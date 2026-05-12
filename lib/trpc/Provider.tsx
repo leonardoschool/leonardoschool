@@ -1,13 +1,28 @@
 'use client';
 
 // tRPC Provider for Client Components
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from '@tanstack/react-query';
 import { httpBatchLink } from '@trpc/client';
+import { TRPCClientError } from '@trpc/client';
 import { useState, useEffect } from 'react';
 import { transformer } from './transformer';
 import { trpc } from './client';
 import { firebaseAuth } from '@/lib/firebase/auth';
 import { colors } from '@/lib/theme/colors';
+
+function isSessionInvalidatedError(error: unknown): boolean {
+  return (
+    error instanceof TRPCClientError &&
+    (error.data as { httpStatus?: number } | undefined)?.httpStatus === 401 &&
+    error.message === 'SESSIONE_TERMINATA'
+  );
+}
+
+function dispatchSessionInvalidated() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('session-invalidated'));
+  }
+}
 
 export function TRPCProvider({ children }: { children: React.ReactNode }) {
   const [isFirebaseReady, setIsFirebaseReady] = useState(false);
@@ -28,13 +43,22 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const [queryClient] = useState(() => new QueryClient({
+    queryCache: new QueryCache({
+      onError: (error) => {
+        if (isSessionInvalidatedError(error)) dispatchSessionInvalidated();
+      },
+    }),
+    mutationCache: new MutationCache({
+      onError: (error) => {
+        if (isSessionInvalidatedError(error)) dispatchSessionInvalidated();
+      },
+    }),
     defaultOptions: {
       queries: {
-        staleTime: 60 * 1000, // Avoid refetching the same data on every app-section navigation
+        staleTime: 60 * 1000,
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
         retry: (failureCount, error) => {
-          // Don't retry on 401/403 errors
           const httpStatus = (error as { data?: { httpStatus?: number } })?.data?.httpStatus;
           if (httpStatus === 401 || httpStatus === 403) {
             return false;

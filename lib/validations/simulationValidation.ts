@@ -568,15 +568,6 @@ export const SmartRandomPresetEnum = z.enum([
 ]);
 export type SmartRandomPreset = z.infer<typeof SmartRandomPresetEnum>;
 
-// Difficulty mix options
-export const DifficultyMixEnum = z.enum([
-  'BALANCED',    // 30% easy, 50% medium, 20% hard
-  'EASY_FOCUS',  // 50% easy, 40% medium, 10% hard
-  'HARD_FOCUS',  // 10% easy, 40% medium, 50% hard
-  'MEDIUM_ONLY', // 100% medium
-  'MIXED',       // Equal mix 33/34/33
-]);
-export type DifficultyMix = z.infer<typeof DifficultyMixEnum>;
 
 // Smart random generation input schema
 export const smartRandomGenerationSchema = z.object({
@@ -592,8 +583,8 @@ export const smartRandomGenerationSchema = z.object({
   // For CUSTOM preset - manual distribution { subjectId: numberOfQuestions }
   customSubjectDistribution: z.record(z.string(), z.number().int().min(0)).optional().nullable(),
   
-  // Difficulty distribution
-  difficultyMix: DifficultyMixEnum.default('BALANCED'),
+  // Difficulty selection: which difficulty levels to include (equal distribution among selected)
+  difficultyLevels: z.array(SectionDifficultyLevelEnum).default(['EASY', 'MEDIUM', 'HARD']),
   
   // Smart features
   avoidRecentlyUsed: z.boolean().default(true),     // Avoid questions used in recent simulations
@@ -621,20 +612,13 @@ export const smartRandomGenerationSchema = z.object({
 
 export type SmartRandomGenerationInput = z.infer<typeof smartRandomGenerationSchema>;
 
-// Helper to get difficulty ratios from mix
-export const getDifficultyRatios = (mix: DifficultyMix): { EASY: number; MEDIUM: number; HARD: number } => {
-  switch (mix) {
-    case 'BALANCED':
-      return { EASY: 0.30, MEDIUM: 0.50, HARD: 0.20 };
-    case 'EASY_FOCUS':
-      return { EASY: 0.50, MEDIUM: 0.40, HARD: 0.10 };
-    case 'HARD_FOCUS':
-      return { EASY: 0.10, MEDIUM: 0.40, HARD: 0.50 };
-    case 'MEDIUM_ONLY':
-      return { EASY: 0, MEDIUM: 1.0, HARD: 0 };
-    case 'MIXED':
-      return { EASY: 0.33, MEDIUM: 0.34, HARD: 0.33 };
-    default:
-      return { EASY: 0.30, MEDIUM: 0.50, HARD: 0.20 };
-  }
+// Helper to get difficulty ratios from selected levels (equal share per selected level)
+export const getDifficultyRatiosFromLevels = (levels: SectionDifficultyLevel[]): { EASY: number; MEDIUM: number; HARD: number } => {
+  const active = levels.length > 0 ? levels : (['EASY', 'MEDIUM', 'HARD'] as SectionDifficultyLevel[]);
+  const share = 1 / active.length;
+  return {
+    EASY: active.includes('EASY') ? share : 0,
+    MEDIUM: active.includes('MEDIUM') ? share : 0,
+    HARD: active.includes('HARD') ? share : 0,
+  };
 };

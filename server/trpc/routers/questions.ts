@@ -17,7 +17,7 @@ import {
 } from '@/lib/validations/questionValidation';
 import {
   smartRandomGenerationSchema,
-  getDifficultyRatios,
+  getDifficultyRatiosFromLevels,
 } from '@/lib/validations/simulationValidation';
 import * as notificationService from '@/server/services/notificationService';
 
@@ -2469,7 +2469,7 @@ export const questionsRouter = router({
         preset,
         focusSubjectId,
         customSubjectDistribution,
-        difficultyMix,
+        difficultyLevels,
         avoidRecentlyUsed,
         maximizeTopicCoverage,
         preferRecentQuestions,
@@ -2509,8 +2509,8 @@ export const questionsRouter = router({
       // Ensure total matches requested
       normalizeDistributionTotal(targetDistribution, totalQuestions);
 
-      // Step 3: Get difficulty ratios
-      const difficultyRatios = getDifficultyRatios(difficultyMix);
+      // Step 3: Get difficulty ratios from selected levels
+      const difficultyRatios = getDifficultyRatiosFromLevels(difficultyLevels);
 
       // Step 4: Build base query for available questions using helper
       const baseWhere = buildSmartRandomBaseWhere(

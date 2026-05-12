@@ -33,6 +33,7 @@ export async function createContext(opts: FetchCreateContextFnOptions) {
 
   let user: (User & { student?: Student | null; admin?: Admin | null; collaborator?: Collaborator | null }) | null = null;
   let firebaseUid: string | null = null;
+  let sessionInvalidated = false;
 
   if (token) {
     try {
@@ -49,7 +50,20 @@ export async function createContext(opts: FetchCreateContextFnOptions) {
           collaborator: true,
         },
       });
-      
+
+      // Single-device enforcement: gli studenti possono avere una sola sessione attiva.
+      // Se il cookie non coincide con il token nel DB, la sessione è stata invalidata
+      // da un login su un altro dispositivo.
+      if (user?.role === 'STUDENT' && user.activeSessionToken !== null) {
+        const cookieHeader = req.headers.get('cookie');
+        const match = cookieHeader?.match(/session-device-token=([^;]+)/);
+        const clientToken = match?.[1];
+        if (!clientToken || clientToken !== user.activeSessionToken) {
+          user = null;
+          sessionInvalidated = true;
+        }
+      }
+
     } catch (error) {
       // Only log authentication errors in production (avoid noise from expired tokens)
       if (process.env.NODE_ENV === 'production') {
@@ -77,8 +91,9 @@ export async function createContext(opts: FetchCreateContextFnOptions) {
     user,
     prisma,
     firebaseUid,
-    requestId, // Expose request ID to procedures
-    requestContext, // Expose full context for async tracking
+    requestId,
+    requestContext,
+    sessionInvalidated,
   };
 }
 

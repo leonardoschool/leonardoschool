@@ -31,7 +31,7 @@ import { spacing, layout } from '../lib/theme/spacing';
 
 // Types matching API
 type SmartRandomPreset = 'PROPORTIONAL' | 'BALANCED' | 'SINGLE_SUBJECT';
-type DifficultyMix = 'BALANCED' | 'EASY_FOCUS' | 'MEDIUM_ONLY' | 'HARD_FOCUS';
+type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD';
 type QuizMode = 'quiz' | 'reading';
 
 interface Subject {
@@ -49,7 +49,7 @@ export default function SelfPracticeScreen() {
   const [durationMinutes, setDurationMinutes] = useState('0');
   const [preset, setPreset] = useState<SmartRandomPreset>('PROPORTIONAL');
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
-  const [difficultyMix, setDifficultyMix] = useState<DifficultyMix>('BALANCED');
+  const [selectedDifficulties, setSelectedDifficulties] = useState<DifficultyLevel[]>(['EASY', 'MEDIUM', 'HARD']);
   const [showSubjects, setShowSubjects] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
@@ -78,7 +78,7 @@ export default function SelfPracticeScreen() {
       const result = await generateSmartQuestions.mutateAsync({
         totalQuestions: count,
         preset,
-        difficultyMix,
+        difficultyLevels: selectedDifficulties,
         maximizeTopicCoverage: true,
         avoidRecentlyUsed: true,
         focusSubjectId: preset === 'SINGLE_SUBJECT' ? selectedSubjectId : undefined,
@@ -399,70 +399,40 @@ export default function SelfPracticeScreen() {
               Difficoltà
             </Text>
             <View style={styles.difficultyRow}>
-              <TouchableOpacity
-                style={[
-                  styles.difficultyCard,
-                  {
-                    backgroundColor: difficultyMix === 'EASY_FOCUS' ? '#10B98115' : themedColors.card,
-                    borderColor: difficultyMix === 'EASY_FOCUS' ? '#10B981' : themedColors.border,
-                  },
-                ]}
-                onPress={() => setDifficultyMix('EASY_FOCUS')}
-              >
-                <Text style={{ fontSize: 18 }}>🟢</Text>
-                <Text variant="caption" style={{ color: difficultyMix === 'EASY_FOCUS' ? '#10B981' : themedColors.text, marginTop: 2 }}>
-                  Facili
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.difficultyCard,
-                  {
-                    backgroundColor: difficultyMix === 'MEDIUM_ONLY' ? '#3B82F615' : themedColors.card,
-                    borderColor: difficultyMix === 'MEDIUM_ONLY' ? '#3B82F6' : themedColors.border,
-                  },
-                ]}
-                onPress={() => setDifficultyMix('MEDIUM_ONLY')}
-              >
-                <Text style={{ fontSize: 18 }}>🔵</Text>
-                <Text variant="caption" style={{ color: difficultyMix === 'MEDIUM_ONLY' ? '#3B82F6' : themedColors.text, marginTop: 2 }}>
-                  Medie
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.difficultyCard,
-                  {
-                    backgroundColor: difficultyMix === 'HARD_FOCUS' ? '#EF444415' : themedColors.card,
-                    borderColor: difficultyMix === 'HARD_FOCUS' ? '#EF4444' : themedColors.border,
-                  },
-                ]}
-                onPress={() => setDifficultyMix('HARD_FOCUS')}
-              >
-                <Text style={{ fontSize: 18 }}>🔴</Text>
-                <Text variant="caption" style={{ color: difficultyMix === 'HARD_FOCUS' ? '#EF4444' : themedColors.text, marginTop: 2 }}>
-                  Difficili
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.difficultyCard,
-                  {
-                    backgroundColor: difficultyMix === 'BALANCED' ? '#F59E0B15' : themedColors.card,
-                    borderColor: difficultyMix === 'BALANCED' ? '#F59E0B' : themedColors.border,
-                  },
-                ]}
-                onPress={() => setDifficultyMix('BALANCED')}
-              >
-                <Text style={{ fontSize: 18 }}>⚖️</Text>
-                <Text variant="caption" style={{ color: difficultyMix === 'BALANCED' ? '#F59E0B' : themedColors.text, marginTop: 2 }}>
-                  Mix
-                </Text>
-              </TouchableOpacity>
+              {([
+                { value: 'EASY' as DifficultyLevel, emoji: '🟢', label: 'Facile', color: '#10B981' },
+                { value: 'MEDIUM' as DifficultyLevel, emoji: '🟡', label: 'Media', color: '#F59E0B' },
+                { value: 'HARD' as DifficultyLevel, emoji: '🔴', label: 'Difficile', color: '#EF4444' },
+              ]).map((opt) => {
+                const isSelected = selectedDifficulties.includes(opt.value);
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[
+                      styles.difficultyCard,
+                      {
+                        backgroundColor: isSelected ? `${opt.color}15` : themedColors.card,
+                        borderColor: isSelected ? opt.color : themedColors.border,
+                      },
+                    ]}
+                    onPress={() => {
+                      const next = isSelected
+                        ? selectedDifficulties.filter((d) => d !== opt.value)
+                        : [...selectedDifficulties, opt.value];
+                      if (next.length > 0) setSelectedDifficulties(next);
+                    }}
+                  >
+                    <Text style={{ fontSize: 18 }}>{opt.emoji}</Text>
+                    <Text variant="caption" style={{ color: isSelected ? opt.color : themedColors.text, marginTop: 2 }}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
+            <Caption style={{ marginTop: 4, color: themedColors.textMuted }}>
+              {selectedDifficulties.length === 3 ? 'Mix di tutte le difficoltà' : `Selezionate: ${selectedDifficulties.join(' + ')}`}
+            </Caption>
           </View>
 
           {/* Start Button */}

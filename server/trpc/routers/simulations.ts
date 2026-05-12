@@ -3770,7 +3770,29 @@ export const simulationsRouter = router({
       // Randomize if needed
       let questions = simulation.questions;
       if (simulation.randomizeOrder) {
-        questions = secureShuffleArray(questions);
+        if (simulation.hasSections && Array.isArray(simulation.sections) && simulation.sections.length > 0) {
+          // Shuffle within each section to preserve section boundaries
+          const sections = simulation.sections as Array<{ questionIds: string[] }>;
+          const questionMap = new Map(questions.map(q => [q.questionId, q]));
+          const assignedIds = new Set<string>();
+          const shuffledQuestions: typeof questions = [];
+
+          for (const section of sections) {
+            const sectionQs = section.questionIds
+              .map(id => questionMap.get(id))
+              .filter((q): q is NonNullable<typeof q> => q !== undefined);
+            shuffledQuestions.push(...secureShuffleArray(sectionQs));
+            section.questionIds.forEach(id => assignedIds.add(id));
+          }
+
+          // Append any questions not assigned to a section (shuffled)
+          const unassigned = questions.filter(q => !assignedIds.has(q.questionId));
+          if (unassigned.length > 0) shuffledQuestions.push(...secureShuffleArray(unassigned));
+
+          questions = shuffledQuestions;
+        } else {
+          questions = secureShuffleArray(questions);
+        }
       }
 
       if (simulation.randomizeAnswers) {
@@ -4761,7 +4783,6 @@ export const simulationsRouter = router({
   createSelfPracticeFromTemplate: studentProcedure
     .input(z.object({
       templateId: z.string().min(1),
-      difficultyMix: z.enum(['BALANCED', 'EASY_FOCUS', 'HARD_FOCUS', 'MEDIUM_ONLY', 'MIXED']).default('BALANCED'),
       openQuestionCorrection: z.enum(['self', 'staff']).default('self'),
       requestCorrectionFromId: z.string().optional(),
     }))

@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Preloader from "@/components/ui/Preloader";
 import { ToastProvider } from "@/components/ui/Toast";
+import { SessionInvalidationHandler } from "@/components/auth/SessionInvalidationHandler";
 import { SITE_NAME, SITE_DESCRIPTION, SITE_KEYWORDS } from "@/lib/constants";
 import { Analytics } from '@vercel/analytics/next';
 import { GoogleAnalytics } from '@next/third-parties/google';
@@ -107,6 +108,7 @@ export default function RootLayout({
       <body className={`${inter.variable} font-sans antialiased h-full transition-colors duration-300`} style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }} suppressHydrationWarning>
         <TRPCProvider>
           <ToastProvider>
+            <SessionInvalidationHandler />
             <Preloader />
             {children}
             <Analytics />

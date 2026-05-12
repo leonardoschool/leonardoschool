@@ -11,6 +11,7 @@ import ContractContentEditor from '@/components/admin/contracts/ContractContentE
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
+import { uploadContractImages } from '@/lib/utils/contractImageUpload';
 import { getContractPlaceholders } from '@/lib/constants/contractPlaceholders';
 import { 
   FileText, 
@@ -184,10 +185,11 @@ export default function AdminContrattiContent() {
       return;
     }
 
+    const content = await uploadContractImages(formData.content);
     const data = {
       name: formData.name.trim(),
       description: formData.description.trim() || undefined,
-      content: formData.content,
+      content,
       price: formData.price ? parseFloat(formData.price) : undefined,
       duration: formData.duration.trim() || undefined,
       targetRole: formData.targetRole,

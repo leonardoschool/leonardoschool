@@ -47,6 +47,7 @@ function createMockUser(
     createdAt: new Date(),
     updatedAt: new Date(),
     lastLoginAt: null,
+    activeSessionToken: null,
     expoPushToken: null,
     student: role === 'STUDENT' ? { id: 'student-id', userId: 'test-user-id' } as Student : null,
     admin: role === 'ADMIN' ? { id: 'admin-id', userId: 'test-user-id' } as Admin : null,
@@ -72,6 +73,7 @@ function createMockContext(user: User | null = null): Context {
       userAgent: 'test-agent',
       startTime: Date.now(),
     },
+    sessionInvalidated: false,
   };
 }
 

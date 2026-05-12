@@ -11,7 +11,7 @@ import { ButtonLoader, Spinner } from '@/components/ui/loaders';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { useRouter } from 'next/navigation';
-import type { DifficultyMix } from '@/lib/validations/simulationValidation';
+type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD';
 
 type LanguageFilter = 'BOTH' | 'IT' | 'EN';
 
@@ -97,43 +97,55 @@ function EnBadge({ show }: { show: boolean }) {
   return <span className="text-xs px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 font-medium">EN</span>;
 }
 
-const DIFFICULTY_OPTIONS: Array<{
-  value: DifficultyMix;
+const DIFFICULTY_LEVELS: Array<{
+  value: DifficultyLevel;
   emoji: string;
   label: string;
   activeClass: string;
   textClass: string;
 }> = [
-  { value: 'EASY_FOCUS', emoji: '🟢', label: 'Facili', activeClass: 'border-green-500 bg-green-50 dark:bg-green-900/20', textClass: 'text-green-700 dark:text-green-300' },
-  { value: 'MEDIUM_ONLY', emoji: '🔵', label: 'Medie', activeClass: 'border-blue-500 bg-blue-50 dark:bg-blue-900/20', textClass: 'text-blue-700 dark:text-blue-300' },
-  { value: 'HARD_FOCUS', emoji: '🔴', label: 'Difficili', activeClass: 'border-red-500 bg-red-50 dark:bg-red-900/20', textClass: 'text-red-700 dark:text-red-300' },
-  { value: 'BALANCED', emoji: '⚖️', label: 'Mix', activeClass: 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20', textClass: 'text-yellow-700 dark:text-yellow-300' },
+  { value: 'EASY', emoji: '🟢', label: 'Facile', activeClass: 'border-green-500 bg-green-50 dark:bg-green-900/20', textClass: 'text-green-700 dark:text-green-300' },
+  { value: 'MEDIUM', emoji: '🟡', label: 'Media', activeClass: 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20', textClass: 'text-yellow-700 dark:text-yellow-300' },
+  { value: 'HARD', emoji: '🔴', label: 'Difficile', activeClass: 'border-red-500 bg-red-50 dark:bg-red-900/20', textClass: 'text-red-700 dark:text-red-300' },
 ];
 
-function DifficultySelector({ value, onChange }: { value: DifficultyMix; onChange: (v: DifficultyMix) => void }) {
+function DifficultySelector({ values, onChange }: { values: DifficultyLevel[]; onChange: (v: DifficultyLevel[]) => void }) {
+  const toggle = (level: DifficultyLevel) => {
+    const next = values.includes(level)
+      ? values.filter((v) => v !== level)
+      : [...values, level];
+    if (next.length > 0) onChange(next);
+  };
+
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
         Difficoltà
       </label>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {DIFFICULTY_OPTIONS.map((opt) => (
-          <button
-            key={opt.value}
-            onClick={() => onChange(opt.value)}
-            className={`p-3 rounded-xl border-2 text-center transition-all ${
-              value === opt.value ? opt.activeClass : 'border-gray-200 dark:border-gray-700'
-            }`}
-          >
-            <span className="text-lg block mb-1">{opt.emoji}</span>
-            <span className={`block text-xs font-medium ${
-              value === opt.value ? opt.textClass : 'text-gray-700 dark:text-gray-300'
-            }`}>
-              {opt.label}
-            </span>
-          </button>
-        ))}
+      <div className="grid grid-cols-3 gap-2">
+        {DIFFICULTY_LEVELS.map((opt) => {
+          const isSelected = values.includes(opt.value);
+          return (
+            <button
+              key={opt.value}
+              onClick={() => toggle(opt.value)}
+              className={`p-3 rounded-xl border-2 text-center transition-all ${
+                isSelected ? opt.activeClass : 'border-gray-200 dark:border-gray-700'
+              }`}
+            >
+              <span className="text-lg block mb-1">{opt.emoji}</span>
+              <span className={`block text-xs font-medium ${
+                isSelected ? opt.textClass : 'text-gray-700 dark:text-gray-300'
+              }`}>
+                {opt.label}
+              </span>
+            </button>
+          );
+        })}
       </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+        {values.length === 3 ? 'Mix di tutte le difficoltà' : `Selezionate: ${values.map((v) => DIFFICULTY_LEVELS.find((d) => d.value === v)?.label).join(' + ')}`}
+      </p>
     </div>
   );
 }
@@ -222,12 +234,12 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
   const [blankPoints, setBlankPoints] = useState<string>('0');
 
   // Difficoltà
-  const [difficultyMix, setDifficultyMix] = useState<DifficultyMix>('BALANCED');
+  const [selectedDifficulties, setSelectedDifficulties] = useState<DifficultyLevel[]>(['EASY', 'MEDIUM', 'HARD']);
 
   // Opzioni avanzate
   const [maximizeCoverage, setMaximizeCoverage] = useState(true);
   const [avoidRecent, setAvoidRecent] = useState(true);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(true);
 
   // Gestione domande aperte (solo per modalità quiz)
   const [openQuestionCorrection, setOpenQuestionCorrection] = useState<'self' | 'staff'>('self');
@@ -338,7 +350,7 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
       const result = await generateSmartQuestions.mutateAsync({
         totalQuestions: count,
         preset: selectedSubjectIds.length > 0 ? 'CUSTOM' : 'PROPORTIONAL',
-        difficultyMix,
+        difficultyLevels: selectedDifficulties,
         maximizeTopicCoverage: maximizeCoverage,
         avoidRecentlyUsed: avoidRecent,
         customSubjectDistribution,
@@ -622,7 +634,7 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
         </div>}
 
         {/* Difficoltà */}
-        {!isTemplateMode && <DifficultySelector value={difficultyMix} onChange={setDifficultyMix} />}
+        {!isTemplateMode && <DifficultySelector values={selectedDifficulties} onChange={setSelectedDifficulties} />}
 
         {isTemplateMode && (
           <div>
@@ -679,11 +691,18 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
             onClick={() => setShowAdvanced(!showAdvanced)}
             className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
           >
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Opzioni avanzate
-            </span>
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0">
+                Opzioni avanzate
+              </span>
+              {!showAdvanced && quizMode === 'quiz' && (
+                <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  Punteggi: +{correctPoints} / {wrongPoints} / {blankPoints} · {openQuestionCorrection === 'self' ? 'Auto' : 'Docente'}
+                </span>
+              )}
+            </div>
             <svg
-              className={`w-5 h-5 text-gray-500 transition-transform ${showAdvanced ? 'rotate-180' : ''}`}
+              className={`w-5 h-5 text-gray-500 transition-transform shrink-0 ${showAdvanced ? 'rotate-180' : ''}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
