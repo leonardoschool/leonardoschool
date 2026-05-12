@@ -102,7 +102,7 @@ export default function HtmlShortcutMenu({ onInsert, compact = false }: HtmlShor
               {listShortcuts.map(renderButton)}
             </div>
             <p className={`mt-1 text-xs ${colors.text.muted}`}>
-              Per aggiungere un punto: posizionati dopo l'ultimo <code className="font-mono">&lt;/li&gt;</code> e usa "+ Punto lista"
+              Per aggiungere un punto: posizionati dopo l&apos;ultimo <code className="font-mono">&lt;/li&gt;</code> e usa &quot;+ Punto lista&quot;
             </p>
           </div>
 
@@ -113,7 +113,7 @@ export default function HtmlShortcutMenu({ onInsert, compact = false }: HtmlShor
               {tableShortcuts.map(renderButton)}
             </div>
             <p className={`mt-1 text-xs ${colors.text.muted}`}>
-              Per aggiungere una riga: posizionati dopo l'ultimo <code className="font-mono">&lt;/tr&gt;</code> e usa "+ Riga tabella"
+              Per aggiungere una riga: posizionati dopo l&apos;ultimo <code className="font-mono">&lt;/tr&gt;</code> e usa &quot;+ Riga tabella&quot;
             </p>
           </div>
         </div>
