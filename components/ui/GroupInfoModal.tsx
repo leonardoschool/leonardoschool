@@ -6,6 +6,7 @@ import { colors } from '@/lib/theme/colors';
 import { trpc } from '@/lib/trpc/client';
 import { Spinner } from '@/components/ui/loaders';
 import { UserInfoModal } from '@/components/ui/UserInfoModal';
+import { getCollaboratorDetailLabel } from '@/lib/utils/collaboratorDisplay';
 import {
   X,
   Users,
@@ -32,6 +33,8 @@ interface GroupMember {
   } | null;
   collaborator: {
     id: string;
+    kind?: string | null;
+    subjects?: Array<{ subject?: { code?: string | null; name?: string | null } | null }>;
     user: { id: string; name: string; email: string };
   } | null;
 }
@@ -50,6 +53,8 @@ interface GroupData {
   } | null;
   referenceCollaborator: {
     id: string;
+    kind?: string | null;
+    subjects?: Array<{ subject?: { code?: string | null; name?: string | null } | null }>;
     user: { id: string; name: string };
   } | null;
   referenceAdmin: {
@@ -232,7 +237,9 @@ export function GroupInfoModal({ groupId, isOpen, onClose, hideUserDetails = fal
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className={`font-medium ${colors.text.primary}`}>{group.referenceCollaborator.user.name}</p>
-                            <p className={`text-xs ${colors.text.muted}`}>Collaboratore referente</p>
+                            <p className={`text-xs ${colors.text.muted}`}>
+                              {getCollaboratorDetailLabel(group.referenceCollaborator.kind, group.referenceCollaborator.subjects)}
+                            </p>
                           </div>
                           {!hideUserDetails && (
                             <button
@@ -287,6 +294,9 @@ export function GroupInfoModal({ groupId, isOpen, onClose, hideUserDetails = fal
                         const user = member.student?.user || member.collaborator?.user;
                         const isStudent = !!member.student;
                         const userId = user?.id;
+                        const collaboratorDetail = member.collaborator
+                          ? getCollaboratorDetailLabel(member.collaborator.kind, member.collaborator.subjects)
+                          : null;
                         
                         return (
                           <div
@@ -308,7 +318,9 @@ export function GroupInfoModal({ groupId, isOpen, onClose, hideUserDetails = fal
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className={`font-medium ${colors.text.primary} truncate`}>{user?.name}</p>
-                              <p className={`text-xs ${colors.text.muted} truncate`}>{user?.email}</p>
+                              <p className={`text-xs ${colors.text.muted} truncate`}>
+                                {collaboratorDetail || user?.email}
+                              </p>
                             </div>
                             {userId && !hideUserDetails && (
                               <button

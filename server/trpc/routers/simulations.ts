@@ -28,6 +28,53 @@ function jsonOrUndefined(value: Prisma.JsonValue | null): Prisma.InputJsonValue 
   return value === null ? undefined : value as Prisma.InputJsonValue;
 }
 
+async function validateTutorCorrectionTarget(prisma: PrismaClient, reviewerUserId?: string) {
+  if (!reviewerUserId) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Seleziona un collaboratore tutor per la correzione.',
+    });
+  }
+
+  const reviewer = await prisma.user.findFirst({
+    where: {
+      id: reviewerUserId,
+      role: 'COLLABORATOR',
+      isActive: true,
+      profileCompleted: true,
+      collaborator: {
+        kind: 'TUTOR',
+      },
+    },
+    select: { id: true },
+  });
+
+  if (!reviewer) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Collaboratore tutor selezionato non valido.',
+    });
+  }
+}
+
+function assertCanReviewOpenAnswers(user: { role: string; collaborator?: { kind?: string | null } | null }) {
+  if (user.role === 'COLLABORATOR' && user.collaborator?.kind === 'SECRETARY') {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'I collaboratori di segreteria non possono accedere alle correzioni delle simulazioni.',
+    });
+  }
+}
+
+function assertCanAccessOpenAnswerReview(user: { id: string; role: string }, openAnswerReviewerId?: string | null) {
+  if (user.role === 'COLLABORATOR' && openAnswerReviewerId && openAnswerReviewerId !== user.id) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Queste risposte aperte sono assegnate a un altro tutor.',
+    });
+  }
+}
+
 /**
  * Auto-close an expired assignment (called on-demand when student accesses)
  * This ensures assignments are closed in real-time without depending on cron jobs
@@ -4126,15 +4173,26 @@ export const simulationsRouter = router({
         }
       }
 
-      // Notify staff about completion (background, don't block response)
-      notificationService.notifySimulationCompletedByStudent(ctx.prisma, {
-        simulationId: simulation.id,
-        simulationTitle: simulation.title,
-        studentName: ctx.user.name,
-        hasOpenAnswers: openAnswersCount > 0,
-        openAnswersCount: openAnswersCount > 0 ? openAnswersCount : undefined,
-      }).catch(err => {
-        console.error('[Simulations] Failed to send completion notification:', err);
+      const openAnswerNotification = simulation.openAnswerReviewerId && openAnswersCount > 0
+        ? notificationService.notifyOpenAnswerCorrectionRequest(ctx.prisma, {
+            staffUserId: simulation.openAnswerReviewerId,
+            simulationId: simulation.id,
+            simulationTitle: simulation.title,
+            studentName: ctx.user.name,
+            openQuestionsCount: openAnswersCount,
+            resultId: updatedResult.id,
+          })
+        : notificationService.notifySimulationCompletedByStudent(ctx.prisma, {
+            simulationId: simulation.id,
+            simulationTitle: simulation.title,
+            studentName: ctx.user.name,
+            hasOpenAnswers: openAnswersCount > 0,
+            openAnswersCount: openAnswersCount > 0 ? openAnswersCount : undefined,
+            resultId: updatedResult.id,
+          });
+
+      openAnswerNotification.catch(err => {
+        console.error('[Simulations] Failed to send open-answer notification:', err);
       });
 
       // Return results if allowed
@@ -4656,22 +4714,8 @@ export const simulationsRouter = router({
         });
       }
 
-      // Validate staff member if correction requested
-      if (openQuestionCorrection === 'staff' && requestCorrectionFromId) {
-        const staffMember = await ctx.prisma.user.findFirst({
-          where: {
-            id: requestCorrectionFromId,
-            role: { in: ['ADMIN', 'COLLABORATOR'] },
-            isActive: true,
-          },
-        });
-
-        if (!staffMember) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: 'Docente selezionato non valido',
-          });
-        }
+      if (openQuestionCorrection === 'staff') {
+        await validateTutorCorrectionTarget(ctx.prisma, requestCorrectionFromId);
       }
 
       // Get main subject from most common subject in questions
@@ -4719,6 +4763,7 @@ export const simulationsRouter = router({
           totalQuestions: finalQuestions.length,
           showResults: true,
           showCorrectAnswers: openQuestionCorrection === 'self',
+          openAnswerReviewerId: openQuestionCorrection === 'staff' ? requestCorrectionFromId : null,
           allowReview: true,
           randomizeOrder: true,
           randomizeAnswers: true,
@@ -4749,34 +4794,11 @@ export const simulationsRouter = router({
         },
       });
 
-      // Count open questions for notification
-      const openQuestionsCount = simulation.questions.filter(
-        q => q.question.type === 'OPEN_TEXT'
-      ).length;
-
-      // If correction requested from staff, create notification for the specific staff member
-      if (openQuestionCorrection === 'staff' && requestCorrectionFromId && openQuestionsCount > 0) {
-        // Get the current user's name for the notification
-        const student = await ctx.prisma.user.findUnique({
-          where: { id: ctx.user.id },
-          select: { name: true },
-        });
-
-        await notificationService.notifyOpenAnswerCorrectionRequest(ctx.prisma, {
-          staffUserId: requestCorrectionFromId,
-          simulationId: simulation.id,
-          simulationTitle: simulation.title,
-          studentName: student?.name || 'Uno studente',
-          openQuestionsCount,
-        }).catch(err => {
-          // Log but don't fail the mutation if notification fails
-          console.error('[Simulations] Failed to notify staff for correction request:', err);
-        });
-      }
+      const hasOpenQuestions = simulation.questions.some(q => q.question.type === 'OPEN_TEXT');
 
       return { 
         id: simulation.id,
-        hasOpenQuestions: simulation.questions.some(q => q.question.type === 'OPEN_TEXT'),
+        hasOpenQuestions,
       };
     }),
 
@@ -4799,18 +4821,8 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Profilo studente non trovato' });
       }
 
-      if (input.openQuestionCorrection === 'staff' && input.requestCorrectionFromId) {
-        const staffMember = await ctx.prisma.user.findFirst({
-          where: {
-            id: input.requestCorrectionFromId,
-            role: { in: ['ADMIN', 'COLLABORATOR'] },
-            isActive: true,
-          },
-        });
-
-        if (!staffMember) {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Docente selezionato non valido' });
-        }
+      if (input.openQuestionCorrection === 'staff') {
+        await validateTutorCorrectionTarget(ctx.prisma, input.requestCorrectionFromId);
       }
 
       const groupIds = student.groupMemberships.map((membership) => membership.groupId);
@@ -4894,6 +4906,7 @@ export const simulationsRouter = router({
           totalQuestions: selectedQuestions.length,
           showResults: true,
           showCorrectAnswers: input.openQuestionCorrection === 'self',
+          openAnswerReviewerId: input.openQuestionCorrection === 'staff' ? input.requestCorrectionFromId : null,
           allowReview: true,
           randomizeOrder: template.randomizeOrder,
           randomizeAnswers: template.randomizeAnswers,
@@ -4923,28 +4936,11 @@ export const simulationsRouter = router({
         },
       });
 
-      const openQuestionsCount = simulation.questions.filter((question) => question.question.type === 'OPEN_TEXT').length;
-
-      if (input.openQuestionCorrection === 'staff' && input.requestCorrectionFromId && openQuestionsCount > 0) {
-        const studentUser = await ctx.prisma.user.findUnique({
-          where: { id: ctx.user.id },
-          select: { name: true },
-        });
-
-        await notificationService.notifyOpenAnswerCorrectionRequest(ctx.prisma, {
-          staffUserId: input.requestCorrectionFromId,
-          simulationId: simulation.id,
-          simulationTitle: simulation.title,
-          studentName: studentUser?.name || 'Uno studente',
-          openQuestionsCount,
-        }).catch((error) => {
-          console.error('[Simulations] Failed to notify staff for correction request:', error);
-        });
-      }
+      const hasOpenQuestions = simulation.questions.some((question) => question.question.type === 'OPEN_TEXT');
 
       return {
         id: simulation.id,
-        hasOpenQuestions: simulation.questions.some((question) => question.question.type === 'OPEN_TEXT'),
+        hasOpenQuestions,
       };
     }),
 
@@ -6462,11 +6458,22 @@ export const simulationsRouter = router({
       offset: z.number().min(0).default(0),
     }))
     .query(async ({ ctx, input }) => {
+      assertCanReviewOpenAnswers(ctx.user);
+
       const whereClause: Prisma.SimulationResultWhereInput = {
         pendingOpenAnswers: { gt: 0 },
         completedAt: { not: null },
         ...(input.simulationId ? { simulationId: input.simulationId } : {}),
       };
+
+      if (ctx.user.role === 'COLLABORATOR') {
+        whereClause.simulation = {
+          OR: [
+            { openAnswerReviewerId: null },
+            { openAnswerReviewerId: ctx.user.id },
+          ],
+        };
+      }
 
       const [results, total] = await Promise.all([
         ctx.prisma.simulationResult.findMany({
@@ -6525,6 +6532,8 @@ export const simulationsRouter = router({
   getOpenAnswersForResult: staffProcedure
     .input(z.object({ resultId: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCanReviewOpenAnswers(ctx.user);
+
       const result = await ctx.prisma.simulationResult.findUnique({
         where: { id: input.resultId },
         include: {
@@ -6533,6 +6542,7 @@ export const simulationsRouter = router({
               id: true, 
               title: true, 
               type: true,
+              openAnswerReviewerId: true,
               correctPoints: true,
               wrongPoints: true,
               blankPoints: true,
@@ -6565,6 +6575,8 @@ export const simulationsRouter = router({
       if (!result) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Risultato non trovato' });
       }
+
+      assertCanAccessOpenAnswerReview(ctx.user, result.simulation.openAnswerReviewerId);
 
       return {
         id: result.id,
@@ -6618,17 +6630,25 @@ export const simulationsRouter = router({
       validatorNotes: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCanReviewOpenAnswers(ctx.user);
+
       const openAnswer = await ctx.prisma.openAnswerSubmission.findUnique({
         where: { id: input.openAnswerId },
         include: {
           question: { select: { points: true } },
-          simulationResult: true,
+          simulationResult: {
+            include: {
+              simulation: { select: { openAnswerReviewerId: true } },
+            },
+          },
         },
       });
 
       if (!openAnswer) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Risposta non trovata' });
       }
+
+      assertCanAccessOpenAnswerReview(ctx.user, openAnswer.simulationResult?.simulation.openAnswerReviewerId);
 
       // Calculate final score based on manual score
       const finalScore = input.manualScore;
@@ -6687,13 +6707,20 @@ export const simulationsRouter = router({
       })),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCanReviewOpenAnswers(ctx.user);
+
       const result = await ctx.prisma.simulationResult.findUnique({
         where: { id: input.resultId },
+        include: {
+          simulation: { select: { openAnswerReviewerId: true } },
+        },
       });
 
       if (!result) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Risultato non trovato' });
       }
+
+      assertCanAccessOpenAnswerReview(ctx.user, result.simulation.openAnswerReviewerId);
 
       // Update all open answers in a transaction
       await ctx.prisma.$transaction(async () => {

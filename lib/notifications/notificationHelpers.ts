@@ -907,6 +907,8 @@ export const notifications = {
       questionTitle: string;
       feedbackType: string;
       reporterName: string;
+      reporterUserId: string;
+      subjectId?: string | null;
       creatorUserId?: string;
     }
   ) {
@@ -919,46 +921,79 @@ export const notifications = {
       OTHER: 'Altro',
     };
     const feedbackLabel = typeLabels[params.feedbackType] || params.feedbackType;
+    const feedbackUrl = `/domande/segnalazioni?questionId=${params.questionId}`;
 
-    // Notify all staff (admin + collaborators)
-    const staffNotification = notifyStaff(prisma, {
+    const [adminRecipients, tutorRecipients] = await Promise.all([
+      prisma.user.findMany({
+        where: {
+          role: 'ADMIN',
+          isActive: true,
+        },
+        select: { id: true },
+      }),
+      params.subjectId
+        ? prisma.user.findMany({
+          where: {
+            role: 'COLLABORATOR',
+            isActive: true,
+            collaborator: {
+              kind: 'TUTOR',
+              subjects: {
+                some: { subjectId: params.subjectId },
+              },
+            },
+          },
+          select: { id: true },
+        })
+        : Promise.resolve([]),
+    ]);
+
+    const notificationsToSend: Promise<unknown>[] = [];
+    const staffUserIds = Array.from(new Set([
+      ...adminRecipients.map((user) => user.id),
+      ...tutorRecipients.map((user) => user.id),
+    ]));
+
+    if (staffUserIds.length > 0) {
+      notificationsToSend.push(createBulkNotifications(prisma, {
+        userIds: staffUserIds,
+        type: 'QUESTION_FEEDBACK',
+        title: 'Segnalazione su domanda',
+        message: `${params.reporterName} ha segnalato un problema (${feedbackLabel}) sulla domanda: "${params.questionTitle}"`,
+        linkUrl: feedbackUrl,
+        linkType: 'question',
+        linkEntityId: params.questionId,
+      }));
+    }
+
+    notificationsToSend.push(createNotification(prisma, {
+      userId: params.reporterUserId,
       type: 'QUESTION_FEEDBACK',
-      title: 'Segnalazione su domanda',
-      message: `${params.reporterName} ha segnalato un problema (${feedbackLabel}) sulla domanda: "${params.questionTitle}"`,
-      linkUrl: `/domande/${params.questionId}`,
-      linkType: 'question',
-      linkEntityId: params.questionId,
-    });
+      title: 'Segnalazione inviata',
+      message: `La tua segnalazione (${feedbackLabel}) sulla domanda "${params.questionTitle}" è stata inviata allo staff.`,
+    }));
 
-    // If there's a creator, notify them specifically (if not already staff)
-    if (params.creatorUserId) {
+    if (params.creatorUserId && params.creatorUserId !== params.reporterUserId) {
       const creator = await prisma.user.findUnique({
         where: { id: params.creatorUserId },
         select: { role: true, isActive: true },
       });
 
-      // Only send separate notification if creator is not admin/collaborator
-      // (they already got it from notifyStaff)
       if (creator && creator.isActive && creator.role === 'STUDENT') {
-        const creatorNotification = createNotification(prisma, {
+        notificationsToSend.push(createNotification(prisma, {
           userId: params.creatorUserId,
           type: 'QUESTION_FEEDBACK',
           title: 'Segnalazione sulla tua domanda',
           message: `${params.reporterName} ha segnalato un problema (${feedbackLabel}) su una domanda che hai creato: "${params.questionTitle}"`,
-          linkUrl: `/domande/${params.questionId}`,
-          linkType: 'question',
-          linkEntityId: params.questionId,
-        });
-
-        return Promise.all([staffNotification, creatorNotification]);
+        }));
       }
     }
 
-    return staffNotification;
+    return Promise.all(notificationsToSend);
   },
 
   /**
-   * Notifica risposta aperta da correggere (a tutto lo staff)
+  * Notifica risposta aperta da correggere (admin e tutor)
    */
   async openAnswerToReview(
     prisma: PrismaClient,
@@ -967,15 +1002,39 @@ export const notifications = {
       simulationTitle: string;
       studentName: string;
       answersCount: number;
+      resultId?: string;
     }
   ) {
-    return notifyStaff(prisma, {
+    const reviewUrl = params.resultId
+      ? `/simulazioni/risposte-aperte/${params.resultId}`
+      : `/simulazioni/risposte-aperte?simulationId=${params.simulationId}`;
+    const reviewStaff = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { role: 'ADMIN' },
+          {
+            role: 'COLLABORATOR',
+            collaborator: { kind: 'TUTOR' },
+          },
+        ],
+      },
+      select: { id: true },
+    });
+
+    const userIds = reviewStaff.map((user) => user.id);
+    if (userIds.length === 0) {
+      return { success: true, count: 0, errors: [] };
+    }
+
+    return createBulkNotifications(prisma, {
+      userIds,
       type: 'OPEN_ANSWER_TO_REVIEW',
       title: 'Risposte da correggere',
       message: `${params.studentName} ha completato la simulazione "${params.simulationTitle}" con ${params.answersCount} risposte aperte da valutare`,
-      linkUrl: `/simulazioni/${params.simulationId}/correzioni`,
+      linkUrl: reviewUrl,
       linkType: 'simulation',
-      linkEntityId: params.simulationId,
+      linkEntityId: params.resultId ?? params.simulationId,
     });
   },
 
@@ -991,16 +1050,20 @@ export const notifications = {
       simulationTitle: string;
       studentName: string;
       openQuestionsCount: number;
+      resultId?: string;
     }
   ) {
+    const reviewUrl = params.resultId
+      ? `/simulazioni/risposte-aperte/${params.resultId}`
+      : `/simulazioni/risposte-aperte?simulationId=${params.simulationId}`;
     return createNotification(prisma, {
       userId: params.staffUserId,
       type: 'OPEN_ANSWER_TO_REVIEW',
       title: 'Richiesta correzione domande aperte',
       message: `${params.studentName} ha richiesto la tua correzione per ${params.openQuestionsCount} domande aperte nella simulazione "${params.simulationTitle}"`,
-      linkUrl: `/simulazioni/${params.simulationId}/correzioni`,
+      linkUrl: reviewUrl,
       linkType: 'simulation',
-      linkEntityId: params.simulationId,
+      linkEntityId: params.resultId ?? params.simulationId,
     });
   },
 

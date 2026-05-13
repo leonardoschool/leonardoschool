@@ -195,12 +195,17 @@ export default function VirtualRoomPage() {
   const startSession = trpc.virtualRoom.startSession.useMutation({
     onSuccess: () => {
       setShowStartConfirm(false);
+      setShowForceStartConfirm(false);
       showSuccess('Sessione avviata', 'La simulazione è iniziata per tutti i partecipanti.');
       sessionState.refetch();
     },
     onError: (error) => {
       setShowStartConfirm(false);
-      if (error.message.includes('Solo') && error.message.includes('studenti sono connessi')) {
+      if (
+        error.message.includes('Solo') &&
+        error.message.includes('studenti sono connessi') &&
+        connectedCount < totalInvited
+      ) {
         setShowForceStartConfirm(true);
       } else {
         handleMutationError(error);
@@ -364,10 +369,12 @@ export default function VirtualRoomPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStudent, participantId]);
 
+  const shouldForceStart = (sessionState.data?.connectedCount ?? 0) >= (sessionState.data?.totalInvited ?? 0);
+
   const handleStartSession = useCallback(() => {
     if (!sessionId) return;
-    startSession.mutate({ sessionId, forceStart: false });
-  }, [sessionId, startSession]);
+    startSession.mutate({ sessionId, forceStart: shouldForceStart });
+  }, [sessionId, shouldForceStart, startSession]);
 
   const handleForceStart = useCallback(() => {
     if (!sessionId) return;
@@ -1142,135 +1149,6 @@ export default function VirtualRoomPage() {
               >
                 <Ban className="w-4 h-4 mr-2" />
                 {kickParticipant.isPending ? 'Espulsione...' : 'Espelli Studente'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Start Session Confirmation Modal */}
-      {showStartConfirm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-500/20 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="p-5 border-b border-blue-200 dark:border-blue-500/20 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center">
-                <Play className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <h3 className={`font-semibold ${colors.text.primary}`}>Avviare la Simulazione?</h3>
-                <p className={`text-sm ${colors.text.muted}`}>Il timer partirà per tutti contemporaneamente</p>
-              </div>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className={`p-4 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20`}>
-                <div className="flex items-center gap-3 mb-3">
-                  <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                  <span className={`font-medium ${colors.text.primary}`}>Stato Connessioni</span>
-                </div>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className={colors.text.muted}>Studenti connessi:</span>
-                    <span className={`font-semibold ${allConnected ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                      {connectedCount}/{totalInvited}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className={colors.text.muted}>Studenti pronti:</span>
-                    <span className={`font-semibold ${colors.text.primary}`}>
-                      {readyCount}/{connectedCount}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              
-              {!allConnected && (
-                <div className={`p-3 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 flex items-start gap-2`}>
-                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-                  <p className="text-sm text-amber-700 dark:text-amber-300">
-                    Non tutti gli studenti invitati sono connessi. Puoi comunque avviare la simulazione.
-                  </p>
-                </div>
-              )}
-              
-              <p className={colors.text.secondary}>
-                Una volta avviata, il timer inizierà immediatamente per tutti i partecipanti connessi e non potrà essere messo in pausa.
-              </p>
-            </div>
-            <div className="p-5 pt-0 flex justify-end gap-3">
-              <Button
-                variant="ghost"
-                onClick={() => setShowStartConfirm(false)}
-                className={`${colors.text.muted} hover:text-gray-900 dark:hover:text-white`}
-              >
-                Annulla
-              </Button>
-              <Button
-                onClick={() => {
-                  if (sessionId) {
-                    startSession.mutate({ 
-                      sessionId, 
-                      forceStart: !allConnected 
-                    });
-                  }
-                }}
-                disabled={startSession.isPending}
-                className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white border-0 px-6"
-              >
-                <Play className="w-4 h-4 mr-2" />
-                {startSession.isPending ? 'Avvio in corso...' : 'Avvia Ora'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Force Start Confirmation Modal (when not all students connected) */}
-      {showForceStartConfirm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-900 border border-amber-200 dark:border-amber-500/20 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="p-5 border-b border-amber-200 dark:border-amber-500/20 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <h3 className={`font-semibold ${colors.text.primary}`}>Non tutti sono connessi</h3>
-                <p className={`text-sm ${colors.text.muted}`}>Vuoi avviare comunque?</p>
-              </div>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className={`p-4 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20`}>
-                <p className="text-sm text-amber-700 dark:text-amber-300">
-                  Solo <span className="font-semibold">{connectedCount} su {totalInvited}</span> studenti invitati sono attualmente connessi.
-                </p>
-              </div>
-              
-              <p className={colors.text.secondary}>
-                Gli studenti non connessi non potranno partecipare a questa simulazione. Sei sicuro di voler avviare comunque?
-              </p>
-            </div>
-            <div className="p-5 pt-0 flex justify-end gap-3">
-              <Button
-                variant="ghost"
-                onClick={() => setShowForceStartConfirm(false)}
-                className={`${colors.text.muted} hover:text-gray-900 dark:hover:text-white`}
-              >
-                Annulla
-              </Button>
-              <Button
-                onClick={() => {
-                  if (sessionId) {
-                    startSession.mutate({ 
-                      sessionId, 
-                      forceStart: true 
-                    });
-                  }
-                  setShowForceStartConfirm(false);
-                }}
-                disabled={startSession.isPending}
-                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 px-6"
-              >
-                <Play className="w-4 h-4 mr-2" />
-                {startSession.isPending ? 'Avvio...' : 'Avvia Comunque'}
               </Button>
             </div>
           </div>

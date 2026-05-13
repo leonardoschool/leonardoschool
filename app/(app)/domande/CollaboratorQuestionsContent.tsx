@@ -27,6 +27,8 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  MessageSquare,
+  BookOpen,
   Layers,
   User,
   Upload,
@@ -141,6 +143,16 @@ export default function CollaboratorQuestionsContent() {
 
   // Fetch stats
   const { data: stats } = trpc.questions.getQuestionStats.useQuery();
+  const { data: pendingFeedbacksData } = trpc.questions.getPendingFeedbacks.useQuery({
+    page: 1,
+    pageSize: 1,
+    status: 'PENDING',
+  });
+  const { data: collaboratorProfile } = trpc.collaborators.getProfile.useQuery();
+  const { data: pendingReviewsData } = trpc.simulations.getResultsWithPendingReviews.useQuery(
+    { limit: 1, offset: 0 },
+    { enabled: collaboratorProfile?.kind === 'TUTOR' }
+  );
 
   // Mutations
   const deleteMutation = trpc.questions.deleteQuestion.useMutation({
@@ -214,6 +226,8 @@ export default function CollaboratorQuestionsContent() {
   // Helpers
   const questions = questionsData?.questions ?? [];
   const pagination = questionsData?.pagination ?? { page: 1, pageSize: 20, total: 0, totalPages: 0 };
+  const pendingFeedbacksCount = pendingFeedbacksData?.pagination.total ?? 0;
+  const pendingReviewsCount = pendingReviewsData?.total ?? 0;
 
   const clearFilters = () => {
     setSearch('');
@@ -354,6 +368,54 @@ export default function CollaboratorQuestionsContent() {
           </div>
         </div>
       )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Link
+          href="/domande/segnalazioni"
+          className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} border ${colors.border.primary} hover:${colors.background.secondary} transition-colors`}
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className={`w-10 h-10 rounded-lg ${colors.status.warning.softBg} flex items-center justify-center shrink-0`}>
+                <MessageSquare className={`w-5 h-5 ${colors.status.warning.text}`} />
+              </div>
+              <div className="min-w-0">
+                <p className={`font-semibold ${colors.text.primary}`}>Segnalazioni domande</p>
+                <p className={`text-sm ${colors.text.muted} truncate`}>Problemi segnalati dagli studenti</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <span className={`px-2.5 py-1 rounded-full text-sm font-semibold ${pendingFeedbacksCount > 0 ? `${colors.primary.bg} text-white` : `${colors.background.tertiary} ${colors.text.muted}`}`}>
+                {pendingFeedbacksCount}
+              </span>
+              <ChevronRight className={`w-5 h-5 ${colors.text.muted}`} />
+            </div>
+          </div>
+        </Link>
+
+        <Link
+          href="/simulazioni/risposte-aperte"
+          className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} border ${colors.border.primary} hover:${colors.background.secondary} transition-colors`}
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className={`w-10 h-10 rounded-lg ${colors.status.info.softBg} flex items-center justify-center shrink-0`}>
+                <BookOpen className={`w-5 h-5 ${colors.status.info.text}`} />
+              </div>
+              <div className="min-w-0">
+                <p className={`font-semibold ${colors.text.primary}`}>Risposte aperte</p>
+                <p className={`text-sm ${colors.text.muted} truncate`}>Domande aperte da correggere</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <span className={`px-2.5 py-1 rounded-full text-sm font-semibold ${pendingReviewsCount > 0 ? `${colors.primary.bg} text-white` : `${colors.background.tertiary} ${colors.text.muted}`}`}>
+                {pendingReviewsCount}
+              </span>
+              <ChevronRight className={`w-5 h-5 ${colors.text.muted}`} />
+            </div>
+          </div>
+        </Link>
+      </div>
 
       {/* Search and Filters */}
       <div className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm}`}>

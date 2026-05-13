@@ -75,6 +75,24 @@ export const messagesRouter = router({
         name: true,
         email: true,
         role: true,
+        collaborator: {
+          select: {
+            kind: true,
+            subjects: {
+              include: {
+                subject: {
+                  select: {
+                    id: true,
+                    name: true,
+                    code: true,
+                    color: true,
+                  },
+                },
+              },
+              orderBy: { isPrimary: 'desc' },
+            },
+          },
+        },
       },
       orderBy: [
         { role: 'asc' },
@@ -106,6 +124,24 @@ export const messagesRouter = router({
                         email: true,
                         role: true,
                         isActive: true,
+                        collaborator: {
+                          select: {
+                            kind: true,
+                            subjects: {
+                              include: {
+                                subject: {
+                                  select: {
+                                    id: true,
+                                    name: true,
+                                    code: true,
+                                    color: true,
+                                  },
+                                },
+                              },
+                              orderBy: { isPrimary: 'desc' },
+                            },
+                          },
+                        },
                       },
                     },
                   },
@@ -121,6 +157,24 @@ export const messagesRouter = router({
                             email: true,
                             role: true,
                             isActive: true,
+                            collaborator: {
+                              select: {
+                                kind: true,
+                                subjects: {
+                                  include: {
+                                    subject: {
+                                      select: {
+                                        id: true,
+                                        name: true,
+                                        code: true,
+                                        color: true,
+                                      },
+                                    },
+                                  },
+                                  orderBy: { isPrimary: 'desc' },
+                                },
+                              },
+                            },
                           },
                         },
                       },
@@ -154,6 +208,7 @@ export const messagesRouter = router({
               name: refStudent.name,
               email: refStudent.email,
               role: refStudent.role,
+              collaborator: refStudent.collaborator,
             });
             existingIds.add(refStudent.id);
           }
@@ -161,7 +216,14 @@ export const messagesRouter = router({
       }
     }
     
-    return users;
+    return users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      collaboratorKind: user.collaborator?.kind ?? null,
+      collaboratorSubjects: user.collaborator?.subjects ?? [],
+    }));
   }),
 
   /**
@@ -567,7 +629,30 @@ export const messagesRouter = router({
             participants: {
               include: {
                 user: {
-                  select: { id: true, name: true, email: true, role: true },
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    role: true,
+                    collaborator: {
+                      select: {
+                        kind: true,
+                        subjects: {
+                          include: {
+                            subject: {
+                              select: {
+                                id: true,
+                                name: true,
+                                code: true,
+                                color: true,
+                              },
+                            },
+                          },
+                          orderBy: { isPrimary: 'desc' },
+                        },
+                      },
+                    },
+                  },
                 },
               },
             },
@@ -618,6 +703,8 @@ export const messagesRouter = router({
               name: p.user.name,
               email: p.user.email,
               role: p.user.role,
+              collaboratorKind: p.user.collaborator?.kind ?? null,
+              collaboratorSubjects: p.user.collaborator?.subjects ?? [],
             })),
           };
         })
@@ -668,7 +755,30 @@ export const messagesRouter = router({
           participants: {
             include: {
               user: {
-                select: { id: true, name: true, email: true, role: true },
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  role: true,
+                  collaborator: {
+                    select: {
+                      kind: true,
+                      subjects: {
+                        include: {
+                          subject: {
+                            select: {
+                              id: true,
+                              name: true,
+                              code: true,
+                              color: true,
+                            },
+                          },
+                        },
+                        orderBy: { isPrimary: 'desc' },
+                      },
+                    },
+                  },
+                },
               },
             },
           },
@@ -722,6 +832,8 @@ export const messagesRouter = router({
           name: p.user.name,
           email: p.user.email,
           role: p.user.role,
+          collaboratorKind: p.user.collaborator?.kind ?? null,
+          collaboratorSubjects: p.user.collaborator?.subjects ?? [],
         }));
       
       return {

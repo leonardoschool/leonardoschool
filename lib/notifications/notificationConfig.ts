@@ -566,12 +566,12 @@ const notificationRouteHandlers: Record<NotificationType, RouteHandler> = {
   // === QUESTIONS ===
   QUESTION_FEEDBACK: (userRole, basePath, params) => 
     (userRole === 'ADMIN' || userRole === 'COLLABORATOR')
-      ? (params?.questionId ? `${basePath}/domande/${params.questionId}` : `${basePath}/domande`)
+      ? (params?.questionId ? `${basePath}/domande/segnalazioni?questionId=${params.questionId}` : `${basePath}/domande/segnalazioni`)
       : null,
 
   OPEN_ANSWER_TO_REVIEW: (userRole, basePath, params) => 
     (userRole === 'ADMIN' || userRole === 'COLLABORATOR')
-      ? (params?.simulationId ? `${basePath}/simulazioni/${params.simulationId}/correzioni` : `${basePath}/simulazioni`)
+      ? (params?.simulationId ? `${basePath}/simulazioni/risposte-aperte?simulationId=${params.simulationId}` : `${basePath}/simulazioni/risposte-aperte`)
       : null,
 
   // === MATERIALS ===

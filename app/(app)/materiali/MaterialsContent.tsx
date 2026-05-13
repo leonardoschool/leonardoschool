@@ -54,6 +54,7 @@ import {
   validateMaterialFileSize,
   type MaterialFileType,
 } from '@/lib/validations/fileValidation';
+import { getCollaboratorDetailLabel } from '@/lib/utils/collaboratorDisplay';
 
 // ==================== TYPES ====================
 
@@ -2022,9 +2023,13 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
                         
                         if (userTypeFilter === 'all' || userTypeFilter === 'collaborators') {
                           allCollaborators?.forEach((collaborator) => {
+                            const collaboratorDetail = getCollaboratorDetailLabel(
+                              collaborator.collaborator?.kind,
+                              collaborator.collaborator?.subjects
+                            );
                             users.push({
                               id: collaborator.id,
-                              name: collaborator.name,
+                              name: `${collaborator.name} · ${collaboratorDetail}`,
                               type: 'collaborator',
                             });
                           });

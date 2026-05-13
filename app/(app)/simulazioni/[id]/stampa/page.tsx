@@ -4,6 +4,7 @@ import { use, useEffect, useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { PageLoader } from '@/components/ui/loaders';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import { normalizeImageSrc } from '@/lib/utils/imageUrl';
 import { Printer, ArrowLeft, Download } from 'lucide-react';
 import Link from 'next/link';
 import { colors } from '@/lib/theme/colors';
@@ -344,11 +345,11 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
                       </div>
 
                       {/* Image if present */}
-                      {sq.question.imageUrl && (
+                      {normalizeImageSrc(sq.question.imageUrl) && (
                         <div className="my-2 text-center">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={sq.question.imageUrl}
+                            src={normalizeImageSrc(sq.question.imageUrl) ?? undefined}
                             alt={`Immagine domanda ${index + 1}`}
                             className="max-w-md max-h-48 mx-auto"
                           />
@@ -398,11 +399,11 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
                       </div>
 
                       {/* Image if present */}
-                      {sq.question.imageUrl && (
+                      {normalizeImageSrc(sq.question.imageUrl) && (
                         <div className="my-2 text-center">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={sq.question.imageUrl}
+                            src={normalizeImageSrc(sq.question.imageUrl) ?? undefined}
                             alt={`Immagine domanda ${mcQuestions.length + index + 1}`}
                             className="max-w-md max-h-48 mx-auto"
                           />

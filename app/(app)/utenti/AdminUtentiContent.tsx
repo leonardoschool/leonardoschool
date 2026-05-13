@@ -13,6 +13,7 @@ import Checkbox from '@/components/ui/Checkbox';
 import ContractContentEditor from '@/components/admin/contracts/ContractContentEditor';
 import { uploadContractImages } from '@/lib/utils/contractImageUpload';
 import { getContractPlaceholders } from '@/lib/constants/contractPlaceholders';
+import { getCollaboratorDetailLabel } from '@/lib/utils/collaboratorDisplay';
 import {
   Users,
   Search,
@@ -61,6 +62,7 @@ type RoleFilter = 'ALL' | 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
 type StatusFilter = 'all' | 'active' | 'inactive' | 'pending_profile' | 'pending_contract' | 'pending_sign' | 'pending_activation' | 'no_signed_contract';
 type ConfirmModalType = 'delete' | 'toggleActive' | 'changeRole' | 'revokeContract' | 'revokeSignedContract';
 type AssignableRole = 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
+type CollaboratorKind = 'TUTOR' | 'SECRETARY';
 
 const statusOptions: { value: StatusFilter; label: string; shortLabel: string; icon: any; color: string; bg: string; activeColor: string }[] = [
   { value: 'all', label: 'Tutti', shortLabel: 'Tutti', icon: Users, color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-100 dark:bg-gray-800', activeColor: 'bg-gray-600' },
@@ -296,14 +298,28 @@ function ParentGuardianSection({
 }
 
 type UserRoleType = 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
+type RoleDropdownOption = {
+  key: 'ADMIN' | 'COLLABORATOR_TUTOR' | 'COLLABORATOR_SECRETARY' | 'STUDENT';
+  role: UserRoleType;
+  collaboratorKind?: CollaboratorKind;
+  label: string;
+  icon: typeof Shield;
+  bg: string;
+  color: string;
+  ring: string;
+};
 
 // Role dropdown component
 function RoleDropdown({
   currentRole,
+  collaboratorKind,
+  collaboratorSubjects,
   onSelect,
 }: {
   currentRole: UserRoleType;
-  onSelect: (role: UserRoleType) => void;
+  collaboratorKind?: CollaboratorKind | null;
+  collaboratorSubjects?: Array<{ subject?: { code?: string | null; name?: string | null } | null }> | null;
+  onSelect: (option: Pick<RoleDropdownOption, 'role' | 'collaboratorKind'>) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -318,13 +334,25 @@ function RoleDropdown({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const roles = [
-    { value: 'ADMIN' as const, label: 'Admin', icon: Shield, bg: 'bg-red-100 dark:bg-red-900/30', color: 'text-red-600 dark:text-red-400', ring: 'ring-red-400' },
-    { value: 'COLLABORATOR' as const, label: 'Collaboratore', icon: UserCog, bg: 'bg-purple-100 dark:bg-purple-900/30', color: 'text-purple-600 dark:text-purple-400', ring: 'ring-purple-400' },
-    { value: 'STUDENT' as const, label: 'Studente', icon: GraduationCap, bg: 'bg-blue-100 dark:bg-blue-900/30', color: 'text-blue-600 dark:text-blue-400', ring: 'ring-blue-400' },
+  const roles: RoleDropdownOption[] = [
+    { key: 'ADMIN', role: 'ADMIN', label: 'Admin', icon: Shield, bg: 'bg-red-100 dark:bg-red-900/30', color: 'text-red-600 dark:text-red-400', ring: 'ring-red-400' },
+    { key: 'COLLABORATOR_TUTOR', role: 'COLLABORATOR', collaboratorKind: 'TUTOR', label: 'Collaboratore tutor', icon: UserCog, bg: 'bg-purple-100 dark:bg-purple-900/30', color: 'text-purple-600 dark:text-purple-400', ring: 'ring-purple-400' },
+    { key: 'COLLABORATOR_SECRETARY', role: 'COLLABORATOR', collaboratorKind: 'SECRETARY', label: 'Collaboratore segreteria', icon: UserCog, bg: 'bg-fuchsia-100 dark:bg-fuchsia-900/30', color: 'text-fuchsia-700 dark:text-fuchsia-400', ring: 'ring-fuchsia-400' },
+    { key: 'STUDENT', role: 'STUDENT', label: 'Studente', icon: GraduationCap, bg: 'bg-blue-100 dark:bg-blue-900/30', color: 'text-blue-600 dark:text-blue-400', ring: 'ring-blue-400' },
   ];
 
-  const current = roles.find(r => r.value === currentRole)!;
+  const currentKey = currentRole === 'COLLABORATOR'
+    ? collaboratorKind === 'SECRETARY'
+      ? 'COLLABORATOR_SECRETARY'
+      : 'COLLABORATOR_TUTOR'
+    : currentRole;
+
+  const current = roles.find(r => r.key === currentKey)!;
+  const currentLabel = currentRole === 'COLLABORATOR'
+    ? collaboratorKind === 'SECRETARY'
+      ? 'Collaboratore segreteria'
+      : `Collaboratore · ${getCollaboratorDetailLabel(collaboratorKind, collaboratorSubjects)}`
+    : current.label;
   const CurrentIcon = current.icon;
 
   return (
@@ -334,19 +362,19 @@ function RoleDropdown({
         className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${current.bg} ${current.color} hover:ring-2 ${current.ring} hover:ring-offset-1`}
       >
         <CurrentIcon className="w-3.5 h-3.5" />
-        <span>{current.label}</span>
+        <span>{currentLabel}</span>
         <ChevronDown className={`w-3 h-3 ml-0.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className={`absolute left-0 top-full mt-1.5 rounded-xl shadow-lg border ${colors.border.primary} ${colors.background.card} z-[100] min-w-[150px] overflow-hidden`}>
-          {roles.filter(r => r.value !== currentRole).map((role) => {
+        <div className={`absolute left-0 top-full mt-1.5 rounded-xl shadow-lg border ${colors.border.primary} ${colors.background.card} z-[100] min-w-[190px] overflow-hidden`}>
+          {roles.filter(r => r.key !== currentKey).map((role) => {
             const RoleIcon = role.icon;
             return (
               <button
-                key={role.value}
+                key={role.key}
                 onClick={() => {
-                  onSelect(role.value);
+                  onSelect({ role: role.role, collaboratorKind: role.collaboratorKind });
                   setIsOpen(false);
                 }}
                 className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2.5 transition-all hover:bg-gray-100 dark:hover:bg-gray-800`}
@@ -1234,6 +1262,7 @@ export default function AdminUtentiContent() {
     userName: string;
     currentActive?: boolean;
     newRole?: AssignableRole;
+    newCollaboratorKind?: CollaboratorKind;
     contractId?: string;
     hasSignedContract?: boolean;
     userRole?: string;
@@ -1299,6 +1328,7 @@ export default function AdminUtentiContent() {
     name: '',
     email: '',
     role: 'STUDENT' as AssignableRole,
+    collaboratorKind: 'TUTOR' as CollaboratorKind,
     groupId: '',
   });
 
@@ -1381,8 +1411,33 @@ export default function AdminUtentiContent() {
     onSuccess: () => {
       utils.users.getAll.invalidate();
       utils.users.getStats.invalidate();
-      setCreateUserModal({ isOpen: false, name: '', email: '', role: 'STUDENT', groupId: '' });
+      setCreateUserModal({ isOpen: false, name: '', email: '', role: 'STUDENT', collaboratorKind: 'TUTOR', groupId: '' });
       showSuccess('Utente creato', 'L\'account è stato creato e l\'email di benvenuto è stata inviata.');
+    },
+    onError: handleMutationError,
+  });
+
+  const updateCollaboratorKindMutation = trpc.collaborators.updatePermissions.useMutation({
+    onSuccess: (updatedCollaborator) => {
+      utils.users.getAll.invalidate();
+      utils.collaborators.getAll.invalidate();
+      setViewUserModal((current) => {
+        if (!current.user?.collaborator || current.user.collaborator.id !== updatedCollaborator.id) {
+          return current;
+        }
+
+        return {
+          ...current,
+          user: {
+            ...current.user,
+            collaborator: {
+              ...current.user.collaborator,
+              kind: updatedCollaborator.kind,
+            },
+          },
+        };
+      });
+      showSuccess('Tipo collaboratore aggiornato', 'Il profilo collaboratore è stato aggiornato.');
     },
     onError: handleMutationError,
   });
@@ -1445,13 +1500,19 @@ export default function AdminUtentiContent() {
     });
   };
 
-  const openChangeRoleModal = (userId: string, userName: string, newRole: 'ADMIN' | 'COLLABORATOR' | 'STUDENT') => {
+  const openChangeRoleModal = (
+    userId: string,
+    userName: string,
+    newRole: 'ADMIN' | 'COLLABORATOR' | 'STUDENT',
+    newCollaboratorKind?: CollaboratorKind
+  ) => {
     setConfirmModal({
       isOpen: true,
       type: 'changeRole',
       userId,
       userName,
       newRole,
+      newCollaboratorKind,
     });
   };
 
@@ -1485,7 +1546,11 @@ export default function AdminUtentiContent() {
         break;
       case 'changeRole':
         if (confirmModal.newRole) {
-          changeRoleMutation.mutate({ userId: confirmModal.userId, newRole: confirmModal.newRole });
+          changeRoleMutation.mutate({
+            userId: confirmModal.userId,
+            newRole: confirmModal.newRole,
+            collaboratorKind: confirmModal.newCollaboratorKind,
+          });
         }
         break;
       case 'revokeContract':
@@ -1564,7 +1629,11 @@ export default function AdminUtentiContent() {
           isLoading: toggleActiveMutation.isPending,
         };
       case 'changeRole':
-        const roleLabels = { ADMIN: 'Amministratore', COLLABORATOR: 'Collaboratore', STUDENT: 'Studente' };
+        const roleLabels = {
+          ADMIN: 'Amministratore',
+          COLLABORATOR: confirmModal.newCollaboratorKind === 'SECRETARY' ? 'Collaboratore segreteria' : 'Collaboratore tutor',
+          STUDENT: 'Studente',
+        };
         return {
           title: 'Cambia Ruolo',
           message: `Sei sicuro di voler cambiare il ruolo di "${confirmModal.userName}" a ${roleLabels[confirmModal.newRole!]}?`,
@@ -1593,12 +1662,23 @@ export default function AdminUtentiContent() {
     }
   };
 
-  const getRoleBadge = (userRole: string) => {
+  const getRoleBadge = (
+    userRole: string,
+    collaboratorKind?: CollaboratorKind | null,
+    collaboratorSubjects?: Array<{ subject?: { code?: string | null; name?: string | null } | null }> | null
+  ) => {
     switch (userRole) {
       case 'ADMIN':
         return { label: 'Admin', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-100 dark:bg-red-900/30', icon: Shield };
       case 'COLLABORATOR':
-        return { label: 'Collaboratore', color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-100 dark:bg-purple-900/30', icon: UserCog };
+        return {
+          label: collaboratorKind === 'SECRETARY'
+            ? 'Collaboratore segreteria'
+            : `Collaboratore · ${getCollaboratorDetailLabel(collaboratorKind, collaboratorSubjects)}`,
+          color: 'text-purple-600 dark:text-purple-400',
+          bg: 'bg-purple-100 dark:bg-purple-900/30',
+          icon: UserCog,
+        };
       default:
         return { label: 'Studente', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30', icon: GraduationCap };
     }
@@ -1656,7 +1736,7 @@ export default function AdminUtentiContent() {
           </p>
         </div>
         <button
-          onClick={() => setCreateUserModal({ isOpen: true, name: '', email: '', role: 'STUDENT', groupId: '' })}
+          onClick={() => setCreateUserModal({ isOpen: true, name: '', email: '', role: 'STUDENT', collaboratorKind: 'TUTOR', groupId: '' })}
           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors flex-shrink-0"
         >
           <Plus className="w-4 h-4" />
@@ -1822,7 +1902,7 @@ export default function AdminUtentiContent() {
             {/* Mobile Cards View */}
             <div className="block lg:hidden divide-y divide-gray-200 dark:divide-gray-700">
               {filteredUsers.map((user: any) => {
-                const roleBadge = getRoleBadge(user.role);
+                const roleBadge = getRoleBadge(user.role, user.collaborator?.kind, user.collaborator?.subjects);
                 const statusBadge = getStatusBadge(user);
                 const RoleIcon = roleBadge.icon;
                 
@@ -2034,12 +2114,27 @@ export default function AdminUtentiContent() {
                       
                       {/* Role change dropdown for mobile - disabled for self */}
                       {!isSelf && (
-                        <div className="ml-auto">
+                        <div className="ml-auto flex flex-wrap justify-end gap-2">
                           <RoleDropdown
                             currentRole={user.role}
-                            onSelect={(newRole) => {
-                              if (newRole !== user.role) {
-                                openChangeRoleModal(user.id, user.name, newRole);
+                            collaboratorKind={user.collaborator?.kind}
+                            collaboratorSubjects={user.collaborator?.subjects}
+                            onSelect={({ role: nextRole, collaboratorKind: nextKind }) => {
+                              if (nextRole !== user.role) {
+                                openChangeRoleModal(user.id, user.name, nextRole, nextKind);
+                                return;
+                              }
+
+                              if (
+                                nextRole === 'COLLABORATOR' &&
+                                user.collaborator?.id &&
+                                nextKind &&
+                                nextKind !== (user.collaborator.kind ?? 'TUTOR')
+                              ) {
+                                updateCollaboratorKindMutation.mutate({
+                                  collaboratorId: user.collaborator.id,
+                                  kind: nextKind,
+                                });
                               }
                             }}
                           />
@@ -2066,7 +2161,7 @@ export default function AdminUtentiContent() {
                 </thead>
                 <tbody className="overflow-visible">
                   {filteredUsers.map((user: any) => {
-                    const roleBadge = getRoleBadge(user.role);
+                    const roleBadge = getRoleBadge(user.role, user.collaborator?.kind, user.collaborator?.subjects);
                     const statusBadge = getStatusBadge(user);
                     const RoleIcon = roleBadge.icon;
                     
@@ -2104,6 +2199,11 @@ export default function AdminUtentiContent() {
                               {user.role === 'COLLABORATOR' && user.collaborator?.fiscalCode && (
                                 <p className={`text-xs ${colors.text.muted} truncate max-w-[140px]`}>
                                   {user.collaborator.fiscalCode}
+                                </p>
+                              )}
+                              {user.role === 'COLLABORATOR' && (
+                                <p className={`text-xs ${roleBadge.color} truncate max-w-[160px]`}>
+                                  {roleBadge.label}
                                 </p>
                               )}
                               {/* Show collaborator subjects */}
@@ -2196,14 +2296,31 @@ export default function AdminUtentiContent() {
                               {roleBadge.label}
                             </span>
                           ) : (
-                            <RoleDropdown
-                              currentRole={user.role}
-                              onSelect={(newRole) => {
-                                if (newRole !== user.role) {
-                                  openChangeRoleModal(user.id, user.name, newRole);
-                                }
-                              }}
-                            />
+                            <div className="flex flex-wrap items-center gap-2">
+                              <RoleDropdown
+                                currentRole={user.role}
+                                collaboratorKind={user.collaborator?.kind}
+                                collaboratorSubjects={user.collaborator?.subjects}
+                                onSelect={({ role: nextRole, collaboratorKind: nextKind }) => {
+                                  if (nextRole !== user.role) {
+                                    openChangeRoleModal(user.id, user.name, nextRole, nextKind);
+                                    return;
+                                  }
+
+                                  if (
+                                    nextRole === 'COLLABORATOR' &&
+                                    user.collaborator?.id &&
+                                    nextKind &&
+                                    nextKind !== (user.collaborator.kind ?? 'TUTOR')
+                                  ) {
+                                    updateCollaboratorKindMutation.mutate({
+                                      collaboratorId: user.collaborator.id,
+                                      kind: nextKind,
+                                    });
+                                  }
+                                }}
+                              />
+                            </div>
                           )}
                         </td>
                         <td className="px-4 py-3">
@@ -2443,8 +2560,7 @@ export default function AdminUtentiContent() {
                     viewUserModal.user.role === 'COLLABORATOR' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' :
                     'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
                   }`}>
-                    {viewUserModal.user.role === 'STUDENT' ? 'Studente' : 
-                     viewUserModal.user.role === 'COLLABORATOR' ? 'Collaboratore' : 'Admin'}
+                    {getRoleBadge(viewUserModal.user.role, viewUserModal.user.collaborator?.kind).label}
                   </span>
                 </div>
               </div>
@@ -2486,6 +2602,7 @@ export default function AdminUtentiContent() {
                 const fields = [
                   // Show matricola for students as first field
                   ...(isStudent ? [{ label: 'Matricola', value: (profile as any).matricola }] : []),
+                  ...(!isStudent ? [{ label: 'Tipo Collaboratore', value: (profile as any).kind === 'SECRETARY' ? 'Segreteria' : 'Tutor' }] : []),
                   { label: 'Codice Fiscale', value: profile.fiscalCode },
                   { label: 'Data di Nascita', value: profile.dateOfBirth ? new Date(profile.dateOfBirth).toLocaleDateString('it-IT') : null },
                   { label: 'Telefono', value: profile.phone },
@@ -2975,7 +3092,7 @@ export default function AdminUtentiContent() {
                   </div>
                 </div>
                 <button
-                  onClick={() => setCreateUserModal({ isOpen: false, name: '', email: '', role: 'STUDENT', groupId: '' })}
+                  onClick={() => setCreateUserModal({ isOpen: false, name: '', email: '', role: 'STUDENT', collaboratorKind: 'TUTOR', groupId: '' })}
                   className={`p-2 rounded-lg ${colors.background.hover} ${colors.text.muted} hover:${colors.text.primary}`}
                 >
                   <X className="w-4 h-4" />
@@ -3013,7 +3130,7 @@ export default function AdminUtentiContent() {
                   <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>Ruolo *</label>
                   <CustomSelect
                     value={createUserModal.role}
-                    onChange={(v) => setCreateUserModal((m) => ({ ...m, role: v as 'STUDENT' | 'COLLABORATOR' | 'ADMIN', groupId: '' }))}
+                    onChange={(v) => setCreateUserModal((m) => ({ ...m, role: v as AssignableRole, collaboratorKind: 'TUTOR', groupId: '' }))}
                     options={[
                       { value: 'STUDENT', label: 'Studente' },
                       { value: 'COLLABORATOR', label: 'Collaboratore' },
@@ -3021,6 +3138,21 @@ export default function AdminUtentiContent() {
                     ]}
                   />
                 </div>
+
+                {/* Collaborator kind */}
+                {createUserModal.role === 'COLLABORATOR' && (
+                  <div>
+                    <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>Tipo collaboratore *</label>
+                    <CustomSelect
+                      value={createUserModal.collaboratorKind}
+                      onChange={(v) => setCreateUserModal((m) => ({ ...m, collaboratorKind: v as CollaboratorKind }))}
+                      options={[
+                        { value: 'TUTOR', label: 'Tutor' },
+                        { value: 'SECRETARY', label: 'Segreteria' },
+                      ]}
+                    />
+                  </div>
+                )}
 
                 {/* Group (only for STUDENT or COLLABORATOR) */}
                 {createUserModal.role !== 'ADMIN' && groupsData && groupsData.length > 0 && (
@@ -3047,7 +3179,7 @@ export default function AdminUtentiContent() {
               {/* Modal footer */}
               <div className={`flex items-center justify-end gap-3 px-6 py-4 border-t ${colors.border.light}`}>
                 <button
-                  onClick={() => setCreateUserModal({ isOpen: false, name: '', email: '', role: 'STUDENT', groupId: '' })}
+                  onClick={() => setCreateUserModal({ isOpen: false, name: '', email: '', role: 'STUDENT', collaboratorKind: 'TUTOR', groupId: '' })}
                   className={`px-4 py-2 rounded-lg border ${colors.border.light} ${colors.text.secondary} text-sm hover:${colors.background.hover} transition-colors`}
                 >
                   Annulla
@@ -3059,6 +3191,7 @@ export default function AdminUtentiContent() {
                       name: createUserModal.name.trim(),
                       email: createUserModal.email.trim(),
                       role: createUserModal.role,
+                      ...(createUserModal.role === 'COLLABORATOR' ? { collaboratorKind: createUserModal.collaboratorKind } : {}),
                       groupId: createUserModal.groupId || undefined,
                     });
                   }}

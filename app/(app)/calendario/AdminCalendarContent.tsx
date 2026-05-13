@@ -18,6 +18,7 @@ import { UserInfoModal } from '@/components/ui/UserInfoModal';
 import { GroupInfoModal } from '@/components/ui/GroupInfoModal';
 import CalendarEventTagsManagerModal from '@/components/admin/CalendarEventTagsManagerModal';
 import { exportCalendarToPdf } from '@/lib/utils/calendarPdfExport';
+import { getCollaboratorDetailLabel } from '@/lib/utils/collaboratorDisplay';
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -185,19 +186,14 @@ export default function AdminCalendarContent() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (collaboratorsData as any[]).forEach((collab: any) => {
         if (collab.isActive) {
-          // Get subjects from collaborator
-          const subjects = collab.collaborator?.subjects || [];
-          const subjectNames = subjects
-            .map((s: { subject?: { code?: string; name?: string } }) => s.subject?.code || s.subject?.name)
-            .filter(Boolean)
-            .join(', ');
+          const collaboratorDetail = getCollaboratorDetailLabel(collab.collaborator?.kind, collab.collaborator?.subjects);
           
           users.push({
             id: collab.id,
             name: collab.name || 'Collaboratore',
             role: 'COLLABORATOR',
             extra: collab.collaborator?.specialization,
-            subjects: subjectNames || undefined,
+            subjects: collaboratorDetail,
           });
         }
       });

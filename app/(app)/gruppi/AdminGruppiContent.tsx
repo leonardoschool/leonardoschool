@@ -28,6 +28,7 @@ import { useToast } from '@/components/ui/Toast';
 import { useUserRole } from '@/lib/hooks/useUserRole';
 import CustomSelect from '@/components/ui/CustomSelect';
 import { useGroupsAdmin } from '@/lib/hooks/useGroupsAdmin';
+import { getCollaboratorDetailLabel, getCollaboratorDisplayLabel } from '@/lib/utils/collaboratorDisplay';
 
 type GroupType = 'STUDENTS' | 'COLLABORATORS' | 'MIXED';
 
@@ -296,11 +297,18 @@ export default function AdminGruppiContent() {
               options={[
                 { value: '', label: 'Tutti i responsabili' },
                 // Collaboratori
-                ...((collaboratorsForFilter as unknown as Array<{name: string; collaborator?: {id: string}}>)
+                ...((collaboratorsForFilter as unknown as Array<{
+                  name: string;
+                  collaborator?: {
+                    id: string;
+                    kind?: string | null;
+                    subjects?: Array<{ subject?: { code?: string | null; name?: string | null } | null }>;
+                  };
+                }>)
                   ?.filter((c) => c.collaborator?.id)
                   .map((c) => ({
                     value: c.collaborator!.id,
-                    label: c.name || 'N/A',
+                    label: getCollaboratorDisplayLabel(c.name, c.collaborator?.kind, c.collaborator?.subjects),
                   })) || []),
                 // Admin
                 ...((adminsForFilter?.users as unknown as Array<{name: string; admin?: {id: string}}>)
@@ -763,6 +771,7 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
     role?: string; 
     collaborator?: { 
       id: string;
+      kind?: string | null;
       subjects?: Array<{ 
         id: string;
         subject: { id: string; name: string; code: string; color: string | null };
@@ -785,14 +794,11 @@ function GroupFormModal({ groupId, onClose, onSubmit, isLoading }: GroupFormModa
   (collaborators as unknown as UserWithCollaborator[] | undefined)
     ?.filter((c) => c.collaborator?.id)
     .forEach((c) => {
-      const subjects = c.collaborator?.subjects || [];
-      const subjectStr = subjects.length > 0 
-        ? ` — ${subjects.map(s => s.subject.code || s.subject.name).join(', ')}`
-        : '';
+      const collaboratorDetail = getCollaboratorDetailLabel(c.collaborator?.kind, c.collaborator?.subjects);
       collaboratorOptions.push({
         value: c.collaborator!.id,
         label: c.name || 'N/A',
-        description: subjectStr ? subjectStr.replace(' — ', '') : c.email,
+        description: collaboratorDetail,
       });
     });
 

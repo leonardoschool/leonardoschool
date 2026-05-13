@@ -50,6 +50,10 @@ export function getNotificationNavigationUrl(
       return isAdmin ? '/candidature' : '/dashboard';
     case 'CONTACT_REQUEST':
       return isAdmin ? '/richieste' : '/dashboard';
+    case 'QUESTION_FEEDBACK':
+      return '/domande/segnalazioni';
+    case 'OPEN_ANSWER_TO_REVIEW':
+      return '/simulazioni/risposte-aperte';
     case 'MATERIAL_AVAILABLE':
       return '/materiali';
     case 'MESSAGE_RECEIVED':

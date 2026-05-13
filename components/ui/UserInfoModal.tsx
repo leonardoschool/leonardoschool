@@ -1,9 +1,10 @@
 'use client';
 
 import { Portal } from '@/components/ui/Portal';
-import { colors } from '@/lib/theme/colors';
+import { colors, generateDynamicSubjectColor } from '@/lib/theme/colors';
 import { trpc } from '@/lib/trpc/client';
 import { Spinner } from '@/components/ui/loaders';
+import { getCollaboratorDetailLabel } from '@/lib/utils/collaboratorDisplay';
 import {
   X,
   GraduationCap,
@@ -44,6 +45,7 @@ interface UserProfile {
   city?: string | null;
   province?: string | null;
   postalCode?: string | null;
+  kind?: 'TUTOR' | 'SECRETARY' | string | null;
   specialization?: string | null;
   enrollmentDate?: Date | string | null;
   groupMemberships?: Array<{
@@ -132,6 +134,10 @@ export function UserInfoModal({ userId, userType, isOpen, onClose }: UserInfoMod
 
   // Gruppi dell'utente
   const groups = profile?.groupMemberships?.map((gm) => gm.group) || [];
+  const collaboratorDetailLabel = getCollaboratorDetailLabel(profile?.kind, profile?.subjects);
+  const collaboratorRoleLabel = collaboratorDetailLabel === 'Segreteria'
+    ? 'Collaboratore segreteria'
+    : `Collaboratore · ${collaboratorDetailLabel}`;
 
   return (
     <Portal>
@@ -170,7 +176,7 @@ export function UserInfoModal({ userId, userType, isOpen, onClose }: UserInfoMod
                     Errore
                   </h2>
                   <span className="inline-block mt-2 text-xs px-2.5 py-1 rounded-full bg-white/20 text-white font-medium">
-                    {userType === 'STUDENT' ? 'Studente' : 'Collaboratore'}
+                    {userType === 'STUDENT' ? 'Studente' : collaboratorRoleLabel}
                   </span>
                 </div>
               </div>
@@ -191,7 +197,7 @@ export function UserInfoModal({ userId, userType, isOpen, onClose }: UserInfoMod
                     {user?.email}
                   </p>
                   <span className="inline-block mt-2 text-xs px-2.5 py-1 rounded-full bg-white/20 text-white font-medium">
-                    {userType === 'STUDENT' ? 'Studente' : 'Collaboratore'}
+                    {userType === 'STUDENT' ? 'Studente' : collaboratorRoleLabel}
                   </span>
                 </div>
               </div>
@@ -295,12 +301,17 @@ export function UserInfoModal({ userId, userType, isOpen, onClose }: UserInfoMod
                 </section>
               )}
 
-              {userType === 'COLLABORATOR' && (profile?.specialization || (profile?.subjects && profile.subjects.length > 0)) && (
+              {userType === 'COLLABORATOR' && (
                 <section>
                   <h3 className={`text-sm font-semibold ${colors.text.secondary} uppercase tracking-wide mb-3`}>
                     Informazioni Lavorative
                   </h3>
                   <div className="space-y-3">
+                    <InfoRow
+                      icon={<Briefcase className="w-4 h-4" />}
+                      label="Tipo collaboratore"
+                      value={profile?.kind === 'SECRETARY' ? 'Segreteria' : 'Tutor'}
+                    />
                     {profile?.specialization && (
                       <InfoRow 
                         icon={<BookOpen className="w-4 h-4" />}
@@ -316,19 +327,21 @@ export function UserInfoModal({ userId, userType, isOpen, onClose }: UserInfoMod
                         <div className="flex-1 min-w-0">
                           <p className={`text-xs ${colors.text.muted} mb-1.5`}>Materie insegnate</p>
                           <div className="flex flex-wrap gap-1.5">
-                            {profile.subjects.map((s) => (
-                              <span 
-                                key={s.id}
-                                className="text-xs px-2 py-1 rounded-full font-medium"
-                                style={{
-                                  backgroundColor: s.subject.color ? `${s.subject.color}20` : 'rgba(147, 51, 234, 0.1)',
-                                  color: s.subject.color || '#9333ea',
-                                }}
-                              >
-                                {s.subject.name}
-                                {s.isPrimary && ' ⭐'}
-                              </span>
-                            ))}
+                            {profile.subjects.map((subjectEntry) => {
+                              const subjectColors = generateDynamicSubjectColor(subjectEntry.subject.color);
+                              return (
+                                <span 
+                                  key={subjectEntry.id}
+                                  className="text-xs px-2 py-1 rounded-full font-medium"
+                                  style={{
+                                    backgroundColor: `${subjectColors.main}20`,
+                                    color: subjectColors.main,
+                                  }}
+                                >
+                                  {subjectEntry.subject.name}{subjectEntry.isPrimary ? ' (principale)' : ''}
+                                </span>
+                              );
+                            })}
                           </div>
                         </div>
                       </div>

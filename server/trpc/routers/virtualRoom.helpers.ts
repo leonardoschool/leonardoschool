@@ -18,6 +18,21 @@ type Assignment = {
   group?: { members: { student?: StudentMember | null }[] } | null;
 };
 
+type AssignmentScope<TAssignment extends Assignment = Assignment> = {
+  assignment?: TAssignment | null;
+  simulation?: { assignments?: TAssignment[] | null } | null;
+};
+
+export function getScopedAssignments<TAssignment extends Assignment>(
+  scope: AssignmentScope<TAssignment>
+): TAssignment[] {
+  if (scope.assignment) {
+    return [scope.assignment];
+  }
+
+  return scope.simulation?.assignments ?? [];
+}
+
 // ==================== INVITED STUDENTS ====================
 
 /**

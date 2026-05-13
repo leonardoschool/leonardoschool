@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import Image from 'next/image';
 import { colors } from '@/lib/theme/colors';
 import { sanitizeStudentOpenAnswerInput } from '@/lib/utils/studentOpenAnswer';
+import { normalizeImageSrc } from '@/lib/utils/imageUrl';
 import { TextareaWithSymbols } from '@/components/ui/SymbolKeyboard';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
@@ -117,6 +118,7 @@ export default function TolcSimulationLayout({
 
   const currentQuestion = questions[currentQuestionIndex];
   const currentAnswer = answers.find(a => a.questionId === currentQuestion?.questionId);
+  const currentQuestionImageSrc = normalizeImageSrc(currentQuestion?.question?.imageUrl);
 
   // Format time as MM:SS
   const formatTime = (seconds: number) => {
@@ -306,12 +308,12 @@ export default function TolcSimulationLayout({
                   key={section.name}
                   className={`py-3 px-4 mb-2 rounded-lg border transition-colors ${containerClass}`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className={`text-sm font-medium ${titleClass}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={`flex-1 text-sm font-medium ${titleClass}`}>
                       {section.name}
                     </span>
                     {isCompleted && (
-                      <CheckCircle className="w-4 h-4 text-green-500" />
+                      <CheckCircle className="w-4 h-4 flex-shrink-0 text-green-500" />
                     )}
                   </div>
                 </div>
@@ -349,10 +351,10 @@ export default function TolcSimulationLayout({
             {/* Question Text */}
             <div className="mb-8">
               {/* Question Image */}
-              {currentQuestion.question?.imageUrl && currentQuestion.question.imageUrl.trim() !== '' && (
+              {currentQuestionImageSrc && (
                 <div className="mb-4 flex justify-center">
                   <Image
-                    src={currentQuestion.question.imageUrl}
+                    src={currentQuestionImageSrc}
                     alt="Immagine domanda"
                     width={600}
                     height={400}
@@ -398,6 +400,7 @@ export default function TolcSimulationLayout({
                 {currentQuestion.question?.answers?.map((answer: { id: string; text: string; imageUrl?: string }, idx: number) => {
                   const isSelected = currentAnswer?.answerId === answer.id;
                   const letter = answerLetters[idx] || String(idx + 1);
+                  const answerImageSrc = normalizeImageSrc(answer.imageUrl);
 
                   return (
                     <button
@@ -425,10 +428,10 @@ export default function TolcSimulationLayout({
 
                       {/* Answer Content */}
                       <div className="flex-1">
-                        {answer.imageUrl && (
+                        {answerImageSrc && (
                           <div className="mb-2">
                             <Image
-                              src={answer.imageUrl}
+                              src={answerImageSrc}
                               alt={`Opzione ${letter}`}
                               width={200}
                               height={120}
@@ -683,13 +686,13 @@ export default function TolcSimulationLayout({
                     key={section.name}
                     className={`py-3 px-4 mb-2 rounded-lg border ${containerClass}`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className={`text-sm font-medium ${
+                    <div className="flex items-center justify-between gap-3">
+                      <span className={`flex-1 text-sm font-medium ${
                         isCompleted ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'
                       }`}>
                         {section.name}
                       </span>
-                      {isCompleted && <CheckCircle className="w-4 h-4 text-green-500" />}
+                      {isCompleted && <CheckCircle className="w-4 h-4 flex-shrink-0 text-green-500" />}
                     </div>
                   </div>
                 );

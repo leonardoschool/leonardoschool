@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { colors } from '@/lib/theme/colors';
+import { normalizeImageSrc } from '@/lib/utils/imageUrl';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import {
@@ -52,6 +53,8 @@ export default function PreviewStandardLayout({
   formatTime,
   durationMinutes,
 }: PreviewStandardLayoutProps) {
+  const currentQuestionImageSrc = normalizeImageSrc(currentQuestion?.imageUrl);
+
   return (
     <div className="h-full flex flex-col min-h-0">
       <div className={`sticky top-0 z-10 ${colors.background.card} border-b ${colors.border.light} px-4 py-3`}>
@@ -111,10 +114,10 @@ export default function PreviewStandardLayout({
                 </div>
 
                 <div className={`p-6 rounded-xl ${colors.background.card} border ${colors.border.light} mb-6`}>
-                  {currentQuestion.imageUrl && (
+                  {currentQuestionImageSrc && (
                     <div className="mb-4 flex justify-center">
                       <Image
-                        src={currentQuestion.imageUrl}
+                        src={currentQuestionImageSrc}
                         alt="Immagine domanda"
                         width={600}
                         height={400}
@@ -151,6 +154,7 @@ export default function PreviewStandardLayout({
                     {currentQuestion.answers?.sort((a, b) => a.order - b.order).map((answer, index) => {
                       const isSelected = selectedAnswer === answer.id;
                       const label = String.fromCharCode(65 + index);
+                      const answerImageSrc = normalizeImageSrc(answer.imageUrl);
                       return (
                         <button
                           key={answer.id}
@@ -169,10 +173,10 @@ export default function PreviewStandardLayout({
                             {label}
                           </span>
                           <div className="flex-1">
-                            {answer.imageUrl && (
+                            {answerImageSrc && (
                               <div className="mb-2">
                                 <Image
-                                  src={answer.imageUrl}
+                                  src={answerImageSrc}
                                   alt={`Opzione ${label}`}
                                   width={200}
                                   height={120}

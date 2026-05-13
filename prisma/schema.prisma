@@ -461,9 +461,15 @@ model Admin {
 
 // ==================== COLLABORATORS ====================
 
+enum CollaboratorKind {
+  TUTOR
+  SECRETARY
+}
+
 model Collaborator {
   id          String    @id @default(cuid())
   userId      String    @unique
+  kind        CollaboratorKind @default(TUTOR)
   fiscalCode  String?   @unique
   dateOfBirth DateTime?
   birthPlace  String?
@@ -889,6 +895,7 @@ model Simulation {
   totalQuestions     Int
   showResults        Boolean @default(true) // Show results immediately after completion
   showCorrectAnswers Boolean @default(true) // Show which answers were correct
+  openAnswerReviewerId String? // Tutor selected by the student for open-answer review
   allowReview        Boolean @default(true) // Allow review after completion
   randomizeOrder     Boolean @default(false) // Randomize question order
   randomizeAnswers   Boolean @default(false) // Randomize answer options order
@@ -959,6 +966,7 @@ model Simulation {
   @@index([createdById])
   @@index([visibility])
   @@index([isOfficial])
+  @@index([openAnswerReviewerId])
   @@index([accessType])
   @@index([isScheduled])
   @@index([isPaperBased])

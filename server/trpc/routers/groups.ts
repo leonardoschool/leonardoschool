@@ -272,7 +272,20 @@ export const groupsRouter = router({
           },
           referenceCollaborator: {
             include: {
-              user: { select: { id: true, name: true } },
+              user: { select: { id: true, name: true, email: true } },
+              subjects: {
+                include: {
+                  subject: {
+                    select: {
+                      id: true,
+                      name: true,
+                      code: true,
+                      color: true,
+                    },
+                  },
+                },
+                orderBy: { isPrimary: 'desc' },
+              },
             },
           },
           referenceAdmin: {
@@ -285,7 +298,26 @@ export const groupsRouter = router({
             orderBy: { createdAt: 'asc' },
           },
           referenceCollaborators: {
-            include: { collaborator: { include: { user: { select: { id: true, name: true } } } } },
+            include: {
+              collaborator: {
+                include: {
+                  user: { select: { id: true, name: true, email: true } },
+                  subjects: {
+                    include: {
+                      subject: {
+                        select: {
+                          id: true,
+                          name: true,
+                          code: true,
+                          color: true,
+                        },
+                      },
+                    },
+                    orderBy: { isPrimary: 'desc' },
+                  },
+                },
+              },
+            },
             orderBy: { createdAt: 'asc' },
           },
           referenceAdmins: {
@@ -301,7 +333,20 @@ export const groupsRouter = router({
               },
               collaborator: {
                 include: {
-                  user: { select: { id: true, name: true } },
+                  user: { select: { id: true, name: true, email: true } },
+                  subjects: {
+                    include: {
+                      subject: {
+                        select: {
+                          id: true,
+                          name: true,
+                          code: true,
+                          color: true,
+                        },
+                      },
+                    },
+                    orderBy: { isPrimary: 'desc' },
+                  },
                 },
               },
             },

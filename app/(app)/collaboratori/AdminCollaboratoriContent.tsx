@@ -8,6 +8,7 @@ import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
+import { getCollaboratorDetailLabel } from '@/lib/utils/collaboratorDisplay';
 import { 
   Users,
   Search,
@@ -23,6 +24,11 @@ import {
   Trash2,
   AlertTriangle,
 } from 'lucide-react';
+
+const collaboratorKindLabels: Record<string, string> = {
+  TUTOR: 'Tutor',
+  SECRETARY: 'Segreteria',
+};
 
 // Modal di conferma custom
 function ConfirmModal({
@@ -234,6 +240,9 @@ export default function AdminCollaboratoriContent() {
                             <h3 className={`font-semibold ${colors.text.primary} truncate`}>
                               {user.name}
                             </h3>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+                              {collaboratorKindLabels[collaborator?.kind ?? 'TUTOR']}
+                            </span>
                             {user.isActive ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
                                 <CheckCircle className="w-3 h-3 mr-1" />
@@ -250,6 +259,9 @@ export default function AdminCollaboratoriContent() {
                             <span className={`flex items-center gap-1 text-sm ${colors.text.secondary}`}>
                               <Mail className="w-3.5 h-3.5" />
                               {user.email}
+                            </span>
+                            <span className={`text-sm ${colors.text.muted}`}>
+                              {getCollaboratorDetailLabel(collaborator?.kind, collaborator?.subjects)}
                             </span>
                             {collaborator?.specialization && (
                               <span className={`text-sm ${colors.text.muted}`}>
@@ -331,6 +343,25 @@ export default function AdminCollaboratoriContent() {
                               Permessi
                             </h4>
                             <div className="space-y-2">
+                              <label className="flex items-center justify-between gap-3">
+                                <span className={`text-sm ${colors.text.secondary}`}>Tipo collaboratore</span>
+                                <select
+                                  value={collaborator?.kind ?? 'TUTOR'}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => {
+                                    if (collaborator) {
+                                      updatePermissionsMutation.mutate({
+                                        collaboratorId: collaborator.id,
+                                        kind: e.target.value as 'TUTOR' | 'SECRETARY',
+                                      });
+                                    }
+                                  }}
+                                  className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-sm text-gray-900 dark:text-gray-100"
+                                >
+                                  <option value="TUTOR">Tutor</option>
+                                  <option value="SECRETARY">Segreteria</option>
+                                </select>
+                              </label>
                               {[
                                 { key: 'canManageQuestions', label: 'Gestione Domande' },
                                 { key: 'canManageMaterials', label: 'Gestione Materiali' },

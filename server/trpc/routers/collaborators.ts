@@ -74,6 +74,7 @@ export const collaboratorsRouter = router({
         collaborator: {
           select: {
             id: true,
+            kind: true,
             specialization: true,
             subjects: {
               include: {
@@ -169,6 +170,7 @@ export const collaboratorsRouter = router({
           isActive: true,
           collaborator: {
             select: {
+              kind: true,
               specialization: true,
               phone: true,
               subjects: {
@@ -361,6 +363,7 @@ export const collaboratorsRouter = router({
       canManageMaterials: z.boolean().optional(),
       canViewStats: z.boolean().optional(),
       canViewStudents: z.boolean().optional(),
+      kind: z.enum(['TUTOR', 'SECRETARY']).optional(),
       specialization: z.string().optional(),
       notes: z.string().optional(),
     }))

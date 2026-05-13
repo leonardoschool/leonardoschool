@@ -8,6 +8,7 @@ import { notifySimulationStarted, notifySessionKicked } from '@/server/services/
 import {
   extractInvitedStudents,
   extractInvitedStudentIds,
+  getScopedAssignments,
   isParticipantConnected,
   calculateTimeRemaining,
 } from './virtualRoom.helpers';
@@ -137,6 +138,12 @@ export const virtualRoomRouter = router({
       const session = await ctx.prisma.simulationSession.findUnique({
         where: { id: input.sessionId },
         include: {
+          assignment: {
+            include: {
+              student: true,
+              group: { include: { members: { include: { student: true } } } },
+            },
+          },
           simulation: {
             include: {
               assignments: {
@@ -160,7 +167,7 @@ export const virtualRoomRouter = router({
       }
 
       // Count invited students
-      const invitedStudentIds = extractInvitedStudentIds(session.simulation.assignments);
+      const invitedStudentIds = extractInvitedStudentIds(getScopedAssignments(session));
 
       // Use heartbeat timeout to determine real connection status
       const connectedCount = session.participants.filter(isParticipantConnected).length;
@@ -282,6 +289,12 @@ export const virtualRoomRouter = router({
       const session = await ctx.prisma.simulationSession.findUnique({
         where: { id: input.sessionId },
         include: {
+          assignment: {
+            include: {
+              student: { include: { user: true } },
+              group: { include: { members: { include: { student: { include: { user: true } } } } } },
+            },
+          },
           simulation: {
             include: {
               questions: {
@@ -317,7 +330,7 @@ export const virtualRoomRouter = router({
       }
 
       // Get list of all invited students
-      const invitedStudents = extractInvitedStudents(session.simulation.assignments);
+      const invitedStudents = extractInvitedStudents(getScopedAssignments(session));
 
       // Calculate time remaining
       const timeRemaining = calculateTimeRemaining(session);
@@ -541,6 +554,20 @@ export const virtualRoomRouter = router({
       const session = await ctx.prisma.simulationSession.findUnique({
         where: { id: participant.sessionId },
         include: {
+          assignment: {
+            include: {
+              student: { include: { user: true } },
+              group: {
+                include: {
+                  members: {
+                    include: {
+                      student: { include: { user: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
           simulation: {
             include: {
               assignments: {
@@ -566,8 +593,8 @@ export const virtualRoomRouter = router({
       });
 
       // Count all unique students invited (avoid duplicates)
-      const invitedStudentIds = session?.simulation.assignments
-        ? extractInvitedStudentIds(session.simulation.assignments)
+      const invitedStudentIds = session
+        ? extractInvitedStudentIds(getScopedAssignments(session))
         : new Set<string>();
       const totalParticipants = invitedStudentIds.size || 1;
 

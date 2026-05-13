@@ -17,6 +17,7 @@ import { Portal } from '@/components/ui/Portal';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { useFocusAwarePolling } from '@/lib/hooks/useWindowFocus';
+import { getCollaboratorDetailLabel } from '@/lib/utils/collaboratorDisplay';
 import {
   MessageSquare,
   Send,
@@ -44,6 +45,16 @@ interface MessagesPageContentProps {
 }
 
 type ConversationFilter = 'all' | 'unread' | 'archived';
+type MessageUserRole = {
+  role?: string | null;
+  collaboratorKind?: string | null;
+  collaboratorSubjects?: Array<{
+    subject?: {
+      code?: string | null;
+      name?: string | null;
+    } | null;
+  }> | null;
+};
 
 // Role icon mapping
 const getRoleIcon = (role: string) => {
@@ -60,16 +71,24 @@ const getRoleIcon = (role: string) => {
 };
 
 // Role label mapping
-const getRoleLabel = (role: string) => {
+const getRoleLabel = (user: string | MessageUserRole) => {
+  const role = typeof user === 'string' ? user : user.role;
+  const collaboratorKind = typeof user === 'string' ? null : user.collaboratorKind;
+
   switch (role) {
     case 'ADMIN':
       return 'Admin';
     case 'COLLABORATOR':
-      return 'Collaboratore';
+      const collaboratorDetail = typeof user === 'string'
+        ? 'Materie non assegnate'
+        : getCollaboratorDetailLabel(collaboratorKind, user.collaboratorSubjects);
+      return collaboratorDetail === 'Segreteria'
+        ? 'Collaboratore segreteria'
+        : `Collaboratore · ${collaboratorDetail}`;
     case 'STUDENT':
       return 'Studente';
     default:
-      return role;
+      return role || '';
   }
 };
 
@@ -395,6 +414,11 @@ export default function MessagesPageContent({ basePath: _basePath, userRole }: M
                                   +{conv.otherParticipants.length - 1}
                                 </span>
                               )}
+                              {mainParticipant && (
+                                <span className={`hidden sm:inline-flex text-[10px] px-2 py-0.5 rounded-full ${getRoleColor(mainParticipant.role)}`}>
+                                  {getRoleLabel(mainParticipant)}
+                                </span>
+                              )}
                             </div>
                             <span className={`text-xs flex-shrink-0 ${colors.text.muted}`}>
                               {conv.lastMessageAt && formatMessageTime(conv.lastMessageAt)}
@@ -475,7 +499,7 @@ export default function MessagesPageContent({ basePath: _basePath, userRole }: M
                             {messagesData.conversation.otherParticipants[0].name}
                           </h3>
                           <p className={`text-sm ${colors.text.muted}`}>
-                            {getRoleLabel(messagesData.conversation.otherParticipants[0].role)}
+                            {getRoleLabel(messagesData.conversation.otherParticipants[0])}
                           </p>
                         </div>
                       </>
@@ -1046,6 +1070,7 @@ function ComposeMessageModal({
                             <div className="text-left flex-1 min-w-0">
                               <p className={`font-medium text-gray-900 dark:text-gray-100 truncate`}>{user.name}</p>
                               <p className={`text-xs text-gray-500 dark:text-gray-400 truncate`}>{user.email}</p>
+                              <p className={`text-xs text-gray-500 dark:text-gray-400 truncate`}>{getRoleLabel(user)}</p>
                             </div>
                             <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
                               isSelected 

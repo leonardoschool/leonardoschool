@@ -486,6 +486,7 @@ export async function notifySimulationCompletedByStudent(
     studentName: string;
     hasOpenAnswers: boolean;
     openAnswersCount?: number;
+    resultId?: string;
   }
 ): Promise<void> {
   // If there are open answers to review, send that notification instead
@@ -495,6 +496,7 @@ export async function notifySimulationCompletedByStudent(
       simulationTitle: params.simulationTitle,
       studentName: params.studentName,
       answersCount: params.openAnswersCount,
+      resultId: params.resultId,
     });
   }
   
@@ -530,6 +532,8 @@ export async function notifyQuestionFeedback(
     questionTitle: string;
     feedbackType: string;
     reporterName: string;
+    reporterUserId: string;
+    subjectId?: string | null;
     creatorUserId?: string;
   }
 ): Promise<void> {
@@ -548,6 +552,7 @@ export async function notifyOpenAnswerCorrectionRequest(
     simulationTitle: string;
     studentName: string;
     openQuestionsCount: number;
+    resultId?: string;
   }
 ): Promise<void> {
   await notifications.openAnswerToReviewForStaff(prisma, params);

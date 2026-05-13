@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { isAdmin } from '@/lib/permissions';
+import { isStaff } from '@/lib/permissions';
 import { PageLoader, ButtonLoader } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import Link from 'next/link';
@@ -68,15 +68,16 @@ type FeedbackStatus = 'PENDING' | 'REVIEWED' | 'FIXED' | 'REJECTED';
 
 export default function FeedbacksPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
   const utils = trpc.useUtils();
   const { user, loading } = useAuth();
   const userRole = user?.role;
+  const questionId = searchParams.get('questionId') ?? undefined;
 
-  // Admin-only access control
   useEffect(() => {
-    if (!loading && !isAdmin(userRole)) {
+    if (!loading && !isStaff(userRole)) {
       router.replace('/dashboard');
     }
   }, [loading, userRole, router]);
@@ -92,6 +93,7 @@ export default function FeedbacksPage() {
     page,
     pageSize: 20,
     status: statusFilter || undefined,
+    questionId,
   });
 
   // Update feedback mutation
@@ -253,7 +255,7 @@ export default function FeedbacksPage() {
                     {feedback.adminResponse && (
                       <div className={`p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800`}>
                         <p className={`text-xs font-medium text-blue-700 dark:text-blue-300 mb-1`}>
-                          Risposta admin:
+                          Risposta staff:
                         </p>
                         <p className={`text-sm text-blue-600 dark:text-blue-400`}>{feedback.adminResponse}</p>
                       </div>

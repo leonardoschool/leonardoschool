@@ -11,6 +11,7 @@ import { ButtonLoader, Spinner } from '@/components/ui/loaders';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { useRouter } from 'next/navigation';
+import { getCollaboratorDisplayLabel } from '@/lib/utils/collaboratorDisplay';
 type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD';
 
 type LanguageFilter = 'BOTH' | 'IT' | 'EN';
@@ -247,7 +248,7 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
 
   // Query
   const { data: subjectsData } = trpc.questions.getSubjects.useQuery();
-  const { data: staff = [] } = trpc.users.getStaff.useQuery();
+  const { data: reviewTutors = [] } = trpc.users.getStaff.useQuery();
   const { data: assignedSelfPracticeTemplates = [] } = trpc.simulationTemplates.listMySelfPracticeTemplates.useQuery(
     undefined,
     { enabled: isOpen },
@@ -299,7 +300,14 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
 
   const createSelfPractice = trpc.simulations.createSelfPractice.useMutation({
     onSuccess: (data) => {
-      showSuccess('Quiz creato!', 'Inizia ora il tuo quiz!');
+      showSuccess(
+        'Quiz creato!',
+        openQuestionCorrection === 'staff'
+          ? data.hasOpenQuestions
+            ? 'Il tutor riceverà le risposte aperte dopo la consegna.'
+            : 'Il quiz non contiene domande aperte da correggere.'
+          : 'Inizia ora il tuo quiz!'
+      );
       onClose();
       router.push(`/simulazioni/${data.id}`);
     },
@@ -308,7 +316,14 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
 
   const createSelfPracticeFromTemplate = trpc.simulations.createSelfPracticeFromTemplate.useMutation({
     onSuccess: (data) => {
-      showSuccess('Quiz creato!', 'Inizia ora il tuo quiz!');
+      showSuccess(
+        'Quiz creato!',
+        openQuestionCorrection === 'staff'
+          ? data.hasOpenQuestions
+            ? 'Il tutor riceverà le risposte aperte dopo la consegna.'
+            : 'Il quiz non contiene domande aperte da correggere.'
+          : 'Inizia ora il tuo quiz!'
+      );
       onClose();
       router.push(`/simulazioni/${data.id}`);
     },
@@ -319,7 +334,7 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
     try {
       if (isTemplateMode) {
         if (openQuestionCorrection === 'staff' && !selectedStaffId) {
-          showError('Errore', 'Seleziona un collaboratore per la correzione.');
+          showError('Errore', 'Seleziona un tutor per la correzione.');
           return;
         }
 
@@ -339,7 +354,7 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
       }
 
       if (quizMode === 'quiz' && openQuestionCorrection === 'staff' && !selectedStaffId) {
-        showError('Errore', 'Seleziona un collaboratore per la correzione.');
+        showError('Errore', 'Seleziona un tutor per la correzione.');
         return;
       }
 
@@ -662,7 +677,7 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
                 }`}
               >
                 <Award className="w-4 h-4" />
-                Docente
+                Tutor
               </button>
             </div>
 
@@ -672,14 +687,17 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
                   value={selectedStaffId}
                   onChange={(value) => setSelectedStaffId(value)}
                   options={[
-                    { value: '', label: 'Seleziona collaboratore...' },
-                    ...staff.map((member) => ({
+                    { value: '', label: reviewTutors.length > 0 ? 'Seleziona tutor...' : 'Nessun tutor disponibile' },
+                    ...reviewTutors.map((member) => ({
                       value: member.id,
-                      label: member.name,
+                      label: getCollaboratorDisplayLabel(member.name, member.collaborator?.kind, member.collaborator?.subjects),
                     })),
                   ]}
                   className="w-full"
                 />
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  Il tutor corregge solo le domande aperte, dopo la consegna del quiz.
+                </p>
               </div>
             )}
           </div>
@@ -697,7 +715,7 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
               </span>
               {!showAdvanced && quizMode === 'quiz' && (
                 <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                  Punteggi: +{correctPoints} / {wrongPoints} / {blankPoints} · {openQuestionCorrection === 'self' ? 'Auto' : 'Docente'}
+                  Punteggi: +{correctPoints} / {wrongPoints} / {blankPoints} · {openQuestionCorrection === 'self' ? 'Auto' : 'Tutor'}
                 </span>
               )}
             </div>
@@ -800,7 +818,7 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
                       }`}
                     >
                       <Award className="w-4 h-4" />
-                      Docente
+                      Tutor
                     </button>
                   </div>
 
@@ -810,14 +828,17 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
                         value={selectedStaffId}
                         onChange={(value) => setSelectedStaffId(value)}
                         options={[
-                          { value: '', label: 'Seleziona collaboratore...' },
-                          ...staff.map((member) => ({
+                          { value: '', label: reviewTutors.length > 0 ? 'Seleziona tutor...' : 'Nessun tutor disponibile' },
+                          ...reviewTutors.map((member) => ({
                             value: member.id,
-                            label: member.name,
+                            label: getCollaboratorDisplayLabel(member.name, member.collaborator?.kind, member.collaborator?.subjects),
                           })),
                         ]}
                         className="w-full"
                       />
+                      <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        Il tutor corregge solo le domande aperte, dopo la consegna del quiz.
+                      </p>
                     </div>
                   )}
                 </div>

@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { colors } from '@/lib/theme/colors';
+import { normalizeImageSrc } from '@/lib/utils/imageUrl';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import {
@@ -53,6 +54,8 @@ export default function PreviewTolcLayout({
   formatTime,
   sectionDuration,
 }: PreviewTolcLayoutProps) {
+  const currentQuestionImageSrc = normalizeImageSrc(currentQuestion?.imageUrl);
+
   return (
     <div className="h-full flex flex-col bg-gray-100 dark:bg-gray-900">
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 lg:px-8 py-4">
@@ -151,10 +154,10 @@ export default function PreviewTolcLayout({
                   </button>
                 </div>
 
-                {currentQuestion.imageUrl && (
+                {currentQuestionImageSrc && (
                   <div className="mb-4 flex justify-center">
                     <Image
-                      src={currentQuestion.imageUrl}
+                      src={currentQuestionImageSrc}
                       alt="Immagine domanda"
                       width={600}
                       height={400}
@@ -193,6 +196,7 @@ export default function PreviewTolcLayout({
                     {currentQuestion.answers?.sort((a, b) => a.order - b.order).map((answer, idx) => {
                       const isSelected = selectedAnswer === answer.id;
                       const letter = ANSWER_LETTERS[idx] || String(idx + 1);
+                      const answerImageSrc = normalizeImageSrc(answer.imageUrl);
                       return (
                         <button
                           key={answer.id}
@@ -211,10 +215,10 @@ export default function PreviewTolcLayout({
                             {letter}
                           </span>
                           <div className="flex-1">
-                            {answer.imageUrl && (
+                            {answerImageSrc && (
                               <div className="mb-2">
                                 <Image
-                                  src={answer.imageUrl}
+                                  src={answerImageSrc}
                                   alt={`Opzione ${letter}`}
                                   width={200}
                                   height={120}

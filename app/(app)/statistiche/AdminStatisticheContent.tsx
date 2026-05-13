@@ -6,6 +6,7 @@ import { colors } from '@/lib/theme/colors';
 import { trpc } from '@/lib/trpc/client';
 import { PageLoader } from '@/components/ui/loaders';
 import AdminSimulationResultsTab from './AdminSimulationResultsTab';
+import { getCollaboratorDetailLabel } from '@/lib/utils/collaboratorDisplay';
 import { 
   Users, 
   BookOpen, 
@@ -90,6 +91,13 @@ type AdminPlatformStats = {
     userId: string;
     name: string | null;
     email: string;
+    kind?: string | null;
+    subjects?: Array<{
+      subject?: {
+        code?: string | null;
+        name?: string | null;
+      } | null;
+    }>;
     isActive: boolean;
     groups: string[];
     questionsCreated: number;
@@ -975,6 +983,13 @@ function CollaboratorCard({
     userId: string;
     name: string | null;
     email: string;
+    kind?: string | null;
+    subjects?: Array<{
+      subject?: {
+        code?: string | null;
+        name?: string | null;
+      } | null;
+    }>;
     isActive: boolean;
     groups: string[];
     questionsCreated: number;
@@ -993,6 +1008,9 @@ function CollaboratorCard({
           </div>
           <div>
             <p className={`font-medium ${colors.text.primary}`}>{collaborator.name || 'N/A'}</p>
+            <p className={`text-xs ${colors.text.secondary} truncate max-w-[150px]`}>
+              {getCollaboratorDetailLabel(collaborator.kind, collaborator.subjects)}
+            </p>
             <p className={`text-xs ${colors.text.muted} truncate max-w-[150px]`}>{collaborator.email}</p>
           </div>
         </div>

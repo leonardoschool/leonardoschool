@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { PageLoader } from '@/components/ui/loaders';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -19,9 +20,12 @@ import {
 } from 'lucide-react';
 
 export default function OpenAnswersReviewPage() {
+  const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
+  const simulationId = searchParams.get('simulationId') ?? undefined;
 
   const { data, isLoading, error } = trpc.simulations.getResultsWithPendingReviews.useQuery({
+    simulationId,
     limit: 50,
     offset: 0,
   });
@@ -95,7 +99,9 @@ export default function OpenAnswersReviewPage() {
             Nessuna risposta da correggere
           </h3>
           <p className={`${colors.text.muted}`}>
-            Tutte le risposte aperte sono state revisionate
+            {simulationId
+              ? 'Non ci sono risposte aperte da correggere per questa simulazione'
+              : 'Tutte le risposte aperte sono state revisionate'}
           </p>
         </div>
       ) : (

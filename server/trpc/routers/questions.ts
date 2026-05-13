@@ -2,7 +2,7 @@
 import { router, adminProcedure, staffProcedure, protectedProcedure, studentProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { secureShuffleArray } from '@/lib/utils';
 import {
   createQuestionSchema,
@@ -2144,6 +2144,7 @@ export const questionsRouter = router({
         where: { id: input.questionId },
         select: { 
           text: true,
+          subjectId: true,
           createdById: true,
         },
       });
@@ -2164,6 +2165,8 @@ export const questionsRouter = router({
         questionTitle: questionTitle + (question?.text && question.text.length > 50 ? '...' : ''),
         feedbackType: input.type,
         reporterName: ctx.user.name,
+        reporterUserId: ctx.user.id,
+        subjectId: question?.subjectId ?? null,
         creatorUserId: question?.createdById || undefined,
       }).catch(err => {
         console.error('[Questions] Failed to send feedback notification:', err);
@@ -2175,16 +2178,35 @@ export const questionsRouter = router({
   // ==================== FEEDBACK MANAGEMENT (Admin) ====================
 
   // Get pending feedbacks
-  getPendingFeedbacks: adminProcedure
+  getPendingFeedbacks: staffProcedure
     .input(z.object({
       page: z.number().min(1).default(1),
       pageSize: z.number().min(1).max(50).default(20),
       status: z.enum(['PENDING', 'REVIEWED', 'FIXED', 'REJECTED']).optional(),
+      questionId: z.string().optional(),
     }))
     .query(async ({ ctx, input }) => {
-      const where: Record<string, unknown> = {};
+      const where: Prisma.QuestionFeedbackWhereInput = {};
       if (input.status) {
         where.status = input.status;
+      }
+      if (input.questionId) {
+        where.questionId = input.questionId;
+      }
+
+      if (ctx.user.role === 'COLLABORATOR') {
+        const collaborator = await ctx.prisma.collaborator.findUnique({
+          where: { userId: ctx.user.id },
+          select: {
+            kind: true,
+            subjects: { select: { subjectId: true } },
+          },
+        });
+        const subjectIds = collaborator?.kind === 'TUTOR'
+          ? collaborator.subjects.map((subject) => subject.subjectId)
+          : [];
+
+        where.question = { subjectId: { in: subjectIds } };
       }
 
       const total = await ctx.prisma.questionFeedback.count({ where });
@@ -2218,9 +2240,43 @@ export const questionsRouter = router({
     }),
 
   // Update feedback status
-  updateFeedback: adminProcedure
+  updateFeedback: staffProcedure
     .input(updateQuestionFeedbackSchema)
     .mutation(async ({ ctx, input }) => {
+      if (ctx.user.role === 'COLLABORATOR') {
+        const feedback = await ctx.prisma.questionFeedback.findUnique({
+          where: { id: input.id },
+          select: {
+            question: { select: { subjectId: true } },
+          },
+        });
+
+        if (!feedback) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Segnalazione non trovata.',
+          });
+        }
+
+        const canManageFeedback = feedback.question.subjectId
+          ? await ctx.prisma.collaborator.findFirst({
+              where: {
+                userId: ctx.user.id,
+                kind: 'TUTOR',
+                subjects: { some: { subjectId: feedback.question.subjectId } },
+              },
+              select: { id: true },
+            })
+          : null;
+
+        if (!canManageFeedback) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Puoi gestire solo le segnalazioni delle tue materie.',
+          });
+        }
+      }
+
       return ctx.prisma.questionFeedback.update({
         where: { id: input.id },
         data: {

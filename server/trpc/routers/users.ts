@@ -23,6 +23,7 @@ const adminSimulationResultsInputSchema = z.object({
 }).optional();
 
 type AdminSimulationResultsInput = NonNullable<z.infer<typeof adminSimulationResultsInputSchema>>;
+const collaboratorKindSchema = z.enum(['TUTOR', 'SECRETARY']);
 
 function parseDateAtStartOfDay(value?: string) {
   if (!value) return undefined;
@@ -428,6 +429,7 @@ export const usersRouter = router({
             collaborator: {
               select: {
                 id: true,
+                kind: true,
                 fiscalCode: true,
                 dateOfBirth: true,
                 phone: true,
@@ -701,6 +703,24 @@ export const usersRouter = router({
         id: true,
         name: true,
         email: true,
+        collaborator: {
+          select: {
+            kind: true,
+            subjects: {
+              include: {
+                subject: {
+                  select: {
+                    id: true,
+                    name: true,
+                    code: true,
+                    color: true,
+                  },
+                },
+              },
+              orderBy: { isPrimary: 'desc' },
+            },
+          },
+        },
       },
       orderBy: { name: 'asc' },
     });
@@ -715,10 +735,11 @@ export const usersRouter = router({
       z.object({
         userId: z.string(),
         newRole: z.enum(['ADMIN', 'COLLABORATOR', 'STUDENT']),
+        collaboratorKind: collaboratorKindSchema.optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { userId, newRole } = input;
+      const { userId, newRole, collaboratorKind } = input;
 
       // Prevent changing your own role
       if (userId === ctx.user.id) {
@@ -821,6 +842,7 @@ export const usersRouter = router({
           await (ctx.prisma as any).collaborator.create({
             data: {
               userId,
+              kind: collaboratorKind ?? 'TUTOR',
               fiscalCode: commonData.fiscalCode,
               dateOfBirth: commonData.dateOfBirth,
               phone: commonData.phone,
@@ -1107,24 +1129,43 @@ export const usersRouter = router({
     }),
 
   /**
-   * Get all staff members (admin + collaborators) for selection
+   * Get tutor collaborators available for open-answer correction requests
    */
   getStaff: protectedProcedure.query(async ({ ctx }) => {
     const staff = await ctx.prisma.user.findMany({
       where: {
-        role: { in: ['ADMIN', 'COLLABORATOR'] },
+        role: 'COLLABORATOR',
         isActive: true,
+        profileCompleted: true,
+        collaborator: {
+          kind: 'TUTOR',
+        },
       },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
+        collaborator: {
+          select: {
+            kind: true,
+            subjects: {
+              include: {
+                subject: {
+                  select: {
+                    id: true,
+                    name: true,
+                    code: true,
+                    color: true,
+                  },
+                },
+              },
+              orderBy: { isPrimary: 'desc' },
+            },
+          },
+        },
       },
-      orderBy: [
-        { role: 'asc' }, // ADMIN first
-        { name: 'asc' },
-      ],
+      orderBy: { name: 'asc' },
     });
 
     return staff;
@@ -1487,6 +1528,19 @@ export const usersRouter = router({
       include: {
         user: { select: { id: true, name: true, email: true, isActive: true } },
         groupMemberships: { include: { group: { select: { name: true } } } },
+        subjects: {
+          include: {
+            subject: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                color: true,
+              },
+            },
+          },
+          orderBy: { isPrimary: 'desc' },
+        },
       },
     });
 
@@ -1502,6 +1556,8 @@ export const usersRouter = router({
           userId: collab.user.id,
           name: collab.user.name,
           email: collab.user.email,
+          kind: collab.kind,
+          subjects: collab.subjects,
           isActive: collab.user.isActive,
           groups: collab.groupMemberships.map(gm => gm.group.name),
           questionsCreated,
@@ -1674,11 +1730,12 @@ export const usersRouter = router({
         name: z.string().min(1, 'Nome obbligatorio'),
         email: z.string().email('Email non valida'),
         role: z.enum(['STUDENT', 'COLLABORATOR', 'ADMIN']),
+        collaboratorKind: collaboratorKindSchema.default('TUTOR'),
         groupId: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { name, email, role, groupId } = input;
+      const { name, email, role, collaboratorKind, groupId } = input;
 
       // Check email not already in use in DB
       const existing = await ctx.prisma.user.findUnique({ where: { email } });
@@ -1730,7 +1787,7 @@ export const usersRouter = router({
             student: { create: { matricola } },
           }),
           ...(role === 'COLLABORATOR' && {
-            collaborator: { create: {} },
+            collaborator: { create: { kind: collaboratorKind } },
           }),
           ...(role === 'ADMIN' && {
             admin: { create: {} },

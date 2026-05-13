@@ -1,5 +1,11 @@
 // Shared Virtual Room state logic
 import { prisma } from '@/lib/prisma/client';
+import {
+  extractInvitedStudents,
+  getScopedAssignments,
+  isParticipantConnected,
+  calculateTimeRemaining,
+} from '@/server/trpc/routers/virtualRoom.helpers';
 
 export interface SessionStateData {
   session: {
@@ -68,6 +74,12 @@ export async function getSessionState(sessionId: string, participantIdForMessage
   const session = await prisma.simulationSession.findUnique({
     where: { id: sessionId },
     include: {
+      assignment: {
+        include: {
+          student: { include: { user: true } },
+          group: { include: { members: { include: { student: { include: { user: true } } } } } },
+        },
+      },
       simulation: {
         include: {
           questions: {
@@ -101,44 +113,13 @@ export async function getSessionState(sessionId: string, participantIdForMessage
   if (!session) return null;
 
   // Get list of all invited students
-  const invitedStudents: { id: string; userId: string; name: string; email: string }[] = [];
-  for (const assignment of session.simulation.assignments) {
-    if (assignment.student) {
-      invitedStudents.push({
-        id: assignment.student.id,
-        userId: assignment.student.userId,
-        name: assignment.student.user.name,
-        email: assignment.student.user.email,
-      });
-    }
-    if (assignment.group) {
-      for (const member of assignment.group.members) {
-        if (member.student && !invitedStudents.find(s => s.id === member.student!.id)) {
-          invitedStudents.push({
-            id: member.student.id,
-            userId: member.student.userId,
-            name: member.student.user.name,
-            email: member.student.user.email,
-          });
-        }
-      }
-    }
-  }
+  const invitedStudents = extractInvitedStudents(getScopedAssignments(session));
 
   // Calculate time remaining
-  let timeRemaining: number | null = null;
-  if (session.status === 'STARTED' && session.actualStartAt) {
-    const elapsedMs = Date.now() - session.actualStartAt.getTime();
-    const totalMs = session.simulation.durationMinutes * 60 * 1000;
-    timeRemaining = Math.max(0, Math.floor((totalMs - elapsedMs) / 1000));
-  }
-
-  const heartbeatTimeout = 15 * 1000; // 15 seconds
+  const timeRemaining = calculateTimeRemaining(session);
 
   const participants = session.participants.map(p => {
-    const isReallyConnected = p.isConnected && 
-      p.lastHeartbeat && 
-      (Date.now() - p.lastHeartbeat.getTime()) < heartbeatTimeout;
+    const isReallyConnected = isParticipantConnected(p);
     
     return {
       id: p.id,
