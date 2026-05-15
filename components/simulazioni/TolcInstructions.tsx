@@ -129,7 +129,7 @@ export default function TolcInstructions({
               </li>
               <li className="flex items-start gap-3">
                 <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-                <span>Puoi <strong>segnalare domande</strong> con la bandierina per rivederle prima di concludere la sezione</span>
+                <span>Puoi usare la <strong>bandierina per segnalare una domanda errata</strong> a tutor o admin durante la simulazione</span>
               </li>
               <li className="flex items-start gap-3">
                 <Lock className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />

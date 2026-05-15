@@ -97,6 +97,11 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   const autoSubmitRef = useRef<(() => void) | null>(null);
   const answersInitializedRef = useRef<boolean>(false);
   const answersRef = useRef<Answer[]>([]); // Ref for heartbeat to read current answers
+  const timeSpentRef = useRef<number>(0);
+  const questionTimesRef = useRef<Record<string, number>>({});
+  const currentSectionIndexRef = useRef<number>(0);
+  const sectionTimesRef = useRef<Record<number, number>>({});
+  const isSubmittingRef = useRef<boolean>(false);
   const participantIdRef = useRef<string | null>(null); // Ref for anti-cheat to read current participantId
   const lastSectionTimeUpdateRef = useRef<number>(-1); // Track last timeSpent used for section time update
 
@@ -163,39 +168,50 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     savedAnswers?: Array<{ questionId?: string | null; answerId?: string | null; answerText?: string | null; timeSpent?: number | null; flagged?: boolean | null }>; 
     savedSectionTimes?: Record<number, number>; 
     savedCurrentSectionIndex?: number;
+    savedCurrentQuestionIndex?: number;
   }) => {
-    const { savedTimeSpent, savedAnswers, savedSectionTimes, savedCurrentSectionIndex } = data;
+    const {
+      savedTimeSpent,
+      savedAnswers,
+      savedSectionTimes,
+      savedCurrentSectionIndex,
+      savedCurrentQuestionIndex,
+    } = data;
     
     if (savedTimeSpent) {
       setTimeSpent(savedTimeSpent);
       lastSectionTimeUpdateRef.current = savedTimeSpent;
     }
     
-    if (!savedAnswers || savedAnswers.length === 0) return;
-    
-    const restoredAnswers = savedAnswers.map(a => ({
-      questionId: a.questionId,
-      answerId: a.answerId,
-      answerText: sanitizeStudentAnswerText(a.answerText),
-      timeSpent: a.timeSpent || 0,
-      flagged: a.flagged || false,
-    }));
-    setAnswers(restoredAnswers);
-    answersInitializedRef.current = true;
-    
-    const restoredQuestionTimes: Record<string, number> = {};
-    savedAnswers.forEach(a => {
-      if (a.timeSpent) {
-        restoredQuestionTimes[a.questionId ?? ''] = a.timeSpent;
-      }
-    });
-    setQuestionTimes(restoredQuestionTimes);
+    if (savedAnswers && savedAnswers.length > 0) {
+      const restoredAnswers = savedAnswers.map(a => ({
+        questionId: a.questionId,
+        answerId: a.answerId,
+        answerText: sanitizeStudentAnswerText(a.answerText),
+        timeSpent: a.timeSpent || 0,
+        flagged: a.flagged ?? false,
+      }));
+      setAnswers(restoredAnswers);
+      answersInitializedRef.current = true;
+
+      const restoredQuestionTimes: Record<string, number> = {};
+      savedAnswers.forEach(a => {
+        if (a.timeSpent) {
+          restoredQuestionTimes[a.questionId ?? ''] = a.timeSpent;
+        }
+      });
+      setQuestionTimes(restoredQuestionTimes);
+    }
     
     if (savedSectionTimes) {
       setSectionTimes(savedSectionTimes);
     }
     if (savedCurrentSectionIndex !== undefined) {
       setCurrentSectionIndex(savedCurrentSectionIndex);
+      setCompletedSections(new Set(Array.from({ length: savedCurrentSectionIndex }, (_, index) => index)));
+    }
+    if (savedCurrentQuestionIndex !== undefined) {
+      setCurrentQuestionIndex(savedCurrentQuestionIndex);
     }
   }, []);
 
@@ -210,6 +226,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
           savedAnswers: 'savedAnswers' in data ? data.savedAnswers : undefined,
           savedSectionTimes: 'savedSectionTimes' in data ? data.savedSectionTimes : undefined,
           savedCurrentSectionIndex: 'savedCurrentSectionIndex' in data ? data.savedCurrentSectionIndex : undefined,
+          savedCurrentQuestionIndex: 'savedCurrentQuestionIndex' in data ? data.savedCurrentQuestionIndex : undefined,
         };
         restoreAttemptState(savedData);
       }
@@ -364,10 +381,65 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     answersRef.current = answers;
   }, [answers]);
 
+  useEffect(() => {
+    timeSpentRef.current = timeSpent;
+  }, [timeSpent]);
+
+  useEffect(() => {
+    questionTimesRef.current = questionTimes;
+  }, [questionTimes]);
+
+  useEffect(() => {
+    currentSectionIndexRef.current = currentSectionIndex;
+  }, [currentSectionIndex]);
+
+  useEffect(() => {
+    sectionTimesRef.current = sectionTimes;
+  }, [sectionTimes]);
+
+  useEffect(() => {
+    isSubmittingRef.current = isSubmitting;
+  }, [isSubmitting]);
+
   // Keep participantIdRef in sync (for anti-cheat callbacks)
   useEffect(() => {
     participantIdRef.current = participantId;
   }, [participantId]);
+
+  const buildProgressPayload = useCallback((resultId: string) => ({
+    resultId,
+    answers: answersRef.current.map((answer) => ({
+      ...answer,
+      answerText: sanitizeStudentAnswerText(answer.answerText),
+      timeSpent: questionTimesRef.current[answer.questionId] || answer.timeSpent || 0,
+    })),
+    timeSpent: timeSpentRef.current,
+    sectionTimes: sectionTimesRef.current,
+    currentSectionIndex: currentSectionIndexRef.current,
+    currentQuestionIndex: currentQuestionIndexRef.current,
+  }), []);
+
+  const flushProgressToApi = useCallback((resultId: string) => {
+    if (isSubmittingRef.current) return;
+
+    const requestBody = JSON.stringify(buildProgressPayload(resultId));
+
+    if (navigator.sendBeacon) {
+      const beaconPayload = new Blob([requestBody], { type: 'application/json' });
+      const sent = navigator.sendBeacon('/api/simulations/save-progress', beaconPayload);
+      if (sent) return;
+    }
+
+    void fetch('/api/simulations/save-progress', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: requestBody,
+      keepalive: true,
+    });
+  }, [buildProgressPayload]);
 
   // Virtual Room heartbeat - send progress updates
   const heartbeatMutation = trpc.virtualRoom.heartbeat.useMutation({
@@ -433,46 +505,18 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
 
   // Save progress function (reusable)
   const saveProgress = useCallback(() => {
-    if (!hasStarted || !startAttemptMutation.data?.resultId) return;
-    
-    const answersWithTimes = answers.map((a) => ({
-      ...a,
-      answerText: sanitizeStudentAnswerText(a.answerText),
-      timeSpent: questionTimes[a.questionId] || 0,
-    }));
+    if (!hasStarted || !startAttemptMutation.data?.resultId || isSubmittingRef.current) return;
 
-    saveProgressMutation.mutate({
-      resultId: startAttemptMutation.data.resultId,
-      answers: answersWithTimes,
-      timeSpent,
-      sectionTimes,
-      currentSectionIndex,
-    });
-  }, [hasStarted, startAttemptMutation.data?.resultId, answers, questionTimes, timeSpent, sectionTimes, currentSectionIndex, saveProgressMutation]);
+    saveProgressMutation.mutate(buildProgressPayload(startAttemptMutation.data.resultId));
+  }, [hasStarted, startAttemptMutation.data?.resultId, saveProgressMutation, buildProgressPayload]);
 
-  // Save on page unload/refresh
+  // Save on page unload/refresh and on client-side navigation unmount
   useEffect(() => {
     const resultId = startAttemptMutation.data?.resultId;
     if (!hasStarted || !resultId) return;
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // Save progress synchronously using sendBeacon for reliability
-      const answersWithTimes = answers.map((a) => ({
-        ...a,
-        answerText: sanitizeStudentAnswerText(a.answerText),
-        timeSpent: questionTimes[a.questionId] || 0,
-      }));
-
-      const payload = JSON.stringify({
-        resultId,
-        answers: answersWithTimes,
-        timeSpent,
-        sectionTimes,
-        currentSectionIndex,
-      });
-
-      // Use sendBeacon for reliable delivery during page unload
-      navigator.sendBeacon('/api/simulations/save-progress', payload);
+      flushProgressToApi(resultId);
 
       // Show confirmation dialog
       e.preventDefault();
@@ -480,9 +524,18 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
       return 'Hai una simulazione in corso. Sei sicuro di voler lasciare la pagina?';
     };
 
+    const handlePageHide = () => {
+      flushProgressToApi(resultId);
+    };
+
     globalThis.addEventListener('beforeunload', handleBeforeUnload);
-    return () => globalThis.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasStarted, startAttemptMutation.data?.resultId, answers, questionTimes, timeSpent, sectionTimes, currentSectionIndex]);
+    globalThis.addEventListener('pagehide', handlePageHide);
+    return () => {
+      globalThis.removeEventListener('beforeunload', handleBeforeUnload);
+      globalThis.removeEventListener('pagehide', handlePageHide);
+      flushProgressToApi(resultId);
+    };
+  }, [hasStarted, startAttemptMutation.data?.resultId, flushProgressToApi]);
 
   // Auto-save progress periodically
   useEffect(() => {
@@ -526,7 +579,6 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     );
   };
 
-  // Handle flag toggle
   const handleToggleFlag = () => {
     if (!simulation) return;
     const currentQuestion = simulation.questions[currentQuestionIndex];
@@ -534,7 +586,9 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
 
     setAnswers((prev) =>
       prev.map((a) =>
-        a.questionId === currentQuestion.questionId ? { ...a, flagged: !a.flagged } : a
+        a.questionId === currentQuestion.questionId
+          ? { ...a, flagged: !a.flagged }
+          : a
       )
     );
   };
@@ -853,8 +907,6 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   const currentAnswer = answers.find((a) => a.questionId === currentQuestion?.questionId);
   // Count answers including both choice answers and text answers
   const answeredCount = answers.filter((a) => a.answerId !== null || (a.answerText && a.answerText.trim().length > 0)).length;
-  const flaggedCount = answers.filter((a) => a.flagged).length;
-
   // Use TOLC layout for simulations with sections
   if (hasSectionsMode) {
     return (
@@ -880,12 +932,12 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
           completedSections={completedSections}
           onAnswerSelect={handleAnswerSelect}
           onOpenTextChange={handleOpenTextChange}
-          onToggleFlag={handleToggleFlag}
           onGoToQuestion={goToQuestion}
           onGoNext={goNext}
           onGoPrev={goPrev}
           onCompleteSection={handleRequestSectionComplete}
           onSubmit={() => setSubmitConfirm(true)}
+          onToggleFlag={handleToggleFlag}
           onReportQuestion={() => setShowFeedbackModal(true)}
           answeredCount={answeredCount}
           totalQuestions={simulation.totalQuestions}
@@ -995,7 +1047,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
             onAnswerSelect={handleAnswerSelect}
             onOpenTextChange={handleOpenTextChange}
             onToggleFlag={handleToggleFlag}
-            onReport={() => setShowFeedbackModal(true)}
+            onReportQuestion={() => setShowFeedbackModal(true)}
             onPrevious={goPrev}
             onNext={goNext}
             canGoPrevious={currentQuestionIndex > 0}
@@ -1010,7 +1062,6 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
             answers={answers}
             currentQuestionIndex={currentQuestionIndex}
             answeredCount={answeredCount}
-            flaggedCount={flaggedCount}
             totalQuestions={simulation.totalQuestions}
             onGoToQuestion={goToQuestion}
             hasSectionsMode={hasSectionsMode}
@@ -1054,7 +1105,6 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
         isOpen={submitConfirm}
         answeredCount={answeredCount}
         totalQuestions={simulation.totalQuestions}
-        flaggedCount={flaggedCount}
         isLoading={submitMutation.isPending}
         onConfirm={handleSubmit}
         onCancel={() => setSubmitConfirm(false)}
@@ -1068,7 +1118,8 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
           nextSectionName={sections[currentSectionIndex + 1]?.name}
           answeredInSection={
             answers.filter(a =>
-              currentSection.questionIds.includes(a.questionId) && a.answerId !== null
+              currentSection.questionIds.includes(a.questionId)
+              && (a.answerId !== null || !!a.answerText?.trim())
             ).length
           }
           totalInSection={currentSection.questionIds.length}

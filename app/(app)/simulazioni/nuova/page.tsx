@@ -10,6 +10,7 @@ import { Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import MultiSelect from '@/components/ui/MultiSelect';
 import Checkbox from '@/components/ui/Checkbox';
+import NumericInput from '@/components/ui/NumericInput';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import { Modal } from '@/components/ui/Modal';
 import { previewSimulationPdf } from '@/lib/utils/simulationPdfGenerator';
@@ -2129,10 +2130,13 @@ export default function NewSimulationPage() {
                 <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
                   Durata (minuti) {simulationType !== 'OFFICIAL' && <span className={colors.text.muted}>(0 = illimitata)</span>}
                 </label>
-                <input
-                  type="number"
+                <NumericInput
                   value={durationMinutes}
-                  onChange={(e) => setDurationMinutes(parseInt(e.target.value) || 0)}
+                  onValueChange={(value) => {
+                    if (value !== null) {
+                      setDurationMinutes(value);
+                    }
+                  }}
                   min={simulationType === 'OFFICIAL' ? 1 : 0}
                   className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
                 />
@@ -2154,10 +2158,14 @@ export default function NewSimulationPage() {
                   <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
                     Risposta corretta
                   </label>
-                  <input
-                    type="number"
+                  <NumericInput
                     value={correctPoints}
-                    onChange={(e) => setCorrectPoints(parseFloat(e.target.value) || 0)}
+                    onValueChange={(value) => {
+                      if (value !== null) {
+                        setCorrectPoints(value);
+                      }
+                    }}
+                    parseMode="float"
                     step={0.1}
                     className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
                   />
@@ -2166,10 +2174,14 @@ export default function NewSimulationPage() {
                   <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
                     Risposta errata
                   </label>
-                  <input
-                    type="number"
+                  <NumericInput
                     value={wrongPoints}
-                    onChange={(e) => setWrongPoints(parseFloat(e.target.value) || 0)}
+                    onValueChange={(value) => {
+                      if (value !== null) {
+                        setWrongPoints(value);
+                      }
+                    }}
+                    parseMode="float"
                     step={0.1}
                     max={0}
                     className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
@@ -2179,10 +2191,14 @@ export default function NewSimulationPage() {
                   <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
                     Non risposta
                   </label>
-                  <input
-                    type="number"
+                  <NumericInput
                     value={blankPoints}
-                    onChange={(e) => setBlankPoints(parseFloat(e.target.value) || 0)}
+                    onValueChange={(value) => {
+                      if (value !== null) {
+                        setBlankPoints(value);
+                      }
+                    }}
+                    parseMode="float"
                     step={0.1}
                     className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
                   />
@@ -2193,10 +2209,11 @@ export default function NewSimulationPage() {
                   <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
                     Punteggio massimo (opzionale)
                   </label>
-                  <input
-                    type="number"
-                    value={maxScore ?? ''}
-                    onChange={(e) => setMaxScore(e.target.value ? parseFloat(e.target.value) : null)}
+                  <NumericInput
+                    value={maxScore}
+                    onValueChange={setMaxScore}
+                    allowEmpty
+                    parseMode="float"
                     step={0.1}
                     placeholder="Calcolato automaticamente"
                     className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
@@ -2206,10 +2223,11 @@ export default function NewSimulationPage() {
                   <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
                     Punteggio minimo per passare
                   </label>
-                  <input
-                    type="number"
-                    value={passingScore ?? ''}
-                    onChange={(e) => setPassingScore(e.target.value ? parseFloat(e.target.value) : null)}
+                  <NumericInput
+                    value={passingScore}
+                    onValueChange={setPassingScore}
+                    allowEmpty
+                    parseMode="float"
                     step={0.1}
                     placeholder="Nessuna soglia"
                     className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
@@ -2244,10 +2262,10 @@ export default function NewSimulationPage() {
                   <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
                     Numero massimo tentativi
                   </label>
-                  <input
-                    type="number"
-                    value={maxAttempts ?? ''}
-                    onChange={(e) => setMaxAttempts(e.target.value ? parseInt(e.target.value) : null)}
+                  <NumericInput
+                    value={maxAttempts}
+                    onValueChange={setMaxAttempts}
+                    allowEmpty
                     min={1}
                     placeholder="Illimitati"
                     className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
@@ -2469,10 +2487,13 @@ export default function NewSimulationPage() {
                                     {/* Duration */}
                                     <div className="flex items-center gap-1">
                                       <Clock className="w-3 h-3 text-gray-400" />
-                                      <input
-                                        type="number"
+                                      <NumericInput
                                         value={section.durationMinutes}
-                                        onChange={(e) => updateSection(section.id, { durationMinutes: parseInt(e.target.value) || 0 })}
+                                        onValueChange={(value) => {
+                                          if (value !== null) {
+                                            updateSection(section.id, { durationMinutes: value });
+                                          }
+                                        }}
                                         className={`w-16 px-2 py-1 rounded border ${colors.border.input} ${colors.background.input} ${colors.text.primary} text-sm text-center`}
                                         min="1"
                                       />
@@ -2482,10 +2503,13 @@ export default function NewSimulationPage() {
                                     {creationMode === 'template' ? (
                                       <div className="flex items-center gap-1">
                                         <Target className="w-3 h-3 text-gray-400" />
-                                        <input
-                                          type="number"
+                                        <NumericInput
                                           value={section.questionCount || 0}
-                                          onChange={(e) => updateSection(section.id, { questionCount: parseInt(e.target.value) || 0 })}
+                                          onValueChange={(value) => {
+                                            if (value !== null) {
+                                              updateSection(section.id, { questionCount: value });
+                                            }
+                                          }}
                                           className={`w-16 px-2 py-1 rounded border ${colors.border.input} ${colors.background.input} ${colors.text.primary} text-sm text-center`}
                                           min="1"
                                         />

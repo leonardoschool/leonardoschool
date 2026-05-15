@@ -7,7 +7,6 @@ interface SubmitConfirmModalProps {
   readonly isOpen: boolean;
   readonly answeredCount: number;
   readonly totalQuestions: number;
-  readonly flaggedCount: number;
   readonly isLoading: boolean;
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
@@ -17,7 +16,6 @@ export function SubmitConfirmModal({
   isOpen,
   answeredCount,
   totalQuestions,
-  flaggedCount,
   isLoading,
   onConfirm,
   onCancel,
@@ -38,11 +36,6 @@ export function SubmitConfirmModal({
             {unansweredCount > 0 && (
               <p className="text-sm text-orange-600 mt-1">
                 ⚠️ Hai {unansweredCount} domande senza risposta
-              </p>
-            )}
-            {flaggedCount > 0 && (
-              <p className="text-sm text-yellow-600 mt-1">
-                ⚠️ Hai {flaggedCount} domande contrassegnate
               </p>
             )}
           </div>

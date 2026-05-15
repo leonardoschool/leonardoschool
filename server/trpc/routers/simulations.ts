@@ -823,6 +823,7 @@ interface ParsedSavedProgress {
   savedAnswers: SavedAnswerItem[];
   savedSectionTimes: Record<number, number>;
   savedCurrentSectionIndex: number;
+  savedCurrentQuestionIndex: number;
 }
 
 /**
@@ -832,6 +833,7 @@ function parseSavedProgress(savedData: unknown): ParsedSavedProgress {
   let savedAnswers: SavedAnswerItem[] = [];
   let savedSectionTimes: Record<number, number> = {};
   let savedCurrentSectionIndex = 0;
+  let savedCurrentQuestionIndex = 0;
 
   if (Array.isArray(savedData)) {
     // Old format: just an array of answers
@@ -842,6 +844,7 @@ function parseSavedProgress(savedData: unknown): ParsedSavedProgress {
       items: SavedAnswerItem[];
       sectionTimes?: Record<string, number>;
       currentSectionIndex?: number;
+      currentQuestionIndex?: number;
     };
     savedAnswers = meta.items || [];
     // Convert string keys to number keys for sectionTimes
@@ -851,9 +854,10 @@ function parseSavedProgress(savedData: unknown): ParsedSavedProgress {
       );
     }
     savedCurrentSectionIndex = meta.currentSectionIndex ?? 0;
+    savedCurrentQuestionIndex = meta.currentQuestionIndex ?? 0;
   }
 
-  return { savedAnswers, savedSectionTimes, savedCurrentSectionIndex };
+  return { savedAnswers, savedSectionTimes, savedCurrentSectionIndex, savedCurrentQuestionIndex };
 }
 
 /**
@@ -3987,6 +3991,7 @@ export const simulationsRouter = router({
           savedAnswers: savedProgress.savedAnswers,
           savedSectionTimes: savedProgress.savedSectionTimes,
           savedCurrentSectionIndex: savedProgress.savedCurrentSectionIndex,
+          savedCurrentQuestionIndex: savedProgress.savedCurrentQuestionIndex,
         };
       }
 
@@ -4028,9 +4033,10 @@ export const simulationsRouter = router({
       // TOLC section progress
       sectionTimes: z.record(z.number()).optional(),
       currentSectionIndex: z.number().int().min(0).optional(),
+      currentQuestionIndex: z.number().int().min(0).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { resultId, answers, timeSpent, sectionTimes, currentSectionIndex } = input;
+      const { resultId, answers, timeSpent, sectionTimes, currentSectionIndex, currentQuestionIndex } = input;
       const sanitizedAnswers = answers.map(answer => ({
         ...answer,
         answerText: sanitizeStudentAnswerText(answer.answerText),
@@ -4059,6 +4065,7 @@ export const simulationsRouter = router({
         items: sanitizedAnswers,
         sectionTimes: sectionTimes || {},
         currentSectionIndex: currentSectionIndex ?? 0,
+        currentQuestionIndex: currentQuestionIndex ?? 0,
       };
 
       await ctx.prisma.simulationResult.update({

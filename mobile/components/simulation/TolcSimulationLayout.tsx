@@ -27,7 +27,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 /**
  * Status type for question navigation buttons
  */
-type QuestionStatus = 'answered' | 'flagged' | 'unanswered';
+type QuestionStatus = 'answered' | 'unanswered';
 
 interface SimulationSection {
   name: string;
@@ -71,7 +71,6 @@ interface TolcSimulationLayoutProps {
   completedSections: Set<number>;
   onAnswerSelect: (answerId: string) => void;
   onOpenTextChange?: (text: string) => void;
-  onToggleFlag: () => void;
   onGoToQuestion: (index: number) => void;
   onGoNext: () => void;
   onGoPrev: () => void;
@@ -90,7 +89,6 @@ const getStatusBackgroundColor = (
 ): string => {
   if (isActive) return colors.neutral[800];
   if (status === 'answered') return colors.status.success.main;
-  if (status === 'flagged') return colors.status.warning.light;
   return themed(colors.background.secondary);
 };
 
@@ -98,7 +96,6 @@ const getStatusBackgroundColor = (
 const getStatusBorderColor = (
   status: QuestionStatus
 ): string => {
-  if (status === 'flagged') return colors.status.warning.main;
   if (status === 'unanswered') return colors.status.error.light;
   return 'transparent';
 };
@@ -111,7 +108,6 @@ const getStatusTextColor = (
 ): string => {
   if (isActive) return '#fff';
   if (status === 'answered') return '#fff';
-  if (status === 'flagged') return colors.status.warning.main;
   return themed(colors.text.primary);
 };
 
@@ -154,15 +150,12 @@ function QuestionNavigator({
 
   const getQuestionStatus = (question: Question): QuestionStatus => {
     const answer = answers.find((a) => a.questionId === question.questionId);
-    if (!answer) return 'unanswered';
-    if (answer.flagged) return 'flagged';
-    if (answer.answerId) return 'answered';
-    return 'unanswered';
+    return answer?.answerId !== null || !!answer?.answerText?.trim() ? 'answered' : 'unanswered';
   };
 
   const answeredCount = questions.filter((q) => {
     const ans = answers.find((a) => a.questionId === q.questionId);
-    return ans?.answerId;
+    return ans?.answerId !== null || !!ans?.answerText?.trim();
   }).length;
 
   return (
@@ -233,7 +226,7 @@ function QuestionNavigator({
                       justifyContent: 'center',
                       alignItems: 'center',
                       backgroundColor: getStatusBackgroundColor(status, isActive, themed),
-                      borderWidth: status === 'flagged' || status === 'unanswered' ? 2 : 0,
+                      borderWidth: status === 'unanswered' ? 2 : 0,
                       borderColor: getStatusBorderColor(status),
                       marginRight: spacing[1],
                       marginBottom: spacing[1],
@@ -248,19 +241,23 @@ function QuestionNavigator({
                     >
                       {idx + 1}
                     </Text>
-                    {/* Red dot for unanswered */}
+                    {/* Unanswered marker */}
                     {status === 'unanswered' && !isActive && (
                       <View
                         style={{
                           position: 'absolute',
-                          top: 2,
-                          right: 2,
-                          width: 6,
-                          height: 6,
-                          borderRadius: 3,
-                          backgroundColor: colors.status.error.main,
+                          top: 0,
+                          right: 0,
+                          width: 14,
+                          height: 14,
+                          borderRadius: 7,
+                          backgroundColor: colors.status.warning.light,
+                          justifyContent: 'center',
+                          alignItems: 'center',
                         }}
-                      />
+                      >
+                        <Ionicons name="remove" size={10} color={colors.status.warning.main} />
+                      </View>
                     )}
                   </TouchableOpacity>
                 );
@@ -299,25 +296,16 @@ function QuestionNavigator({
                   width: 12,
                   height: 12,
                   borderRadius: 6,
-                  backgroundColor: colors.status.warning.main,
-                }}
-              />
-              <Text variant="caption" color="muted">
-                Segnalata
-              </Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing[1] }}>
-              <View
-                style={{
-                  width: 12,
-                  height: 12,
-                  borderRadius: 6,
                   borderWidth: 2,
                   borderColor: colors.status.error.light,
+                  justifyContent: 'center',
+                  alignItems: 'center',
                 }}
-              />
+              >
+                <Ionicons name="remove" size={10} color={colors.status.warning.main} />
+              </View>
               <Text variant="caption" color="muted">
-                Da fare
+                Non risposta
               </Text>
             </View>
           </View>
@@ -352,7 +340,6 @@ export default function TolcSimulationLayout({
   completedSections: _completedSections,
   onAnswerSelect,
   onOpenTextChange: _onOpenTextChange,
-  onToggleFlag,
   onGoToQuestion,
   onGoNext,
   onGoPrev,
@@ -388,8 +375,12 @@ export default function TolcSimulationLayout({
   }, [questions, currentQuestionIndex, currentSectionQuestions]);
 
   const currentQuestion = questions[currentQuestionIndex];
-  const currentAnswer = answers.find(
-    (a) => a.questionId === currentQuestion?.questionId
+  const hasResponse = useCallback(
+    (questionId: string) => {
+      const answer = answers.find((a) => a.questionId === questionId);
+      return answer?.answerId !== null || !!answer?.answerText?.trim();
+    },
+    [answers]
   );
 
   // Navigation bounds
@@ -400,19 +391,14 @@ export default function TolcSimulationLayout({
   // eslint-disable-next-line sonarjs/no-unused-vars -- utility for question status indicator
   const _getQuestionStatus = useCallback(
     (question: Question) => {
-      const answer = answers.find((a) => a.questionId === question.questionId);
-      if (!answer) return 'unanswered';
-      if (answer.flagged) return 'flagged';
-      if (answer.answerId) return 'answered';
-      return 'unanswered';
+      return hasResponse(question.questionId) ? 'answered' : 'unanswered';
     },
-    [answers]
+    [hasResponse]
   );
 
   // Answered in section
   const answeredInSection = currentSectionQuestions.filter((q) => {
-    const ans = answers.find((a) => a.questionId === q.questionId);
-    return ans?.answerId;
+    return hasResponse(q.questionId);
   }).length;
 
   // Timer color
@@ -489,13 +475,15 @@ export default function TolcSimulationLayout({
           {/* Report button */}
           <TouchableOpacity
             onPress={onReportQuestion}
+            accessibilityRole="button"
+            accessibilityLabel="Segnala una domanda errata a tutor o admin"
             style={{
               padding: spacing[2],
               backgroundColor: themed(colors.background.secondary),
               borderRadius: 8,
             }}
           >
-            <Ionicons name="settings-outline" size={20} color={themed(colors.text.muted)} />
+            <Ionicons name="flag-outline" size={20} color={themed(colors.text.muted)} />
           </TouchableOpacity>
         </View>
 
@@ -536,12 +524,11 @@ export default function TolcSimulationLayout({
         style={{ flex: 1 }}
         contentContainerStyle={{ padding: spacing[4] }}
       >
-        {/* Question Number & Flag */}
+        {/* Question Number */}
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'space-between',
             marginBottom: spacing[4],
           }}
         >
@@ -559,26 +546,6 @@ export default function TolcSimulationLayout({
               {String(sectionQuestionIndex + 1).padStart(2, '0')}
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={onToggleFlag}
-            style={{
-              padding: spacing[2],
-              borderRadius: 8,
-              backgroundColor: currentAnswer?.flagged
-                ? colors.status.warning.light
-                : themed(colors.background.secondary),
-            }}
-          >
-            <Ionicons
-              name={currentAnswer?.flagged ? 'flag' : 'flag-outline'}
-              size={24}
-              color={
-                currentAnswer?.flagged
-                  ? colors.status.warning.main
-                  : themed(colors.text.muted)
-              }
-            />
-          </TouchableOpacity>
         </View>
 
         {/* Question Text */}

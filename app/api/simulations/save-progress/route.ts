@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { resultId, answers, timeSpent, sectionTimes, currentSectionIndex } = body;
+    const { resultId, answers, timeSpent, sectionTimes, currentSectionIndex, currentQuestionIndex } = body;
 
     if (!resultId || !Array.isArray(answers)) {
       return NextResponse.json({ error: 'Dati mancanti' }, { status: 400 });
@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
       items: sanitizedAnswers,
       sectionTimes: sectionTimes || {},
       currentSectionIndex: currentSectionIndex ?? 0,
+      currentQuestionIndex: currentQuestionIndex ?? 0,
     };
 
     // Save progress

@@ -3,8 +3,10 @@
 import {
   CheckCircle,
   ChevronRight,
+  Flag,
   Layers,
   Lock,
+  Minus,
 } from 'lucide-react';
 import { colors } from '@/lib/theme/colors';
 
@@ -30,7 +32,6 @@ interface NavigationSidebarProps {
   readonly answers: AnswerState[];
   readonly currentQuestionIndex: number;
   readonly answeredCount: number;
-  readonly flaggedCount: number;
   readonly totalQuestions: number;
   readonly onGoToQuestion: (index: number) => void;
   // Section mode props (optional for TOLC-style)
@@ -47,7 +48,6 @@ export default function NavigationSidebar({
   answers,
   currentQuestionIndex,
   answeredCount,
-  flaggedCount,
   totalQuestions,
   onGoToQuestion,
   hasSectionsMode = false,
@@ -57,6 +57,8 @@ export default function NavigationSidebar({
   onSectionChange,
   onCompleteSection,
 }: NavigationSidebarProps) {
+  const unansweredCount = totalQuestions - answeredCount;
+
   return (
     <div className={`w-full sm:w-80 lg:w-96 border-l ${colors.border.light} ${colors.background.secondary} overflow-y-auto`}>
       <div className="p-4">
@@ -80,11 +82,15 @@ export default function NavigationSidebar({
             <span>Risposta data</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-yellow-500" />
-            <span>Contrassegnata</span>
+            <div className="flex h-6 w-6 items-center justify-center rounded bg-amber-100 text-amber-600 dark:bg-amber-900/70 dark:text-amber-300">
+              <Flag className="h-4 w-4" />
+            </div>
+            <span>Da rispondere dopo</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-gray-300 dark:bg-gray-600" />
+            <div className="flex h-6 w-6 items-center justify-center rounded bg-gray-300 text-amber-600 dark:bg-gray-600 dark:text-amber-300">
+              <Minus className="h-4 w-4" />
+            </div>
             <span>Non risposta</span>
           </div>
         </div>
@@ -107,8 +113,8 @@ export default function NavigationSidebar({
               </span>
             </div>
             <div className="flex justify-between">
-              <span className={colors.text.muted}>Contrassegnate:</span>
-              <span className={`font-medium ${colors.text.primary}`}>{flaggedCount}</span>
+              <span className={colors.text.muted}>Non risposte:</span>
+              <span className={`font-medium ${colors.text.primary}`}>{unansweredCount}</span>
             </div>
           </div>
         </div>
@@ -222,21 +228,31 @@ function QuestionGrid({
         const answer = answers.find((a) => a.questionId === sq.questionId);
         const isCurrent = index === currentQuestionIndex;
         const isAnswered = answer?.answerId !== null || (answer?.answerText && answer.answerText.trim().length > 0);
-        const isFlagged = answer?.flagged;
+        const isFlagged = answer?.flagged === true;
 
         let bgColor = 'bg-gray-200 dark:bg-gray-700';
-        if (isAnswered) bgColor = 'bg-green-500 text-white';
-        if (isFlagged) bgColor = 'bg-yellow-500 text-white';
+        if (isFlagged) bgColor = 'bg-amber-100 text-amber-700 dark:bg-amber-900/70 dark:text-amber-300';
+        else if (isAnswered) bgColor = 'bg-green-500 text-white';
 
         return (
           <button
             key={sq.questionId}
             onClick={() => onGoToQuestion(index)}
-            className={`w-full aspect-square rounded flex items-center justify-center text-sm font-medium transition-all ${bgColor} ${
+            className={`relative w-full aspect-square rounded flex items-center justify-center text-sm font-medium transition-all ${bgColor} ${
               isCurrent ? 'ring-2 ring-red-500 ring-offset-2' : ''
             }`}
           >
             {index + 1}
+            {!isCurrent && isFlagged && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-amber-100 text-amber-600 dark:border-gray-800 dark:bg-amber-900/70 dark:text-amber-300">
+                <Flag className="h-3 w-3" />
+              </span>
+            )}
+            {!isCurrent && !isFlagged && !isAnswered && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-amber-100 text-amber-600 dark:border-gray-800 dark:bg-amber-900/70 dark:text-amber-300">
+                <Minus className="h-3 w-3" />
+              </span>
+            )}
           </button>
         );
       })}

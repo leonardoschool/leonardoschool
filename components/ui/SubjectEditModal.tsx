@@ -6,6 +6,7 @@ import { Save, GraduationCap } from 'lucide-react';
 import { colors } from '@/lib/theme/colors';
 import Button from '@/components/ui/Button';
 import { ButtonLoader } from '@/components/ui/loaders';
+import NumericInput from '@/components/ui/NumericInput';
 
 export interface SubjectFormData {
   name: string;
@@ -144,10 +145,13 @@ export function SubjectEditModal({
             <label className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
               Ordine
             </label>
-            <input
-              type="number"
+            <NumericInput
               value={formData.order}
-              onChange={(e) => setFormData({ ...formData, order: parseInt(e.target.value) || 0 })}
+              onValueChange={(order) => {
+                if (order !== null) {
+                  setFormData({ ...formData, order });
+                }
+              }}
               className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-[#a8012b]/50 focus:border-transparent transition-all`}
               placeholder="0"
               disabled={isLoading}

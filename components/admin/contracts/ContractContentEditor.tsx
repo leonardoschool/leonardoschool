@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { colors } from '@/lib/theme/colors';
 import { escapeHtml } from '@/lib/utils/escapeHtml';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
+import NumericInput from '@/components/ui/NumericInput';
 import type { ContractPlaceholder } from '@/lib/constants/contractPlaceholders';
 import { ContractContentEditorModeSwitch } from './ContractContentEditorModeSwitch';
 import { ContractContentEditorStyles } from './ContractContentEditorStyles';
@@ -504,12 +505,15 @@ export function ContractContentEditor({
                   className="flex-1 accent-red-700 cursor-pointer"
                 />
                 <div className="flex items-center gap-1 shrink-0">
-                  <input
-                    type="number"
+                  <NumericInput
                     min="5"
                     max="100"
                     value={imageWidthPct}
-                    onChange={(e) => handleWidthChange(Number(e.target.value))}
+                    onValueChange={(pct) => {
+                      if (pct !== null) {
+                        handleWidthChange(pct);
+                      }
+                    }}
                     className={`w-14 px-2 py-1 text-sm text-center rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:outline-none focus:ring-1 focus:ring-red-600`}
                   />
                   <span className={`text-sm ${colors.text.muted}`}>%</span>

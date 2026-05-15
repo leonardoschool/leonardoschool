@@ -9,6 +9,7 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { PageLoader, Spinner } from '@/components/ui/loaders';
 import Checkbox from '@/components/ui/Checkbox';
+import NumericInput from '@/components/ui/NumericInput';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { isStaff } from '@/lib/permissions';
 import type { LocationType, SimulationType } from '@/lib/validations/simulationValidation';
@@ -354,10 +355,13 @@ export default function EditSimulationPage({ params }: { params: Promise<{ id: s
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>Durata (minuti)</label>
-              <input
-                type="number"
+              <NumericInput
                 value={durationMinutes}
-                onChange={(event) => setDurationMinutes(parseInt(event.target.value, 10) || 0)}
+                onValueChange={(value) => {
+                  if (value !== null) {
+                    setDurationMinutes(value);
+                  }
+                }}
                 min={isOfficial ? 1 : 0}
                 className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
               />
@@ -377,20 +381,28 @@ export default function EditSimulationPage({ params }: { params: Promise<{ id: s
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
               <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>Risposta corretta</label>
-              <input
-                type="number"
+              <NumericInput
                 value={correctPoints}
-                onChange={(event) => setCorrectPoints(parseFloat(event.target.value) || 0)}
+                onValueChange={(value) => {
+                  if (value !== null) {
+                    setCorrectPoints(value);
+                  }
+                }}
+                parseMode="float"
                 step={0.1}
                 className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
               />
             </div>
             <div>
               <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>Risposta errata</label>
-              <input
-                type="number"
+              <NumericInput
                 value={wrongPoints}
-                onChange={(event) => setWrongPoints(parseFloat(event.target.value) || 0)}
+                onValueChange={(value) => {
+                  if (value !== null) {
+                    setWrongPoints(value);
+                  }
+                }}
+                parseMode="float"
                 step={0.1}
                 max={0}
                 className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
@@ -398,10 +410,14 @@ export default function EditSimulationPage({ params }: { params: Promise<{ id: s
             </div>
             <div>
               <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>Non risposta</label>
-              <input
-                type="number"
+              <NumericInput
                 value={blankPoints}
-                onChange={(event) => setBlankPoints(parseFloat(event.target.value) || 0)}
+                onValueChange={(value) => {
+                  if (value !== null) {
+                    setBlankPoints(value);
+                  }
+                }}
+                parseMode="float"
                 step={0.1}
                 className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
               />
@@ -411,10 +427,11 @@ export default function EditSimulationPage({ params }: { params: Promise<{ id: s
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>Punteggio massimo (opzionale)</label>
-              <input
-                type="number"
-                value={maxScore ?? ''}
-                onChange={(event) => setMaxScore(event.target.value ? parseFloat(event.target.value) : null)}
+              <NumericInput
+                value={maxScore}
+                onValueChange={setMaxScore}
+                allowEmpty
+                parseMode="float"
                 step={0.1}
                 placeholder="Calcolato automaticamente"
                 className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
@@ -422,10 +439,11 @@ export default function EditSimulationPage({ params }: { params: Promise<{ id: s
             </div>
             <div>
               <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>Punteggio minimo per passare</label>
-              <input
-                type="number"
-                value={passingScore ?? ''}
-                onChange={(event) => setPassingScore(event.target.value ? parseFloat(event.target.value) : null)}
+              <NumericInput
+                value={passingScore}
+                onValueChange={setPassingScore}
+                allowEmpty
+                parseMode="float"
                 step={0.1}
                 placeholder="Nessuna soglia"
                 className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}
@@ -452,10 +470,10 @@ export default function EditSimulationPage({ params }: { params: Promise<{ id: s
           {isRepeatable && (
             <div className="mt-4 max-w-xs">
               <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>Numero massimo tentativi</label>
-              <input
-                type="number"
-                value={maxAttempts ?? ''}
-                onChange={(event) => setMaxAttempts(event.target.value ? parseInt(event.target.value, 10) : null)}
+              <NumericInput
+                value={maxAttempts}
+                onValueChange={setMaxAttempts}
+                allowEmpty
                 min={1}
                 placeholder="Illimitati"
                 className={`w-full px-4 py-2 rounded-lg border ${colors.border.light} ${colors.background.input} ${colors.text.primary}`}

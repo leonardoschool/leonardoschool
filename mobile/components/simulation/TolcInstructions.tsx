@@ -259,7 +259,7 @@ export default function TolcInstructions({
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2] }}>
             <Ionicons name="checkmark-circle" size={20} color={colors.status.success.main} style={{ marginTop: 2 }} />
             <Text variant="bodySmall" color="secondary" style={{ flex: 1 }}>
-              Puoi segnalare domande con la bandierina per rivederle
+              Puoi usare la bandierina per segnalare una domanda errata a tutor o admin durante la simulazione
             </Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2] }}>

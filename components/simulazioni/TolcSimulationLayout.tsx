@@ -9,15 +9,16 @@ import { TextareaWithSymbols } from '@/components/ui/SymbolKeyboard';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import {
+  AlertTriangle,
   ChevronLeft,
   ChevronRight,
-  Settings,
   Flag,
   Menu,
   X,
   Clock,
   CheckCircle,
   Info,
+  Minus,
   User,
 } from 'lucide-react';
 
@@ -52,12 +53,12 @@ interface TolcSimulationLayoutProps {
   readonly completedSections: Set<number>;
   readonly onAnswerSelect: (answerId: string) => void;
   readonly onOpenTextChange?: (text: string) => void;
-  readonly onToggleFlag: () => void;
   readonly onGoToQuestion: (index: number) => void;
   readonly onGoNext: () => void;
   readonly onGoPrev: () => void;
   readonly onCompleteSection: () => void;
   readonly onSubmit: () => void;
+  readonly onToggleFlag: () => void;
   readonly onReportQuestion: () => void;
   readonly answeredCount: number;
   readonly totalQuestions: number;
@@ -74,11 +75,11 @@ export default function TolcSimulationLayout({
   completedSections,
   onAnswerSelect,
   onOpenTextChange,
-  onToggleFlag,
   onGoToQuestion,
   onGoNext,
   onGoPrev,
   onCompleteSection,
+  onToggleFlag,
   onReportQuestion,
   // Props available for future use
   // onSubmit - for final submission
@@ -117,8 +118,18 @@ export default function TolcSimulationLayout({
   }, [questions, currentQuestionIndex, currentSectionQuestions]);
 
   const currentQuestion = questions[currentQuestionIndex];
-  const currentAnswer = answers.find(a => a.questionId === currentQuestion?.questionId);
+  const currentAnswer = currentQuestion
+    ? answers.find((answer) => answer.questionId === currentQuestion.questionId)
+    : undefined;
   const currentQuestionImageSrc = normalizeImageSrc(currentQuestion?.question?.imageUrl);
+
+  const hasResponse = useCallback(
+    (questionId: string) => {
+      const answer = answers.find(a => a.questionId === questionId);
+      return answer?.answerId !== null || !!answer?.answerText?.trim();
+    },
+    [answers]
+  );
 
   // Format time as MM:SS
   const formatTime = (seconds: number) => {
@@ -129,26 +140,24 @@ export default function TolcSimulationLayout({
 
   // Get question status
   const getQuestionStatus = useCallback((question: Question) => {
-    const answer = answers.find(a => a.questionId === question.questionId);
-    if (!answer) return 'unanswered';
-    if (answer.flagged) return 'flagged';
-    if (answer.answerId) return 'answered';
-    return 'unanswered';
-  }, [answers]);
+    const answer = answers.find((item) => item.questionId === question.questionId);
+    if (answer?.flagged) return 'flagged';
+    return hasResponse(question.questionId) ? 'answered' : 'unanswered';
+  }, [answers, hasResponse]);
 
   // Get button class for question status
   const getQuestionButtonClass = (status: string, isActive: boolean) => {
     if (isActive) return 'bg-cyan-600 dark:bg-cyan-700 text-white shadow-lg';
     if (status === 'answered') return 'bg-green-500 dark:bg-green-600 text-white';
-    if (status === 'flagged') return 'bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-300 border-2 border-orange-400 dark:border-orange-500';
+    if (status === 'flagged') return 'bg-amber-100 dark:bg-amber-900/70 text-amber-700 dark:text-amber-300';
     return 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600';
   };
 
   // Get button title for question status
   const getQuestionButtonTitle = (status: string) => {
     if (status === 'answered') return 'Risposta data';
-    if (status === 'flagged') return 'Domanda segnalata';
-    return 'Nessuna risposta';
+    if (status === 'flagged') return 'Da rispondere dopo';
+    return 'Risposta non data';
   };
 
   // Get section container class
@@ -186,8 +195,7 @@ export default function TolcSimulationLayout({
 
   // Count answered in section
   const answeredInSection = currentSectionQuestions.filter(q => {
-    const ans = answers.find(a => a.questionId === q.questionId);
-    return ans?.answerId;
+    return hasResponse(q.questionId);
   }).length;
 
   // Answer letters
@@ -196,9 +204,9 @@ export default function TolcSimulationLayout({
   if (!currentQuestion) return null;
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-100 dark:bg-gray-900">
+    <div className="flex h-[calc(100dvh-8rem)] flex-col overflow-hidden bg-gray-100 dark:bg-gray-900 sm:h-[calc(100dvh-9rem)] lg:h-[calc(100dvh-10rem)]">
       {/* ===== HEADER ===== */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 lg:px-8 py-4">
+      <header className="shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 lg:px-8 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           {/* Left: User icon (mobile: menu) */}
           <div className="flex items-center gap-4">
@@ -218,24 +226,34 @@ export default function TolcSimulationLayout({
             {simulationTitle}
           </h1>
 
-          {/* Right: Settings icon */}
+          {/* Right: Report button */}
           <div className="flex items-center gap-2">
             <button 
+              onClick={onToggleFlag}
+              className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              title="Evidenzia per rispondere dopo"
+              aria-label="Evidenzia per rispondere dopo"
+              aria-pressed={currentAnswer?.flagged === true}
+            >
+              <Flag className={`w-5 h-5 ${currentAnswer?.flagged ? 'text-amber-500' : 'text-gray-500 dark:text-gray-400'}`} />
+            </button>
+            <button
               onClick={onReportQuestion}
               className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-              title="Segnala un problema con questa domanda"
+              title="Segnala una domanda errata a tutor o admin"
+              aria-label="Segnala una domanda errata a tutor o admin"
             >
-              <Settings className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              <AlertTriangle className="w-5 h-5 text-gray-500 dark:text-gray-400" />
             </button>
           </div>
         </div>
       </header>
 
       {/* ===== MAIN CONTENT ===== */}
-      <div className="flex-1 flex flex-col lg:flex-row max-w-7xl mx-auto w-full">
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row max-w-7xl mx-auto w-full">
         
         {/* ===== LEFT SIDEBAR - SECTIONS & NAVIGATION ===== */}
-        <aside className="hidden lg:flex flex-col w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
+        <aside className="hidden lg:flex min-h-0 flex-col w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
           {/* Current Section */}
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
             <div className={`flex items-center gap-2 px-4 py-3 rounded-lg ${
@@ -268,9 +286,16 @@ export default function TolcSimulationLayout({
                     title={getQuestionButtonTitle(status)}
                   >
                     {idx + 1}
-                    {/* Red dot for unanswered questions */}
+                    {status === 'flagged' && !isActive && (
+                      <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-amber-100 text-amber-600 dark:border-gray-800 dark:bg-amber-900/70 dark:text-amber-300">
+                        <Flag className="h-3 w-3" />
+                      </span>
+                    )}
+                    {/* Unanswered marker */}
                     {status === 'unanswered' && !isActive && (
-                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 dark:bg-red-400 rounded-full border border-white dark:border-gray-800" />
+                      <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-amber-100 text-amber-600 dark:border-gray-800 dark:bg-amber-900/70 dark:text-amber-300">
+                        <Minus className="h-3 w-3" />
+                      </span>
                     )}
                   </button>
                 );
@@ -293,15 +318,12 @@ export default function TolcSimulationLayout({
           {/* Other Sections */}
           <div className="flex-1 p-4 overflow-y-auto">
             {sections.map((section, idx) => {
+              if (idx === currentSectionIndex) return null;
+
               const isCompleted = completedSections.has(idx);
-              const isCurrent = idx === currentSectionIndex;
               const isLocked = idx > currentSectionIndex && !isCompleted;
-              const containerClass = isCurrent 
-                ? 'bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600' 
-                : getSectionContainerClass(false, isCompleted, isLocked);
-              const titleClass = isCurrent 
-                ? 'text-gray-800 dark:text-gray-100' 
-                : getSectionTitleClass(false, isCompleted);
+              const containerClass = getSectionContainerClass(false, isCompleted, isLocked);
+              const titleClass = getSectionTitleClass(false, isCompleted);
 
               return (
                 <div
@@ -323,10 +345,10 @@ export default function TolcSimulationLayout({
         </aside>
 
         {/* ===== CENTER - QUESTION CONTENT ===== */}
-        <main className="flex-1 flex flex-col bg-white dark:bg-gray-800">
+        <main className="flex-1 min-h-0 flex flex-col bg-white dark:bg-gray-800">
           {/* Question */}
-          <div className="flex-1 p-6 lg:p-8 overflow-y-auto">
-            {/* Question Number & Flag */}
+          <div className="min-h-0 flex-1 p-6 lg:p-8 overflow-y-auto">
+            {/* Question Number */}
             <div className="flex items-start justify-between mb-6">
               <div className="flex items-start gap-3">
                 <span className={`
@@ -336,16 +358,6 @@ export default function TolcSimulationLayout({
                   {String(sectionQuestionIndex + 1).padStart(2, '0')}
                 </span>
               </div>
-              <button
-                onClick={onToggleFlag}
-                className={`p-2 rounded-lg transition-colors ${
-                  currentAnswer?.flagged
-                    ? 'bg-orange-100 dark:bg-orange-900 text-orange-500'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-400 hover:text-orange-500'
-                }`}
-              >
-                <Flag className="w-5 h-5" />
-              </button>
             </div>
 
             {/* Question Text */}
@@ -453,7 +465,7 @@ export default function TolcSimulationLayout({
           </div>
 
           {/* Navigation Arrows - Mobile & Desktop */}
-          <div className="border-t border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between bg-gray-50 dark:bg-gray-800/50">
+          <div className="shrink-0 border-t border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between bg-gray-50 dark:bg-gray-800/50">
             <button
               onClick={onGoPrev}
               disabled={!canGoPrev}
@@ -492,7 +504,7 @@ export default function TolcSimulationLayout({
         </main>
 
         {/* ===== RIGHT SIDEBAR - TIMER ===== */}
-        <aside className="hidden lg:flex flex-col w-56 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 p-6">
+        <aside className="hidden lg:flex min-h-0 flex-col w-56 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 p-6">
           {/* Circular Timer */}
           <div className="flex flex-col items-center">
             {/* Timer Circle */}
@@ -561,14 +573,18 @@ export default function TolcSimulationLayout({
                 <span className="text-sm text-gray-600 dark:text-gray-400">Risposta data</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="relative w-4 h-4 rounded bg-white dark:bg-gray-700 shrink-0">
-                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-gray-800" />
+                <span className="relative flex w-4 h-4 items-center justify-center rounded bg-amber-100 text-amber-600 dark:bg-amber-900/70 dark:text-amber-300 shrink-0">
+                  <Flag className="w-3 h-3" />
                 </span>
-                <span className="text-sm text-gray-600 dark:text-gray-400">Senza risposta</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">Da rispondere dopo</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-4 h-4 rounded border-2 border-orange-400 bg-orange-100 dark:bg-orange-900 shrink-0"></span>
-                <span className="text-sm text-gray-600 dark:text-gray-400">Segnalata</span>
+                <span className="relative w-4 h-4 rounded bg-white dark:bg-gray-700 shrink-0">
+                  <span className="absolute inset-0 flex items-center justify-center text-amber-600 dark:text-amber-300">
+                    <Minus className="w-3 h-3" />
+                  </span>
+                </span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">Non risposta</span>
               </div>
             </div>
           </div>
@@ -648,9 +664,15 @@ export default function TolcSimulationLayout({
                       title={getQuestionButtonTitle(status)}
                     >
                       {idx + 1}
-                      {/* Red dot for unanswered questions */}
+                      {status === 'flagged' && !isActive && (
+                        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-amber-100 text-amber-600 dark:border-gray-800 dark:bg-amber-900/70 dark:text-amber-300">
+                          <Flag className="h-3 w-3" />
+                        </span>
+                      )}
                       {status === 'unanswered' && !isActive && (
-                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 dark:bg-red-400 rounded-full border border-white dark:border-gray-800" />
+                        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-amber-100 text-amber-600 dark:border-gray-800 dark:bg-amber-900/70 dark:text-amber-300">
+                          <Minus className="h-3 w-3" />
+                        </span>
                       )}
                     </button>
                   );
@@ -672,14 +694,13 @@ export default function TolcSimulationLayout({
             {/* All Sections */}
             <div className="p-4">
               <h3 className="text-sm font-semibold mb-3 text-gray-500 dark:text-gray-400 uppercase">
-                Tutte le Sezioni
+                Altre Sezioni
               </h3>
               {sections.map((section, idx) => {
+                if (idx === currentSectionIndex) return null;
+
                 const isCompleted = completedSections.has(idx);
-                const isCurrent = idx === currentSectionIndex;
-                const containerClass = isCurrent 
-                  ? 'bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600' 
-                  : getSectionContainerClass(false, isCompleted, !isCompleted && !isCurrent);
+                const containerClass = getSectionContainerClass(false, isCompleted, !isCompleted);
 
                 return (
                   <div

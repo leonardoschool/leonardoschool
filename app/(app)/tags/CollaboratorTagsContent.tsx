@@ -9,6 +9,7 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import CustomSelect from '@/components/ui/CustomSelect';
+import NumericInput from '@/components/ui/NumericInput';
 import {
   Tag,
   Plus,
@@ -783,10 +784,13 @@ export default function CollaboratorTagsContent() {
                   <label className={`block text-sm font-medium ${colors.text.primary} mb-1`}>
                     Ordine
                   </label>
-                  <input
-                    type="number"
+                  <NumericInput
                     value={categoryForm.order}
-                    onChange={(e) => setCategoryForm(prev => ({ ...prev, order: parseInt(e.target.value) || 0 }))}
+                    onValueChange={(order) => {
+                      if (order !== null) {
+                        setCategoryForm(prev => ({ ...prev, order }));
+                      }
+                    }}
                     min={0}
                     className={`w-24 px-4 py-2 rounded-lg ${colors.background.input} ${colors.text.primary} border ${colors.border.primary} focus:ring-2 focus:ring-[#a8012b]/30 focus:border-[#a8012b]`}
                   />

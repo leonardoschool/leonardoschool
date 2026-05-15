@@ -1,8 +1,8 @@
 'use client';
 
 import {
-  Flag,
   AlertTriangle,
+  Flag,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -42,7 +42,7 @@ interface QuestionPanelProps {
   readonly onAnswerSelect: (answerId: string) => void;
   readonly onOpenTextChange: (text: string) => void;
   readonly onToggleFlag: () => void;
-  readonly onReport: () => void;
+  readonly onReportQuestion: () => void;
   readonly onPrevious: () => void;
   readonly onNext: () => void;
   readonly canGoPrevious: boolean;
@@ -57,14 +57,13 @@ export default function QuestionPanel({
   onAnswerSelect,
   onOpenTextChange,
   onToggleFlag,
-  onReport,
+  onReportQuestion,
   onPrevious,
   onNext,
   canGoPrevious,
   canGoNext,
 }: QuestionPanelProps) {
   const isOpenText = question.question.type === 'OPEN_TEXT';
-  const isFlagged = answer?.flagged ?? false;
 
   return (
     <div className="flex-1 px-4 py-6 overflow-y-auto">
@@ -76,23 +75,23 @@ export default function QuestionPanel({
           </span>
           <div className="flex items-center gap-2">
             <button
-              onClick={onReport}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${colors.background.hover} ${colors.text.secondary} hover:text-orange-500`}
-              title="Segnala problema con la domanda"
-            >
-              <AlertTriangle className="w-4 h-4" />
-              <span className="hidden sm:inline">Segnala</span>
-            </button>
-            <button
               onClick={onToggleFlag}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${
-                isFlagged
-                  ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
-                  : `${colors.background.hover} ${colors.text.secondary}`
+              aria-pressed={answer?.flagged === true}
+              className={`flex items-center justify-center rounded-lg p-2 transition-colors ${colors.background.hover} ${
+                answer?.flagged ? 'text-amber-500' : colors.text.secondary
               }`}
+              title="Evidenzia per rispondere dopo"
+              aria-label="Evidenzia per rispondere dopo"
             >
               <Flag className="w-4 h-4" />
-              {isFlagged ? 'Contrassegnata' : 'Contrassegna'}
+            </button>
+            <button
+              onClick={onReportQuestion}
+              className={`flex items-center justify-center rounded-lg p-2 transition-colors ${colors.background.hover} ${colors.text.secondary} hover:text-orange-500`}
+              title="Segnala una domanda errata a tutor o admin"
+              aria-label="Segnala una domanda errata a tutor o admin"
+            >
+              <AlertTriangle className="w-4 h-4" />
             </button>
           </div>
         </div>

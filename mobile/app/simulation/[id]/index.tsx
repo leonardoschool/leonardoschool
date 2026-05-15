@@ -67,7 +67,7 @@ interface Answer {
   questionId: string;
   selectedOptionId: string | null;
   answerText: string | null;
-  isMarked: boolean; // domanda segnata per revisione
+  isMarked: boolean;
   timeSpent: number;
 }
 
@@ -245,7 +245,7 @@ export default function SimulationExecutionScreen() {
             questionId: a.questionId,
             selectedOptionId: a.answerId,
             answerText: a.answerText || null,
-            isMarked: a.flagged || false,
+            isMarked: false,
             timeSpent: a.timeSpent || 0,
           }));
           setAnswers(restoredAnswers);
@@ -380,7 +380,7 @@ export default function SimulationExecutionScreen() {
         answerId: a.selectedOptionId,
         answerText: a.answerText,
         timeSpent: a.timeSpent,
-        flagged: a.isMarked,
+        flagged: false,
       }));
 
       saveProgressMutation.mutate({
@@ -446,13 +446,6 @@ export default function SimulationExecutionScreen() {
     );
   };
 
-  // Toggle segna domanda
-  const toggleMark = () => {
-    setAnswers((prev) =>
-      prev.map((a, i) => (i === currentQuestionIndex ? { ...a, isMarked: !a.isMarked } : a))
-    );
-  };
-
   // Navigazione domande
   const goToQuestion = (index: number) => {
     setCurrentQuestionIndex(index);
@@ -506,7 +499,7 @@ export default function SimulationExecutionScreen() {
         answerId: a.selectedOptionId,
         answerText: a.answerText,
         timeSpent: a.timeSpent,
-        flagged: a.isMarked,
+        flagged: false,
       }));
 
       await submitMutation.mutateAsync({
@@ -733,7 +726,7 @@ export default function SimulationExecutionScreen() {
       answerId: a.selectedOptionId,
       answerText: a.answerText,
       timeSpent: a.timeSpent,
-      flagged: a.isMarked,
+      flagged: false,
     }));
     
     const tolcQuestions = simulation.questions.map(q => ({
@@ -773,13 +766,6 @@ export default function SimulationExecutionScreen() {
             if (!currentQ) return;
             setAnswers(prev => prev.map(a => 
               a.questionId === currentQ.id ? { ...a, answerText: text } : a
-            ));
-          }}
-          onToggleFlag={() => {
-            const currentQ = simulation.questions[currentQuestionIndex];
-            if (!currentQ) return;
-            setAnswers(prev => prev.map(a => 
-              a.questionId === currentQ.id ? { ...a, isMarked: !a.isMarked } : a
             ));
           }}
           onGoToQuestion={goToQuestion}
@@ -831,7 +817,7 @@ export default function SimulationExecutionScreen() {
 
   const currentQuestion = simulation.questions[currentQuestionIndex];
   const currentAnswer = answers[currentQuestionIndex];
-  const answeredCount = answers.filter((a) => a.selectedOptionId !== null).length;
+  const answeredCount = answers.filter((a) => a.selectedOptionId !== null || !!a.answerText?.trim()).length;
   const progressPercent = (answeredCount / simulation.questions.length) * 100;
 
   return (
@@ -902,47 +888,21 @@ export default function SimulationExecutionScreen() {
           showsVerticalScrollIndicator={false}
         >
           <Animated.View entering={FadeInRight.duration(300)}>
-            {/* Numero domanda e mark */}
+            {/* Numero domanda e report */}
             <View style={styles.questionHeader}>
               <View style={styles.questionNumber}>
                 <Text style={styles.questionNumberText}>
                   Domanda {currentQuestionIndex + 1}
                 </Text>
-                {currentAnswer?.isMarked && (
-                  <View style={styles.markedBadge}>
-                    <Ionicons name="flag" size={12} color={colors.status.warning.main} />
-                  </View>
-                )}
               </View>
-              <TouchableOpacity onPress={toggleMark} style={styles.markButton}>
-                <Ionicons
-                  name={currentAnswer?.isMarked ? 'flag' : 'flag-outline'}
-                  size={20}
-                  color={
-                    currentAnswer?.isMarked ? colors.status.warning.main : dynamicStyles.textSecondary
-                  }
-                />
-                <Text
-                  style={[
-                    styles.markText,
-                    {
-                      color: currentAnswer?.isMarked
-                        ? colors.status.warning.main
-                        : dynamicStyles.textSecondary,
-                    },
-                  ]}
-                >
-                  {currentAnswer?.isMarked ? 'Segnata' : 'Segna'}
-                </Text>
-              </TouchableOpacity>
-              
-              {/* Pulsante segnala problema */}
-              <TouchableOpacity 
-                onPress={() => setShowFeedbackModal(true)} 
-                style={[styles.markButton, { marginLeft: spacing[2] }]}
+              <TouchableOpacity
+                onPress={() => setShowFeedbackModal(true)}
+                style={styles.markButton}
+                accessibilityRole="button"
+                accessibilityLabel="Segnala una domanda errata a tutor o admin"
               >
                 <Ionicons
-                  name="alert-circle-outline"
+                  name="flag-outline"
                   size={20}
                   color={dynamicStyles.textSecondary}
                 />
@@ -1106,8 +1066,7 @@ export default function SimulationExecutionScreen() {
                 <View style={styles.navGridContent}>
                   {simulation.questions.map((q, index) => {
                     const answer = answers[index];
-                    const isAnswered = answer?.selectedOptionId !== null;
-                    const isMarked = answer?.isMarked;
+                    const isAnswered = answer?.selectedOptionId !== null || !!answer?.answerText?.trim();
                     const isCurrent = index === currentQuestionIndex;
 
                     return (
@@ -1121,8 +1080,6 @@ export default function SimulationExecutionScreen() {
                               : isAnswered
                                 ? `${colors.primary.main}40`
                                 : dynamicStyles.border,
-                            borderColor: isMarked ? colors.status.warning.main : 'transparent',
-                            borderWidth: isMarked ? 2 : 0,
                           },
                         ]}
                         onPress={() => goToQuestion(index)}
@@ -1138,9 +1095,9 @@ export default function SimulationExecutionScreen() {
                         >
                           {index + 1}
                         </Text>
-                        {isMarked && (
+                        {!isCurrent && !isAnswered && (
                           <View style={styles.navItemFlag}>
-                            <Ionicons name="flag" size={8} color={colors.status.warning.main} />
+                            <Ionicons name="remove" size={10} color={colors.status.warning.main} />
                           </View>
                         )}
                       </TouchableOpacity>
@@ -1173,13 +1130,17 @@ export default function SimulationExecutionScreen() {
                       styles.legendDot,
                       {
                         backgroundColor: dynamicStyles.border,
-                        borderColor: colors.status.warning.main,
+                        borderColor: colors.status.error.light,
                         borderWidth: 2,
+                        justifyContent: 'center',
+                        alignItems: 'center',
                       },
                     ]}
-                  />
+                  >
+                    <Ionicons name="remove" size={10} color={colors.status.warning.main} />
+                  </View>
                   <Text style={[styles.legendText, { color: dynamicStyles.textSecondary }]}>
-                    Segnata
+                    Non risposta
                   </Text>
                 </View>
               </View>
