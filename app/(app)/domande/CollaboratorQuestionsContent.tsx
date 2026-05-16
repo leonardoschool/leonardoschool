@@ -386,7 +386,7 @@ export default function CollaboratorQuestionsContent() {
               </div>
             </div>
             <div className="flex items-center gap-3 shrink-0">
-              <span className={`px-2.5 py-1 rounded-full text-sm font-semibold ${pendingFeedbacksCount > 0 ? `${colors.primary.bg} text-white` : `${colors.background.tertiary} ${colors.text.muted}`}`}>
+              <span className={`px-2.5 py-1 rounded-full text-sm font-semibold ${pendingFeedbacksCount > 0 ? (colors.primary.bg + ' text-white') : (colors.background.tertiary + ' ' + colors.text.muted)}`}>
                 {pendingFeedbacksCount}
               </span>
               <ChevronRight className={`w-5 h-5 ${colors.text.muted}`} />
@@ -409,7 +409,7 @@ export default function CollaboratorQuestionsContent() {
               </div>
             </div>
             <div className="flex items-center gap-3 shrink-0">
-              <span className={`px-2.5 py-1 rounded-full text-sm font-semibold ${pendingReviewsCount > 0 ? `${colors.primary.bg} text-white` : `${colors.background.tertiary} ${colors.text.muted}`}`}>
+              <span className={`px-2.5 py-1 rounded-full text-sm font-semibold ${pendingReviewsCount > 0 ? (colors.primary.bg + ' text-white') : (colors.background.tertiary + ' ' + colors.text.muted)}`}>
                 {pendingReviewsCount}
               </span>
               <ChevronRight className={`w-5 h-5 ${colors.text.muted}`} />

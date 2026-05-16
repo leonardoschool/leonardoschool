@@ -968,7 +968,7 @@ export default function AdminQuestionsContent() {
                           ? `Aggiungi ${selectedBulkTagIds.size} tag a ${selectedIds.size} domande`
                           : bulkTagMode === 'remove'
                             ? `Rimuovi ${selectedBulkTagIds.size} tag da ${selectedIds.size} domande`
-                            : `Sostituisci tag su ${selectedIds.size} domande${selectedBulkTagIds.size > 0 ? ` con ${selectedBulkTagIds.size} tag` : ' (rimuovi tutti)'}`}
+                            : `Sostituisci tag su ${selectedIds.size} domande` + (selectedBulkTagIds.size > 0 ? ` con ${selectedBulkTagIds.size} tag` : ' (rimuovi tutti)')}
                       </button>
                     </div>
                   )}

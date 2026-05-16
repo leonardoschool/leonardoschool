@@ -49,19 +49,19 @@ export async function POST(request: NextRequest) {
     if (!user) {
       // User exists in Firebase but not in DB — they registered on the old platform.
       // Auto-create as STUDENT so they go through the profile-completion onboarding flow.
-      const matricola = await generateMatricola(prisma as any);
+      const matricola = await generateMatricola(prisma);
       const displayName = decodedToken.name || decodedToken.email?.split('@')[0] || 'Utente';
       user = await prisma.user.create({
         data: {
           firebaseUid: decodedToken.uid,
           email: decodedToken.email || '',
           name: displayName,
-          role: 'STUDENT',
+          role: 'STUDENT' as const,
           isActive: false,
           profileCompleted: false,
           emailVerified: decodedToken.email_verified || false,
           student: { create: { matricola } },
-        } as any,
+        },
         include: {
           student: { include: { parentGuardian: true } },
           admin: true,
