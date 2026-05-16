@@ -3,9 +3,17 @@
  * Usage: DATABASE_URL="postgresql://..." pnpm tsx scripts/test-db-connection.ts
  */
 
+import { config } from 'dotenv';
+import { resolve } from 'node:path';
+config({ path: resolve(process.cwd(), '.env') });
+
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
 const prisma = new PrismaClient({
+  adapter,
   log: ['error', 'warn'],
 });
 
