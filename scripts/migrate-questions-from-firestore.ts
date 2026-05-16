@@ -55,6 +55,9 @@ const INSPECT_ONLY = process.argv.includes('--inspect');
 // Flag per preview (mostra mappatura senza connessione al database)
 const PREVIEW_ONLY = process.argv.includes('--preview');
 
+// Flag per ritentare solo le domande fallite (legge migration-errors.json)
+const RETRY_ERRORS = process.argv.includes('--retry-errors');
+
 // School ID (verrà trovato automaticamente)
 let FIRESTORE_SCHOOL_ID = '';
 
@@ -512,9 +515,9 @@ function mapStatus(status?: string): QuestionStatus {
  */
 function cleanText(text?: string): string {
   if (!text) return '';
-  
-  // Rimuovi whitespace extra
-  return text.trim();
+
+  // Rimuovi null bytes (0x00) che PostgreSQL rifiuta, poi whitespace extra
+  return text.replace(/\0/g, '').trim();
 }
 
 /**
@@ -792,15 +795,28 @@ async function migrateQuestions(): Promise<void> {
     // 3. Leggi le domande da Firestore
     console.log('\n📖 Reading questions from Firestore...');
     const questionsRef = firestore.collection('schools').doc(FIRESTORE_SCHOOL_ID).collection('questions');
-    
-    let query: FirebaseFirestore.Query = questionsRef;
-    if (LIMIT > 0) {
-      query = query.limit(LIMIT);
+
+    let questionsSnapshot: FirebaseFirestore.QuerySnapshot;
+
+    if (RETRY_ERRORS) {
+      const errorLogPath = join(process.cwd(), 'migration-errors.json');
+      if (!existsSync(errorLogPath)) {
+        console.error('❌ migration-errors.json non trovato. Esegui prima la migrazione completa.');
+        process.exit(1);
+      }
+      const errorIds: string[] = (JSON.parse(readFileSync(errorLogPath, 'utf-8')) as { id: string }[]).map(e => e.id);
+      console.log(`   Retry mode: ${errorIds.length} domande fallite da ritentare\n`);
+      const docs = await Promise.all(errorIds.map(id => questionsRef.doc(id).get()));
+      questionsSnapshot = { docs: docs.filter(d => d.exists), size: docs.filter(d => d.exists).length } as unknown as FirebaseFirestore.QuerySnapshot;
+    } else {
+      let query: FirebaseFirestore.Query = questionsRef;
+      if (LIMIT > 0) {
+        query = query.limit(LIMIT);
+      }
+      questionsSnapshot = await query.get();
     }
-    
-    const questionsSnapshot = await query.get();
+
     stats.total = questionsSnapshot.size;
-    
     console.log(`   Found ${stats.total} questions to migrate\n`);
     
     if (stats.total === 0) {
@@ -917,13 +933,13 @@ async function migrateQuestions(): Promise<void> {
           difficulty: difficulty,
           
           // Images (prendi la prima se presente)
-          imageUrl: firestoreQuestion.images?.[0] || null,
-          
+          imageUrl: cleanText(firestoreQuestion.images?.[0]) || null,
+
           // Explanations
           generalExplanation: cleanText(firestoreQuestion.comment) || null,
-          
+
           // Metadata - valori leggibili e anno numerico
-          source: metadata.source,
+          source: cleanText(metadata.source ?? undefined) || null,
           year: metadata.year,
           externalId: firestoreQuestion.id,
           // Legacy tags con nomi leggibili invece di sigle
@@ -967,7 +983,7 @@ async function migrateQuestions(): Promise<void> {
               answers: {
                 create: (firestoreQuestion.options || []).map((opt, index) => ({
                   text: cleanText(opt.text) || `Opzione ${index + 1}`,
-                  imageUrl: opt.image || null,
+                  imageUrl: cleanText(opt.image) || null,
                   isCorrect: (firestoreQuestion.answers || []).includes(opt.id || ''),
                   order: index,
                   label: String.fromCharCode(65 + index) // A, B, C, D...
@@ -993,7 +1009,7 @@ async function migrateQuestions(): Promise<void> {
               answers: {
                 create: (firestoreQuestion.options || []).map((opt, index) => ({
                   text: cleanText(opt.text) || `Opzione ${index + 1}`,
-                  imageUrl: opt.image || null,
+                  imageUrl: cleanText(opt.image) || null,
                   isCorrect: (firestoreQuestion.answers || []).includes(opt.id || ''),
                   order: index,
                   label: String.fromCharCode(65 + index) // A, B, C, D...
