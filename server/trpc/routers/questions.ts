@@ -56,17 +56,17 @@ function buildTagFilterConditions(tagIds: string[] | undefined): Record<string, 
  */
 function buildQuestionBasicFilters(input: QuestionFilterInput): Record<string, unknown> {
   const where: Record<string, unknown> = {};
-  
-  if (input.subjectId) where.subjectId = input.subjectId;
-  if (input.topicId) where.topicId = input.topicId;
-  if (input.type) where.type = input.type;
-  if (input.difficulty) where.difficulty = input.difficulty;
-  if (input.year) where.year = input.year;
-  if (input.source) where.source = { contains: input.source, mode: 'insensitive' };
+
+  if (input.subjectIds && input.subjectIds.length > 0) where.subjectId = { in: input.subjectIds };
+  if (input.topicIds && input.topicIds.length > 0) where.topicId = { in: input.topicIds };
+  if (input.types && input.types.length > 0) where.type = { in: input.types };
+  if (input.difficulties && input.difficulties.length > 0) where.difficulty = { in: input.difficulties };
+  if (input.years && input.years.length > 0) where.year = { in: input.years };
+  if (input.sources && input.sources.length > 0) where.source = { in: input.sources };
   if (input.createdById) where.createdById = input.createdById;
-  if (input.language) where.language = input.language;
+  if (input.languages && input.languages.length > 0) where.language = { in: input.languages };
   if (input.tags && input.tags.length > 0) where.legacyTags = { hasEvery: input.tags };
-  
+
   return where;
 }
 
@@ -74,12 +74,12 @@ function buildQuestionBasicFilters(input: QuestionFilterInput): Record<string, u
  * Build status filter for questions
  */
 function buildQuestionStatusFilter(
-  status: string | undefined,
+  statuses: string[] | undefined,
   includeDrafts: boolean | undefined,
   includeArchived: boolean | undefined
-): { in: string[] } | string {
-  if (status) return status;
-  
+): { in: string[] } {
+  if (statuses && statuses.length > 0) return { in: statuses };
+
   const statusIn: string[] = ['PUBLISHED'];
   if (includeDrafts) statusIn.push('DRAFT');
   if (includeArchived) statusIn.push('ARCHIVED');
@@ -742,7 +742,7 @@ export const questionsRouter = router({
       ];
 
       // Status filter
-      where.status = buildQuestionStatusFilter(input.status, input.includeDrafts, input.includeArchived);
+      where.status = buildQuestionStatusFilter(input.statuses, input.includeDrafts, input.includeArchived);
 
       // Combine AND conditions if any
       if (andConditions.length > 0) {
@@ -752,45 +752,102 @@ export const questionsRouter = router({
       // Count total
       const total = await ctx.prisma.question.count({ where });
 
-      // Get questions
-      const questions = await ctx.prisma.question.findMany({
-        where,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        orderBy: { [sortBy]: sortOrder },
-        include: {
-          subject: {
-            select: { id: true, name: true, code: true, color: true, icon: true },
-          },
-          topic: {
-            select: { id: true, name: true },
-          },
-          createdBy: {
-            select: { id: true, name: true, role: true },
-          },
-          answers: {
-            orderBy: { order: 'asc' },
-          },
-          keywords: {
-            select: { keyword: true },
-          },
-          questionTags: {
-            include: {
-              tag: {
-                select: { id: true, name: true, color: true, category: { select: { id: true, name: true, color: true } } },
-              },
-            },
-          },
-          _count: {
-            select: {
-              answers: true,
-              feedbacks: true,
-              favorites: true,
-              simulationQuestions: true,
+      const include = {
+        subject: {
+          select: { id: true, name: true, code: true, color: true, icon: true },
+        },
+        topic: {
+          select: { id: true, name: true },
+        },
+        createdBy: {
+          select: { id: true, name: true, role: true },
+        },
+        answers: {
+          orderBy: { order: 'asc' as const },
+        },
+        keywords: {
+          select: { keyword: true },
+        },
+        questionTags: {
+          include: {
+            tag: {
+              select: { id: true, name: true, color: true, category: { select: { id: true, name: true, color: true } } },
             },
           },
         },
-      });
+        _count: {
+          select: {
+            answers: true,
+            feedbacks: true,
+            favorites: true,
+            simulationQuestions: true,
+          },
+        },
+      } satisfies Prisma.QuestionInclude;
+
+      type QuestionRow = Prisma.QuestionGetPayload<{ include: typeof include }>;
+      let questions: QuestionRow[];
+
+      if (sortBy === 'text' || sortBy === 'tag') {
+        // Phase 1: lightweight fetch for JS sorting
+        const allIdData = await ctx.prisma.question.findMany({
+          where,
+          select: {
+            id: true,
+            text: true,
+            questionTags: {
+              take: 1,
+              orderBy: { tag: { name: 'asc' } },
+              select: { tag: { select: { name: true } } },
+            },
+          },
+        });
+
+        const sorted = [...allIdData].sort((a, b) => {
+          if (sortBy === 'tag') {
+            const aTag = a.questionTags[0]?.tag.name ?? null;
+            const bTag = b.questionTags[0]?.tag.name ?? null;
+            // No tag always last, regardless of sort direction
+            if (aTag === null && bTag === null) return 0;
+            if (aTag === null) return 1;
+            if (bTag === null) return -1;
+            const cmp = aTag.localeCompare(bTag, 'it', { sensitivity: 'base' });
+            return sortOrder === 'asc' ? cmp : -cmp;
+          }
+          // sortBy === 'text': non-letter starters always last
+          const aLetter = /^\p{L}/u.test(a.text);
+          const bLetter = /^\p{L}/u.test(b.text);
+          if (aLetter !== bLetter) return aLetter ? -1 : 1;
+          const cmp = a.text.localeCompare(b.text, 'it', { sensitivity: 'base' });
+          return sortOrder === 'asc' ? cmp : -cmp;
+        });
+
+        const pageStart = (page - 1) * pageSize;
+        const pageIds = sorted.slice(pageStart, pageStart + pageSize).map(q => q.id);
+
+        // Phase 2: full data for this page only
+        const rows = await ctx.prisma.question.findMany({
+          where: { id: { in: pageIds } },
+          include,
+        });
+
+        const rowMap = new Map(rows.map(q => [q.id, q]));
+        questions = pageIds.map(id => rowMap.get(id)).filter((q): q is QuestionRow => q != null);
+      } else {
+        const orderBy: Prisma.QuestionOrderByWithRelationInput = (() => {
+          if (sortBy === 'subject') return { subject: { name: sortOrder } };
+          if (sortBy === 'year' || sortBy === 'source') return { [sortBy]: { sort: sortOrder, nulls: 'last' } };
+          return { [sortBy]: sortOrder };
+        })();
+
+        questions = await ctx.prisma.question.findMany({
+          where,
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+          orderBy,
+          include,
+        });
+      }
 
       return {
         questions,
@@ -1487,12 +1544,12 @@ export const questionsRouter = router({
       return { updated: result.count };
     }),
 
-  // Bulk add tags to questions
+  // Bulk add/remove/replace tags on questions
   bulkAddTags: adminProcedure
     .input(z.object({
       ids: z.array(z.string()),
       tagIds: z.array(z.string()),
-      mode: z.enum(['add', 'remove']).default('add'),
+      mode: z.enum(['add', 'remove', 'replace']).default('add'),
     }))
     .mutation(async ({ ctx, input }) => {
       // Verify tags exist
@@ -1509,35 +1566,43 @@ export const questionsRouter = router({
       }
 
       if (input.mode === 'remove') {
-        // Remove selected tags from selected questions
         await ctx.prisma.questionTagAssignment.deleteMany({
-          where: { 
+          where: {
             questionId: { in: input.ids },
             tagId: { in: input.tagIds },
           },
         });
+      } else if (input.mode === 'replace') {
+        // Remove all existing tags, then add the new ones
+        await ctx.prisma.$transaction(async (tx) => {
+          await tx.questionTagAssignment.deleteMany({
+            where: { questionId: { in: input.ids } },
+          });
+          if (input.tagIds.length > 0) {
+            await tx.questionTagAssignment.createMany({
+              data: input.ids.flatMap(questionId =>
+                input.tagIds.map(tagId => ({ questionId, tagId }))
+              ),
+              skipDuplicates: true,
+            });
+          }
+        });
       } else {
-        // Add mode: Create new associations (skip duplicates)
-        const associations = input.ids.flatMap(questionId =>
-          input.tagIds.map(tagId => ({
-            questionId,
-            tagId,
-          }))
-        );
-
+        // Add mode: create new associations (skip duplicates)
         await ctx.prisma.questionTagAssignment.createMany({
-          data: associations,
+          data: input.ids.flatMap(questionId =>
+            input.tagIds.map(tagId => ({ questionId, tagId }))
+          ),
           skipDuplicates: true,
         });
       }
 
-      // Update questions' updatedById
       await ctx.prisma.question.updateMany({
         where: { id: { in: input.ids } },
         data: { updatedById: ctx.user.id },
       });
 
-      return { 
+      return {
         updated: input.ids.length,
         tags: tags.map(t => t.name).join(', '),
         mode: input.mode,

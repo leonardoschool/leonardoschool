@@ -73,14 +73,14 @@ export default function CollaboratorQuestionsContent() {
   // Filters state
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [subjectId, setSubjectId] = useState<string>('');
-  const [topicId, setTopicId] = useState<string>('');
-  const [type, setType] = useState<QuestionType | ''>('');
-  const [status, setStatus] = useState<QuestionStatus | ''>('');
-  const [difficulty, setDifficulty] = useState<DifficultyLevel | ''>('');
-  const [selectedTagId, setSelectedTagId] = useState<string>('');
+  const [subjectIds, setSubjectIds] = useState<string[]>([]);
+  const [topicIds, setTopicIds] = useState<string[]>([]);
+  const [types, setTypes] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<string[]>([]);
+  const [difficulties, setDifficulties] = useState<string[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(20);
+  const [pageSize] = useState(50);
 
   // Filter options
   const [showFilters, setShowFilters] = useState(false);
@@ -111,12 +111,12 @@ export default function CollaboratorQuestionsContent() {
       page,
       pageSize,
       search: debouncedSearch || undefined,
-      subjectId: subjectId || undefined,
-      topicId: topicId || undefined,
-      type: type || undefined,
-      status: status || undefined,
-      difficulty: difficulty || undefined,
-      tagIds: selectedTagId ? [selectedTagId] : undefined,
+      subjectIds: subjectIds.length > 0 ? subjectIds : undefined,
+      topicIds: topicIds.length > 0 ? topicIds : undefined,
+      types: types.length > 0 ? (types as QuestionType[]) : undefined,
+      statuses: statuses.length > 0 ? (statuses as QuestionStatus[]) : undefined,
+      difficulties: difficulties.length > 0 ? (difficulties as DifficultyLevel[]) : undefined,
+      tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
       includeAnswers: false,
       includeDrafts: true,
       includeArchived: true,
@@ -129,10 +129,11 @@ export default function CollaboratorQuestionsContent() {
   // Fetch subjects for filter
   const { data: subjects } = trpc.materials.getAllSubjects.useQuery();
 
-  // Fetch topics for filter (when subject is selected)
+  // Fetch topics for filter (only when exactly one subject is selected)
+  const singleSubjectId = subjectIds.length === 1 ? subjectIds[0] : '';
   const { data: topics } = trpc.materials.getTopics.useQuery(
-    { subjectId: subjectId, includeInactive: true },
-    { enabled: !!subjectId }
+    { subjectId: singleSubjectId, includeInactive: true },
+    { enabled: !!singleSubjectId }
   );
 
   // Fetch tags for filter
@@ -197,10 +198,10 @@ export default function CollaboratorQuestionsContent() {
     setIsExporting(true);
     try {
       const result = await utils.questions.exportQuestionsCSV.fetch({
-        subjectId: subjectId || undefined,
-        status: status || undefined,
-        type: type || undefined,
-        difficulty: difficulty || undefined,
+        subjectId: subjectIds[0] || undefined,
+        status: statuses[0] as 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' | undefined,
+        type: types[0] as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT' | undefined,
+        difficulty: difficulties[0] as 'EASY' | 'MEDIUM' | 'HARD' | undefined,
       });
 
       // Create and download the CSV file
@@ -232,16 +233,16 @@ export default function CollaboratorQuestionsContent() {
   const clearFilters = () => {
     setSearch('');
     setDebouncedSearch('');
-    setSubjectId('');
-    setTopicId('');
-    setType('');
-    setStatus('');
-    setDifficulty('');
-    setSelectedTagId('');
+    setSubjectIds([]);
+    setTopicIds([]);
+    setTypes([]);
+    setStatuses([]);
+    setDifficulties([]);
+    setSelectedTagIds([]);
     setPage(1);
   };
 
-  const hasActiveFilters = search || subjectId || topicId || type || status || difficulty || selectedTagId;
+  const hasActiveFilters = !!(search || subjectIds.length || topicIds.length || types.length || statuses.length || difficulties.length || selectedTagIds.length);
 
   // Subject options for select
   const subjectOptions = useMemo(
@@ -445,7 +446,7 @@ export default function CollaboratorQuestionsContent() {
             Filtri
             {hasActiveFilters && (
               <span className={`w-5 h-5 rounded-full ${colors.primary.bg} text-white text-xs flex items-center justify-center`}>
-                {[subjectId, topicId, type, status, difficulty].filter(Boolean).length}
+                {[subjectIds, topicIds, types, statuses, difficulties, selectedTagIds].filter(a => a.length > 0).length}
               </span>
             )}
           </button>
@@ -458,22 +459,24 @@ export default function CollaboratorQuestionsContent() {
               <CustomSelect
                 label="Materia"
                 options={subjectOptions}
-                value={subjectId}
-                onChange={(val) => {
-                  setSubjectId(val);
-                  setTopicId('');
+                multiSelect
+                values={subjectIds}
+                onMultiChange={(vals) => {
+                  setSubjectIds(vals);
+                  setTopicIds([]);
                   setPage(1);
                 }}
               />
               <CustomSelect
                 label="Argomento"
                 options={topicOptions}
-                value={topicId}
-                onChange={(val) => {
-                  setTopicId(val);
+                multiSelect
+                values={topicIds}
+                onMultiChange={(vals) => {
+                  setTopicIds(vals);
                   setPage(1);
                 }}
-                disabled={!subjectId}
+                disabled={subjectIds.length !== 1}
               />
               <CustomSelect
                 label="Tipo"
@@ -483,9 +486,10 @@ export default function CollaboratorQuestionsContent() {
                   { value: 'MULTIPLE_CHOICE', label: questionTypeLabels.MULTIPLE_CHOICE },
                   { value: 'OPEN_TEXT', label: questionTypeLabels.OPEN_TEXT },
                 ]}
-                value={type}
-                onChange={(val) => {
-                  setType(val as QuestionType | '');
+                multiSelect
+                values={types}
+                onMultiChange={(vals) => {
+                  setTypes(vals);
                   setPage(1);
                 }}
               />
@@ -497,9 +501,10 @@ export default function CollaboratorQuestionsContent() {
                   { value: 'PUBLISHED', label: questionStatusLabels.PUBLISHED },
                   { value: 'ARCHIVED', label: questionStatusLabels.ARCHIVED },
                 ]}
-                value={status}
-                onChange={(val) => {
-                  setStatus(val as QuestionStatus | '');
+                multiSelect
+                values={statuses}
+                onMultiChange={(vals) => {
+                  setStatuses(vals);
                   setPage(1);
                 }}
               />
@@ -511,18 +516,20 @@ export default function CollaboratorQuestionsContent() {
                   { value: 'MEDIUM', label: difficultyLabels.MEDIUM },
                   { value: 'HARD', label: difficultyLabels.HARD },
                 ]}
-                value={difficulty}
-                onChange={(val) => {
-                  setDifficulty(val as DifficultyLevel | '');
+                multiSelect
+                values={difficulties}
+                onMultiChange={(vals) => {
+                  setDifficulties(vals);
                   setPage(1);
                 }}
               />
               <CustomSelect
                 label="Tag"
                 options={tagOptions}
-                value={selectedTagId}
-                onChange={(val) => {
-                  setSelectedTagId(val);
+                multiSelect
+                values={selectedTagIds}
+                onMultiChange={(vals) => {
+                  setSelectedTagIds(vals);
                   setPage(1);
                 }}
               />

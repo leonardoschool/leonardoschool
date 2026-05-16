@@ -35,6 +35,9 @@ import {
   Tag,
   Download,
   Languages,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from 'lucide-react';
 import {
   questionTypeLabels,
@@ -78,20 +81,35 @@ export default function AdminQuestionsContent() {
   const { showSuccess } = useToast();
   const utils = trpc.useUtils();
 
-  // Filters state
+  // Filters state (multi-select arrays)
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [subjectId, setSubjectId] = useState<string>('');
-  const [topicId, setTopicId] = useState<string>('');
-  const [type, setType] = useState<QuestionType | ''>('');
-  const [status, setStatus] = useState<QuestionStatus | ''>('');
-  const [difficulty, setDifficulty] = useState<DifficultyLevel | ''>('');
-  const [language, setLanguage] = useState<QuestionLanguage | ''>('');
-  const [selectedTagId, setSelectedTagId] = useState<string>('');
-  const [selectedYear, setSelectedYear] = useState<string>('');
-  const [selectedSource, setSelectedSource] = useState<string>('');
+  const [subjectIds, setSubjectIds] = useState<string[]>([]);
+  const [topicIds, setTopicIds] = useState<string[]>([]);
+  const [types, setTypes] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<string[]>([]);
+  const [difficulties, setDifficulties] = useState<string[]>([]);
+  const [languages, setLanguages] = useState<string[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [selectedYears, setSelectedYears] = useState<string[]>([]);
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+
+  // Sorting state — default: alphabetical by question text
+  type SortByOption = 'text' | 'year' | 'source' | 'type' | 'language' | 'status' | 'difficulty' | 'subject' | 'tag';
+  const [sortBy, setSortBy] = useState<SortByOption>('text');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (column: SortByOption) => {
+    if (sortBy === column) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortOrder('asc');
+    }
+    setPage(1);
+  };
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -99,7 +117,7 @@ export default function AdminQuestionsContent() {
   const [showBulkSubjectSelect, setShowBulkSubjectSelect] = useState(false);
   const [showBulkLanguageSelect, setShowBulkLanguageSelect] = useState(false);
   const [showBulkTagSelect, setShowBulkTagSelect] = useState(false);
-  const [bulkTagMode, setBulkTagMode] = useState<'add' | 'remove'>('add');
+  const [bulkTagMode, setBulkTagMode] = useState<'add' | 'remove' | 'replace'>('add');
   const [selectedBulkTagIds, setSelectedBulkTagIds] = useState<Set<string>>(new Set());
 
   // Export state
@@ -188,15 +206,17 @@ export default function AdminQuestionsContent() {
       page,
       pageSize,
       search: debouncedSearch || undefined,
-      subjectId: subjectId || undefined,
-      topicId: topicId || undefined,
-      type: type || undefined,
-      status: status || undefined,
-      difficulty: difficulty || undefined,
-      language: (language as QuestionLanguage) || undefined,
-      tagIds: selectedTagId ? [selectedTagId] : undefined,
-      year: selectedYear ? Number(selectedYear) : undefined,
-      source: selectedSource || undefined,
+      subjectIds: subjectIds.length > 0 ? subjectIds : undefined,
+      topicIds: topicIds.length > 0 ? topicIds : undefined,
+      types: types.length > 0 ? (types as QuestionType[]) : undefined,
+      statuses: statuses.length > 0 ? (statuses as QuestionStatus[]) : undefined,
+      difficulties: difficulties.length > 0 ? (difficulties as DifficultyLevel[]) : undefined,
+      languages: languages.length > 0 ? (languages as QuestionLanguage[]) : undefined,
+      tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+      years: selectedYears.length > 0 ? selectedYears.map(Number) : undefined,
+      sources: selectedSources.length > 0 ? selectedSources : undefined,
+      sortBy,
+      sortOrder,
       includeAnswers: false,
       includeDrafts: true,
       includeArchived: true,
@@ -209,10 +229,11 @@ export default function AdminQuestionsContent() {
   // Fetch subjects for filter
   const { data: subjects } = trpc.materials.getAllSubjects.useQuery();
 
-  // Fetch topics for filter (when subject is selected)
+  // Fetch topics for filter (only when exactly one subject is selected)
+  const singleSubjectId = subjectIds.length === 1 ? subjectIds[0] : '';
   const { data: topics } = trpc.materials.getTopics.useQuery(
-    { subjectId: subjectId, includeInactive: true },
-    { enabled: !!subjectId }
+    { subjectId: singleSubjectId, includeInactive: true },
+    { enabled: !!singleSubjectId }
   );
 
   // Fetch tags for filter
@@ -313,8 +334,8 @@ export default function AdminQuestionsContent() {
 
   const bulkTagMutation = trpc.questions.bulkAddTags.useMutation({
     onSuccess: (result) => {
-      const modeText = bulkTagMode === 'add' ? 'aggiunti a' : 'rimossi da';
-      showSuccess('Tag aggiornati', `Tag ${modeText} ${result.updated} domande: ${result.tags}.`);
+      const modeText = result.mode === 'add' ? 'aggiunti a' : result.mode === 'remove' ? 'rimossi da' : 'sostituiti su';
+      showSuccess('Tag aggiornati', `Tag ${modeText} ${result.updated} domande: ${result.tags || '(nessuno)'}.`);
       utils.questions.getQuestions.invalidate();
       setSelectedIds(new Set());
       setShowBulkTagSelect(false);
@@ -329,10 +350,10 @@ export default function AdminQuestionsContent() {
     try {
       const result = await utils.questions.exportQuestionsCSV.fetch({
         ids: selectedIds.size > 0 ? Array.from(selectedIds) : undefined,
-        subjectId: subjectId || undefined,
-        status: status || undefined,
-        type: type || undefined,
-        difficulty: difficulty || undefined,
+        subjectId: subjectIds[0] || undefined,
+        status: statuses[0] as 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' | undefined,
+        type: types[0] as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT' | undefined,
+        difficulty: difficulties[0] as 'EASY' | 'MEDIUM' | 'HARD' | undefined,
       });
 
       // Create and download the CSV file
@@ -385,19 +406,19 @@ export default function AdminQuestionsContent() {
   const clearFilters = () => {
     setSearch('');
     setDebouncedSearch('');
-    setSubjectId('');
-    setTopicId('');
-    setType('');
-    setStatus('');
-    setDifficulty('');
-    setLanguage('');
-    setSelectedTagId('');
-    setSelectedYear('');
-    setSelectedSource('');
+    setSubjectIds([]);
+    setTopicIds([]);
+    setTypes([]);
+    setStatuses([]);
+    setDifficulties([]);
+    setLanguages([]);
+    setSelectedTagIds([]);
+    setSelectedYears([]);
+    setSelectedSources([]);
     setPage(1);
   };
 
-  const hasActiveFilters = search || subjectId || topicId || type || status || difficulty || language || selectedTagId || selectedYear || selectedSource;
+  const hasActiveFilters = !!(search || subjectIds.length || topicIds.length || types.length || statuses.length || difficulties.length || languages.length || selectedTagIds.length || selectedYears.length || selectedSources.length);
 
   // Get unique tags from selected questions for replace mode
   const selectedQuestionsTags = useMemo(() => {
@@ -433,7 +454,7 @@ export default function AdminQuestionsContent() {
     [subjects]
   );
 
-  // Topic options for select
+  // Topic options for select (only populated when a single subject is selected)
   const topicOptions = useMemo(
     () => [
       { value: '', label: 'Tutti gli argomenti' },
@@ -453,6 +474,27 @@ export default function AdminQuestionsContent() {
     ],
     [tagsData]
   );
+
+  // Renders a sortable column header
+  const sortHeader = (column: SortByOption, label: string, className?: string) => {
+    const isActive = sortBy === column;
+    return (
+      <th
+        className={`px-3 py-3 text-left text-sm font-medium cursor-pointer select-none group ${colors.text.secondary} ${className ?? ''}`}
+        onClick={() => handleSort(column)}
+      >
+        <div className="flex items-center gap-1 hover:opacity-80 transition-opacity">
+          {label}
+          {isActive
+            ? (sortOrder === 'asc'
+                ? <ArrowUp className={`w-3.5 h-3.5 ${colors.primary.text}`} />
+                : <ArrowDown className={`w-3.5 h-3.5 ${colors.primary.text}`} />)
+            : <ArrowUpDown className="w-3.5 h-3.5 opacity-30 group-hover:opacity-60 transition-opacity" />
+          }
+        </div>
+      </th>
+    );
+  };
 
   if (isLoading && !questionsData) {
     return <PageLoader />;
@@ -583,7 +625,7 @@ export default function AdminQuestionsContent() {
             Filtri
             {hasActiveFilters && (
               <span className={`w-5 h-5 rounded-full ${colors.primary.bg} text-white text-xs flex items-center justify-center`}>
-                {[subjectId, topicId, type, status, difficulty, language, selectedTagId, selectedYear, selectedSource].filter(Boolean).length}
+                {[subjectIds, topicIds, types, statuses, difficulties, languages, selectedTagIds, selectedYears, selectedSources].filter(a => a.length > 0).length}
               </span>
             )}
           </button>
@@ -596,22 +638,24 @@ export default function AdminQuestionsContent() {
               <CustomSelect
                 label="Materia"
                 options={subjectOptions}
-                value={subjectId}
-                onChange={(val) => {
-                  setSubjectId(val);
-                  setTopicId('');
+                multiSelect
+                values={subjectIds}
+                onMultiChange={(vals) => {
+                  setSubjectIds(vals);
+                  setTopicIds([]);
                   setPage(1);
                 }}
               />
               <CustomSelect
                 label="Argomento"
                 options={topicOptions}
-                value={topicId}
-                onChange={(val) => {
-                  setTopicId(val);
+                multiSelect
+                values={topicIds}
+                onMultiChange={(vals) => {
+                  setTopicIds(vals);
                   setPage(1);
                 }}
-                disabled={!subjectId}
+                disabled={subjectIds.length !== 1}
               />
               <CustomSelect
                 label="Fonte"
@@ -619,9 +663,10 @@ export default function AdminQuestionsContent() {
                   { value: '', label: 'Tutte le fonti' },
                   ...(distinctFilters?.sources.map(s => ({ value: s, label: s })) ?? []),
                 ]}
-                value={selectedSource}
-                onChange={(val) => {
-                  setSelectedSource(val);
+                multiSelect
+                values={selectedSources}
+                onMultiChange={(vals) => {
+                  setSelectedSources(vals);
                   setPage(1);
                 }}
               />
@@ -631,9 +676,10 @@ export default function AdminQuestionsContent() {
                   { value: '', label: 'Tutti gli anni' },
                   ...(distinctFilters?.years.map(y => ({ value: String(y), label: String(y) })) ?? []),
                 ]}
-                value={selectedYear}
-                onChange={(val) => {
-                  setSelectedYear(val);
+                multiSelect
+                values={selectedYears}
+                onMultiChange={(vals) => {
+                  setSelectedYears(vals);
                   setPage(1);
                 }}
               />
@@ -645,9 +691,10 @@ export default function AdminQuestionsContent() {
                   { value: 'MULTIPLE_CHOICE', label: questionTypeLabels.MULTIPLE_CHOICE },
                   { value: 'OPEN_TEXT', label: questionTypeLabels.OPEN_TEXT },
                 ]}
-                value={type}
-                onChange={(val) => {
-                  setType(val as QuestionType | '');
+                multiSelect
+                values={types}
+                onMultiChange={(vals) => {
+                  setTypes(vals);
                   setPage(1);
                 }}
               />
@@ -659,9 +706,10 @@ export default function AdminQuestionsContent() {
                   { value: 'PUBLISHED', label: questionStatusLabels.PUBLISHED },
                   { value: 'ARCHIVED', label: questionStatusLabels.ARCHIVED },
                 ]}
-                value={status}
-                onChange={(val) => {
-                  setStatus(val as QuestionStatus | '');
+                multiSelect
+                values={statuses}
+                onMultiChange={(vals) => {
+                  setStatuses(vals);
                   setPage(1);
                 }}
               />
@@ -673,9 +721,10 @@ export default function AdminQuestionsContent() {
                   { value: 'MEDIUM', label: difficultyLabels.MEDIUM },
                   { value: 'HARD', label: difficultyLabels.HARD },
                 ]}
-                value={difficulty}
-                onChange={(val) => {
-                  setDifficulty(val as DifficultyLevel | '');
+                multiSelect
+                values={difficulties}
+                onMultiChange={(vals) => {
+                  setDifficulties(vals);
                   setPage(1);
                 }}
               />
@@ -686,18 +735,20 @@ export default function AdminQuestionsContent() {
                   { value: 'IT', label: questionLanguageLabels.IT },
                   { value: 'EN', label: questionLanguageLabels.EN },
                 ]}
-                value={language}
-                onChange={(val) => {
-                  setLanguage(val as QuestionLanguage | '');
+                multiSelect
+                values={languages}
+                onMultiChange={(vals) => {
+                  setLanguages(vals);
                   setPage(1);
                 }}
               />
               <CustomSelect
                 label="Tag"
                 options={tagOptions}
-                value={selectedTagId}
-                onChange={(val) => {
-                  setSelectedTagId(val);
+                multiSelect
+                values={selectedTagIds}
+                onMultiChange={(vals) => {
+                  setSelectedTagIds(vals);
                   setPage(1);
                 }}
               />
@@ -805,9 +856,9 @@ export default function AdminQuestionsContent() {
                     <div className={`text-xs font-medium ${colors.text.muted} block mb-1.5`}>
                       Modalità
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-1">
                       <button
-                        onClick={(e) => { e.stopPropagation(); setBulkTagMode('add'); }}
+                        onClick={(e) => { e.stopPropagation(); setBulkTagMode('add'); setSelectedBulkTagIds(new Set()); }}
                         className={`flex-1 text-xs px-2 py-1.5 rounded transition-colors ${
                           bulkTagMode === 'add'
                             ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300'
@@ -817,7 +868,7 @@ export default function AdminQuestionsContent() {
                         Aggiungi
                       </button>
                       <button
-                        onClick={(e) => { e.stopPropagation(); setBulkTagMode('remove'); }}
+                        onClick={(e) => { e.stopPropagation(); setBulkTagMode('remove'); setSelectedBulkTagIds(new Set()); }}
                         className={`flex-1 text-xs px-2 py-1.5 rounded transition-colors ${
                           bulkTagMode === 'remove'
                             ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300'
@@ -826,13 +877,27 @@ export default function AdminQuestionsContent() {
                       >
                         Rimuovi
                       </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setBulkTagMode('replace'); setSelectedBulkTagIds(new Set()); }}
+                        className={`flex-1 text-xs px-2 py-1.5 rounded transition-colors ${
+                          bulkTagMode === 'replace'
+                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
+                            : `${colors.background.secondary} ${colors.text.muted}`
+                        }`}
+                      >
+                        Sostituisci
+                      </button>
                     </div>
                     <p className={`text-xs ${colors.text.muted} mt-1`}>
-                      {bulkTagMode === 'add' ? 'I tag selezionati verranno aggiunti' : 'I tag selezionati verranno rimossi'}
+                      {bulkTagMode === 'add'
+                        ? 'I tag selezionati verranno aggiunti'
+                        : bulkTagMode === 'remove'
+                          ? 'I tag selezionati verranno rimossi'
+                          : 'Tutti i tag esistenti verranno sostituiti con quelli selezionati'}
                     </p>
                   </div>
-                  
-                  {/* Tags list - show all tags in add mode, only selected questions' tags in remove mode */}
+
+                  {/* Tags list */}
                   <div className="px-2">
                     {bulkTagMode === 'remove' && selectedQuestionsTags.length === 0 ? (
                       <p className={`text-xs ${colors.text.muted} text-center py-4`}>
@@ -882,7 +947,7 @@ export default function AdminQuestionsContent() {
                   </div>
                   
                   {/* Apply button */}
-                  {selectedBulkTagIds.size > 0 && (
+                  {(selectedBulkTagIds.size > 0 || bulkTagMode === 'replace') && (
                     <div className="px-4 pt-2 mt-2 border-t border-gray-200 dark:border-gray-700">
                       <button
                         onClick={() => {
@@ -892,9 +957,18 @@ export default function AdminQuestionsContent() {
                             mode: bulkTagMode,
                           });
                         }}
-                        className={`w-full py-2 rounded-lg ${bulkTagMode === 'remove' ? 'bg-red-600' : colors.primary.bg} text-white text-sm font-medium hover:opacity-90 transition-opacity`}
+                        disabled={bulkTagMutation.isPending}
+                        className={`w-full py-2 rounded-lg ${
+                          bulkTagMode === 'remove' ? 'bg-red-600' :
+                          bulkTagMode === 'replace' ? 'bg-amber-600' :
+                          colors.primary.bg
+                        } text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50`}
                       >
-                        {bulkTagMode === 'add' ? 'Aggiungi' : 'Rimuovi'} {selectedBulkTagIds.size} tag {bulkTagMode === 'add' ? 'a' : 'da'} {selectedIds.size} domande
+                        {bulkTagMode === 'add'
+                          ? `Aggiungi ${selectedBulkTagIds.size} tag a ${selectedIds.size} domande`
+                          : bulkTagMode === 'remove'
+                            ? `Rimuovi ${selectedBulkTagIds.size} tag da ${selectedIds.size} domande`
+                            : `Sostituisci tag su ${selectedIds.size} domande${selectedBulkTagIds.size > 0 ? ` con ${selectedBulkTagIds.size} tag` : ' (rimuovi tutti)'}`}
                       </button>
                     </div>
                   )}
@@ -944,33 +1018,15 @@ export default function AdminQuestionsContent() {
                     )}
                   </button>
                 </th>
-                <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} min-w-[200px]`}>
-                  Domanda
-                </th>
-                <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden lg:table-cell min-w-[120px]`}>
-                  Anno / Fonte
-                </th>
-                <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden md:table-cell min-w-[140px]`}>
-                  Materia
-                </th>
-                <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden xl:table-cell`}>
-                  Tipo
-                </th>
-                <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden lg:table-cell`}>
-                  Lingua
-                </th>
-                <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden sm:table-cell`}>
-                  Stato
-                </th>
-                <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden xl:table-cell`}>
-                  Difficoltà
-                </th>
-                <th className={`px-3 py-3 text-left text-sm font-medium ${colors.text.secondary} hidden lg:table-cell min-w-[100px]`}>
-                  Tag
-                </th>
-                <th className={`px-3 py-3 text-right text-sm font-medium ${colors.text.secondary} w-14`}>
-                  
-                </th>
+                {sortHeader('text', 'Domanda', 'min-w-[200px]')}
+                {sortHeader('year', 'Anno / Fonte', 'hidden lg:table-cell min-w-[120px]')}
+                {sortHeader('subject', 'Materia', 'hidden md:table-cell min-w-[140px]')}
+                {sortHeader('type', 'Tipo', 'hidden xl:table-cell')}
+                {sortHeader('language', 'Lingua', 'hidden lg:table-cell')}
+                {sortHeader('status', 'Stato', 'hidden sm:table-cell')}
+                {sortHeader('difficulty', 'Difficoltà', 'hidden xl:table-cell')}
+                {sortHeader('tag', 'Tag', 'hidden lg:table-cell min-w-[100px]')}
+                <th className="px-3 py-3 w-14" />
               </tr>
             </thead>
             <tbody>
@@ -1143,18 +1199,16 @@ export default function AdminQuestionsContent() {
             {/* Page size selector */}
             <div className="flex items-center gap-2">
               <span className={`text-xs ${colors.text.muted} hidden sm:inline`}>Per pagina:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
+              <CustomSelect
+                options={[50, 100, 200, 500, 1000].map(n => ({ value: String(n), label: String(n) }))}
+                value={String(pageSize)}
+                onChange={(val) => {
+                  setPageSize(Number(val));
                   setPage(1);
                 }}
-                className={`text-sm px-2 py-1 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:outline-none focus:ring-2 focus:ring-[#a8012b]/20`}
-              >
-                {[50, 100, 200, 500, 1000].map(n => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
+                size="sm"
+                className="w-24"
+              />
             </div>
           </div>
           {pagination.totalPages > 1 && (

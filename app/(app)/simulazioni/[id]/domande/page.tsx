@@ -268,11 +268,10 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
     page: 1,
     pageSize: 50,
     search: questionSearchTerm || undefined,
-    subjectId: questionSubjectFilter || undefined,
-    difficulty:
-      (questionDifficultyFilter as 'EASY' | 'MEDIUM' | 'HARD' | undefined) || undefined,
-    type: (questionTypeFilter as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT' | undefined) || undefined,
-    status: 'PUBLISHED',
+    subjectIds: questionSubjectFilter ? [questionSubjectFilter] : undefined,
+    difficulties: questionDifficultyFilter ? [questionDifficultyFilter as 'EASY' | 'MEDIUM' | 'HARD'] : undefined,
+    types: questionTypeFilter ? [questionTypeFilter as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT'] : undefined,
+    statuses: ['PUBLISHED'],
   });
 
   // Update questions mutation

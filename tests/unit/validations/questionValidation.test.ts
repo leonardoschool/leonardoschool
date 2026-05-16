@@ -372,9 +372,9 @@ describe('questionFilterSchema', () => {
     const filter = {};
     const result = questionFilterSchema.parse(filter);
     expect(result.page).toBe(1);
-    expect(result.pageSize).toBe(20);
-    expect(result.sortBy).toBe('createdAt');
-    expect(result.sortOrder).toBe('desc');
+    expect(result.pageSize).toBe(50);
+    expect(result.sortBy).toBe('text');
+    expect(result.sortOrder).toBe('asc');
   });
 
   it('should accept all filter options', () => {
@@ -382,14 +382,14 @@ describe('questionFilterSchema', () => {
       page: 2,
       pageSize: 50,
       search: 'capitale',
-      subjectId: 'subj-1',
-      topicId: 'topic-1',
-      type: 'SINGLE_CHOICE' as const,
-      status: 'PUBLISHED' as const,
-      difficulty: 'EASY' as const,
+      subjectIds: ['subj-1'],
+      topicIds: ['topic-1'],
+      types: ['SINGLE_CHOICE' as const],
+      statuses: ['PUBLISHED' as const],
+      difficulties: ['EASY' as const],
       tags: ['storia'],
       tagIds: ['tag-1', 'tag-2'],
-      year: 2024,
+      years: [2024],
       sortBy: 'difficulty' as const,
       sortOrder: 'asc' as const,
       includeAnswers: true,
@@ -409,11 +409,11 @@ describe('questionFilterSchema', () => {
 
   it('should reject pageSize out of range', () => {
     expect(() => questionFilterSchema.parse({ pageSize: 0 })).toThrow();
-    expect(() => questionFilterSchema.parse({ pageSize: 101 })).toThrow();
+    expect(() => questionFilterSchema.parse({ pageSize: 1001 })).toThrow();
   });
 
   it('should accept valid sortBy values', () => {
-    const sortByValues = ['createdAt', 'updatedAt', 'text', 'difficulty', 'timesUsed', 'avgCorrectRate'];
+    const sortByValues = ['text', 'year', 'source', 'type', 'language', 'status', 'difficulty', 'subject', 'tag', 'createdAt', 'updatedAt', 'timesUsed', 'avgCorrectRate'];
     sortByValues.forEach(sortBy => {
       const result = questionFilterSchema.parse({ sortBy });
       expect(result.sortBy).toBe(sortBy);

@@ -505,12 +505,12 @@ export default function NewSimulationPage() {
     page: 1,
     pageSize: 100,
     search: questionSearchTerm || undefined,
-    subjectId: questionSubjectFilter || undefined,
-    type: questionTypeFilter || undefined,
-    difficulty: questionDifficultyFilter as 'EASY' | 'MEDIUM' | 'HARD' | undefined || undefined,
-    status: 'PUBLISHED',
+    subjectIds: questionSubjectFilter ? [questionSubjectFilter] : undefined,
+    types: questionTypeFilter ? [questionTypeFilter as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT'] : undefined,
+    difficulties: questionDifficultyFilter ? [questionDifficultyFilter as 'EASY' | 'MEDIUM' | 'HARD'] : undefined,
+    statuses: ['PUBLISHED'],
     tagIds: questionTagFilter.length > 0 ? questionTagFilter : undefined,
-    language: questionLanguageFilter as 'IT' | 'EN' | undefined || undefined,
+    languages: questionLanguageFilter ? [questionLanguageFilter as 'IT' | 'EN'] : undefined,
   });
 
   // Query for question detail (with answers)

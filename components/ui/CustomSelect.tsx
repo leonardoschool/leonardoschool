@@ -11,9 +11,9 @@ export interface SelectOption {
 
 export interface CustomSelectProps {
   id?: string;
-  value: string;
+  value?: string;
   options: SelectOption[];
-  onChange: (value: string) => void;
+  onChange?: (value: string) => void;
   onBlur?: () => void;
   placeholder?: string;
   hasError?: boolean;
@@ -23,11 +23,15 @@ export interface CustomSelectProps {
   dropdownClassName?: string;
   size?: 'sm' | 'md' | 'lg';
   label?: string;
+  // Multi-select mode
+  multiSelect?: boolean;
+  values?: string[];
+  onMultiChange?: (values: string[]) => void;
 }
 
 export default function CustomSelect({
   id,
-  value,
+  value = '',
   options,
   onChange,
   onBlur,
@@ -39,6 +43,9 @@ export default function CustomSelect({
   dropdownClassName = '',
   size = 'md',
   label,
+  multiSelect = false,
+  values = [],
+  onMultiChange,
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,8 +57,17 @@ export default function CustomSelect({
   const listRef = useRef<HTMLDivElement>(null);
   const [isMounted, setIsMounted] = useState(false);
 
-  // Find selected option
+  // Find selected option (single-select mode)
   const selectedOption = options.find(opt => opt.value === value);
+
+  // Multi-select trigger label
+  const multiTriggerLabel = (() => {
+    if (!multiSelect) return null;
+    const active = values.filter(v => v !== '');
+    if (active.length === 0) return options[0]?.label || placeholder;
+    if (active.length === 1) return options.find(o => o.value === active[0])?.label || active[0];
+    return `${active.length} selezionati`;
+  })();
 
   // Filter options based on search
   const filteredOptions = searchable && searchTerm
@@ -181,7 +197,20 @@ export default function CustomSelect({
   };
 
   const handleSelect = (optionValue: string) => {
-    onChange(optionValue);
+    if (multiSelect) {
+      if (!onMultiChange) return;
+      if (optionValue === '') {
+        onMultiChange([]);
+      } else {
+        const next = values.includes(optionValue)
+          ? values.filter(v => v !== optionValue)
+          : [...values, optionValue];
+        onMultiChange(next);
+      }
+      // Keep dropdown open in multi-select mode
+      return;
+    }
+    onChange?.(optionValue);
     setIsOpen(false);
     setSearchTerm('');
     setHighlightedIndex(-1);
@@ -191,7 +220,6 @@ export default function CustomSelect({
     if (!disabled) {
       setIsOpen(!isOpen);
       if (!isOpen) {
-        // Find and highlight current value
         const currentIndex = filteredOptions.findIndex(opt => opt.value === value);
         setHighlightedIndex(currentIndex >= 0 ? currentIndex : 0);
       }
@@ -234,8 +262,8 @@ export default function CustomSelect({
         onKeyDown={handleKeyDown}
         className={inputClass}
       >
-        <span className={selectedOption ? colors.text.primary : colors.text.muted}>
-          {selectedOption ? selectedOption.label : placeholder}
+        <span className={multiSelect ? (values.filter(v => v !== '').length > 0 ? colors.text.primary : colors.text.muted) : (selectedOption ? colors.text.primary : colors.text.muted)}>
+          {multiSelect ? multiTriggerLabel : (selectedOption ? selectedOption.label : placeholder)}
         </span>
         <svg 
           className={`w-5 h-5 ${colors.text.secondary} transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} 
@@ -300,9 +328,11 @@ export default function CustomSelect({
               </div>
             ) : (
               filteredOptions.map((option, index) => {
-                const isSelected = option.value === value;
+                const isSelected = multiSelect
+                  ? (option.value === '' ? values.filter(v => v !== '').length === 0 : values.includes(option.value))
+                  : option.value === value;
                 const isHighlighted = index === highlightedIndex;
-                
+
                 return (
                   <div
                     key={option.value}
@@ -313,8 +343,10 @@ export default function CustomSelect({
                     onMouseEnter={() => setHighlightedIndex(index)}
                     className={`
                       px-4 py-3 cursor-pointer transition-colors duration-100 flex items-center justify-between
-                      ${isSelected 
-                        ? `${colors.primary.bg} text-white` 
+                      ${isSelected
+                        ? (multiSelect
+                            ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
+                            : `${colors.primary.bg} text-white`)
                         : isHighlighted
                           ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
                           : `${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700`
@@ -323,7 +355,7 @@ export default function CustomSelect({
                   >
                     <span className="font-medium">{option.label}</span>
                     {isSelected && (
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <svg className={`w-5 h-5 flex-shrink-0 ${multiSelect ? 'text-[#A01B3B]' : ''}`} fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                       </svg>
                     )}

@@ -139,32 +139,39 @@ export const questionFilterSchema = z.object({
   // Pagination
   page: z.number().min(1).default(1),
   pageSize: z.number().min(1).max(1000).default(50),
-  
-  // Filters
+
+  // Filters (all multi-value)
   search: z.string().optional(),
-  subjectId: z.string().optional(),
-  topicId: z.string().optional(),
-  type: QuestionTypeEnum.optional(),
-  status: QuestionStatusEnum.optional(),
-  difficulty: DifficultyLevelEnum.optional(),
+  subjectIds: z.array(z.string()).optional(),
+  topicIds: z.array(z.string()).optional(),
+  types: z.array(QuestionTypeEnum).optional(),
+  statuses: z.array(QuestionStatusEnum).optional(),
+  difficulties: z.array(DifficultyLevelEnum).optional(),
+  years: z.array(z.number()).optional(),
+  sources: z.array(z.string()).optional(),
+  createdById: z.string().optional(),
+  languages: z.array(QuestionLanguageEnum).optional(),
   tags: z.array(z.string()).optional(), // Legacy tags filter
   tagIds: z.array(z.string()).optional(), // New QuestionTag IDs filter
-  year: z.number().optional(),
-  source: z.string().optional(),
-  createdById: z.string().optional(),
-  language: QuestionLanguageEnum.optional(),
-  
+
   // Sorting
   sortBy: z.enum([
+    'text',
+    'year',
+    'source',
+    'type',
+    'language',
+    'status',
+    'difficulty',
+    'subject',
+    'tag',
     'createdAt',
     'updatedAt',
-    'text',
-    'difficulty',
     'timesUsed',
     'avgCorrectRate',
-  ]).default('createdAt'),
-  sortOrder: z.enum(['asc', 'desc']).default('desc'),
-  
+  ]).default('text'),
+  sortOrder: z.enum(['asc', 'desc']).default('asc'),
+
   // Include options
   includeAnswers: z.boolean().default(false),
   includeDrafts: z.boolean().default(true),
