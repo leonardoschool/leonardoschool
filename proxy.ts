@@ -244,12 +244,13 @@ function handleWaitingForContract(
 
 /**
  * Handle deactivated account
+ * ADMIN users with isActive=false are auto-trusted (promoted manually, no approval needed)
  */
 function handleDeactivatedAccount(request: NextRequest, ctx: UserContext): NextResponse | null {
-  if (ctx.userActive) {
+  if (ctx.userActive || ctx.userRole === 'ADMIN') {
     return null;
   }
-  
+
   return redirectToLogin(request, undefined, 'account-deactivated');
 }
 

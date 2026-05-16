@@ -358,12 +358,14 @@ function resolveCinecaSource(value?: string | null): string {
   const readable = resolveToReadable(value);
   if (!readable) return 'CINECA';
 
-  // Format atteso: miur_{mese}_{anno} oppure miur_{anno}
-  const match = readable.toLowerCase().match(/^miur_0?(\d{1,2})_\d{4}$/);
-  if (match) {
+  // CINECA MAGGIO/LUGLIO solo per miur_05_2024 e miur_07_2024 (con eventuale suffisso _s).
+  // Tutto il resto (anni precedenti, altri mesi) → "CINECA" generico.
+  const match = readable.toLowerCase().match(/^miur_0?(\d{1,2})_(\d{4})(?:_s)?$/);
+    if (match) {
     const month = parseInt(match[1], 10);
+    const year = parseInt(match[2], 10);
     const monthName = MONTH_NAMES_IT[month];
-    if (monthName) return `CINECA ${monthName}`;
+    if (monthName && year >= 2024) return `CINECA ${monthName}`;
   }
 
   return 'CINECA';

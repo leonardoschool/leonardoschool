@@ -88,8 +88,10 @@ export default function AdminQuestionsContent() {
   const [difficulty, setDifficulty] = useState<DifficultyLevel | ''>('');
   const [language, setLanguage] = useState<QuestionLanguage | ''>('');
   const [selectedTagId, setSelectedTagId] = useState<string>('');
+  const [selectedYear, setSelectedYear] = useState<string>('');
+  const [selectedSource, setSelectedSource] = useState<string>('');
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(50);
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -177,6 +179,9 @@ export default function AdminQuestionsContent() {
     return () => document.removeEventListener('click', handleClick);
   }, [showBulkTagSelect]);
 
+  // Fetch distinct year/source values for filter dropdowns
+  const { data: distinctFilters } = trpc.questions.getDistinctFilters.useQuery();
+
   // Fetch questions
   const { data: questionsData, isLoading } = trpc.questions.getQuestions.useQuery(
     {
@@ -190,6 +195,8 @@ export default function AdminQuestionsContent() {
       difficulty: difficulty || undefined,
       language: (language as QuestionLanguage) || undefined,
       tagIds: selectedTagId ? [selectedTagId] : undefined,
+      year: selectedYear ? Number(selectedYear) : undefined,
+      source: selectedSource || undefined,
       includeAnswers: false,
       includeDrafts: true,
       includeArchived: true,
@@ -385,10 +392,12 @@ export default function AdminQuestionsContent() {
     setDifficulty('');
     setLanguage('');
     setSelectedTagId('');
+    setSelectedYear('');
+    setSelectedSource('');
     setPage(1);
   };
 
-  const hasActiveFilters = search || subjectId || topicId || type || status || difficulty || language || selectedTagId;
+  const hasActiveFilters = search || subjectId || topicId || type || status || difficulty || language || selectedTagId || selectedYear || selectedSource;
 
   // Get unique tags from selected questions for replace mode
   const selectedQuestionsTags = useMemo(() => {
@@ -574,7 +583,7 @@ export default function AdminQuestionsContent() {
             Filtri
             {hasActiveFilters && (
               <span className={`w-5 h-5 rounded-full ${colors.primary.bg} text-white text-xs flex items-center justify-center`}>
-                {[subjectId, topicId, type, status, difficulty, language, selectedTagId].filter(Boolean).length}
+                {[subjectId, topicId, type, status, difficulty, language, selectedTagId, selectedYear, selectedSource].filter(Boolean).length}
               </span>
             )}
           </button>
@@ -583,7 +592,7 @@ export default function AdminQuestionsContent() {
         {/* Expanded Filters */}
         {showFilters && (
           <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
               <CustomSelect
                 label="Materia"
                 options={subjectOptions}
@@ -603,6 +612,30 @@ export default function AdminQuestionsContent() {
                   setPage(1);
                 }}
                 disabled={!subjectId}
+              />
+              <CustomSelect
+                label="Fonte"
+                options={[
+                  { value: '', label: 'Tutte le fonti' },
+                  ...(distinctFilters?.sources.map(s => ({ value: s, label: s })) ?? []),
+                ]}
+                value={selectedSource}
+                onChange={(val) => {
+                  setSelectedSource(val);
+                  setPage(1);
+                }}
+              />
+              <CustomSelect
+                label="Anno"
+                options={[
+                  { value: '', label: 'Tutti gli anni' },
+                  ...(distinctFilters?.years.map(y => ({ value: String(y), label: String(y) })) ?? []),
+                ]}
+                value={selectedYear}
+                onChange={(val) => {
+                  setSelectedYear(val);
+                  setPage(1);
+                }}
               />
               <CustomSelect
                 label="Tipo"
@@ -1100,12 +1133,31 @@ export default function AdminQuestionsContent() {
         </div>
 
         {/* Pagination */}
-        {pagination.totalPages > 1 && (
-          <div className={`px-4 py-3 border-t ${colors.border.primary} flex items-center justify-between`}>
+        <div className={`px-4 py-3 border-t ${colors.border.primary} flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3`}>
+          <div className="flex items-center gap-4">
             <p className={`text-sm ${colors.text.muted}`}>
-              Mostrando {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, pagination.total)} di{' '}
-              {pagination.total} domande
+              {pagination.total > 0
+                ? `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, pagination.total)} di ${pagination.total} domande`
+                : '0 domande'}
             </p>
+            {/* Page size selector */}
+            <div className="flex items-center gap-2">
+              <span className={`text-xs ${colors.text.muted} hidden sm:inline`}>Per pagina:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className={`text-sm px-2 py-1 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:outline-none focus:ring-2 focus:ring-[#a8012b]/20`}
+              >
+                {[50, 100, 200, 500, 1000].map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {pagination.totalPages > 1 && (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage(page - 1)}
@@ -1129,8 +1181,8 @@ export default function AdminQuestionsContent() {
                 <ChevronRight className={`w-5 h-5 ${colors.text.muted}`} />
               </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Actions Dropdown Portal */}

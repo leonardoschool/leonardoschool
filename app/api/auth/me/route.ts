@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { getAdminAuth } from '@/lib/firebase/admin';
 import { prisma } from '@/lib/prisma/client';
+import { generateMatricola } from '@/lib/utils/matricolaUtils';
 import { checkRateLimit, getClientIp, rateLimitExceededResponse } from '@/lib/middleware/rateLimit';
 
 export async function POST(request: NextRequest) {
@@ -46,10 +47,40 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'Utente non trovato' },
-        { status: 404 }
-      );
+      // User exists in Firebase but not in DB — they registered on the old platform.
+      // Auto-create as STUDENT so they go through the profile-completion onboarding flow.
+      const matricola = await generateMatricola(prisma as any);
+      const displayName = decodedToken.name || decodedToken.email?.split('@')[0] || 'Utente';
+      user = await prisma.user.create({
+        data: {
+          firebaseUid: decodedToken.uid,
+          email: decodedToken.email || '',
+          name: displayName,
+          role: 'STUDENT',
+          isActive: false,
+          profileCompleted: false,
+          emailVerified: decodedToken.email_verified || false,
+          student: { create: { matricola } },
+        } as any,
+        include: {
+          student: { include: { parentGuardian: true } },
+          admin: true,
+          collaborator: true,
+        },
+      });
+    }
+
+    // Auto-fix ADMIN users: they are always active with profile completed
+    if (user.role === 'ADMIN' && (!user.profileCompleted || !user.isActive)) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { profileCompleted: true, isActive: true },
+        include: {
+          student: { include: { parentGuardian: true } },
+          admin: true,
+          collaborator: true,
+        },
+      });
     }
 
     // Check if student needs to provide parent data

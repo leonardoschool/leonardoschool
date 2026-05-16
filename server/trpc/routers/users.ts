@@ -585,13 +585,17 @@ export const usersRouter = router({
     // Cache stats for 2 minutes - they don't change frequently
     const getCachedStats = createCachedQuery(
       async () => {
-        const [total, students, collaborators, admins, active, pendingProfile] = await Promise.all([
+        const pendingProfileRoles = (roleFilter !== 'ALL' && roleFilter !== 'ADMIN')
+        ? [roleFilter]
+        : ['STUDENT', 'COLLABORATOR'];
+
+      const [total, students, collaborators, admins, active, pendingProfile] = await Promise.all([
       ctx.prisma.user.count({ where: roleWhere }),
       ctx.prisma.user.count({ where: { role: 'STUDENT' } }),
       ctx.prisma.user.count({ where: { role: 'COLLABORATOR' as any } }),
       ctx.prisma.user.count({ where: { role: 'ADMIN' } }),
       ctx.prisma.user.count({ where: { ...roleWhere, isActive: true } }),
-      ctx.prisma.user.count({ where: { ...roleWhere, profileCompleted: false } }),
+      ctx.prisma.user.count({ where: { profileCompleted: false, role: { in: pendingProfileRoles as any[] } } }),
     ]);
 
     // Count pending contract (profile completed but no contracts)
@@ -862,13 +866,14 @@ export const usersRouter = router({
         }
 
         // 3. Update user role and reset profileCompleted if data is missing
-        // Also reset isActive since they need to complete profile and sign new contract
+        // ADMIN users are auto-activated (no contract required).
+        // STUDENT/COLLABORATOR remain inactive until they complete profile and sign contract.
         return ctx.prisma.user.update({
           where: { id: userId },
           data: {
             role: newRole as any,
             profileCompleted: isNewProfileComplete,
-            isActive: false, // User needs to complete profile and sign contract for new role
+            isActive: newRole === 'ADMIN',
           },
           include: {
             student: true,
@@ -1781,8 +1786,8 @@ export const usersRouter = router({
           name,
           role,
           emailVerified: true,
-          isActive: false,
-          profileCompleted: false,
+          isActive: role === 'ADMIN',
+          profileCompleted: role === 'ADMIN',
           ...(role === 'STUDENT' && matricola && {
             student: { create: { matricola } },
           }),

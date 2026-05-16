@@ -803,6 +803,28 @@ export const questionsRouter = router({
       };
     }),
 
+  // Get distinct year and source values for filter dropdowns
+  getDistinctFilters: staffProcedure.query(async ({ ctx }) => {
+    const [rawYears, rawSources] = await Promise.all([
+      ctx.prisma.question.findMany({
+        where: { year: { not: null } },
+        select: { year: true },
+        distinct: ['year'],
+        orderBy: { year: 'desc' },
+      }),
+      ctx.prisma.question.findMany({
+        where: { source: { not: null } },
+        select: { source: true },
+        distinct: ['source'],
+        orderBy: { source: 'asc' },
+      }),
+    ]);
+    return {
+      years: rawYears.map(q => q.year!).filter(Boolean) as number[],
+      sources: rawSources.map(q => q.source!).filter(s => s && s.trim() !== '') as string[],
+    };
+  }),
+
   /**
    * Pick N random questions matching given filters.
    * Used to bulk-fill a simulation section with auto-selected questions.

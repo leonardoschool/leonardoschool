@@ -166,15 +166,17 @@ export default function ProfiloPage() {
                 </div>
               </div>
               
-              {/* Edit Button */}
-              <Link 
-                href="/auth/complete-profile?edit=true"
-                className={`px-3 sm:px-4 py-2 rounded-lg ${colors.primary.bg} text-white font-medium flex items-center gap-2 hover:opacity-90 transition-opacity text-sm sm:text-base`}
-              >
-                <Edit2 className="w-4 h-4" />
-                <span className="hidden sm:inline">Modifica Profilo</span>
-                <span className="sm:hidden">Modifica</span>
-              </Link>
+              {/* Edit Button - not shown for ADMIN (no profile form) */}
+              {user.role !== 'ADMIN' && (
+                <Link
+                  href="/auth/complete-profile?edit=true"
+                  className={`px-3 sm:px-4 py-2 rounded-lg ${colors.primary.bg} text-white font-medium flex items-center gap-2 hover:opacity-90 transition-opacity text-sm sm:text-base`}
+                >
+                  <Edit2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Modifica Profilo</span>
+                  <span className="sm:hidden">Modifica</span>
+                </Link>
+              )}
             </div>
           </div>
         </div>
@@ -304,11 +306,11 @@ export default function ProfiloPage() {
             status={emailVerified ? 'success' : 'warning'} 
             icon={emailVerified ? CheckCircle : AlertTriangle}
           />
-          <StatusCard 
-            label="Profilo Completo" 
-            value={user.profileCompleted ? 'Sì' : 'No'} 
-            status={user.profileCompleted ? 'success' : 'warning'} 
-            icon={user.profileCompleted ? CheckCircle : AlertTriangle}
+          <StatusCard
+            label="Profilo Completo"
+            value={user.role === 'ADMIN' || user.profileCompleted ? 'Sì' : 'No'}
+            status={user.role === 'ADMIN' || user.profileCompleted ? 'success' : 'warning'}
+            icon={user.role === 'ADMIN' || user.profileCompleted ? CheckCircle : AlertTriangle}
           />
         </div>
       </div>

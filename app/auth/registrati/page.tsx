@@ -179,7 +179,14 @@ export default function RegisterPage() {
       let errorMessage = 'Errore durante la registrazione. Riprova';
 
       if (firebaseError.code === 'auth/email-already-in-use') {
-        errorMessage = 'Questa email è già registrata';
+        setError('');
+        showError(
+          'Email già registrata',
+          'Hai già un account. Accedi con le tue credenziali o recupera la password.'
+        );
+        setLoading(false);
+        router.push(`/auth/login?email=${encodeURIComponent(formData.email)}&hint=existing`);
+        return;
       } else if (firebaseError.code === 'auth/invalid-email') {
         errorMessage = 'Email non valida';
       } else if (firebaseError.code === 'auth/weak-password') {

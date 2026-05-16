@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { firebaseAuth } from '@/lib/firebase/auth';
@@ -11,8 +12,9 @@ import { isValidEmail } from '@/lib/validations/authValidation';
 
 export default function RecuperaPasswordPage() {
   const { showSuccess, showError } = useToast();
-  
-  const [email, setEmail] = useState('');
+  const searchParams = useSearchParams();
+
+  const [email, setEmail] = useState(searchParams.get('email') || '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);

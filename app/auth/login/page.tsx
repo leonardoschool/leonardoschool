@@ -58,9 +58,11 @@ export default function LoginPage() {
   // eslint-disable-next-line sonarjs/no-unused-vars -- reserved for redirect after login feature
   const _redirect = searchParams.get('redirect') || '/app';
   const errorParam = searchParams.get('error');
+  const emailParam = searchParams.get('email') || '';
+  const hintParam = searchParams.get('hint');
   const { showError } = useToast();
 
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(emailParam);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -307,6 +309,15 @@ export default function LoginPage() {
           <h2 className={`text-2xl font-bold ${colors.text.primary} text-center mb-6`}>
             Accedi
           </h2>
+
+          {hintParam === 'existing' && (
+            <div className={`${colors.status.info?.bgLight ?? 'bg-blue-50 dark:bg-blue-900/20'} border border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-200 px-4 py-3 rounded mb-4 text-sm`}>
+              Hai già un account. Inserisci la tua password oppure{' '}
+              <Link href={`/auth/recupera-password${emailParam ? `?email=${encodeURIComponent(emailParam)}` : ''}`} className="font-semibold underline">
+                recupera la password
+              </Link>.
+            </div>
+          )}
 
           <form onSubmit={handleLogin} className="space-y-4">
           {error && (
