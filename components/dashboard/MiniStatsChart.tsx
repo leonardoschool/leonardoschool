@@ -61,11 +61,11 @@ export function MiniStatsChart({ overview: rawOverview, trendData: rawTrendData,
 
   const trendData = useMemo(() => rawTrendData ?? [], [rawTrendData]);
 
-  // Prepare chart data - filter out simulations with score 0 and take last 8
+  // Prepare chart data — take last 8, clamp scores to [0, 100]
   const chartData = useMemo(() => {
-    const filteredData = trendData.filter(d => d.score > 0);
-    return filteredData.slice(-8).map((d, i) => ({
+    return trendData.slice(-8).map((d, i) => ({
       ...d,
+      score: Math.max(0, d.score),
       label: i + 1,
     }));
   }, [trendData]);
@@ -197,9 +197,12 @@ export function MiniStatsChart({ overview: rawOverview, trendData: rawTrendData,
                       </linearGradient>
                     </defs>
                     <XAxis dataKey="label" hide />
-                    <YAxis 
-                      hide 
-                      domain={[0, 100]}
+                    <YAxis
+                      hide
+                      domain={([dataMin, dataMax]: [number, number]) => {
+                        const padding = Math.max((dataMax - dataMin) * 0.15, 3);
+                        return [Math.max(0, dataMin - padding), Math.min(100, dataMax + padding)];
+                      }}
                     />
                     <Tooltip
                       content={({ active, payload }) => {

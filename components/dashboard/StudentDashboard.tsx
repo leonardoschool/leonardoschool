@@ -355,11 +355,13 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
             />
 
             {/* Mini Stats Chart */}
-            <MiniStatsChart 
-              overview={statsData?.overview}
-              trendData={statsData?.trendData}
-              isLoading={statsLoading}
-            />
+            <div className="self-start">
+              <MiniStatsChart
+                overview={statsData?.overview}
+                trendData={statsData?.trendData}
+                isLoading={statsLoading}
+              />
+            </div>
           </div>
 
           {/* Quick Links Grid */}

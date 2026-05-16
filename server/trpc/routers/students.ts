@@ -139,13 +139,20 @@ function calculateOverviewStats(allResults: SimulationResultWithSimulation[]) {
   const bestScore = scores.length > 0 ? Math.max(...scores) : 0;
   const worstScore = scores.length > 0 ? Math.min(...scores) : 0;
 
-  // Calculate improvement (last 5 vs first 5)
-  const first5Avg = allResults.length >= 5
-    ? scores.slice(0, 5).reduce((sum, s) => sum + s, 0) / 5
-    : scores.reduce((sum, s) => sum + s, 0) / Math.max(allResults.length, 1);
-  const last5Avg = allResults.length >= 5
-    ? scores.slice(-5).reduce((sum, s) => sum + s, 0) / 5
-    : scores.reduce((sum, s) => sum + s, 0) / Math.max(allResults.length, 1);
+  // Calculate improvement: last 5 vs first 5 when enough data, otherwise first half vs second half
+  let first5Avg: number;
+  let last5Avg: number;
+  if (scores.length >= 5) {
+    first5Avg = scores.slice(0, 5).reduce((sum, s) => sum + s, 0) / 5;
+    last5Avg = scores.slice(-5).reduce((sum, s) => sum + s, 0) / 5;
+  } else if (scores.length >= 2) {
+    const mid = Math.ceil(scores.length / 2);
+    first5Avg = scores.slice(0, mid).reduce((sum, s) => sum + s, 0) / mid;
+    last5Avg = scores.slice(mid).reduce((sum, s) => sum + s, 0) / Math.max(scores.length - mid, 1);
+  } else {
+    first5Avg = scores[0] ?? 0;
+    last5Avg = scores[0] ?? 0;
+  }
 
   // Simulations this month
   const now = new Date();
@@ -166,6 +173,30 @@ function calculateOverviewStats(allResults: SimulationResultWithSimulation[]) {
     improvement: last5Avg - first5Avg,
     simulationsThisMonth,
   };
+}
+
+/** Calculate current consecutive-day streak from a list of completion dates */
+function calculateCurrentStreak(completedDates: (Date | null)[]): number {
+  const dayKeys = new Set(
+    completedDates
+      .filter((d): d is Date => d !== null)
+      .map(d => d.toISOString().slice(0, 10))
+  );
+  if (dayKeys.size === 0) return 0;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+  // Streak is only active if the student did something today or yesterday
+  if (!dayKeys.has(today) && !dayKeys.has(yesterday)) return 0;
+
+  let streak = 0;
+  const cursor = new Date(dayKeys.has(today) ? today : yesterday);
+  while (dayKeys.has(cursor.toISOString().slice(0, 10))) {
+    streak++;
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  return streak;
 }
 
 /** Calculate type breakdown from simulation results */
@@ -898,19 +929,48 @@ export const studentsRouter = router({
       });
     }
 
-    // Get recent simulation results
+    // Get all completed results to compute live stats
+    const allCompletedResults = await ctx.prisma.simulationResult.findMany({
+      where: { studentId: student.id, completedAt: { not: null } },
+      orderBy: { completedAt: 'asc' },
+      select: {
+        id: true,
+        simulationId: true,
+        totalScore: true,
+        percentageScore: true,
+        totalQuestions: true,
+        correctAnswers: true,
+        durationSeconds: true,
+        startedAt: true,
+        completedAt: true,
+        simulation: {
+          select: { id: true, title: true, type: true, maxScore: true, correctPoints: true, totalQuestions: true },
+        },
+      },
+    });
+
+    const calcEffective = (r: { totalScore: number; percentageScore: number; simulation: { maxScore: number | null; correctPoints: number; totalQuestions: number } }) => {
+      const effectiveMax = (r.simulation.maxScore && r.simulation.maxScore > 0)
+        ? r.simulation.maxScore
+        : r.simulation.totalQuestions * r.simulation.correctPoints;
+      return effectiveMax > 0 ? (r.totalScore / effectiveMax) * 100 : r.percentageScore;
+    };
+
+    const scores = allCompletedResults.map(calcEffective);
+    const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+    const bestScore = scores.length > 0 ? Math.max(...scores) : 0;
+    const totalStudyMinutes = Math.round(
+      allCompletedResults.reduce((sum, r) => sum + (r.durationSeconds ?? 0), 0) / 60
+    );
+    const currentStreak = calculateCurrentStreak(allCompletedResults.map(r => r.completedAt));
+
+    // Get recent simulation results (last 10, any status)
     const recentResults = await ctx.prisma.simulationResult.findMany({
       where: { studentId: student.id },
       orderBy: { startedAt: 'desc' },
       take: 10,
       include: {
-        simulation: {
-          select: {
-            id: true,
-            title: true,
-            type: true,
-          },
-        },
+        simulation: { select: { id: true, title: true, type: true } },
       },
     });
 
@@ -919,14 +979,14 @@ export const studentsRouter = router({
 
     return {
       overview: {
-        totalSimulations: student.stats?.totalSimulations || 0,
-        totalQuestions: student.stats?.totalQuestions || 0,
-        totalCorrectAnswers: student.stats?.totalCorrectAnswers || 0,
-        avgScore: student.stats?.avgScore || 0,
-        bestScore: student.stats?.bestScore || 0,
-        totalStudyTimeMinutes: student.stats?.totalStudyTimeMinutes || 0,
-        currentStreak: student.stats?.currentStreak || 0,
-        longestStreak: student.stats?.longestStreak || 0,
+        totalSimulations: allCompletedResults.length,
+        totalQuestions: allCompletedResults.reduce((sum, r) => sum + r.totalQuestions, 0),
+        totalCorrectAnswers: allCompletedResults.reduce((sum, r) => sum + r.correctAnswers, 0),
+        avgScore,
+        bestScore,
+        totalStudyTimeMinutes: totalStudyMinutes,
+        currentStreak,
+        longestStreak: Math.max(student.stats?.longestStreak || 0, currentStreak),
         lastActivityDate: student.stats?.lastActivityDate,
       },
       subjectStats: subjectStats || {},
@@ -1019,13 +1079,14 @@ export const studentsRouter = router({
     const trendData = allResults.slice(-12).map((r, index) => ({
       index: index + 1,
       date: r.completedAt?.toISOString() || '',
-      score: r.percentageScore,
+      score: effectivePercentage(r),
       simulationTitle: r.simulation.title,
       type: r.simulation.type,
     }));
 
     // Recent results (last 20)
     const recentResults = allResults.slice(-20).reverse();
+    const currentStreak = calculateCurrentStreak(allResults.map(r => r.completedAt));
 
     return {
       overview: {
@@ -1033,8 +1094,8 @@ export const studentsRouter = router({
         averageScore: overview.avgPercentage,
         totalTimeSpent: totalStudyMinutes,
         averageTime: Math.round(avgTimeSeconds / 60),
-        currentStreak: student.stats?.currentStreak || 0,
-        longestStreak: student.stats?.longestStreak || 0,
+        currentStreak,
+        longestStreak: Math.max(student.stats?.longestStreak || 0, currentStreak),
         lastActivityDate: student.stats?.lastActivityDate,
       },
       typeBreakdown: Object.entries(typeBreakdown).map(([type, data]) => ({
@@ -1061,7 +1122,7 @@ export const studentsRouter = router({
         title: r.simulation.title,
         type: r.simulation.type,
         isOfficial: r.simulation.isOfficial,
-        score: r.percentageScore,
+        score: effectivePercentage(r),
         correct: r.correctAnswers,
         total: r.totalQuestions,
         date: r.completedAt?.toISOString() || r.startedAt.toISOString(),
