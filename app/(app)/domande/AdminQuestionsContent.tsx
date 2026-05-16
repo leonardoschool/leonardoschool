@@ -1070,10 +1070,7 @@ export default function AdminQuestionsContent() {
                     </td>
                     <td className="px-3 py-3">
                       <div className="max-w-[300px] overflow-hidden">
-                        <div
-                          className={`font-medium ${colors.text.primary} line-clamp-2`}
-                          title={question.text}
-                        >
+                        <div className={`font-medium ${colors.text.primary} line-clamp-2`}>
                           <RichTextRenderer text={question.text} />
                         </div>
                       </div>
