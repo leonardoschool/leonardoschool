@@ -4135,9 +4135,13 @@ export const simulationsRouter = router({
       );
 
       // Count pending open answers (isCorrect === null with text)
-      const pendingOpenCount = scoringResult.evaluatedAnswers.filter(a => 
+      const pendingOpenCount = scoringResult.evaluatedAnswers.filter(a =>
         a.isCorrect === null && a.answerText && a.answerText.trim().length > 0
       ).length;
+
+      const effectiveMaxScore = simulation.maxScore && simulation.maxScore > 0
+        ? simulation.maxScore
+        : (simulation.totalQuestions ?? 0) * (simulation.correctPoints ?? 1.5);
 
       // Update result with subjectScores for per-subject statistics
       const updatedResult = await ctx.prisma.simulationResult.update({
@@ -4145,7 +4149,7 @@ export const simulationsRouter = router({
         data: {
           answers: scoringResult.evaluatedAnswers as unknown as Prisma.JsonArray,
           totalScore: scoringResult.totalScore,
-          percentageScore: simulation.maxScore ? (scoringResult.totalScore / simulation.maxScore) * 100 : 0,
+          percentageScore: effectiveMaxScore > 0 ? (scoringResult.totalScore / effectiveMaxScore) * 100 : 0,
           correctAnswers: scoringResult.correctCount,
           wrongAnswers: scoringResult.wrongCount,
           blankAnswers: scoringResult.blankCount,
@@ -4544,9 +4548,11 @@ export const simulationsRouter = router({
       simulationId: z.string().optional(),
       page: z.number().int().min(1).default(1),
       pageSize: z.number().int().min(1).max(50).default(20),
+      selfCreated: z.boolean().optional(),
+      assignedToMe: z.boolean().optional(),
     }))
     .query(async ({ ctx, input }) => {
-      const { simulationId, page, pageSize } = input;
+      const { simulationId, page, pageSize, selfCreated, assignedToMe } = input;
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
       const studentId = student.id;
 
@@ -4556,6 +4562,8 @@ export const simulationsRouter = router({
       };
 
       if (simulationId) where.simulationId = simulationId;
+      if (selfCreated === true) where.simulation = { creatorRole: 'STUDENT' };
+      if (assignedToMe === true) where.simulation = { creatorRole: { not: 'STUDENT' } };
 
       const total = await ctx.prisma.simulationResult.count({ where });
 
@@ -5761,6 +5769,10 @@ export const simulationsRouter = router({
         simulation
       );
 
+      const paperEffectiveMaxScore = simulation.maxScore && simulation.maxScore > 0
+        ? simulation.maxScore
+        : (simulation.totalQuestions ?? 0) * (simulation.correctPoints ?? 1.5);
+
       // Create result
       const result = await ctx.prisma.simulationResult.create({
         data: {
@@ -5771,7 +5783,7 @@ export const simulationsRouter = router({
           wrongAnswers: evaluation.wrongCount,
           blankAnswers: evaluation.blankCount,
           totalScore: evaluation.totalScore,
-          percentageScore: simulation.maxScore ? (evaluation.totalScore / simulation.maxScore) * 100 : 0,
+          percentageScore: paperEffectiveMaxScore > 0 ? (evaluation.totalScore / paperEffectiveMaxScore) * 100 : 0,
           answers: evaluation.evaluatedAnswers as unknown as Prisma.JsonArray,
           completedAt: new Date(),
         },

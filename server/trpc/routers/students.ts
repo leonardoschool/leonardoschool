@@ -83,6 +83,7 @@ type SimulationResultWithSimulation = {
   id: string;
   simulationId: string;
   percentageScore: number;
+  totalScore: number;
   correctAnswers: number;
   wrongAnswers: number;
   blankAnswers: number;
@@ -99,6 +100,8 @@ type SimulationResultWithSimulation = {
     isOfficial: boolean;
     durationMinutes: number;
     totalQuestions: number;
+    maxScore: number | null;
+    correctPoints: number;
       subjectDistribution: unknown;
       sections: unknown;
     questions: Array<{
@@ -113,6 +116,14 @@ type SimulationResultWithSimulation = {
   };
 };
 
+/** Compute the effective percentage for a result, falling back to scoring math when DB value is 0 */
+function effectivePercentage(r: SimulationResultWithSimulation): number {
+  const effectiveMax = (r.simulation.maxScore && r.simulation.maxScore > 0)
+    ? r.simulation.maxScore
+    : r.simulation.totalQuestions * r.simulation.correctPoints;
+  return effectiveMax > 0 ? (r.totalScore / effectiveMax) * 100 : r.percentageScore;
+}
+
 /** Calculate overview stats from simulation results */
 function calculateOverviewStats(allResults: SimulationResultWithSimulation[]) {
   const totalSimulations = allResults.length;
@@ -120,24 +131,21 @@ function calculateOverviewStats(allResults: SimulationResultWithSimulation[]) {
   const totalCorrect = allResults.reduce((sum, r) => sum + r.correctAnswers, 0);
   const totalWrong = allResults.reduce((sum, r) => sum + r.wrongAnswers, 0);
   const totalBlank = allResults.reduce((sum, r) => sum + r.blankAnswers, 0);
-  
-  const avgPercentage = totalSimulations > 0 
-    ? allResults.reduce((sum, r) => sum + r.percentageScore, 0) / totalSimulations 
+
+  const scores = allResults.map(effectivePercentage);
+  const avgPercentage = totalSimulations > 0
+    ? scores.reduce((sum, s) => sum + s, 0) / totalSimulations
     : 0;
-  const bestScore = allResults.length > 0 
-    ? Math.max(...allResults.map(r => r.percentageScore)) 
-    : 0;
-  const worstScore = allResults.length > 0 
-    ? Math.min(...allResults.map(r => r.percentageScore)) 
-    : 0;
+  const bestScore = scores.length > 0 ? Math.max(...scores) : 0;
+  const worstScore = scores.length > 0 ? Math.min(...scores) : 0;
 
   // Calculate improvement (last 5 vs first 5)
-  const first5Avg = allResults.length >= 5 
-    ? allResults.slice(0, 5).reduce((sum, r) => sum + r.percentageScore, 0) / 5 
-    : allResults.reduce((sum, r) => sum + r.percentageScore, 0) / Math.max(allResults.length, 1);
-  const last5Avg = allResults.length >= 5 
-    ? allResults.slice(-5).reduce((sum, r) => sum + r.percentageScore, 0) / 5 
-    : allResults.reduce((sum, r) => sum + r.percentageScore, 0) / Math.max(allResults.length, 1);
+  const first5Avg = allResults.length >= 5
+    ? scores.slice(0, 5).reduce((sum, s) => sum + s, 0) / 5
+    : scores.reduce((sum, s) => sum + s, 0) / Math.max(allResults.length, 1);
+  const last5Avg = allResults.length >= 5
+    ? scores.slice(-5).reduce((sum, s) => sum + s, 0) / 5
+    : scores.reduce((sum, s) => sum + s, 0) / Math.max(allResults.length, 1);
 
   // Simulations this month
   const now = new Date();
@@ -170,7 +178,7 @@ function calculateTypeBreakdown(allResults: SimulationResultWithSimulation[]) {
       typeBreakdown[type] = { count: 0, avgScore: 0, totalScore: 0 };
     }
     typeBreakdown[type].count++;
-    typeBreakdown[type].totalScore += result.percentageScore;
+    typeBreakdown[type].totalScore += effectivePercentage(result);
   }
   
   for (const type of Object.keys(typeBreakdown)) {
@@ -191,7 +199,7 @@ function calculateMonthlyTrend(allResults: SimulationResultWithSimulation[]) {
       monthlyData[monthKey] = { month: monthKey, count: 0, avgScore: 0, totalScore: 0 };
     }
     monthlyData[monthKey].count++;
-    monthlyData[monthKey].totalScore += result.percentageScore;
+    monthlyData[monthKey].totalScore += effectivePercentage(result);
   }
   
   return Object.values(monthlyData)
@@ -961,7 +969,7 @@ export const studentsRouter = router({
 
     // Get ALL simulation results for this student (completed ones)
     const allResults = await ctx.prisma.simulationResult.findMany({
-      where: { 
+      where: {
         studentId: student.id,
         completedAt: { not: null },
       },
@@ -975,6 +983,8 @@ export const studentsRouter = router({
             isOfficial: true,
             durationMinutes: true,
             totalQuestions: true,
+            maxScore: true,
+            correctPoints: true,
             subjectDistribution: true,
             sections: true,
             questions: {

@@ -133,8 +133,12 @@ export default function StudentSimulationsContent() {
     assignedToMe: activeTab === 'assigned' ? true : undefined,
   });
 
-  // Fetch student results for stats
-  const { data: resultsData } = trpc.simulations.getMyResults.useQuery({ pageSize: 50 });
+  // Fetch student results for stats (filtered by active tab)
+  const { data: resultsData } = trpc.simulations.getMyResults.useQuery({
+    pageSize: 50,
+    selfCreated: activeTab === 'self' ? true : undefined,
+    assignedToMe: activeTab === 'assigned' ? true : undefined,
+  });
 
   // Format date with time
   const formatDateTime = (date: Date | string | null | undefined) => {
@@ -164,10 +168,12 @@ export default function StudentSimulationsContent() {
   const simulations = simulationsData?.simulations ?? [];
   const pagination = simulationsData?.pagination ?? { page: 1, pageSize: 20, total: 0, totalPages: 0 };
 
-  // Calculate stats
-  const completedCount = resultsData?.results?.length ?? 0;
-  const avgScore = completedCount > 0 
-    ? (resultsData?.results?.reduce((sum, r) => sum + (r.totalScore ?? 0), 0) ?? 0) / completedCount 
+  // Calculate stats — count unique simulations completed (not total attempts)
+  const completedSimIds = new Set(resultsData?.results?.map(r => r.simulationId) ?? []);
+  const completedCount = completedSimIds.size;
+  const resultsCount = resultsData?.results?.length ?? 0;
+  const avgScore = resultsCount > 0
+    ? (resultsData?.results?.reduce((sum, r) => sum + (r.totalScore ?? 0), 0) ?? 0) / resultsCount
     : 0;
 
   return (
