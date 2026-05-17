@@ -16,14 +16,17 @@ export async function POST(request: NextRequest) {
     }
 
     const { email } = parsed.data;
+    console.log('[send-reset-password] request for:', email);
+
     const adminAuth = getAdminAuth();
 
     let name: string;
     try {
       const firebaseUser = await adminAuth.getUserByEmail(email);
       name = firebaseUser.displayName || email.split('@')[0];
-    } catch {
-      // User not found — return success silently
+      console.log('[send-reset-password] user found:', name);
+    } catch (err) {
+      console.log('[send-reset-password] user not found in Firebase:', (err as Error).message);
       return NextResponse.json({ success: true });
     }
 
@@ -33,16 +36,19 @@ export async function POST(request: NextRequest) {
       resetLink = await adminAuth.generatePasswordResetLink(email, {
         url: `${appUrl}/auth/login`,
       });
-    } catch {
-      // continueUrl domain not yet authorized in Firebase Console — generate without it
+      console.log('[send-reset-password] link generated with continueUrl');
+    } catch (err) {
+      console.warn('[send-reset-password] continueUrl rejected, retrying without:', (err as Error).message);
       resetLink = await adminAuth.generatePasswordResetLink(email);
+      console.log('[send-reset-password] link generated without continueUrl');
     }
 
-    await sendAuthPasswordReset({ name, email, resetLink });
+    const result = await sendAuthPasswordReset({ name, email, resetLink });
+    console.log('[send-reset-password] email result:', result);
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('[send-reset-password]', error);
+    console.error('[send-reset-password] fatal error:', error);
     return NextResponse.json({ success: true });
   }
 }
