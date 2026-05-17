@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await sendAuthPasswordReset({ name, email, resetLink });
-    console.log('[send-reset-password] email result:', result);
+    console.log(`[send-reset-password] email sent to ${email}:`, result);
 
     return NextResponse.json({ success: true });
   } catch (error) {
