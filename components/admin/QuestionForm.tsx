@@ -5,6 +5,7 @@ import { colors } from '@/lib/theme/colors';
 import { ButtonLoader } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import { Modal } from '@/components/ui/Modal';
+import { normalizeImageSrc } from '@/lib/utils/imageUrl';
 import {
   Save, X, Eye, Info, Sparkles, ChevronDown, ChevronUp, AlertCircle,
   ImageIcon, Upload, Link as LinkIcon, Copy, Check,
@@ -406,7 +407,7 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
                   <p className={`text-sm ${colors.text.muted} mb-2`}>Anteprima:</p>
                   <div className="relative inline-block">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={form.currentImageUrl} alt="Preview" className="max-w-full max-h-48 rounded-lg border border-gray-200 dark:border-gray-700" />
+                    <img src={normalizeImageSrc(form.currentImageUrl) ?? undefined} alt="Preview" className="max-w-full max-h-48 rounded-lg border border-gray-200 dark:border-gray-700" />
                     <button
                       type="button"
                       onClick={() => {
@@ -559,7 +560,7 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
         {form.currentImageUrl && (
           <div className="mb-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={form.currentImageUrl} alt="Immagine domanda" className="max-w-full max-h-64 rounded-lg mx-auto" />
+            <img src={normalizeImageSrc(form.currentImageUrl) ?? undefined} alt="Immagine domanda" className="max-w-full max-h-64 rounded-lg mx-auto" />
           </div>
         )}
 

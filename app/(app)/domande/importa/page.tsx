@@ -43,6 +43,7 @@ interface ImportRow {
   answer5Correct?: string;
   correctExplanation?: string;
   wrongExplanation?: string;
+  imageUrl?: string;
   tags?: string;
   year?: string;
   source?: string;
@@ -268,6 +269,7 @@ export default function ImportaDomandePage() {
         negativePoints: parseFloat(row.negativePoints) || 0,
         correctExplanation: row.correctExplanation || undefined,
         wrongExplanation: row.wrongExplanation || undefined,
+        imageUrl: row.imageUrl || undefined,
         tags: row.tags || undefined,
         year: row.year ? parseInt(row.year) : undefined,
         source: row.source || undefined,
@@ -305,6 +307,7 @@ export default function ImportaDomandePage() {
       'answer5Correct',
       'correctExplanation',
       'wrongExplanation',
+      'imageUrl',
       'tags',
       'year',
       'source',
@@ -329,6 +332,7 @@ export default function ImportaDomandePage() {
         '',
         '"L\'acqua è composta da 2 atomi di idrogeno e 1 di ossigeno"',
         '',
+        '',
         '"chimica,molecole"',
         '2024',
         '"Test ingresso 2024"',
@@ -347,6 +351,7 @@ export default function ImportaDomandePage() {
         'true',
         'Giallo',
         'true',
+        '',
         '',
         '',
         '',

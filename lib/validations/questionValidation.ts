@@ -230,6 +230,9 @@ export const importQuestionRowSchema = z.object({
   source: z.string().optional(),
   externalId: z.string().optional(),
   
+  // Image
+  imageUrl: z.string().optional(), // Full URL or Firebase Storage path (e.g. __uploads/xxx/image.webp)
+
   // Keywords (for open text)
   keywords: z.string().optional(), // Comma-separated
 });

@@ -101,6 +101,12 @@ service firebase.storage {
       allow delete: if isSignedIn();
     }
 
+    // ---------- legacy uploads (migrated from old platform) ----------
+    match /__uploads/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
     // Default deny.
     match /{allPaths=**} {
       allow read, write: if false;
