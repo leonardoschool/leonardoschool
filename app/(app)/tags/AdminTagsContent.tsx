@@ -48,7 +48,7 @@ export default function AdminTagsContent() {
   const [editingTag, setEditingTag] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
-  const [showInactive, setShowInactive] = useState(false);
+  const [showInactive, setShowInactive] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'category' | 'tag'; id: string; name: string } | null>(null);
   
   // Form states
@@ -118,13 +118,24 @@ export default function AdminTagsContent() {
   });
 
   const deleteCategoryMutation = trpc.questionTags.deleteCategory.useMutation({
+    onMutate: async (variables) => {
+      if (!variables || typeof variables !== 'object' || !('id' in variables) || !variables.id) return;
+      await utils.questionTags.getCategories.cancel();
+      const params = { includeInactive: showInactive, search: searchTerm || undefined };
+      const prev = utils.questionTags.getCategories.getData(params);
+      utils.questionTags.getCategories.setData(params, (old) => old?.filter((c) => c.id !== (variables as { id: string }).id) ?? old);
+      return { prev, params };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev !== undefined) utils.questionTags.getCategories.setData(ctx.params, ctx.prev);
+      handleMutationError(_err);
+    },
     onSuccess: (data) => {
       utils.questionTags.getCategories.invalidate();
       utils.questionTags.getStats.invalidate();
       showSuccess('Categoria eliminata', `Categoria eliminata. ${data.unlinkedTags} tag scollegati.`);
       setDeleteConfirm(null);
     },
-    onError: handleMutationError,
   });
 
   const createTagMutation = trpc.questionTags.createTag.useMutation({
@@ -153,6 +164,35 @@ export default function AdminTagsContent() {
   });
 
   const deleteTagMutation = trpc.questionTags.deleteTag.useMutation({
+    onMutate: async (variables) => {
+      if (!variables || typeof variables !== 'object' || !('id' in variables) || !variables.id) return;
+      const id = variables.id as string;
+      await utils.questionTags.getCategories.cancel();
+      await utils.questionTags.getTags.cancel();
+      const catParams = { includeInactive: showInactive, search: searchTerm || undefined };
+      const tagParams = { includeInactive: showInactive, uncategorized: true as const, pageSize: 200 };
+      const prevCats = utils.questionTags.getCategories.getData(catParams);
+      const prevTags = utils.questionTags.getTags.getData(tagParams);
+      utils.questionTags.getCategories.setData(catParams, (old) =>
+        old?.map((cat) => {
+          const wasHere = cat.tags.some((t) => t.id === id);
+          return {
+            ...cat,
+            tags: cat.tags.filter((t) => t.id !== id),
+            _count: wasHere ? { ...cat._count, tags: cat._count.tags - 1 } : cat._count,
+          };
+        }) ?? old
+      );
+      utils.questionTags.getTags.setData(tagParams, (old) =>
+        old ? { ...old, tags: old.tags.filter((t) => t.id !== id) } : old
+      );
+      return { prevCats, prevTags, catParams, tagParams };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prevCats !== undefined) utils.questionTags.getCategories.setData(ctx.catParams, ctx.prevCats);
+      if (ctx?.prevTags !== undefined) utils.questionTags.getTags.setData(ctx.tagParams, ctx.prevTags);
+      handleMutationError(_err);
+    },
     onSuccess: (data) => {
       utils.questionTags.getCategories.invalidate();
       utils.questionTags.getTags.invalidate();
@@ -160,11 +200,37 @@ export default function AdminTagsContent() {
       showSuccess('Tag eliminato', `Tag eliminato. ${data.removedAssignments} assegnazioni rimosse.`);
       setDeleteConfirm(null);
     },
-    onError: handleMutationError,
   });
 
   // Toggle tag active status
   const toggleTagActiveMutation = trpc.questionTags.updateTag.useMutation({
+    onMutate: async (variables) => {
+      if (!variables || typeof variables !== 'object' || !('id' in variables) || !variables.id) return;
+      const id = variables.id as string;
+      const isActive = 'isActive' in variables ? (variables.isActive as boolean) : undefined;
+      if (isActive === undefined) return;
+      await utils.questionTags.getCategories.cancel();
+      await utils.questionTags.getTags.cancel();
+      const catParams = { includeInactive: showInactive, search: searchTerm || undefined };
+      const tagParams = { includeInactive: showInactive, uncategorized: true as const, pageSize: 200 };
+      const prevCats = utils.questionTags.getCategories.getData(catParams);
+      const prevTags = utils.questionTags.getTags.getData(tagParams);
+      utils.questionTags.getCategories.setData(catParams, (old) =>
+        old?.map((cat) => ({
+          ...cat,
+          tags: cat.tags.map((t) => (t.id === id ? { ...t, isActive } : t)),
+        })) ?? old
+      );
+      utils.questionTags.getTags.setData(tagParams, (old) =>
+        old ? { ...old, tags: old.tags.map((t) => (t.id === id ? { ...t, isActive } : t)) } : old
+      );
+      return { prevCats, prevTags, catParams, tagParams };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prevCats !== undefined) utils.questionTags.getCategories.setData(ctx.catParams, ctx.prevCats);
+      if (ctx?.prevTags !== undefined) utils.questionTags.getTags.setData(ctx.tagParams, ctx.prevTags);
+      handleMutationError(_err);
+    },
     onSuccess: (data) => {
       utils.questionTags.getCategories.invalidate();
       utils.questionTags.getTags.invalidate();
@@ -174,11 +240,27 @@ export default function AdminTagsContent() {
         `Il tag "${data.name}" è stato ${data.isActive ? 'attivato' : 'disattivato'}.`
       );
     },
-    onError: handleMutationError,
   });
 
   // Toggle category active status
   const toggleCategoryActiveMutation = trpc.questionTags.updateCategory.useMutation({
+    onMutate: async (variables) => {
+      if (!variables || typeof variables !== 'object' || !('id' in variables) || !variables.id) return;
+      const id = variables.id as string;
+      const isActive = 'isActive' in variables ? (variables.isActive as boolean) : undefined;
+      if (isActive === undefined) return;
+      await utils.questionTags.getCategories.cancel();
+      const params = { includeInactive: showInactive, search: searchTerm || undefined };
+      const prev = utils.questionTags.getCategories.getData(params);
+      utils.questionTags.getCategories.setData(params, (old) =>
+        old?.map((cat) => (cat.id === id ? { ...cat, isActive } : cat)) ?? old
+      );
+      return { prev, params };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev !== undefined) utils.questionTags.getCategories.setData(ctx.params, ctx.prev);
+      handleMutationError(_err);
+    },
     onSuccess: (data) => {
       utils.questionTags.getCategories.invalidate();
       utils.questionTags.getTags.invalidate();
@@ -188,7 +270,6 @@ export default function AdminTagsContent() {
         `La categoria "${data.name}" è stata ${data.isActive ? 'attivata' : 'disattivata'}.`
       );
     },
-    onError: handleMutationError,
   });
 
   // Helper functions

@@ -4,7 +4,9 @@
 import { router, protectedProcedure, adminProcedure, studentProcedure, collaboratorProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import { revalidateTag } from 'next/cache';
 import * as notificationService from '../../services/notificationService';
+import { CACHE_TAGS } from '@/lib/cache/serverCache';
 import { sanitizeText } from '@/lib/utils/escapeHtml';
 import {
   getContractTarget,
@@ -523,6 +525,8 @@ export const contractsRouter = router({
         where: { id: student.user.id },
         data: { isActive: true },
       });
+      revalidateTag(CACHE_TAGS.USERS, {});
+      revalidateTag(CACHE_TAGS.STATS, {});
 
       // Send notifications using the unified notification service
       const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.leonardoschool.it'}/auth/login`;
@@ -559,6 +563,8 @@ export const contractsRouter = router({
         where: { id: student.user.id },
         data: { isActive: false },
       });
+      revalidateTag(CACHE_TAGS.USERS, {});
+      revalidateTag(CACHE_TAGS.STATS, {});
 
       return { success: true, user: updatedUser };
     }),
@@ -1296,6 +1302,8 @@ export const contractsRouter = router({
         where: { id: ctx.user.id },
         data: { isActive: true },
       });
+      revalidateTag(CACHE_TAGS.USERS, {});
+      revalidateTag(CACHE_TAGS.STATS, {});
 
       // Send notifications using the unified notification service
       await notificationService.notifyContractSigned(ctx.prisma, {

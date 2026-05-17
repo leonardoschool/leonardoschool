@@ -4,6 +4,7 @@
 import { router, staffProcedure, adminProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import { revalidateTag } from 'next/cache';
 import {
   createTagCategorySchema,
   updateTagCategorySchema,
@@ -17,7 +18,7 @@ import {
   listCategoriesFilterSchema,
 } from '@/lib/validations/questionTagValidation';
 import type { Prisma } from '@prisma/client';
-import { createCachedQuery, CACHE_TIMES, CACHE_TAGS } from '@/lib/cache/serverCache';
+import { CACHE_TAGS } from '@/lib/cache/serverCache';
 
 export const questionTagsRouter = router({
   // ==================== CATEGORIES ====================
@@ -30,53 +31,42 @@ export const questionTagsRouter = router({
     .query(async ({ ctx, input }) => {
       const includeInactive = input?.includeInactive || false;
       const search = input?.search || '';
-      
-      // Cache for 15 minutes - categories and tags change infrequently
-      const getCachedCategories = createCachedQuery(
-        async () => {
-          const where: Prisma.QuestionTagCategoryWhereInput = {};
 
-          if (!includeInactive) {
-            where.isActive = true;
-          }
+      const where: Prisma.QuestionTagCategoryWhereInput = {};
 
-          if (search) {
-            where.name = { contains: search, mode: 'insensitive' };
-          }
+      if (!includeInactive) {
+        where.isActive = true;
+      }
 
-          const categories = await ctx.prisma.questionTagCategory.findMany({
-            where,
-            orderBy: [{ order: 'asc' }, { name: 'asc' }],
-            include: {
-              tags: {
-                where: includeInactive ? {} : { isActive: true },
-                orderBy: { name: 'asc' },
-                select: {
-                  id: true,
-                  name: true,
-                  description: true,
-                  color: true,
-                  categoryId: true,
-                  isActive: true,
-                  createdBy: true,
-                  _count: {
-                    select: { questions: true },
-                  },
-                },
-              },
+      if (search) {
+        where.name = { contains: search, mode: 'insensitive' };
+      }
+
+      return ctx.prisma.questionTagCategory.findMany({
+        where,
+        orderBy: [{ order: 'asc' }, { name: 'asc' }],
+        include: {
+          tags: {
+            where: includeInactive ? {} : { isActive: true },
+            orderBy: { name: 'asc' },
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              color: true,
+              categoryId: true,
+              isActive: true,
+              createdBy: true,
               _count: {
-                select: { tags: true },
+                select: { questions: true },
               },
             },
-          });
-
-          return categories;
+          },
+          _count: {
+            select: { tags: true },
+          },
         },
-        [CACHE_TAGS.TAGS, 'categories', `inactive-${includeInactive}`, `search-${search}`],
-        { revalidate: CACHE_TIMES.LONG } // 15 minutes
-      );
-
-      return await getCachedCategories();
+      });
     }),
 
   /**
@@ -137,6 +127,7 @@ export const questionTagsRouter = router({
         },
       });
 
+      revalidateTag(CACHE_TAGS.TAGS, {});
       return category;
     }),
 
@@ -186,6 +177,7 @@ export const questionTagsRouter = router({
         data,
       });
 
+      revalidateTag(CACHE_TAGS.TAGS, {});
       return category;
     }),
 
@@ -221,6 +213,7 @@ export const questionTagsRouter = router({
         where: { id: input.id },
       });
 
+      revalidateTag(CACHE_TAGS.TAGS, {});
       return { success: true, unlinkedTags: category._count.tags };
     }),
 
@@ -370,6 +363,7 @@ export const questionTagsRouter = router({
         },
       });
 
+      revalidateTag(CACHE_TAGS.TAGS, {});
       return tag;
     }),
 
@@ -430,6 +424,7 @@ export const questionTagsRouter = router({
         },
       });
 
+      revalidateTag(CACHE_TAGS.TAGS, {});
       return tag;
     }),
 
@@ -465,6 +460,7 @@ export const questionTagsRouter = router({
         where: { id: input.id },
       });
 
+      revalidateTag(CACHE_TAGS.TAGS, {});
       return { success: true, removedAssignments: tag._count.questions };
     }),
 

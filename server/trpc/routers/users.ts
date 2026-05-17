@@ -5,10 +5,11 @@
 import { router, adminProcedure, protectedProcedure, staffProcedure } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import { revalidateTag } from 'next/cache';
 import { getAdminAuth } from '@/lib/firebase/admin';
 import { Prisma } from '@prisma/client';
 import { generateMatricola } from '@/lib/utils/matricolaUtils';
-import { createCachedQuery, CACHE_TIMES, CACHE_TAGS } from '@/lib/cache/serverCache';
+import { CACHE_TAGS } from '@/lib/cache/serverCache';
 import { sendWelcomeEmail } from '@/lib/email/userEmails';
 
 const adminSimulationResultsInputSchema = z.object({
@@ -582,14 +583,11 @@ export const usersRouter = router({
     const roleFilter = input?.role || 'ALL';
     const roleWhere = roleFilter !== 'ALL' ? { role: roleFilter } : {};
 
-    // Cache stats for 2 minutes - they don't change frequently
-    const getCachedStats = createCachedQuery(
-      async () => {
-        const pendingProfileRoles = (roleFilter !== 'ALL' && roleFilter !== 'ADMIN')
-        ? [roleFilter]
-        : ['STUDENT', 'COLLABORATOR'];
+    const pendingProfileRoles = (roleFilter !== 'ALL' && roleFilter !== 'ADMIN')
+      ? [roleFilter]
+      : ['STUDENT', 'COLLABORATOR'];
 
-      const [total, students, collaborators, admins, active, pendingProfile] = await Promise.all([
+    const [total, students, collaborators, admins, active, pendingProfile] = await Promise.all([
       ctx.prisma.user.count({ where: roleWhere }),
       ctx.prisma.user.count({ where: { role: 'STUDENT' } }),
       ctx.prisma.user.count({ where: { role: 'COLLABORATOR' as any } }),
@@ -598,7 +596,6 @@ export const usersRouter = router({
       ctx.prisma.user.count({ where: { profileCompleted: false, role: { in: pendingProfileRoles as any[] } } }),
     ]);
 
-    // Count pending contract (profile completed but no contracts)
     const usersWithProfile = await ctx.prisma.user.findMany({
       where: {
         ...roleWhere,
@@ -628,47 +625,28 @@ export const usersRouter = router({
         } else if (lastContract.status === 'SIGNED') {
           pendingActivation++;
         } else if (lastContract.status === 'CANCELLED' || lastContract.status === 'EXPIRED') {
-          // User with cancelled or expired contract = can be considered inactive
           inactiveCount++;
         }
       }
     }
 
-    // Handle admin users who don't need contracts
     if (roleFilter === 'ADMIN') {
-      // Admins don't have contracts, so reset these counts
       pendingContract = 0;
       pendingSign = 0;
       pendingActivation = 0;
-      // Inactive admins are those with profileCompleted but not active
       inactiveCount = await ctx.prisma.user.count({
-        where: {
-          role: 'ADMIN',
-          profileCompleted: true,
-          isActive: false,
-        }
+        where: { role: 'ADMIN', profileCompleted: true, isActive: false },
       });
     }
 
-    // Count users without any signed contract (regardless of active status)
     const noSignedContractCount = roleFilter === 'ADMIN' ? 0 : await ctx.prisma.user.count({
       where: {
         role: roleFilter !== 'ALL' ? roleFilter : { in: ['STUDENT', 'COLLABORATOR'] },
         AND: [
-          {
-            OR: [
-              { student: null },
-              { student: { contracts: { none: { signedAt: { not: null } } } } }
-            ]
-          },
-          {
-            OR: [
-              { collaborator: null },
-              { collaborator: { contracts: { none: { signedAt: { not: null } } } } }
-            ]
-          }
-        ]
-      } as any
+          { OR: [{ student: null }, { student: { contracts: { none: { signedAt: { not: null } } } } }] },
+          { OR: [{ collaborator: null }, { collaborator: { contracts: { none: { signedAt: { not: null } } } } }] },
+        ],
+      } as any,
     });
 
     return {
@@ -685,12 +663,6 @@ export const usersRouter = router({
       inactive: inactiveCount,
       noSignedContract: noSignedContractCount,
     };
-      },
-      [CACHE_TAGS.STATS, CACHE_TAGS.USERS, `user-stats-${roleFilter}`],
-      { revalidate: CACHE_TIMES.SHORT } // 1 minute cache
-    );
-
-    return await getCachedStats();
   }),
 
   /**
@@ -881,6 +853,10 @@ export const usersRouter = router({
             collaborator: true,
           } as any,
         });
+      }).then((result) => {
+        revalidateTag(CACHE_TAGS.USERS, {});
+        revalidateTag(CACHE_TAGS.STATS, {});
+        return result;
       });
     }),
 
@@ -909,10 +885,13 @@ export const usersRouter = router({
         });
       }
 
-      return ctx.prisma.user.update({
+      const updated = await ctx.prisma.user.update({
         where: { id: input.userId },
         data: { isActive: !user.isActive },
       });
+      revalidateTag(CACHE_TAGS.USERS, {});
+      revalidateTag(CACHE_TAGS.STATS, {});
+      return updated;
     }),
 
   /**
@@ -1019,6 +998,8 @@ export const usersRouter = router({
         console.warn(`[deleteUser] DB deleted for user ${userId} but Firebase deletion failed. Manual cleanup may be needed for firebaseUid: ${user.firebaseUid}`);
       }
 
+      revalidateTag(CACHE_TAGS.USERS, {});
+      revalidateTag(CACHE_TAGS.STATS, {});
       return { success: true, message: 'Utente eliminato con successo' };
     }),
 
@@ -1820,6 +1801,8 @@ export const usersRouter = router({
       // Send welcome email with set-password link
       await sendWelcomeEmail({ name, email, passwordSetLink, role });
 
+      revalidateTag(CACHE_TAGS.USERS, {});
+      revalidateTag(CACHE_TAGS.STATS, {});
       return {
         userId: user.id,
         matricola: (user as any).student?.matricola ?? null,
