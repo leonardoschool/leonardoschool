@@ -13,7 +13,11 @@ export function normalizeImageSrc(src?: string | null): string | null {
   const bucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
   if (bucket) {
     const cleanPath = trimmedSrc.startsWith('/') ? trimmedSrc.slice(1) : trimmedSrc;
-    return `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(cleanPath)}?alt=media`;
+    // Legacy __uploads files are nested under schools/leonardo/ in Firebase Storage
+    const storagePath = cleanPath.startsWith('__uploads/')
+      ? `schools/leonardo/${cleanPath}`
+      : cleanPath;
+    return `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(storagePath)}?alt=media`;
   }
 
   const localSrc = trimmedSrc.startsWith('/') ? trimmedSrc : `/${trimmedSrc}`;

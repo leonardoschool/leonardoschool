@@ -2767,9 +2767,10 @@ export const questionsRouter = router({
         stats,
         requestedTotal: totalQuestions,
         achievedTotal: finalQuestions.length,
-        warning: finalQuestions.length < totalQuestions 
+        warning: finalQuestions.length < totalQuestions
           ? `Sono state trovate solo ${finalQuestions.length} domande corrispondenti ai criteri (richieste: ${totalQuestions}).`
           : undefined,
       };
     }),
+
 });

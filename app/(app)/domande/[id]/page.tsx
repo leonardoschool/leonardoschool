@@ -165,7 +165,7 @@ export default function DettaglioDomandaPage() {
               </span>
             </div>
             <h1 className={`text-xl font-bold ${colors.text.primary}`}>
-              <RichTextRenderer text={question.text.length > 100 ? `${question.text.slice(0, 100)}...` : question.text} />
+              <RichTextRenderer text={question.text} className="line-clamp-2" />
             </h1>
           </div>
         </div>

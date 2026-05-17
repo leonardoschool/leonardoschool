@@ -2,10 +2,12 @@
 import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
 import { getAuth, Auth } from 'firebase-admin/auth';
 import { getStorage, Storage } from 'firebase-admin/storage';
+import { getFirestore, Firestore } from 'firebase-admin/firestore';
 
 let adminApp: App | undefined;
 let adminAuth: Auth | undefined;
 let adminStorage: Storage | undefined;
+let adminFirestore: Firestore | undefined;
 let initialized = false;
 
 function initAdmin() {
@@ -46,6 +48,7 @@ function initAdmin() {
       });
       adminAuth = getAuth(adminApp);
       adminStorage = getStorage(adminApp);
+      adminFirestore = getFirestore(adminApp);
     } catch (error) {
       console.error('Failed to initialize Firebase Admin:', error);
       // Don't throw during build - just skip initialization
@@ -56,6 +59,7 @@ function initAdmin() {
     try {
       adminAuth = getAuth(adminApp);
       adminStorage = getStorage(adminApp);
+      adminFirestore = getFirestore(adminApp);
     } catch (error) {
       console.error('Failed to get Firebase Admin services:', error);
       return;
@@ -94,6 +98,16 @@ export function getAdminApp(): App {
     throw new Error('Firebase Admin App not initialized. Check FIREBASE_SERVICE_ACCOUNT_KEY env var.');
   }
   return adminApp;
+}
+
+export function getAdminFirestore(): Firestore {
+  if (!adminFirestore) {
+    initAdmin();
+  }
+  if (!adminFirestore) {
+    throw new Error('Firebase Admin Firestore not initialized. Check FIREBASE_SERVICE_ACCOUNT_KEY env var.');
+  }
+  return adminFirestore;
 }
 
 // Legacy exports for backward compatibility (use getters instead)
