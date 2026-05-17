@@ -30,9 +30,15 @@ export async function POST(request: NextRequest) {
     const name = firebaseUser.displayName || email.split('@')[0];
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.leonardoschool.it';
-    const verificationLink = await adminAuth.generateEmailVerificationLink(email, {
-      url: `${appUrl}/auth/login`,
-    });
+    let verificationLink: string;
+    try {
+      verificationLink = await adminAuth.generateEmailVerificationLink(email, {
+        url: `${appUrl}/auth/login`,
+      });
+    } catch {
+      // continueUrl domain not yet authorized in Firebase Console — generate without it
+      verificationLink = await adminAuth.generateEmailVerificationLink(email);
+    }
 
     await sendAuthEmailVerification({ name, email, verificationLink });
 

@@ -28,9 +28,15 @@ export async function POST(request: NextRequest) {
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.leonardoschool.it';
-    const resetLink = await adminAuth.generatePasswordResetLink(email, {
-      url: `${appUrl}/auth/login`,
-    });
+    let resetLink: string;
+    try {
+      resetLink = await adminAuth.generatePasswordResetLink(email, {
+        url: `${appUrl}/auth/login`,
+      });
+    } catch {
+      // continueUrl domain not yet authorized in Firebase Console — generate without it
+      resetLink = await adminAuth.generatePasswordResetLink(email);
+    }
 
     await sendAuthPasswordReset({ name, email, resetLink });
 
