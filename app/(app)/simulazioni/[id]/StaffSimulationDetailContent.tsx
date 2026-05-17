@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/Toast';
 import { PageLoader, Spinner } from '@/components/ui/loaders';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import { normalizeImageSrc } from '@/lib/utils/imageUrl';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -204,15 +205,8 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
       .replaceAll(/\\includegraphics(?:\[[^\]]*\])?\{[^}]+\}/g, '')
       .trim();
 
-    const toPrintableImageSrc = (imageUrl?: string | null) => {
-      if (!imageUrl?.trim()) return '';
-
-      try {
-        return new URL(imageUrl, window.location.origin).href;
-      } catch {
-        return imageUrl;
-      }
-    };
+    const toPrintableImageSrc = (imageUrl?: string | null): string =>
+      normalizeImageSrc(imageUrl) ?? '';
 
     const renderImage = (imageUrl?: string | null, className = 'question-image') => {
       const imageSrc = toPrintableImageSrc(imageUrl);

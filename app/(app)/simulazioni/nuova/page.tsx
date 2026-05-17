@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { stripHtml } from '@/lib/utils/sanitizeHtml';
+import { normalizeImageSrc } from '@/lib/utils/imageUrl';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { Spinner } from '@/components/ui/loaders';
@@ -1032,15 +1033,8 @@ export default function NewSimulationPage() {
       .replaceAll(/\\includegraphics(?:\[[^\]]*\])?\{[^}]+\}/g, '')
       .trim();
 
-    const toPrintableImageSrc = (imageUrl?: string | null) => {
-      if (!imageUrl?.trim()) return '';
-
-      try {
-        return new URL(imageUrl, window.location.origin).href;
-      } catch {
-        return imageUrl;
-      }
-    };
+    const toPrintableImageSrc = (imageUrl?: string | null): string =>
+      normalizeImageSrc(imageUrl) ?? '';
 
     const renderImage = (imageUrl?: string | null, className = 'question-image') => {
       const imageSrc = toPrintableImageSrc(imageUrl);

@@ -35,6 +35,7 @@ import {
   openValidationTypeLabels,
 } from '@/lib/validations/questionValidation';
 import ConfirmModal from '@/components/ui/ConfirmModal';
+import { normalizeImageSrc } from '@/lib/utils/imageUrl';
 
 export default function DettaglioDomandaPage() {
   const params = useParams();
@@ -271,10 +272,10 @@ export default function DettaglioDomandaPage() {
                 </div>
               </div>
             )}
-            {question.imageUrl && (
+            {normalizeImageSrc(question.imageUrl) && (
               <div className="mt-4 relative">
                 <Image
-                  src={question.imageUrl}
+                  src={normalizeImageSrc(question.imageUrl)!}
                   alt="Immagine domanda"
                   width={800}
                   height={600}

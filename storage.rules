@@ -102,8 +102,11 @@ service firebase.storage {
     }
 
     // ---------- legacy uploads (migrated from old platform) ----------
+    // Public read: these are exam question images (not sensitive), previously
+    // public in the old platform. Browser <img> tags cannot carry Firebase
+    // auth tokens, so isSignedIn() would always block them.
     match /__uploads/{allPaths=**} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow write: if false;
     }
 

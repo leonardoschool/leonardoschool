@@ -244,6 +244,9 @@ export function normalizeStoredRichText(value: string): string {
   let normalized = restoreKaTeXToLatex(value);
   normalized = normalizeLatexContent(normalized);
   normalized = normalized.replace(/\\newline\b/g, '\n');
+  // Strip LaTeX image references — paths can't be resolved client-side and the
+  // image is already served via the question's imageUrl field.
+  normalized = normalized.replace(/\\includegraphics(?:\[[^\]]*\])?\{[^}]+\}/g, '');
   return wrapUndelimitedMath(normalized);
 }
 
