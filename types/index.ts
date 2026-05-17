@@ -11,6 +11,7 @@ export interface TestCard {
   title: string;
   description: string;
   image?: string;
+  imageClassName?: string;
   images?: string[]; // Array of multiple images for cards that need multiple icons
   link: string;
   details?: string;

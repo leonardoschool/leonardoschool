@@ -100,6 +100,23 @@ const allTests: TestCardType[] = [
     ],
   },
   {
+    id: 'formazione-primaria',
+    title: 'Scienze della Formazione Primaria',
+    description: 'Insegnamento nella scuola dell\'infanzia e nella scuola primaria',
+    image: '/images/school-building.png',
+    imageClassName: 'scale-75 [filter:brightness(0)_invert(27%)_sepia(51%)_saturate(2878%)_hue-rotate(336deg)_brightness(104%)_contrast(97%)]',
+    link: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20Ministeriale%20n.%20593%20del%2007-08-2025.pdf',
+    dates: [
+      { label: 'Test', date: '12 settembre 2025' },
+    ],
+    documents: [
+      { title: 'Decreto ministeriale LM-85 bis', url: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20Ministeriale%20n.%20593%20del%2007-08-2025.pdf' },
+      { title: 'Syllabi LM-85 bis', url: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20Ministeriale%20n.%20593%20del%2007-08-2025%20-%20Allegato%20A%20programmi.pdf' },
+      { title: 'Posti disponibili LM-85 bis UE e non UE', url: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20ministeriale%20n.%20598%20del%2007-08-2025%20-%20Tabella%20A%20candidati%20UE%20e%20non%20UE%20Italia.pdf' },
+      { title: 'Posti disponibili LM-85 bis non UE estero', url: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20ministeriale%20n.%20598%20del%2007-08-2025%20-%20Tabella%20B%20candidati%20non%20UE%20estero.pdf' },
+    ],
+  },
+  {
     id: 'tolc-cent',
     title: 'TOLC & CEnT',
     description: 'Test On-Line CISIA / CISIA English Test',
@@ -282,7 +299,7 @@ export default function TestPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8 max-w-7xl mx-auto mb-20 items-start">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-5xl mx-auto mb-20 items-start">
             {allTests.map((test) => (
               <TestCard key={test.id} test={test} expandable={true} />
             ))}
