@@ -1,10 +1,92 @@
-// Regex that matches a known LaTeX math command anchored at start-of-string.
-// Used to detect the beginning of an undelimited math expression.
-const MATH_CMD_AT_START =
-  /^\\(?:sqrt|[dt]?frac|cfrac|sfrac|sum|int|oint|iint|iiint|prod|coprod|lim(?:sup|inf)?|log|ln|exp|sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|sinh|cosh|tanh|coth|max|min|sup|inf|det|ker|deg|gcd|lcm|dim|hom|Pr|arg|cdot|cdots|ldots|vdots|ddots|times|div|pm|mp|leq|geq|le|ge|neq|ne|ll|gg|approx|equiv|sim|simeq|cong|propto|in|notin|ni|subset|supset|subseteq|supseteq|cup|cap|setminus|emptyset|infty|partial|nabla|forall|exists|nexists|to|rightarrow|leftarrow|leftrightarrow|Rightarrow|Leftarrow|Leftrightarrow|longrightarrow|iff|mapsto|not|neg|vec|hat|bar|tilde|dot|ddot|dddot|overline|underline|overbrace|underbrace|widehat|widetilde|mathring|binom|pmod|bmod|mod|alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|mathbb|mathbf|mathrm|mathit|mathcal|mathfrak|mathsf|mathtt|boldsymbol|text|textrm|textbf|textit|left|right|middle|big|Big|bigg|Bigg|langle|rangle|lceil|rceil|lfloor|rfloor|hbar|ell|Re|Im|wp|aleph|imath|jmath|angle|triangle|square|circ|bullet|star|dagger|ddagger|oplus|otimes|ominus|oslash|uparrow|downarrow|updownarrow|Uparrow|Downarrow|gt|lt)\b/;
+// Known LaTeX math command names (without the leading backslash).
+// Used instead of a giant alternation regex to stay within SonarJS regex-complexity limits.
+const MATH_CMDS = new Set([
+  'sqrt', 'frac', 'dfrac', 'tfrac', 'cfrac', 'sfrac',
+  'sum', 'int', 'oint', 'iint', 'iiint', 'prod', 'coprod',
+  'lim', 'limsup', 'liminf', 'log', 'ln', 'exp',
+  'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
+  'arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh', 'coth',
+  'max', 'min', 'sup', 'inf', 'det', 'ker', 'deg', 'gcd', 'lcm',
+  'dim', 'hom', 'Pr', 'arg',
+  'cdot', 'cdots', 'ldots', 'vdots', 'ddots',
+  'times', 'div', 'pm', 'mp',
+  'leq', 'geq', 'le', 'ge', 'neq', 'ne', 'll', 'gg',
+  'approx', 'equiv', 'sim', 'simeq', 'cong', 'propto',
+  'in', 'notin', 'ni', 'subset', 'supset', 'subseteq', 'supseteq',
+  'cup', 'cap', 'setminus', 'emptyset',
+  'infty', 'partial', 'nabla', 'forall', 'exists', 'nexists',
+  'to', 'rightarrow', 'leftarrow', 'leftrightarrow',
+  'Rightarrow', 'Leftarrow', 'Leftrightarrow', 'longrightarrow',
+  'iff', 'mapsto', 'not', 'neg',
+  'vec', 'hat', 'bar', 'tilde', 'dot', 'ddot', 'dddot',
+  'overline', 'underline', 'overbrace', 'underbrace',
+  'widehat', 'widetilde', 'mathring',
+  'binom', 'pmod', 'bmod', 'mod',
+  'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'varepsilon',
+  'zeta', 'eta', 'theta', 'vartheta', 'iota', 'kappa', 'lambda',
+  'mu', 'nu', 'xi', 'pi', 'varpi', 'rho', 'varrho',
+  'sigma', 'varsigma', 'tau', 'upsilon', 'phi', 'varphi', 'chi', 'psi', 'omega',
+  'Gamma', 'Delta', 'Theta', 'Lambda', 'Xi', 'Pi', 'Sigma', 'Upsilon', 'Phi', 'Psi', 'Omega',
+  'mathbb', 'mathbf', 'mathrm', 'mathit', 'mathcal', 'mathfrak', 'mathsf', 'mathtt',
+  'boldsymbol', 'text', 'textrm', 'textbf', 'textit',
+  'left', 'right', 'middle', 'big', 'Big', 'bigg', 'Bigg',
+  'langle', 'rangle', 'lceil', 'rceil', 'lfloor', 'rfloor',
+  'hbar', 'ell', 'Re', 'Im', 'wp', 'aleph', 'imath', 'jmath',
+  'angle', 'triangle', 'square', 'circ', 'bullet', 'star', 'dagger', 'ddagger',
+  'oplus', 'otimes', 'ominus', 'oslash',
+  'uparrow', 'downarrow', 'updownarrow', 'Uparrow', 'Downarrow',
+  'gt', 'lt',
+]);
 
-// Quick check: does the string contain at least one LaTeX math command?
-const MATH_CMD_ANYWHERE = /\\(?:sqrt|frac|sum|int|prod|lim|log|ln|sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|sinh|cosh|tanh|max|min|sup|inf|det|binom|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|xi|pi|sigma|tau|phi|psi|omega|Gamma|Delta|Lambda|Pi|Sigma|Omega|mathbb|mathbf|mathrm|mathit|text|vec|hat|bar|tilde|overline|underline|cdot|times|div|pm|leq|geq|neq|approx|equiv|infty|partial|nabla|forall|exists|to|rightarrow|Rightarrow|gt|lt)\b/;
+// Extracts the command name from a string that starts with `\name` (letters only).
+const CMD_NAME_RE = /^\\([a-zA-Z]+)/;
+
+/** Returns true if `slice` starts with a known math command (`\name` in MATH_CMDS). */
+function startsWithMathCmd(slice: string): boolean {
+  const m = slice.match(CMD_NAME_RE);
+  return m !== null && MATH_CMDS.has(m[1]);
+}
+
+/** Returns true if `text` contains at least one known math command anywhere. */
+function containsMathCmd(text: string): boolean {
+  let pos = 0;
+  while (pos < text.length) {
+    const idx = text.indexOf('\\', pos);
+    if (idx === -1) return false;
+    const m = text.slice(idx).match(CMD_NAME_RE);
+    if (m && MATH_CMDS.has(m[1])) return true;
+    pos = idx + 1;
+  }
+  return false;
+}
+
+/**
+ * Low-level normalizer shared by both the full-text and LaTeX-only paths.
+ * Unescapes double backslashes and decodes HTML entities.
+ * Does NOT convert \newline or wrap undelimited math — callers handle those.
+ */
+function normalizeLatexContent(text: string): string {
+  let normalized = text;
+  let previous: string;
+
+  do {
+    previous = normalized;
+    normalized = normalized.replace(/\\\\(?=(?:[()[\]]|[a-zA-Z]))/g, '\\');
+  } while (normalized !== previous);
+
+  return normalized
+    .replace(/&gt;/g, '>')
+    .replace(/&lt;/g, '<')
+    .replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&le;/g, '≤')
+    .replace(/&ge;/g, '≥')
+    .replace(/&ne;/g, '≠')
+    .replace(/&times;/g, '×')
+    .replace(/&divide;/g, '÷')
+    .replace(/&plusmn;/g, '±')
+    .replace(/&infin;/g, '∞');
+}
 
 /**
  * Scans `text` for LaTeX math commands that appear outside existing math
@@ -17,7 +99,7 @@ const MATH_CMD_ANYWHERE = /\\(?:sqrt|frac|sum|int|prod|lim|log|ln|sin|cos|tan|co
  * language and terminates the math region.
  */
 export function wrapUndelimitedMath(text: string): string {
-  if (!MATH_CMD_ANYWHERE.test(text)) return text;
+  if (!containsMathCmd(text)) return text;
 
   const len = text.length;
   let result = '';
@@ -50,9 +132,7 @@ export function wrapUndelimitedMath(text: string): string {
       }
 
       // ── Undelimited math command? ─────────────────────────────────────
-      const cmdMatch = text.slice(i).match(MATH_CMD_AT_START);
-      if (cmdMatch) {
-        // Collect the full math expression from this point
+      if (startsWithMathCmd(text.slice(i))) {
         let j = i;
         let depth = 0;
 
@@ -61,16 +141,10 @@ export function wrapUndelimitedMath(text: string): string {
           if (c === '{') { depth++; j++; continue; }
           if (c === '}') {
             if (depth > 0) { depth--; j++; continue; }
-            break; // unmatched closing brace — stop
+            break;
           }
           if (c === '\\') {
-            // Another math command — include it and keep going
-            if (text.slice(j).match(MATH_CMD_AT_START)) {
-              j++;
-              while (j < len && /[a-zA-Z*]/.test(text[j])) j++;
-              continue;
-            }
-            // Unknown command — include and skip name
+            // Skip command name and continue collecting
             j++;
             while (j < len && /[a-zA-Z*]/.test(text[j])) j++;
             continue;
@@ -81,11 +155,11 @@ export function wrapUndelimitedMath(text: string): string {
           if (/[a-zA-ZÀ-ÿ]/.test(c)) {
             let k = j + 1;
             while (k < len && /[a-zA-ZÀ-ÿ]/.test(text[k])) k++;
-            if (k - j >= 2 && depth === 0) break; // natural language word — stop
+            if (k - j >= 2 && depth === 0) break;
             j = k;
             continue;
           }
-          break; // any other character (?, !, etc.) — stop
+          break;
         }
 
         const mathExpr = text.slice(i, j).trim();
@@ -117,9 +191,6 @@ export function wrapUndelimitedMath(text: string): string {
  * Finds pre-rendered KaTeX HTML blocks (stored by old platforms) and replaces
  * each one with the original LaTeX source extracted from the embedded
  * <annotation encoding="application/x-tex"> tag.
- *
- * Uses balanced-span counting so nested <span> elements are handled correctly
- * regardless of how deeply the KaTeX HTML is nested.
  */
 export function restoreKaTeXToLatex(html: string): string {
   if (!html.includes('class="katex')) return html;
@@ -134,7 +205,6 @@ export function restoreKaTeXToLatex(html: string): string {
 
     result += html.slice(i, katexStart);
 
-    // Walk forward counting <span> opens and </span> closes
     let depth = 0;
     let j = katexStart;
     while (j < len) {
@@ -164,43 +234,29 @@ export function restoreKaTeXToLatex(html: string): string {
   return result;
 }
 
+/**
+ * Normalizes text that may contain a mix of prose and LaTeX coming from the
+ * database. Strips pre-rendered KaTeX HTML, unescapes backslashes, decodes
+ * HTML entities, and wraps bare LaTeX commands with `$...$` so that
+ * RichTextRenderer can render them.
+ */
 export function normalizeStoredRichText(value: string): string {
-  let normalized = value;
-  let previous: string;
-
-  // Strip pre-rendered KaTeX HTML, restoring raw LaTeX source
-  normalized = restoreKaTeXToLatex(normalized);
-
-  // Unescape double-escaped backslashes before math delimiters/commands
-  do {
-    previous = normalized;
-    normalized = normalized.replace(/\\\\(?=(?:[()[\]]|[a-zA-Z]))/g, '\\');
-  } while (normalized !== previous);
-
+  let normalized = restoreKaTeXToLatex(value);
+  normalized = normalizeLatexContent(normalized);
   normalized = normalized.replace(/\\newline\b/g, '\n');
-
-  // Decode HTML entities commonly stored by old platforms in math expressions
-  normalized = normalized
-    .replace(/&gt;/g, '>')
-    .replace(/&lt;/g, '<')
-    .replace(/&amp;/g, '&')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&le;/g, '≤')
-    .replace(/&ge;/g, '≥')
-    .replace(/&ne;/g, '≠')
-    .replace(/&times;/g, '×')
-    .replace(/&divide;/g, '÷')
-    .replace(/&plusmn;/g, '±')
-    .replace(/&infin;/g, '∞');
-
-  // Wrap raw LaTeX math (no delimiters) so RichTextRenderer can render it
-  normalized = wrapUndelimitedMath(normalized);
-
-  return normalized;
+  return wrapUndelimitedMath(normalized);
 }
 
+/**
+ * Prepares a raw LaTeX string (already extracted from a math delimiter) for
+ * KaTeX's renderToString. Only unescapes backslashes, decodes HTML entities,
+ * and strips unsupported font-size commands.
+ *
+ * Must NOT call wrapUndelimitedMath: the content is already pure LaTeX and
+ * adding `$...$` wrappers would break KaTeX's parser.
+ */
 export function sanitizeLatexForKatex(latex: string): string {
-  return normalizeStoredRichText(latex)
+  return normalizeLatexContent(latex)
     .replace(/\\(?:tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge)\b\s*/g, '')
     .replace(/\\newline\b\s*/g, ' ');
 }
