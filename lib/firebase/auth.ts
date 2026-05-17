@@ -3,8 +3,6 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
-  sendPasswordResetEmail,
-  sendEmailVerification,
   updateProfile,
   onAuthStateChanged as firebaseOnAuthStateChanged,
   User as FirebaseUser,
@@ -72,26 +70,48 @@ export const firebaseAuth = {
   },
 
   /**
-   * Send password reset email
+   * Send password reset email via custom Nodemailer flow
    */
   resetPassword: async (email: string): Promise<void> => {
-    return await sendPasswordResetEmail(auth, email);
+    await fetch('/api/auth/send-reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
   },
 
   /**
-   * Send email verification
+   * Send email verification via custom Nodemailer flow
    */
   verifyEmail: async (user: FirebaseUser): Promise<void> => {
-    return await sendEmailVerification(user);
+    const token = await user.getIdToken();
+    const response = await fetch('/api/auth/send-verification-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      throw new Error(data.error ?? 'Errore nell\'invio dell\'email di verifica');
+    }
   },
 
   /**
-   * Send verification email to current user
+   * Send verification email to current user via custom Nodemailer flow
    */
   sendVerificationEmail: async (): Promise<void> => {
     const user = auth.currentUser;
     if (!user) throw new Error('Nessun utente autenticato');
-    return await sendEmailVerification(user);
+    const token = await user.getIdToken();
+    const response = await fetch('/api/auth/send-verification-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      throw new Error(data.error ?? 'Errore nell\'invio dell\'email di verifica');
+    }
   },
 
   /**

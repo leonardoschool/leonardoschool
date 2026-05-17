@@ -643,20 +643,105 @@ export async function sendContractSignedAdminNotification(data: {
 }
 
 // =============================================================================
+// AUTH EMAILS
+// =============================================================================
+
+interface AuthEmailVerificationData {
+  name: string;
+  email: string;
+  verificationLink: string;
+}
+
+interface AuthPasswordResetData {
+  name: string;
+  email: string;
+  resetLink: string;
+}
+
+/**
+ * Invia email di verifica indirizzo con link generato da Firebase Admin
+ */
+export async function sendAuthEmailVerification(data: AuthEmailVerificationData): Promise<{ success: boolean; error?: string }> {
+  const content = `
+    <p class="greeting">Ciao <strong>${data.name}</strong>,</p>
+
+    <p>Grazie per esserti registrato su <strong>Leonardo School</strong>. Per completare la registrazione, verifica il tuo indirizzo email cliccando sul pulsante qui sotto.</p>
+
+    <p style="text-align: center;">
+      <a href="${data.verificationLink}" class="button">✉️ Verifica il tuo indirizzo email</a>
+    </p>
+
+    <div class="warning-box">
+      <strong>⏰ Il link scade entro 24 ore</strong>
+      <p style="margin: 5px 0 0 0;">Se non completi la verifica entro 24 ore, dovrai richiedere un nuovo link di verifica.</p>
+    </div>
+
+    <div class="divider"></div>
+
+    <p style="font-size: 14px; color: #6b7280;">
+      Se non hai creato un account su Leonardo School, puoi ignorare questa email. Il tuo indirizzo email non sarà registrato.
+    </p>
+  `;
+
+  return sendEmail({
+    to: data.email,
+    subject: 'Verifica il tuo indirizzo email – Leonardo School',
+    html: getBaseEmailTemplate(content, 'Verifica Email'),
+  });
+}
+
+/**
+ * Invia email di reset password con link generato da Firebase Admin
+ */
+export async function sendAuthPasswordReset(data: AuthPasswordResetData): Promise<{ success: boolean; error?: string }> {
+  const content = `
+    <p class="greeting">Ciao <strong>${data.name}</strong>,</p>
+
+    <p>Abbiamo ricevuto una richiesta di reimpostazione della password per il tuo account <strong>Leonardo School</strong>.</p>
+
+    <p style="text-align: center;">
+      <a href="${data.resetLink}" class="button">🔑 Reimposta la tua password</a>
+    </p>
+
+    <div class="warning-box">
+      <strong>⏰ Il link scade entro 1 ora</strong>
+      <p style="margin: 5px 0 0 0;">Per motivi di sicurezza, questo link è valido per 1 ora soltanto.</p>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="info-box">
+      <strong>🔒 Non hai richiesto il cambio di password?</strong>
+      <p style="margin: 5px 0 0 0;">Se non hai richiesto questa operazione, puoi ignorare questa email in tutta sicurezza. Il tuo account non subirà modifiche.</p>
+    </div>
+  `;
+
+  return sendEmail({
+    to: data.email,
+    subject: 'Reimposta la tua password – Leonardo School',
+    html: getBaseEmailTemplate(content, 'Reimposta Password'),
+  });
+}
+
+// =============================================================================
 // EXPORTS
 // =============================================================================
 
 export const emailService = {
   // Base
   sendEmail,
-  
+
+  // Auth emails
+  sendAuthEmailVerification,
+  sendAuthPasswordReset,
+
   // Contract emails (to student/collaborator)
   sendContractAssignedEmail,
   sendContractSignedConfirmationEmail,
   sendContractReminderEmail,
   sendContractExpiredEmail,
   sendAccountActivatedEmail,
-  
+
   // Admin notifications
   sendProfileCompletedAdminNotification,
   sendContractSignedAdminNotification,
