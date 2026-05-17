@@ -1165,7 +1165,7 @@ export default function NewSimulationPage() {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>${title || 'Simulazione'}</title>
+  <title>${escapeHtmlAttribute(title || 'Simulazione')}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1346,7 +1346,7 @@ export default function NewSimulationPage() {
   
   <div class="container">
     <!-- Description -->
-    ${description ? `<div class="description">${description}</div>` : ''}
+    ${description ? `<div class="description">${escapeHtmlAttribute(description)}</div>` : ''}
     
     <div class="academic-year">${academicYearText}</div>
     

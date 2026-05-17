@@ -249,13 +249,14 @@ function removeDangerousTags(html: string): string {
   const selfClosingDangerousTagsRegex = /<(script|style|iframe|object|embed|form|input|button|textarea|select|meta|link|base)[^>]*\/?>/gi;
   
   let sanitized = html;
-  
-  // Remove paired tags
-  sanitized = sanitized.replaceAll(dangerousTagsRegex, '');
-  
-  // Remove self-closing tags
-  sanitized = sanitized.replaceAll(selfClosingDangerousTagsRegex, '');
-  
+  let previous: string;
+
+  do {
+    previous = sanitized;
+    sanitized = sanitized.replaceAll(dangerousTagsRegex, '');
+    sanitized = sanitized.replaceAll(selfClosingDangerousTagsRegex, '');
+  } while (sanitized !== previous);
+
   return sanitized;
 }
 
