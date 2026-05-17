@@ -20,6 +20,7 @@ import {
   getDifficultyRatiosFromLevels,
 } from '@/lib/validations/simulationValidation';
 import * as notificationService from '@/server/services/notificationService';
+import { getAdminStorage } from '@/lib/firebase/admin';
 
 // ============ Helper Functions ============
 
@@ -95,6 +96,28 @@ function buildRelationUpdate(
   if (value === undefined) return undefined;
   if (value === null) return { disconnect: true };
   return { connect: { id: value } };
+}
+
+async function resolveFirebaseImageUrl(rawUrl: string | undefined | null): Promise<string | null> {
+  if (!rawUrl) return null;
+  if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
+  try {
+    const storage = getAdminStorage();
+    const bucket = storage.bucket();
+    const cleanPath = rawUrl.startsWith('/') ? rawUrl.slice(1) : rawUrl;
+    const [url] = await bucket.file(cleanPath).getSignedUrl({
+      action: 'read',
+      expires: '01-01-2099',
+    });
+    return url;
+  } catch {
+    const bucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+    if (bucketName) {
+      const cleanPath = rawUrl.startsWith('/') ? rawUrl.slice(1) : rawUrl;
+      return `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(cleanPath)}?alt=media`;
+    }
+    return null;
+  }
 }
 
 // Types for import helpers
@@ -1937,6 +1960,7 @@ export const questionsRouter = router({
           // Match subject and topic using helpers
           const subjectId = matchSubjectId(row.subjectCode, input.defaultSubjectId, subjectByCode);
           const topicId = matchTopicId(row.topicName, subjectId, topics);
+          const imageUrl = await resolveFirebaseImageUrl(row.imageUrl);
 
           // Build answers and keywords using helpers
           const answers = buildImportAnswers(
@@ -1955,6 +1979,7 @@ export const questionsRouter = router({
               difficulty: row.difficulty ?? 'MEDIUM',
               subjectId,
               topicId,
+              imageUrl,
               points: row.points ?? 1,
               negativePoints: row.negativePoints ?? 0,
               correctExplanation: row.correctExplanation ?? null,

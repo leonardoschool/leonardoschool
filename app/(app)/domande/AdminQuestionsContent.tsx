@@ -547,7 +547,10 @@ export default function AdminQuestionsContent() {
       {/* Stats Cards */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm}`}>
+          <button
+            onClick={() => setStatuses([])}
+            className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} text-left hover:ring-2 hover:ring-[#a8012b] transition-shadow ${statuses.length === 0 ? 'ring-2 ring-[#a8012b]' : ''}`}
+          >
             <div className="flex items-center gap-3">
               <div className={`w-10 h-10 rounded-lg ${colors.primary.softBg} flex items-center justify-center`}>
                 <FileText className={`w-5 h-5 ${colors.primary.text}`} />
@@ -557,8 +560,11 @@ export default function AdminQuestionsContent() {
                 <p className={`text-sm ${colors.text.muted}`}>Totale</p>
               </div>
             </div>
-          </div>
-          <div className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm}`}>
+          </button>
+          <button
+            onClick={() => setStatuses(['PUBLISHED'])}
+            className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} text-left hover:ring-2 hover:ring-green-400 transition-shadow ${statuses.length === 1 && statuses[0] === 'PUBLISHED' ? 'ring-2 ring-green-400' : ''}`}
+          >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
                 <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
@@ -568,8 +574,11 @@ export default function AdminQuestionsContent() {
                 <p className={`text-sm ${colors.text.muted}`}>Pubblicate</p>
               </div>
             </div>
-          </div>
-          <div className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm}`}>
+          </button>
+          <button
+            onClick={() => setStatuses(['DRAFT'])}
+            className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} text-left hover:ring-2 hover:ring-gray-400 transition-shadow ${statuses.length === 1 && statuses[0] === 'DRAFT' ? 'ring-2 ring-gray-400' : ''}`}
+          >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
                 <Edit2 className="w-5 h-5 text-gray-600 dark:text-gray-400" />
@@ -579,7 +588,7 @@ export default function AdminQuestionsContent() {
                 <p className={`text-sm ${colors.text.muted}`}>Bozze</p>
               </div>
             </div>
-          </div>
+          </button>
           <Link
             href="/domande/segnalazioni"
             className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} hover:ring-2 hover:ring-amber-400 transition-shadow`}
@@ -1026,7 +1035,7 @@ export default function AdminQuestionsContent() {
                 {sortHeader('status', 'Stato', 'hidden sm:table-cell')}
                 {sortHeader('difficulty', 'Difficoltà', 'hidden xl:table-cell')}
                 {sortHeader('tag', 'Tag', 'hidden lg:table-cell min-w-[100px]')}
-                <th className="px-3 py-3 w-14" />
+                <th className="px-3 py-3 w-14 sticky right-0 bg-white dark:bg-slate-800" />
               </tr>
             </thead>
             <tbody>
@@ -1157,7 +1166,7 @@ export default function AdminQuestionsContent() {
                         <span className={`text-xs ${colors.text.muted}`}>-</span>
                       )}
                     </td>
-                    <td className="px-3 py-3 text-right">
+                    <td className="px-3 py-3 text-right sticky right-0 bg-white dark:bg-slate-800">
                       <button
                         onClick={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect();

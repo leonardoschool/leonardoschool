@@ -26,22 +26,8 @@ export default function RichTextRenderer({ text, className = '' }: RichTextRende
 
     let processed = normalizeStoredRichText(text);
 
-    // Process LaTeX environment blocks without delimiters: \begin{...}...\end{...}
-    // These are rendered as display math
-    processed = processed.replace(/\\begin\{(\w+)\}([\s\S]*?)\\end\{\1\}/g, (match, env, content) => {
-      try {
-        const fullLatex = sanitizeLatexForKatex(`\\begin{${env}}${content}\\end{${env}}`);
-        return katex.renderToString(fullLatex, {
-          throwOnError: false,
-          displayMode: true,
-          strict: false,
-        });
-      } catch {
-        return `<span class="text-red-500">[Errore LaTeX: ${match}]</span>`;
-      }
-    });
-
-    // Process display math first: \[ ... \] or $$ ... $$
+    // Process display math: \[ ... \] — runs before \begin so inner environments
+    // are captured as part of the display block rather than extracted separately
     processed = processed.replace(/\\\[([\s\S]*?)\\\]/g, (_, latex) => {
       try {
         return katex.renderToString(sanitizeLatexForKatex(latex.trim()), {
@@ -66,7 +52,7 @@ export default function RichTextRenderer({ text, className = '' }: RichTextRende
       }
     });
 
-    // Process inline math: \( ... \) or $ ... $
+    // Process inline math: \( ... \) — runs before \begin for the same reason
     processed = processed.replace(/\\\(([\s\S]*?)\\\)/g, (_, latex) => {
       try {
         return katex.renderToString(sanitizeLatexForKatex(latex.trim()), {
@@ -76,6 +62,21 @@ export default function RichTextRenderer({ text, className = '' }: RichTextRende
         });
       } catch {
         return `<span class="text-red-500">[Errore LaTeX: ${latex}]</span>`;
+      }
+    });
+
+    // Process naked environment blocks: \begin{...}...\end{...}
+    // Only reaches here if not already inside \[, \(, or $$ delimiters
+    processed = processed.replace(/\\begin\{(\w+)\}([\s\S]*?)\\end\{\1\}/g, (match, env, content) => {
+      try {
+        const fullLatex = sanitizeLatexForKatex(`\\begin{${env}}${content}\\end{${env}}`);
+        return katex.renderToString(fullLatex, {
+          throwOnError: false,
+          displayMode: true,
+          strict: false,
+        });
+      } catch {
+        return `<span class="text-red-500">[Errore LaTeX: ${match}]</span>`;
       }
     });
 
