@@ -104,7 +104,7 @@ const allTests: TestCardType[] = [
     title: 'Scienze della Formazione Primaria',
     description: 'Insegnamento nella scuola dell\'infanzia e nella scuola primaria',
     image: '/images/school-building.png',
-    imageClassName: 'scale-75 [filter:brightness(0)_invert(27%)_sepia(51%)_saturate(2878%)_hue-rotate(336deg)_brightness(104%)_contrast(97%)]',
+    imageClassName: 'scale-75',
     link: 'https://www.mur.gov.it/sites/default/files/2025-08/Decreto%20Ministeriale%20n.%20593%20del%2007-08-2025.pdf',
     dates: [
       { label: 'Test', date: '12 settembre 2025' },
