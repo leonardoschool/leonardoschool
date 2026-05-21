@@ -15,7 +15,9 @@ export const authRouter = router({
       z.object({
         firebaseUid: z.string(),
         email: z.string().email(),
-        name: z.string(),
+        name: z.string()
+          .min(3, 'Il nome è troppo corto')
+          .refine(val => val.trim().includes(' '), 'Inserisci nome e cognome'),
         role: z.enum(['STUDENT', 'ADMIN', 'COLLABORATOR']).default('STUDENT'),
       })
     )

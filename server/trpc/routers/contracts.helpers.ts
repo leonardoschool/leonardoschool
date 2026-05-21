@@ -187,7 +187,7 @@ export function prepareContractContent(
   extras?: { startDate?: Date | null; endDate?: Date | null; compensation?: number | null }
 ): string {
   if (customContent) {
-    const check = validateContentLength(customContent);
+    const check = validateContentLength(customContent, 500000);
     if (!check.valid) {
       throw new TRPCError({ code: 'BAD_REQUEST', message: check.message ?? 'Contenuto troppo lungo' });
     }

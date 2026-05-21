@@ -126,6 +126,7 @@ export function useQuestionForm({ questionId, basePath = '/domande', initialData
           { ...defaultAnswer, label: 'B', order: 1 },
           { ...defaultAnswer, label: 'C', order: 2 },
           { ...defaultAnswer, label: 'D', order: 3 },
+          { ...defaultAnswer, label: 'E', order: 4 },
         ]
   );
   const [keywords, setKeywords] = useState<QuestionKeywordInput[]>(initialData?.keywords ?? []);

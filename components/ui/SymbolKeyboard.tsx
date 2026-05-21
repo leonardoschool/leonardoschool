@@ -106,6 +106,7 @@ const symbolCategories: SymbolCategory[] = [
           { symbol: '/', label: 'frazione' },
           { symbol: '√', label: 'radice' },
           { symbol: '%', label: 'percentuale' },
+          { symbol: '…', label: 'puntini di sospensione' },
         ],
       },
       {
@@ -184,6 +185,7 @@ const symbolCategories: SymbolCategory[] = [
           { symbol: '⁹', label: 'apice 9' },
           { symbol: '⁺', label: 'apice +' },
           { symbol: '⁻', label: 'apice -' },
+          { symbol: 'ⁿ', label: 'apice n' },
         ],
       },
       {
@@ -201,6 +203,7 @@ const symbolCategories: SymbolCategory[] = [
           { symbol: '₉', label: 'pedice 9' },
           { symbol: '₊', label: 'pedice +' },
           { symbol: '₋', label: 'pedice -' },
+          { symbol: 'ₙ', label: 'pedice n' },
         ],
       },
     ],

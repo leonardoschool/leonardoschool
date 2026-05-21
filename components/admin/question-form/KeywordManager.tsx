@@ -1,7 +1,10 @@
 'use client';
 
+import { useRef } from 'react';
 import { colors } from '@/lib/theme/colors';
 import CustomSelect from '@/components/ui/CustomSelect';
+import SymbolKeyboard from '@/components/ui/SymbolKeyboard';
+import HtmlShortcutMenu from '@/components/admin/question-form/HtmlShortcutMenu';
 import { Spinner } from '@/components/ui/loaders';
 import { Plus, Trash2, Sparkles, Lightbulb, AlertCircle } from 'lucide-react';
 import type { OpenAnswerValidationType, QuestionKeywordInput } from '@/lib/validations/questionValidation';
@@ -52,6 +55,23 @@ export default function KeywordManager({
   onMinLengthChange,
   onMaxLengthChange,
 }: KeywordManagerProps) {
+  const keywordRefs = useRef<Array<HTMLInputElement | null>>([]);
+
+  const insertIntoKeyword = (index: number, symbol: string) => {
+    const el = keywordRefs.current[index];
+    const currentValue = keywords[index].keyword;
+    if (!el) {
+      onUpdateKeyword(index, 'keyword', currentValue + symbol);
+      return;
+    }
+    const start = el.selectionStart ?? currentValue.length;
+    const end = el.selectionEnd ?? start;
+    const newValue = currentValue.substring(0, start) + symbol + currentValue.substring(end);
+    onUpdateKeyword(index, 'keyword', newValue);
+    const newPos = start + symbol.length;
+    setTimeout(() => { el.focus(); el.setSelectionRange(newPos, newPos); }, 0);
+  };
+
   return (
     <div className="space-y-4">
       <CustomSelect
@@ -155,22 +175,29 @@ export default function KeywordManager({
             {keywords.map((keyword, index) => (
               <div
                 key={index}
-                className={`flex items-center gap-3 p-3 rounded-lg border ${colors.border.primary} ${colors.background.secondary}`}
+                className={`p-3 rounded-lg border ${colors.border.primary} ${colors.background.secondary} space-y-2`}
               >
-                <input
-                  type="text"
-                  value={keyword.keyword}
-                  onChange={(e) => onUpdateKeyword(index, 'keyword', e.target.value)}
-                  placeholder="Keyword..."
-                  className={`flex-1 px-3 py-1.5 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} text-sm focus:ring-2 focus:ring-[#a8012b]/20 focus:border-[#a8012b] transition-colors`}
-                />
-                <button
-                  type="button"
-                  onClick={() => onRemoveKeyword(index)}
-                  className="p-1.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-3">
+                  <input
+                    ref={(el) => { keywordRefs.current[index] = el; }}
+                    type="text"
+                    value={keyword.keyword}
+                    onChange={(e) => onUpdateKeyword(index, 'keyword', e.target.value)}
+                    placeholder="Keyword... (supporta LaTeX: $x^2$ e HTML: <sub>2</sub>)"
+                    className={`flex-1 px-3 py-1.5 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} text-sm focus:ring-2 focus:ring-[#a8012b]/20 focus:border-[#a8012b] transition-colors`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onRemoveKeyword(index)}
+                    className="p-1.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors flex-shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-1">
+                  <SymbolKeyboard onInsert={(symbol) => insertIntoKeyword(index, symbol)} />
+                  <HtmlShortcutMenu compact onInsert={(snippet) => insertIntoKeyword(index, snippet)} />
+                </div>
               </div>
             ))}
             {keywords.length === 0 && (

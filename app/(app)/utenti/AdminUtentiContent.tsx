@@ -57,6 +57,7 @@ import {
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import CustomSelect from '@/components/ui/CustomSelect';
+import AdminEditUserModal from '@/components/admin/users/AdminEditUserModal';
 
 type RoleFilter = 'ALL' | 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
 type StatusFilter = 'all' | 'active' | 'inactive' | 'pending_profile' | 'pending_contract' | 'pending_sign' | 'pending_activation' | 'no_signed_contract';
@@ -1332,6 +1333,14 @@ export default function AdminUtentiContent() {
     groupId: '',
   });
 
+  const [editUserModal, setEditUserModal] = useState<{
+    isOpen: boolean;
+    user: any | null;
+  }>({
+    isOpen: false,
+    user: null,
+  });
+
   const utils = trpc.useUtils();
 
   // Get current user to hide self
@@ -1986,6 +1995,16 @@ export default function AdminUtentiContent() {
                           <Eye className="w-4 h-4" />
                         </button>
                       )}
+                      {/* Edit user data */}
+                      {!isSelf && (
+                        <button
+                          onClick={() => setEditUserModal({ isOpen: true, user })}
+                          className={`p-2 rounded-lg bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 hover:opacity-80 transition-opacity`}
+                          title="Modifica dati utente"
+                        >
+                          <FileEdit className="w-4 h-4" />
+                        </button>
+                      )}
                       {hasSignedContract && contractId && (
                         <>
                           <button
@@ -2467,6 +2486,15 @@ export default function AdminUtentiContent() {
                                 {user.isActive ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
                               </button>
                             )}
+                            {!isSelf && (
+                              <button
+                                onClick={() => setEditUserModal({ isOpen: true, user })}
+                                className={`p-1.5 rounded-lg bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 hover:opacity-80 transition-opacity`}
+                                title="Modifica dati utente"
+                              >
+                                <FileEdit className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                             <button
                               onClick={() => openDeleteModal(user.id, user.name)}
                               className={`p-1.5 rounded-lg ${colors.status.error.softBg} ${colors.status.error.text} hover:opacity-80 transition-opacity`}
@@ -2518,6 +2546,14 @@ export default function AdminUtentiContent() {
         onClose={closeConfirmModal}
         onConfirm={handleConfirm}
         {...modalConfig}
+      />
+
+      {/* Edit User Modal */}
+      <AdminEditUserModal
+        isOpen={editUserModal.isOpen}
+        user={editUserModal.user}
+        onClose={() => setEditUserModal({ isOpen: false, user: null })}
+        onSuccess={() => refetch()}
       />
 
       {/* Assign Contract Modal */}

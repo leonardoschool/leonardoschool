@@ -424,17 +424,17 @@ export default function DettaglioDomandaPage() {
               )}
               <hr className={colors.border.primary} />
               {question.subject && (
-                <div className="flex items-center justify-between">
-                  <span className={`text-sm ${colors.text.muted}`}>Materia</span>
-                  <span className={`font-medium ${colors.text.primary}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <span className={`text-sm ${colors.text.muted} flex-shrink-0`}>Materia</span>
+                  <span className={`font-medium ${colors.text.primary} text-right`}>
                     {question.subject.name}
                   </span>
                 </div>
               )}
               {question.topic && (
-                <div className="flex items-center justify-between">
-                  <span className={`text-sm ${colors.text.muted}`}>Argomento</span>
-                  <span className={`font-medium ${colors.text.primary}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <span className={`text-sm ${colors.text.muted} flex-shrink-0`}>Argomento</span>
+                  <span className={`font-medium ${colors.text.primary} text-right`}>
                     {question.topic.name}
                   </span>
                 </div>

@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { isStaff } from '@/lib/permissions';
 import { PageLoader } from '@/components/ui/loaders';
 
@@ -44,7 +44,11 @@ export default function DomandePage() {
 
   // Render based on role
   if (userRole === 'ADMIN') {
-    return <AdminQuestionsContent />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <AdminQuestionsContent />
+      </Suspense>
+    );
   }
 
   return <CollaboratorQuestionsContent />;

@@ -11,6 +11,8 @@ import { Prisma } from '@prisma/client';
 import { generateMatricola } from '@/lib/utils/matricolaUtils';
 import { CACHE_TAGS } from '@/lib/cache/serverCache';
 import { sendWelcomeEmail } from '@/lib/email/userEmails';
+import { normalizeName } from '@/lib/utils/stringUtils';
+import { PROVINCE_ITALIANE } from '@/lib/validations/profileValidation';
 
 const adminSimulationResultsInputSchema = z.object({
   page: z.number().int().min(1).default(1),
@@ -1807,5 +1809,113 @@ export const usersRouter = router({
         userId: user.id,
         matricola: (user as any).student?.matricola ?? null,
       };
+    }),
+
+  /**
+   * Update user name (admin only) — syncs to Prisma and Firebase
+   */
+  adminUpdateUserName: adminProcedure
+    .input(
+      z.object({
+        userId: z.string(),
+        firstName: z.string().min(1, 'Il nome è obbligatorio').max(50),
+        lastName: z.string().min(1, 'Il cognome è obbligatorio').max(50),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { userId, firstName, lastName } = input;
+      const fullName = normalizeName(`${firstName} ${lastName}`);
+
+      const user = await ctx.prisma.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Utente non trovato' });
+      }
+
+      const updated = await ctx.prisma.user.update({
+        where: { id: userId },
+        data: { name: fullName },
+      });
+
+      try {
+        await getAdminAuth().updateUser(user.firebaseUid, { displayName: fullName });
+      } catch (err) {
+        console.error('[adminUpdateUserName] Firebase update failed:', err);
+      }
+
+      revalidateTag(CACHE_TAGS.USERS, {});
+      return updated;
+    }),
+
+  /**
+   * Update student or collaborator profile fields (admin only)
+   */
+  adminUpdateUserProfile: adminProcedure
+    .input(
+      z.object({
+        userId: z.string(),
+        fiscalCode: z.string()
+          .length(16, 'Il codice fiscale deve essere di 16 caratteri')
+          .regex(/^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/, 'Formato codice fiscale non valido')
+          .transform(val => val.toUpperCase()),
+        dateOfBirth: z.date(),
+        phone: z.string().min(9, 'Telefono troppo corto').max(20),
+        address: z.string().min(5, "Indirizzo troppo corto").max(200),
+        city: z.string().min(2, 'Città troppo corta').max(100),
+        province: z.string()
+          .length(2, 'La provincia deve essere di 2 lettere')
+          .transform(val => val.toUpperCase())
+          .refine(val => PROVINCE_ITALIANE.includes(val as typeof PROVINCE_ITALIANE[number]), 'Sigla provincia non valida'),
+        postalCode: z.string()
+          .length(5, 'Il CAP deve essere di 5 cifre')
+          .regex(/^\d{5}$/, 'Il CAP deve contenere solo numeri'),
+        birthPlace: z.string().max(100).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { userId, ...profileData } = input;
+
+      const user = await ctx.prisma.user.findUnique({
+        where: { id: userId },
+        include: { student: true, collaborator: true },
+      });
+
+      if (!user) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Utente non trovato' });
+      }
+
+      if ((user as any).student) {
+        await ctx.prisma.student.update({
+          where: { userId },
+          data: {
+            fiscalCode: profileData.fiscalCode,
+            dateOfBirth: profileData.dateOfBirth,
+            phone: profileData.phone,
+            address: profileData.address,
+            city: profileData.city,
+            province: profileData.province,
+            postalCode: profileData.postalCode,
+            birthPlace: profileData.birthPlace ?? null,
+          },
+        });
+      } else if ((user as any).collaborator) {
+        await (ctx.prisma as any).collaborator.update({
+          where: { userId },
+          data: {
+            fiscalCode: profileData.fiscalCode,
+            dateOfBirth: profileData.dateOfBirth,
+            phone: profileData.phone,
+            address: profileData.address,
+            city: profileData.city,
+            province: profileData.province,
+            postalCode: profileData.postalCode,
+            birthPlace: profileData.birthPlace ?? null,
+          },
+        });
+      } else {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nessun profilo trovato per questo utente' });
+      }
+
+      revalidateTag(CACHE_TAGS.USERS, {});
+      return { success: true };
     }),
 });

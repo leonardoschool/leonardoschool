@@ -2,6 +2,7 @@
 
 import { keepPreviousData } from '@tanstack/react-query';
 import { useState, useMemo, useEffect } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
@@ -80,26 +81,41 @@ export default function AdminQuestionsContent() {
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
   const utils = trpc.useUtils();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
 
-  // Filters state (multi-select arrays)
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [subjectIds, setSubjectIds] = useState<string[]>([]);
-  const [topicIds, setTopicIds] = useState<string[]>([]);
-  const [types, setTypes] = useState<string[]>([]);
-  const [statuses, setStatuses] = useState<string[]>([]);
-  const [difficulties, setDifficulties] = useState<string[]>([]);
-  const [languages, setLanguages] = useState<string[]>([]);
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [selectedYears, setSelectedYears] = useState<string[]>([]);
-  const [selectedSources, setSelectedSources] = useState<string[]>([]);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  // Helper to read comma-separated array from URL params
+  const getParamArray = (key: string): string[] => {
+    const val = searchParams.get(key);
+    return val ? val.split(',').filter(Boolean) : [];
+  };
+
+  // Filters state — initialized from URL so they survive page navigation
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
+  const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('q') ?? '');
+  const [subjectIds, setSubjectIds] = useState<string[]>(() => getParamArray('subjects'));
+  const [topicIds, setTopicIds] = useState<string[]>(() => getParamArray('topics'));
+  const [types, setTypes] = useState<string[]>(() => getParamArray('types'));
+  const [statuses, setStatuses] = useState<string[]>(() => getParamArray('statuses'));
+  const [difficulties, setDifficulties] = useState<string[]>(() => getParamArray('difficulties'));
+  const [languages, setLanguages] = useState<string[]>(() => getParamArray('languages'));
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>(() => getParamArray('tags'));
+  const [selectedYears, setSelectedYears] = useState<string[]>(() => getParamArray('years'));
+  const [selectedSources, setSelectedSources] = useState<string[]>(() => getParamArray('sources'));
+  const [page, setPage] = useState(() => {
+    const p = Number(searchParams.get('page'));
+    return p > 0 ? p : 1;
+  });
+  const [pageSize, setPageSize] = useState(() => {
+    const s = Number(searchParams.get('size'));
+    return s > 0 ? s : 50;
+  });
 
   // Sorting state — default: alphabetical by question text
   type SortByOption = 'text' | 'year' | 'source' | 'type' | 'language' | 'status' | 'difficulty' | 'subject' | 'tag';
-  const [sortBy, setSortBy] = useState<SortByOption>('text');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortBy, setSortBy] = useState<SortByOption>(() => (searchParams.get('sortBy') as SortByOption) ?? 'text');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => (searchParams.get('sortOrder') as 'asc' | 'desc') ?? 'asc');
 
   const handleSort = (column: SortByOption) => {
     if (sortBy === column) {
@@ -150,6 +166,28 @@ export default function AdminQuestionsContent() {
 
     return () => window.clearTimeout(timeoutId);
   }, [search]);
+
+  // Sync all filter state to URL so they survive navigation to/from edit pages
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set('q', debouncedSearch);
+    if (subjectIds.length) params.set('subjects', subjectIds.join(','));
+    if (topicIds.length) params.set('topics', topicIds.join(','));
+    if (types.length) params.set('types', types.join(','));
+    if (statuses.length) params.set('statuses', statuses.join(','));
+    if (difficulties.length) params.set('difficulties', difficulties.join(','));
+    if (languages.length) params.set('languages', languages.join(','));
+    if (selectedTagIds.length) params.set('tags', selectedTagIds.join(','));
+    if (selectedYears.length) params.set('years', selectedYears.join(','));
+    if (selectedSources.length) params.set('sources', selectedSources.join(','));
+    if (page > 1) params.set('page', String(page));
+    if (pageSize !== 50) params.set('size', String(pageSize));
+    if (sortBy !== 'text') params.set('sortBy', sortBy);
+    if (sortOrder !== 'asc') params.set('sortOrder', sortOrder);
+
+    const query = params.toString();
+    router.replace(`${pathname}${query ? `?${query}` : ''}`, { scroll: false });
+  }, [debouncedSearch, subjectIds, topicIds, types, statuses, difficulties, languages, selectedTagIds, selectedYears, selectedSources, page, pageSize, sortBy, sortOrder]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close bulk subject dropdown on click outside
   useEffect(() => {

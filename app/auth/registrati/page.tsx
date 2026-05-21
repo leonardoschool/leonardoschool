@@ -28,7 +28,8 @@ export default function RegisterPage() {
   const { showError, showSuccess } = useToast();
 
   const [formData, setFormData] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -125,6 +126,16 @@ export default function RegisterPage() {
     setError('');
 
     // Validation
+    if (!formData.firstName.trim()) {
+      setError('Inserisci il tuo nome');
+      return;
+    }
+
+    if (!formData.lastName.trim()) {
+      setError('Inserisci il tuo cognome');
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
       setError('Le password non coincidono');
       return;
@@ -149,13 +160,15 @@ export default function RegisterPage() {
       }
 
       // 3. Normalize data before submission
-      const normalizedName = normalizeName(formData.name);
-      
+      const normalizedFirst = normalizeName(formData.firstName);
+      const normalizedLast = normalizeName(formData.lastName);
+      const fullName = `${normalizedFirst} ${normalizedLast}`;
+
       // 4. Register with Firebase
       const userCredential = await firebaseAuth.register(
         formData.email,
         formData.password,
-        normalizedName
+        fullName
       );
 
       // 5. Send email verification
@@ -165,7 +178,7 @@ export default function RegisterPage() {
       await syncUserMutation.mutateAsync({
         firebaseUid: userCredential.user.uid,
         email: formData.email,
-        name: normalizedName,
+        name: fullName,
         role: formData.role,
       });
 
@@ -249,19 +262,35 @@ export default function RegisterPage() {
           />
         </div>
 
-        <div>
-          <label htmlFor="name" className={`block text-sm font-medium ${colors.text.secondary}`}>
-            Nome completo
-          </label>
-          <input
-            id="name"
-            type="text"
-            required
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            className={`mt-1 block w-full px-3 py-2 ${colors.effects.cardBackground} border ${colors.neutral.borderPrimary} rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[${colors.primary.main}]`}
-            placeholder="Mario Rossi"
-          />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="firstName" className={`block text-sm font-medium ${colors.text.secondary}`}>
+              Nome
+            </label>
+            <input
+              id="firstName"
+              type="text"
+              required
+              value={formData.firstName}
+              onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+              className={`mt-1 block w-full px-3 py-2 ${colors.effects.cardBackground} border ${colors.neutral.borderPrimary} rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[${colors.primary.main}]`}
+              placeholder="Mario"
+            />
+          </div>
+          <div>
+            <label htmlFor="lastName" className={`block text-sm font-medium ${colors.text.secondary}`}>
+              Cognome
+            </label>
+            <input
+              id="lastName"
+              type="text"
+              required
+              value={formData.lastName}
+              onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+              className={`mt-1 block w-full px-3 py-2 ${colors.effects.cardBackground} border ${colors.neutral.borderPrimary} rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[${colors.primary.main}]`}
+              placeholder="Rossi"
+            />
+          </div>
         </div>
 
         <div>
