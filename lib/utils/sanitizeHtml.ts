@@ -79,14 +79,22 @@ function sanitizeAttrsString(tag: string, attrsStr: string): string {
   if (!allowedAttrs) return '';
 
   const result: string[] = [];
-  // Match: attrName or attrName="value" or attrName='value' or attrName=value
-  const attrRe = /\s*([\w-]+)\s*(?:=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*)))?/g;
+  // Non-backtracking: match attr=value pairs or bare attr names
+  const attrRe = /[\w-]+=(?:"[^"]*"|'[^']*'|[^\s>]+)|[\w-]+/g;
   let m: RegExpExecArray | null;
 
   while ((m = attrRe.exec(attrsStr)) !== null) {
-    const name = m[1]?.toLowerCase();
-    if (!name) continue;
-    const value = m[2] ?? m[3] ?? m[4] ?? '';
+    const eqIdx = m[0].indexOf('=');
+    let name: string;
+    let value: string;
+    if (eqIdx === -1) {
+      name = m[0].toLowerCase();
+      value = '';
+    } else {
+      name = m[0].slice(0, eqIdx).toLowerCase();
+      const raw = m[0].slice(eqIdx + 1);
+      value = raw[0] === '"' || raw[0] === "'" ? raw.slice(1, -1) : raw;
+    }
     const sanitized = sanitizeAttribute(tag, name, value);
     if (sanitized !== null) {
       result.push(`${name}="${sanitized}"`);
