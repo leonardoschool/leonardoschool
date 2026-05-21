@@ -1,4 +1,4 @@
-import DOMPurify from 'isomorphic-dompurify';
+// Pure-JS HTML sanitizer — no jsdom/DOMPurify to avoid ESM conflicts in Vercel serverless
 
 export const ALLOWED_TAGS = new Set([
   'p', 'br', 'b', 'i', 'u', 'strong', 'em', 'span', 'div',
@@ -29,6 +29,12 @@ const DANGEROUS_PROTOCOLS = [
 
 const DANGEROUS_CSS_PROPERTIES = ['behavior', 'expression', '-moz-binding'];
 const DANGEROUS_CSS_PROTOCOLS = ['javascript' + ':', 'vbscript' + ':'];
+
+// Tags whose inner content must be removed entirely (not just the tag itself)
+const STRIP_WITH_CONTENT = [
+  'script', 'style', 'svg', 'math', 'template',
+  'form', 'input', 'button', 'select', 'textarea',
+];
 
 function sanitizeStyle(style: string): string {
   return style
@@ -67,22 +73,57 @@ export function sanitizeAttribute(tagName: string, attrName: string, attrValue: 
   return attrValue;
 }
 
+function sanitizeAttrsString(tag: string, attrsStr: string): string {
+  const allowedAttrs = ALLOWED_ATTRIBUTES[tag];
+  if (!allowedAttrs) return '';
+
+  const result: string[] = [];
+  // Match: attrName or attrName="value" or attrName='value' or attrName=value
+  const attrRe = /\s*([\w-]+)\s*(?:=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*)))?/g;
+  let m: RegExpExecArray | null;
+
+  while ((m = attrRe.exec(attrsStr)) !== null) {
+    const name = m[1]?.toLowerCase();
+    if (!name) continue;
+    const value = m[2] ?? m[3] ?? m[4] ?? '';
+    const sanitized = sanitizeAttribute(tag, name, value);
+    if (sanitized !== null) {
+      result.push(`${name}="${sanitized}"`);
+    }
+  }
+
+  return result.length ? ' ' + result.join(' ') : '';
+}
+
 export function sanitizeHtml(html: string | null | undefined): string {
   if (!html) {
     return '';
   }
 
-  return DOMPurify.sanitize(String(html), {
-    ALLOWED_TAGS: Array.from(ALLOWED_TAGS),
-    ALLOWED_ATTR: [
-      'href', 'title', 'target', 'rel',
-      'class', 'style',
-      'border', 'cellpadding', 'cellspacing', 'colspan', 'rowspan',
-      'src', 'alt', 'width', 'height',
-    ],
-    ADD_ATTR: ['target'],
-    FORBID_CONTENTS: ['script', 'style', 'button', 'textarea', 'select', 'form', 'input', 'template', 'math', 'svg'],
-  });
+  let result = String(html);
+
+  // Strip dangerous block elements along with all their inner content
+  for (const tag of STRIP_WITH_CONTENT) {
+    result = result.replace(
+      new RegExp(`<${tag}(\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, 'gi'),
+      ''
+    );
+    result = result.replace(new RegExp(`<${tag}(\\s[^>]*)?\\/?>`, 'gi'), '');
+  }
+
+  // Sanitize all remaining tags — keep allowed ones, strip everything else
+  result = result.replace(
+    /<(\/?)([a-zA-Z][a-zA-Z0-9]*)(\s[^>]*)?\/?>/g,
+    (_, slash, rawTag, attrs) => {
+      const tag = rawTag.toLowerCase();
+      if (!ALLOWED_TAGS.has(tag)) return '';
+      if (slash) return `</${tag}>`;
+      const safeAttrs = attrs ? sanitizeAttrsString(tag, attrs) : '';
+      return `<${tag}${safeAttrs}>`;
+    }
+  );
+
+  return result;
 }
 
 export function stripHtml(html: string | null | undefined): string {
