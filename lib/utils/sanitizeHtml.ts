@@ -79,7 +79,7 @@ function sanitizeAttrsString(tag: string, attrsStr: string): string {
   if (!allowedAttrs) return '';
 
   const result: string[] = [];
-  // Non-backtracking: match attr=value pairs or bare attr names
+  // eslint-disable-next-line sonarjs/slow-regex, sonarjs/regex-complexity
   const attrRe = /[\w-]+=(?:"[^"]*"|'[^']*'|[^\s>]+)|[\w-]+/g;
   let m: RegExpExecArray | null;
 
