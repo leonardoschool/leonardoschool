@@ -56,7 +56,8 @@ export function sanitizeAttribute(tagName: string, attrName: string, attrValue: 
   }
 
   if (attrName.toLowerCase() === 'href') {
-    const lowerUrl = attrValue.toLowerCase().trim();
+    // Strip all whitespace before checking protocol (catches "javascript :alert(1)")
+    const lowerUrl = attrValue.toLowerCase().replace(/\s/g, '');
     if (DANGEROUS_PROTOCOLS.some(p => lowerUrl.startsWith(p))) {
       return '#';
     }
@@ -101,6 +102,21 @@ export function sanitizeHtml(html: string | null | undefined): string {
   }
 
   let result = String(html);
+
+  // Remove XML processing instructions: <?...?>
+  result = result.replace(/<\?[\s\S]*?\?>/g, '');
+
+  // Remove DOCTYPE declarations: <!DOCTYPE...>
+  result = result.replace(/<!DOCTYPE[^>]*>/gi, '');
+
+  // Remove HTML comments (including conditional comments): <!-- ... -->
+  result = result.replace(/<!--[\s\S]*?-->/g, '');
+
+  // Remove CDATA sections: <![CDATA[...]]>
+  result = result.replace(/<!\[CDATA\[[\s\S]*?\]\]>/gi, '');
+
+  // Strip remaining <! constructs (e.g. stray <![ )
+  result = result.replace(/<![\s\S]*?>/g, '');
 
   // Strip dangerous block elements along with all their inner content
   for (const tag of STRIP_WITH_CONTENT) {
