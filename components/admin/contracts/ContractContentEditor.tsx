@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { colors } from '@/lib/theme/colors';
 import { escapeHtml } from '@/lib/utils/escapeHtml';
-import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
+import { sanitizeHtml, cleanContractHtml } from '@/lib/utils/sanitizeHtml';
 import NumericInput from '@/components/ui/NumericInput';
 import type { ContractPlaceholder } from '@/lib/constants/contractPlaceholders';
 import { ContractContentEditorModeSwitch } from './ContractContentEditorModeSwitch';
@@ -60,6 +60,51 @@ interface ContractContentEditorProps {
   error?: string;
   minRows?: number;
   onBlur?: () => void;
+}
+
+const BLOCK_TAGS = /^(div|p|h[1-6]|ul|ol|li|table|thead|tbody|tfoot|tr|th|td|blockquote|pre|hr|br|section|article|header|footer|figure|figcaption)$/i;
+const VOID_TAGS = /^(br|hr|img|input|meta|link)$/i;
+
+function formatHtml(html: string): string {
+  const cleaned = cleanContractHtml(html);
+  const tokens = cleaned.split(/(<[^>]+>)/);
+  let out = '';
+  let depth = 0;
+  const pad = (d: number) => '  '.repeat(Math.max(0, d));
+
+  for (const tok of tokens) {
+    if (!tok) continue;
+    if (!tok.startsWith('<')) {
+      const text = tok.replace(/\s+/g, ' ');
+      if (text.trim()) out += text;
+      continue;
+    }
+    const closing = tok.match(/^<\/([a-zA-Z][a-zA-Z0-9]*)/);
+    const opening = tok.match(/^<([a-zA-Z][a-zA-Z0-9]*)/);
+    if (closing) {
+      const tag = closing[1];
+      if (BLOCK_TAGS.test(tag)) {
+        depth = Math.max(0, depth - 1);
+        if (!out.endsWith('\n')) out += '\n';
+        out += `${pad(depth)}${tok}\n`;
+      } else {
+        out += tok;
+      }
+    } else if (opening) {
+      const tag = opening[1];
+      const selfClosing = tok.endsWith('/>') || VOID_TAGS.test(tag);
+      if (BLOCK_TAGS.test(tag)) {
+        if (!out.endsWith('\n')) out += '\n';
+        out += `${pad(depth)}${tok}\n`;
+        if (!selfClosing) depth++;
+      } else {
+        out += tok;
+      }
+    } else {
+      out += tok;
+    }
+  }
+  return out.trim();
 }
 
 const initialToolbarState: ToolbarState = { block: 'p', bold: false, italic: false, underline: false, unorderedList: false, orderedList: false };
@@ -359,7 +404,13 @@ export function ContractContentEditor({
         <label className={`block text-sm font-medium ${colors.text.primary}`}>
           {label} {required && <span className={colors.status.error.text}>*</span>}
         </label>
-        <ContractContentEditorModeSwitch mode={mode} onModeChange={setMode} />
+        <ContractContentEditorModeSwitch
+          mode={mode}
+          onModeChange={(newMode) => {
+            if (newMode === 'html') onChange(formatHtml(value));
+            setMode(newMode);
+          }}
+        />
       </div>
 
       {mode === 'visual' && (

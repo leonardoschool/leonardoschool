@@ -10,7 +10,7 @@ import { Portal } from '@/components/ui/Portal';
 import ContractContentEditor from '@/components/admin/contracts/ContractContentEditor';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
-import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
+import { sanitizeHtml, cleanContractHtml } from '@/lib/utils/sanitizeHtml';
 import { uploadContractImages } from '@/lib/utils/contractImageUpload';
 import { getContractPlaceholders } from '@/lib/constants/contractPlaceholders';
 import CustomSelect from '@/components/ui/CustomSelect';
@@ -131,7 +131,7 @@ export default function AdminContrattiContent() {
     setFormData({
       name: template.name,
       description: template.description || '',
-      content: template.content,
+      content: cleanContractHtml(template.content),
       price: template.price?.toString() || '',
       duration: template.duration || '',
       targetRole: template.targetRole || 'STUDENT',
@@ -193,7 +193,7 @@ export default function AdminContrattiContent() {
       return;
     }
 
-    const content = await uploadContractImages(formData.content);
+    const content = cleanContractHtml(await uploadContractImages(formData.content));
     const data = {
       name: formData.name.trim(),
       description: formData.description.trim() || undefined,

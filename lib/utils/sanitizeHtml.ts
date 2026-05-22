@@ -40,7 +40,11 @@ function sanitizeStyle(style: string): string {
   return style
     .split(';')
     .filter(prop => {
-      const lowerProp = prop.toLowerCase().trim();
+      const trimmed = prop.trim();
+      if (!trimmed) return false;
+      // Strip CSS custom properties (e.g. --tw-* variables injected by Tailwind)
+      if (trimmed.startsWith('--')) return false;
+      const lowerProp = trimmed.toLowerCase();
       if (DANGEROUS_CSS_PROPERTIES.some(p => lowerProp.includes(p))) return false;
       if (DANGEROUS_CSS_PROTOCOLS.some(p => lowerProp.includes(p))) return false;
       return true;
@@ -148,6 +152,23 @@ export function sanitizeHtml(html: string | null | undefined): string {
   );
 
   return result;
+}
+
+/**
+ * Strip Tailwind CSS custom properties (--tw-*) from inline style attributes.
+ * Call this before saving editor content to DB to avoid polluting stored HTML.
+ */
+export function cleanContractHtml(html: string): string {
+  if (!html) return '';
+  return html.replace(/style="([^"]*)"/g, (_, styleValue: string) => {
+    const cleaned = styleValue
+      .split(';')
+      .filter(p => p.trim() && !p.trim().startsWith('--'))
+      .join(';')
+      .trim()
+      .replace(/;$/, '');
+    return cleaned ? `style="${cleaned}"` : '';
+  });
 }
 
 export function stripHtml(html: string | null | undefined): string {
