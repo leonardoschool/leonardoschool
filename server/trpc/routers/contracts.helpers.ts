@@ -241,7 +241,7 @@ export function generateContractContent(
 ): string {
   const today = new Date();
   const formattedDate = today.toLocaleDateString('it-IT', {
-    day: '2-digit',
+    day: 'numeric',
     month: 'long',
     year: 'numeric',
   });

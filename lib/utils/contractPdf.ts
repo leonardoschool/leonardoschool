@@ -27,8 +27,18 @@ export function generateContractPdf(contract: ContractPdfData): void {
   const contractName = contract.template.name.replace(/\s+/g, '_');
   const fileName = `Contratto_${contractName}_${studentName}`;
   
-  // Sanitize content before generating PDF
-  const sanitizedContent = sanitizeHtml(contract.contentSnapshot);
+  // Replace {{FIRMA}} with a professional "Firma: ___ [signature image on line]" block
+  const signatureBlock = contract.signatureData
+    ? `<div style="margin:20px 0;page-break-inside:avoid;">
+        <strong style="vertical-align:bottom;">Firma:</strong>&nbsp;<span style="display:inline-block;vertical-align:bottom;min-width:300px;border-bottom:1px solid #333;">
+          <img src="${contract.signatureData}" alt="Firma" style="display:block;height:60px;max-width:300px;background:white;" />
+        </span>
+      </div>`
+    : `<div style="margin:20px 0;page-break-inside:avoid;">
+        <strong>Firma:</strong>&nbsp;<span style="display:inline-block;border-bottom:1px solid #333;min-width:300px;">&nbsp;</span>
+      </div>`;
+  const contentWithSignature = (contract.contentSnapshot ?? '').replaceAll('{{FIRMA}}', signatureBlock);
+  const sanitizedContent = sanitizeHtml(contentWithSignature);
   
   const htmlContent = `
     <!DOCTYPE html>
@@ -108,12 +118,21 @@ export function generateContractPdf(contract: ContractPdfData): void {
           margin-top: 50px;
           page-break-inside: avoid;
         }
-        .signature-image {
-          max-width: 200px;
-          height: auto;
-          border-bottom: 1px solid #333;
+        .signature-field {
+          display: inline-block;
+          min-width: 320px;
+          margin: 8px 0 4px;
+        }
+        .signature-field img {
+          display: block;
+          max-width: 320px;
+          height: 80px;
+          object-fit: contain;
           background: white;
-          padding: 10px;
+        }
+        .signature-line {
+          border-bottom: 1px solid #333;
+          width: 320px;
         }
         .meta-info {
           background: #f5f5f5;
@@ -157,22 +176,26 @@ export function generateContractPdf(contract: ContractPdfData): void {
       <div class="contract-content">
         ${sanitizedContent}
       </div>
+      ${!(contract.contentSnapshot ?? '').includes('{{FIRMA}}') ? `
       <div class="signature-section">
         <p><strong>Firma${contract.student ? ' dello studente' : ''}:</strong></p>
-        ${contract.signatureData 
-          ? `<img src="${contract.signatureData}" alt="Firma" class="signature-image" />` 
-          : '<p>-</p>'
-        }
-        ${contract.student 
-          ? `<p><strong>Nome:</strong> ${contract.student.user.name}</p>` 
+        <div class="signature-field">
+          ${contract.signatureData
+            ? `<img src="${contract.signatureData}" alt="Firma" />`
+            : '<div style="height:80px;"></div>'
+          }
+          <div class="signature-line"></div>
+        </div>
+        ${contract.student
+          ? `<p style="margin-top:8px;"><strong>Nome:</strong> ${contract.student.user.name}</p>`
           : ''
         }
         <p><strong>Data firma:</strong> ${
-          contract.signedAt 
-            ? new Date(contract.signedAt).toLocaleString('it-IT') 
+          contract.signedAt
+            ? new Date(contract.signedAt).toLocaleString('it-IT')
             : '-'
         }</p>
-      </div>
+      </div>` : ''}
       <div class="meta-info">
         <p><strong>ID Contratto:</strong> ${contract.id}</p>
         <p><strong>Data assegnazione:</strong> ${new Date(contract.assignedAt).toLocaleString('it-IT')}</p>

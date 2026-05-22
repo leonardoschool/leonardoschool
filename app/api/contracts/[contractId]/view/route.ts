@@ -376,9 +376,19 @@ export async function GET(
     
     <div class="content">
       <h2>Contenuto del Contratto</h2>
-      <div class="contract-text">${sanitizeHtml(contract.contentSnapshot) || 'Contenuto non disponibile'}</div>
-      
-      ${contract.status === 'SIGNED' && contract.signedAt ? `
+      <div class="contract-text">${(() => {
+        const snapshot = contract.contentSnapshot ?? '';
+        const hasInlineFirma = snapshot.includes('{{FIRMA}}');
+        const signatureBlock = safeSignatureData
+          ? `<div style="margin:20px 0;page-break-inside:avoid;"><strong style="vertical-align:bottom;">Firma:</strong>&nbsp;<span style="display:inline-block;vertical-align:bottom;min-width:300px;border-bottom:1px solid #333;"><img src="${safeSignatureData}" alt="Firma" style="display:block;height:60px;max-width:300px;background:white;" /></span></div>`
+          : `<div style="margin:20px 0;"><strong>Firma:</strong>&nbsp;<span style="display:inline-block;border-bottom:1px solid #333;min-width:300px;">&nbsp;</span></div>`;
+        const contentWithSignature = hasInlineFirma
+          ? snapshot.replaceAll('{{FIRMA}}', signatureBlock)
+          : snapshot;
+        return sanitizeHtml(contentWithSignature) || 'Contenuto non disponibile';
+      })()}</div>
+
+      ${contract.status === 'SIGNED' && contract.signedAt && !(contract.contentSnapshot ?? '').includes('{{FIRMA}}') ? `
       <div class="signature-section">
         <h3>✓ Contratto Firmato</h3>
         <div class="signature-info">

@@ -407,6 +407,41 @@ export default function ContractSignPage() {
   };
   const daysRemaining = calculateDaysRemaining();
 
+  // Split contract content at {{FIRMA}} placeholder if present
+  const FIRMA_TAG = '{{FIRMA}}';
+  const hasInlineSignature = (contract.contentSnapshot ?? '').includes(FIRMA_TAG);
+  const splitIdx = hasInlineSignature ? contract.contentSnapshot.indexOf(FIRMA_TAG) : -1;
+  const rawBefore = splitIdx >= 0
+    ? contract.contentSnapshot.slice(0, splitIdx)
+    : (contract.contentSnapshot ?? '');
+  const rawAfter = splitIdx >= 0
+    ? contract.contentSnapshot.slice(splitIdx + FIRMA_TAG.length)
+    : '';
+
+  // Inline signature canvas JSX (used both when inline and at the bottom)
+  const signatureCanvas = (
+    <div className="relative">
+      <canvas
+        ref={canvasRef}
+        width={600}
+        height={200}
+        className={`w-full h-[150px] border-2 border-dashed rounded-xl ${colors.border.secondary} bg-white cursor-crosshair touch-none`}
+        onMouseDown={startDrawing}
+        onMouseMove={draw}
+        onMouseUp={stopDrawing}
+        onMouseLeave={stopDrawing}
+        onTouchStart={startDrawing}
+        onTouchMove={draw}
+        onTouchEnd={stopDrawing}
+      />
+      {!hasSignature && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <p className={`${colors.text.muted} text-sm`}>Disegna qui la tua firma</p>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className={`min-h-screen ${colors.background.primary} py-8 px-4`}>
       <div className="max-w-4xl mx-auto">
@@ -434,17 +469,14 @@ export default function ContractSignPage() {
                 </p>
               </div>
             </div>
-            {/* Only show download button if canDownload is true */}
-            {contract.canDownload && (
-              <button
-                onClick={handleDownloadPDF}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg ${colors.background.secondary} ${colors.text.primary} hover:${colors.background.tertiary} border ${colors.border.primary} transition-colors`}
-                title="Scarica contratto in PDF"
-              >
-                <Download className="w-4 h-4" />
-                <span className="hidden sm:inline">Scarica PDF</span>
-              </button>
-            )}
+            <button
+              onClick={handleDownloadPDF}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${colors.background.secondary} ${colors.text.primary} hover:${colors.background.tertiary} border ${colors.border.primary} transition-colors`}
+              title="Scarica contratto in PDF"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Scarica PDF</span>
+            </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -476,30 +508,68 @@ export default function ContractSignPage() {
 
         {/* Contract Content */}
         <div className={`${colors.background.card} rounded-2xl shadow-lg p-6 mb-6`}>
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className={`w-full flex items-center justify-between text-left ${colors.text.primary}`}
-          >
-            <h3 className="text-lg font-semibold">Testo del Contratto</h3>
-            {isExpanded ? (
-              <ChevronUp className="w-5 h-5" />
-            ) : (
-              <ChevronDown className="w-5 h-5" />
-            )}
-          </button>
-          
-          <div 
-            className={`mt-4 transition-all duration-300 overflow-hidden ${
-              isExpanded ? 'max-h-[2000px]' : 'max-h-48'
+          {/* Collapse toggle — hidden when inline signature (contract must stay fully visible) */}
+          {!hasInlineSignature && (
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className={`w-full flex items-center justify-between text-left ${colors.text.primary}`}
+            >
+              <h3 className="text-lg font-semibold">Testo del Contratto</h3>
+              {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </button>
+          )}
+          {hasInlineSignature && (
+            <h3 className={`text-lg font-semibold mb-4 ${colors.text.primary}`}>Testo del Contratto</h3>
+          )}
+
+          <div
+            className={`${hasInlineSignature ? '' : 'mt-4'} transition-all duration-300 overflow-hidden ${
+              hasInlineSignature || isExpanded ? 'max-h-none' : 'max-h-48'
             }`}
           >
-            <div 
-              className={`prose prose-sm max-w-none ${colors.text.primary}`}
-              dangerouslySetInnerHTML={{ __html: sanitizeHtml(contract.contentSnapshot) }}
-            />
+            {hasInlineSignature ? (
+              <>
+                {/* Content before {{FIRMA}} */}
+                <div
+                  className={`prose prose-sm max-w-none ${colors.text.primary}`}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(rawBefore) }}
+                />
+
+                {/* Inline signature canvas */}
+                <div className={`my-6 p-4 rounded-xl border-2 border-dashed ${colors.border.secondary}`}>
+                  <p className={`text-sm font-semibold mb-3 flex items-center gap-2 ${colors.text.primary}`}>
+                    <Pen className="w-4 h-4" />
+                    Firma
+                  </p>
+                  {signatureCanvas}
+                  <div className="flex justify-end mt-2">
+                    <button
+                      onClick={clearSignature}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm ${colors.background.secondary} ${colors.text.primary} transition-colors`}
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Cancella firma
+                    </button>
+                  </div>
+                </div>
+
+                {/* Content after {{FIRMA}} */}
+                {rawAfter && (
+                  <div
+                    className={`prose prose-sm max-w-none ${colors.text.primary}`}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(rawAfter) }}
+                  />
+                )}
+              </>
+            ) : (
+              <div
+                className={`prose prose-sm max-w-none ${colors.text.primary}`}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(contract.contentSnapshot) }}
+              />
+            )}
           </div>
 
-          {!isExpanded && (
+          {!hasInlineSignature && !isExpanded && (
             <div className={`text-center mt-4 pt-4 border-t ${colors.border.primary}`}>
               <button
                 onClick={() => setIsExpanded(true)}
@@ -511,63 +581,41 @@ export default function ContractSignPage() {
           )}
         </div>
 
-        {/* Signature Section */}
-        <div className={`${colors.background.card} rounded-2xl shadow-lg p-6 mb-6`}>
-          <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${colors.text.primary}`}>
-            <Pen className="w-5 h-5" />
-            Firma
-          </h3>
-
-          {/* Signature Canvas */}
-          <div className="relative">
-            <canvas
-              ref={canvasRef}
-              width={600}
-              height={200}
-              className={`w-full h-[150px] border-2 border-dashed rounded-xl ${colors.border.secondary} bg-white cursor-crosshair touch-none`}
-              onMouseDown={startDrawing}
-              onMouseMove={draw}
-              onMouseUp={stopDrawing}
-              onMouseLeave={stopDrawing}
-              onTouchStart={startDrawing}
-              onTouchMove={draw}
-              onTouchEnd={stopDrawing}
-            />
-            {!hasSignature && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <p className={`${colors.text.muted} text-sm`}>
-                  Disegna qui la tua firma
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="flex justify-end mt-3">
-            <button
-              onClick={clearSignature}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm ${colors.background.secondary} ${colors.text.primary} hover:${colors.background.tertiary} transition-colors`}
-            >
-              <RotateCcw className="w-4 h-4" />
-              Cancella firma
-            </button>
-          </div>
-
-          {/* Terms Checkbox */}
-          <div className={`mt-6 p-4 rounded-xl ${colors.background.secondary}`}>
-            <div className="flex items-start gap-3">
-              <Checkbox
-                checked={acceptedTerms}
-                onChange={(e) => setAcceptedTerms(e.target.checked)}
-              />
-              <label 
-                className={`text-sm ${colors.text.secondary} flex-1 cursor-pointer select-none`}
-                onClick={() => setAcceptedTerms(!acceptedTerms)}
+        {/* Signature Section — shown only when NO inline {{FIRMA}} in template */}
+        {!hasInlineSignature && (
+          <div className={`${colors.background.card} rounded-2xl shadow-lg p-6 mb-6`}>
+            <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${colors.text.primary}`}>
+              <Pen className="w-5 h-5" />
+              Firma
+            </h3>
+            {signatureCanvas}
+            <div className="flex justify-end mt-3">
+              <button
+                onClick={clearSignature}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm ${colors.background.secondary} ${colors.text.primary} hover:${colors.background.tertiary} transition-colors`}
               >
-                Dichiaro di aver letto e compreso integralmente il contenuto del presente contratto 
-                e di accettare tutti i termini e le condizioni in esso contenuti. 
-                La firma digitale apposta ha valore legale ai sensi del D.Lgs. 82/2005.
-              </label>
+                <RotateCcw className="w-4 h-4" />
+                Cancella firma
+              </button>
             </div>
+          </div>
+        )}
+
+        {/* Terms Checkbox */}
+        <div className={`${colors.background.card} rounded-2xl shadow-lg p-6 mb-6`}>
+          <div className="flex items-start gap-3">
+            <Checkbox
+              checked={acceptedTerms}
+              onChange={(e) => setAcceptedTerms(e.target.checked)}
+            />
+            <label
+              className={`text-sm ${colors.text.secondary} flex-1 cursor-pointer select-none`}
+              onClick={() => setAcceptedTerms(!acceptedTerms)}
+            >
+              Dichiaro di aver letto e compreso integralmente il contenuto del presente contratto
+              e di accettare tutti i termini e le condizioni in esso contenuti.
+              La firma digitale apposta ha valore legale ai sensi del D.Lgs. 82/2005.
+            </label>
           </div>
         </div>
 

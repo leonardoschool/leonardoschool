@@ -17,8 +17,9 @@ export const baseContractPlaceholders: ContractPlaceholder[] = [
   { tag: '{{PROVINCIA}}', desc: 'Sigla provincia' },
   { tag: '{{CAP}}', desc: 'CAP' },
   { tag: '{{INDIRIZZO_COMPLETO}}', desc: 'Indirizzo completo' },
-  { tag: '{{DATA_ODIERNA}}', desc: 'Data odierna' },
-  { tag: '{{ANNO}}', desc: 'Anno corrente' },
+  { tag: '{{DATA_ODIERNA}}', desc: 'Data odierna (es: 21 maggio 2026)' },
+  { tag: '{{ANNO}}', desc: 'Solo anno corrente (es: 2026)' },
+  { tag: '{{FIRMA}}', desc: 'Riquadro firma (canvas interattivo per utente/collaboratore)' },
 ];
 
 export const collaboratorContractPlaceholders: ContractPlaceholder[] = [

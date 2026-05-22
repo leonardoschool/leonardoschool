@@ -567,7 +567,9 @@ export function ContractContentEditor({
                 style={{ minHeight: `${minRows * 1.75}rem` }}
                 className={`contract-rich-editor max-h-[34rem] overflow-auto px-4 py-4 text-sm leading-relaxed ${colors.background.input} ${colors.text.primary}`}
               >
-                <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(value) }} />
+                <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(
+                  value.replaceAll('{{FIRMA}}', '<div style="display:inline-flex;align-items:center;justify-content:center;width:220px;height:80px;border:2px dashed #8B1A1A;border-radius:6px;background:#fdf5f5;color:#8B1A1A;font-size:12px;font-style:italic;margin:8px 0;">[ Riquadro Firma ]</div>')
+                ) }} />
               </div>
             )}
           </div>
