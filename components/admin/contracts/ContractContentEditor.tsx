@@ -62,15 +62,33 @@ interface ContractContentEditorProps {
   onBlur?: () => void;
 }
 
-const BLOCK_TAGS = /^(div|p|h[1-6]|ul|ol|li|table|thead|tbody|tfoot|tr|th|td|blockquote|pre|hr|br|section|article|header|footer|figure|figcaption)$/i;
-const VOID_TAGS = /^(br|hr|img|input|meta|link)$/i;
+const BLOCK_TAG_SET = new Set(['div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'blockquote', 'pre', 'hr', 'br', 'section', 'article', 'header', 'footer', 'figure', 'figcaption']);
+const VOID_TAG_SET = new Set(['br', 'hr', 'img', 'input', 'meta', 'link']);
+
+function isBlockTag(tag: string) { return BLOCK_TAG_SET.has(tag.toLowerCase()); }
+function isSelfClosing(tok: string, tag: string) { return tok.endsWith('/>') || VOID_TAG_SET.has(tag.toLowerCase()); }
+
+function applyClosingTag(tok: string, tag: string, out: string, depth: number): { out: string; depth: number } {
+  if (!isBlockTag(tag)) return { out: out + tok, depth };
+  const newDepth = Math.max(0, depth - 1);
+  const newOut = (out.endsWith('\n') ? out : out + '\n') + `${'  '.repeat(newDepth)}${tok}\n`;
+  return { out: newOut, depth: newDepth };
+}
+
+function applyOpeningTag(tok: string, tag: string, out: string, depth: number): { out: string; depth: number } {
+  if (!isBlockTag(tag)) return { out: out + tok, depth };
+  const newOut = (out.endsWith('\n') ? out : out + '\n') + `${'  '.repeat(depth)}${tok}\n`;
+  const newDepth = isSelfClosing(tok, tag) ? depth : depth + 1;
+  return { out: newOut, depth: newDepth };
+}
+
+// eslint-disable-next-line sonarjs/slow-regex
+const TAG_SPLIT_RE = /(<[^>]+>)/;
 
 function formatHtml(html: string): string {
-  const cleaned = cleanContractHtml(html);
-  const tokens = cleaned.split(/(<[^>]+>)/);
+  const tokens = cleanContractHtml(html).split(TAG_SPLIT_RE);
   let out = '';
   let depth = 0;
-  const pad = (d: number) => '  '.repeat(Math.max(0, d));
 
   for (const tok of tokens) {
     if (!tok) continue;
@@ -79,27 +97,12 @@ function formatHtml(html: string): string {
       if (text.trim()) out += text;
       continue;
     }
-    const closing = tok.match(/^<\/([a-zA-Z][a-zA-Z0-9]*)/);
-    const opening = tok.match(/^<([a-zA-Z][a-zA-Z0-9]*)/);
-    if (closing) {
-      const tag = closing[1];
-      if (BLOCK_TAGS.test(tag)) {
-        depth = Math.max(0, depth - 1);
-        if (!out.endsWith('\n')) out += '\n';
-        out += `${pad(depth)}${tok}\n`;
-      } else {
-        out += tok;
-      }
-    } else if (opening) {
-      const tag = opening[1];
-      const selfClosing = tok.endsWith('/>') || VOID_TAGS.test(tag);
-      if (BLOCK_TAGS.test(tag)) {
-        if (!out.endsWith('\n')) out += '\n';
-        out += `${pad(depth)}${tok}\n`;
-        if (!selfClosing) depth++;
-      } else {
-        out += tok;
-      }
+    const closingTag = tok.match(/^<\/([a-zA-Z][a-zA-Z0-9]*)/)?.[1];
+    const openingTag = tok.match(/^<([a-zA-Z][a-zA-Z0-9]*)/)?.[1];
+    if (closingTag) {
+      ({ out, depth } = applyClosingTag(tok, closingTag, out, depth));
+    } else if (openingTag) {
+      ({ out, depth } = applyOpeningTag(tok, openingTag, out, depth));
     } else {
       out += tok;
     }
