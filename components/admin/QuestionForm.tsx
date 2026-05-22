@@ -223,6 +223,7 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
             options={form.subjectOptions}
             value={form.subjectId}
             onChange={(val) => { form.setSubjectId(val); form.setTopicId(''); }}
+            searchable
           />
           <CustomSelect
             label="Argomento"
@@ -230,6 +231,7 @@ export default function QuestionForm({ questionId, basePath = '/domande', initia
             value={form.topicId}
             onChange={form.setTopicId}
             disabled={!form.subjectId}
+            searchable
           />
         </div>
 

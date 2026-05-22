@@ -263,7 +263,25 @@ export async function GET(
     }
     .contract-text {
       color: #374151;
-      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+    }
+    /* Force all editor-generated content to fit within the container */
+    .contract-text * {
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+    }
+    .contract-text img {
+      height: auto !important;
+    }
+    .contract-text table {
+      width: 100% !important;
+      table-layout: fixed !important;
+    }
+    .contract-text td,
+    .contract-text th {
+      overflow-wrap: break-word;
+      word-wrap: break-word;
     }
     .signature-section {
       margin-top: 30px;
@@ -288,7 +306,22 @@ export async function GET(
     }
     @media print {
       body { background: white; padding: 0; }
-      .container { box-shadow: none; }
+      .container {
+        box-shadow: none;
+        border-radius: 0;
+        max-width: 100%;
+        width: 100%;
+        overflow: visible;
+      }
+      .contract-text * {
+        max-width: 100% !important;
+        overflow-wrap: break-word !important;
+        word-wrap: break-word !important;
+      }
+      .contract-text table {
+        width: 100% !important;
+        table-layout: fixed !important;
+      }
     }
   </style>
 </head>

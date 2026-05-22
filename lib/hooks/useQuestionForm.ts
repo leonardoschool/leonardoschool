@@ -195,14 +195,17 @@ export function useQuestionForm({ questionId, basePath = '/domande', initialData
   const subjectOptions = useMemo(
     () => [
       { value: '', label: 'Seleziona materia' },
-      ...(subjects?.map((s) => ({ value: s.id, label: s.name })) ?? []),
+      ...(subjects?.map((s) => ({ value: s.id, label: s.name })) ?? [])
+        .sort((a, b) => a.label.localeCompare(b.label, 'it')),
     ],
     [subjects]
   );
   const topicOptions = useMemo(
     () => [
       { value: '', label: 'Seleziona argomento' },
-      ...topics.map((t) => ({ value: t.id, label: t.name })),
+      ...topics
+        .map((t) => ({ value: t.id, label: t.name }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'it')),
     ],
     [topics]
   );

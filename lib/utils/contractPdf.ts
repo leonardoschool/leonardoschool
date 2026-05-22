@@ -48,65 +48,101 @@ export function generateContractPdf(contract: ContractPdfData): void {
           }
         }
 
-        body { 
-          font-family: 'Times New Roman', Times, serif; 
-          line-height: 1.6; 
-          padding: 40px; 
-          max-width: 800px; 
-          margin: 0 auto; 
+        * { box-sizing: border-box; }
+
+        body {
+          font-family: 'Times New Roman', Times, serif;
+          line-height: 1.6;
+          padding: 40px;
+          max-width: 800px;
+          margin: 0 auto;
+          overflow-wrap: break-word;
+          word-wrap: break-word;
         }
-        .header { 
-          text-align: center; 
-          margin-bottom: 30px; 
+        .header {
+          text-align: center;
+          margin-bottom: 30px;
         }
-        .logo-container { 
-          background: #8B1A1A; 
-          padding: 20px 40px; 
-          border-radius: 8px; 
-          margin-bottom: 20px; 
+        .logo-container {
+          background: #8B1A1A;
+          padding: 20px 40px;
+          border-radius: 8px;
+          margin-bottom: 20px;
         }
-        .logo-container img { 
-          max-width: 300px; 
-          height: auto; 
+        .logo-container img {
+          max-width: 300px;
+          height: auto;
         }
-        h1 { 
-          text-align: center; 
-          color: #333; 
-          margin: 0; 
-          font-size: 24px; 
-          padding-top: 15px; 
-          border-top: 2px solid #8B1A1A; 
+        h1 {
+          text-align: center;
+          color: #333;
+          margin: 0;
+          font-size: 24px;
+          padding-top: 15px;
+          border-top: 2px solid #8B1A1A;
         }
-        .contract-content { 
-          margin: 30px 0; 
-          text-align: justify; 
+        .contract-content {
+          margin: 30px 0;
+          text-align: justify;
+          overflow-wrap: break-word;
+          word-wrap: break-word;
         }
-        .signature-section { 
-          margin-top: 50px; 
-          page-break-inside: avoid; 
+        /* Force all editor-generated content to fit page width */
+        .contract-content * {
+          max-width: 100% !important;
+          box-sizing: border-box !important;
         }
-        .signature-image { 
-          max-width: 200px; 
-          height: auto; 
-          border-bottom: 1px solid #333; 
-          background: white; 
-          padding: 10px; 
+        .contract-content img {
+          height: auto !important;
         }
-        .meta-info { 
-          background: #f5f5f5; 
-          padding: 15px; 
-          border-radius: 5px; 
-          margin-top: 30px; 
-          font-size: 12px; 
+        .contract-content table {
+          width: 100% !important;
+          table-layout: fixed !important;
         }
-        .meta-info p { 
-          margin: 5px 0; 
+        .contract-content td,
+        .contract-content th {
+          overflow-wrap: break-word;
+          word-wrap: break-word;
         }
-        @media print { 
-          body { padding: 0; }
-          .logo-container { 
-            -webkit-print-color-adjust: exact; 
-            print-color-adjust: exact; 
+        .signature-section {
+          margin-top: 50px;
+          page-break-inside: avoid;
+        }
+        .signature-image {
+          max-width: 200px;
+          height: auto;
+          border-bottom: 1px solid #333;
+          background: white;
+          padding: 10px;
+        }
+        .meta-info {
+          background: #f5f5f5;
+          padding: 15px;
+          border-radius: 5px;
+          margin-top: 30px;
+          font-size: 12px;
+        }
+        .meta-info p {
+          margin: 5px 0;
+        }
+        @media print {
+          body {
+            padding: 0;
+            max-width: 100%;
+            width: 100%;
+          }
+          .logo-container {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .contract-content * {
+            max-width: 100% !important;
+            overflow-wrap: break-word !important;
+            word-wrap: break-word !important;
+          }
+          .contract-content table {
+            width: 100% !important;
+            table-layout: fixed !important;
           }
         }
       </style>
