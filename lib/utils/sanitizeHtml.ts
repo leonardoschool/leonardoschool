@@ -41,7 +41,6 @@ function sanitizeStyle(style: string): string {
     .split(';')
     .filter(prop => {
       const trimmed = prop.trim();
-      if (!trimmed) return false;
       // Strip CSS custom properties (e.g. --tw-* variables injected by Tailwind)
       if (trimmed.startsWith('--')) return false;
       const lowerProp = trimmed.toLowerCase();
