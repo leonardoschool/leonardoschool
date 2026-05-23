@@ -584,7 +584,7 @@ export default function AdminQuestionsContent() {
 
       {/* Stats Cards */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
           <button
             onClick={() => setStatuses([])}
             className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} text-left hover:ring-2 hover:ring-[#a8012b] transition-shadow ${statuses.length === 0 ? 'ring-2 ring-[#a8012b]' : ''}`}
@@ -624,6 +624,20 @@ export default function AdminQuestionsContent() {
               <div>
                 <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.draft}</p>
                 <p className={`text-sm ${colors.text.muted}`}>Bozze</p>
+              </div>
+            </div>
+          </button>
+          <button
+            onClick={() => setStatuses(['ARCHIVED'])}
+            className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} text-left hover:ring-2 hover:ring-red-400 transition-shadow ${statuses.length === 1 && statuses[0] === 'ARCHIVED' ? 'ring-2 ring-red-400' : ''}`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <Archive className="w-5 h-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.archived}</p>
+                <p className={`text-sm ${colors.text.muted}`}>Archiviate</p>
               </div>
             </div>
           </button>

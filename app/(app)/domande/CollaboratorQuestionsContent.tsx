@@ -322,7 +322,7 @@ export default function CollaboratorQuestionsContent() {
 
       {/* Stats Cards */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
           <div className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm}`}>
             <div className="flex items-center gap-3">
               <div className={`w-10 h-10 rounded-lg ${colors.primary.softBg} flex items-center justify-center`}>
@@ -353,6 +353,17 @@ export default function CollaboratorQuestionsContent() {
               <div>
                 <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.draft}</p>
                 <p className={`text-sm ${colors.text.muted}`}>Bozze</p>
+              </div>
+            </div>
+          </div>
+          <div className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm}`}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <Archive className="w-5 h-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <p className={`text-2xl font-bold ${colors.text.primary}`}>{stats.archived}</p>
+                <p className={`text-sm ${colors.text.muted}`}>Archiviate</p>
               </div>
             </div>
           </div>

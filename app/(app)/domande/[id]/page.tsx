@@ -70,8 +70,12 @@ export default function DettaglioDomandaPage() {
   });
 
   const publishMutation = trpc.questions.publishQuestion.useMutation({
-    onSuccess: () => {
-      showSuccess('Domanda pubblicata', 'La domanda è ora visibile agli studenti.');
+    onSuccess: (updatedQuestion) => {
+      if (updatedQuestion.status === 'PUBLISHED') {
+        showSuccess('Domanda pubblicata', 'La domanda è ora visibile agli studenti.');
+      } else {
+        showSuccess('Domanda ritirata', 'La domanda non è più visibile agli studenti.');
+      }
       utils.questions.getQuestion.invalidate({ id: questionId });
     },
     onError: handleMutationError,
@@ -210,7 +214,7 @@ export default function DettaglioDomandaPage() {
                   {question.status !== 'PUBLISHED' && (
                     <button
                       onClick={() => {
-                        publishMutation.mutate({ id: questionId });
+                        publishMutation.mutate({ id: questionId, publish: true });
                         setShowActionsMenu(false);
                       }}
                       className={`w-full flex items-center gap-2 px-4 py-2 text-sm ${colors.text.primary} hover:${colors.background.secondary}`}
@@ -219,10 +223,22 @@ export default function DettaglioDomandaPage() {
                       Pubblica
                     </button>
                   )}
+                  {question.status === 'PUBLISHED' && (
+                    <button
+                      onClick={() => {
+                        publishMutation.mutate({ id: questionId, publish: false });
+                        setShowActionsMenu(false);
+                      }}
+                      className={`w-full flex items-center gap-2 px-4 py-2 text-sm ${colors.text.primary} hover:${colors.background.secondary}`}
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Ritira
+                    </button>
+                  )}
                   {question.status !== 'ARCHIVED' && (
                     <button
                       onClick={() => {
-                        archiveMutation.mutate({ id: questionId });
+                        archiveMutation.mutate({ id: questionId, archive: true });
                         setShowActionsMenu(false);
                       }}
                       className={`w-full flex items-center gap-2 px-4 py-2 text-sm ${colors.text.primary} hover:${colors.background.secondary}`}
