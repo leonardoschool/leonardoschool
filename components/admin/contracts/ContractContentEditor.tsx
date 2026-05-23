@@ -75,6 +75,7 @@ const WRAPPED_FONT_SIZE_TAGS = new Set(['li', 'blockquote', ...HEADING_FORMATS])
 const TEXT_CONTAINER_SELECTOR = 'p, div, li, td, th, blockquote, h1, h2, h3, h4, h5, h6';
 const DEFAULT_FONT_SIZE = 14;
 const FONT_SIZE_OPTIONS = [10, 12, 14, 16, 18, 20, 24, 28, 32, 36] as const;
+type TextAlignment = 'left' | 'center' | 'right' | 'justify';
 const BLOCK_FORMAT_OPTIONS: readonly { value: BlockFormat; label: string; title: string }[] = [
   { value: 'p', label: 'P', title: 'Paragrafo' },
   ...HEADING_FORMATS.map((heading) => ({
@@ -326,24 +327,10 @@ function htmlFromVisibleText(text: string): string {
     .join('');
 }
 
-function getEditorSelection(editor: HTMLElement): Selection | null {
-  const selection = document.getSelection();
-  if (!selection?.rangeCount || selection.isCollapsed) return null;
-
+function isSelectionInsideEditor(editor: HTMLElement, selection: Selection | null): selection is Selection {
+  if (!selection?.rangeCount) return false;
   const range = selection.getRangeAt(0);
-  return editor.contains(range.commonAncestorContainer) ? selection : null;
-}
-
-function createPlainTextFragment(text: string): DocumentFragment {
-  const fragment = document.createDocumentFragment();
-  const lines = normalizeVisibleText(text).split('\n');
-
-  lines.forEach((line, index) => {
-    if (index > 0) fragment.append(document.createElement('br'));
-    if (line) fragment.append(document.createTextNode(line));
-  });
-
-  return fragment;
+  return editor.contains(range.commonAncestorContainer);
 }
 
 function isBlankEditorNode(node: ChildNode): boolean {
@@ -389,20 +376,15 @@ function placeCaretAtStart(editor: HTMLElement) {
   selection.addRange(range);
 }
 
-function replaceSelectionWithPlainText(selection: Selection, text: string) {
-  const range = selection.getRangeAt(0);
-  const fragment = createPlainTextFragment(text);
-  const lastNode = fragment.lastChild;
+function placeCaretAfterNode(node: Node) {
+  const selection = document.getSelection();
+  if (!selection) return;
 
-  range.deleteContents();
-  range.insertNode(fragment);
-
-  if (lastNode) {
-    range.setStartAfter(lastNode);
-    range.collapse(true);
-    selection.removeAllRanges();
-    selection.addRange(range);
-  }
+  const range = document.createRange();
+  range.setStartAfter(node);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
 }
 
 function createFontSizeSpan(fontSize: number): HTMLSpanElement {
@@ -520,17 +502,114 @@ function getSelectedTextContainers(editor: HTMLElement, selection: Selection): H
   }
 
   const range = selection.getRangeAt(0);
-  return Array.from(editor.querySelectorAll<HTMLElement>(TEXT_CONTAINER_SELECTOR)).filter((container) => {
+  const intersectedContainers = Array.from(editor.querySelectorAll<HTMLElement>(TEXT_CONTAINER_SELECTOR)).filter((container) => {
     try {
       return range.intersectsNode(container);
     } catch {
       return false;
     }
   });
+
+  return intersectedContainers.filter((container) => (
+    !intersectedContainers.some((otherContainer) => otherContainer !== container && container.contains(otherContainer))
+  ));
 }
 
 function clearSelectedFontSizeStyles(editor: HTMLElement, selection: Selection) {
   getSelectedTextContainers(editor, selection).forEach(clearFontSizeStyles);
+}
+
+function getNormalizedContainerText(container: HTMLElement): string {
+  return normalizeVisibleText(container.innerText || container.textContent || '');
+}
+
+function createPlainParagraphs(text: string): HTMLParagraphElement[] {
+  const lines = normalizeVisibleText(text).split('\n').filter(Boolean);
+  return lines.map((line) => {
+    const paragraph = document.createElement('p');
+    paragraph.textContent = line;
+    return paragraph;
+  });
+}
+
+function selectionMatchesTextContainers(selection: Selection, containers: HTMLElement[]): boolean {
+  const selectedText = normalizeVisibleText(selection.toString());
+  if (!selectedText) return false;
+
+  const containerText = normalizeVisibleText(containers.map(getNormalizedContainerText).join('\n'));
+  return selectedText === containerText;
+}
+
+function getUniqueOuterElements(elements: HTMLElement[]): HTMLElement[] {
+  const uniqueElements = Array.from(new Set(elements));
+  return uniqueElements.filter((element) => (
+    !uniqueElements.some((otherElement) => otherElement !== element && otherElement.contains(element))
+  ));
+}
+
+function getFormatCleanupTarget(editor: HTMLElement, container: HTMLElement): HTMLElement {
+  const table = container.closest<HTMLElement>('table');
+  if (table && editor.contains(table)) return table;
+
+  const list = container.closest<HTMLElement>('ul, ol');
+  if (list && editor.contains(list)) return list;
+
+  return container;
+}
+
+function getFormatCleanupTargets(editor: HTMLElement, selection: Selection): HTMLElement[] {
+  const containers = getSelectedTextContainers(editor, selection);
+  const targets = containers.map((container) => getFormatCleanupTarget(editor, container));
+  return getUniqueOuterElements(targets);
+}
+
+function replaceElementsWithPlainParagraphs(elements: HTMLElement[]): HTMLElement | null {
+  let lastInserted: HTMLElement | null = null;
+
+  elements.forEach((element) => {
+    const text = element.innerText || element.textContent || '';
+    const paragraphs = createPlainParagraphs(text);
+
+    if (paragraphs.length === 0) {
+      element.remove();
+      return;
+    }
+
+    lastInserted = paragraphs[paragraphs.length - 1];
+    element.replaceWith(...paragraphs);
+  });
+
+  return lastInserted;
+}
+
+function replaceSelectionWithPlainParagraphs(selection: Selection): HTMLElement | null {
+  const paragraphs = createPlainParagraphs(selection.toString());
+  if (paragraphs.length === 0) return null;
+
+  const fragment = document.createDocumentFragment();
+  paragraphs.forEach((paragraph) => fragment.append(paragraph));
+
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  range.insertNode(fragment);
+
+  return paragraphs[paragraphs.length - 1];
+}
+
+function applyTextAlignmentToElement(element: HTMLElement, alignment: TextAlignment) {
+  element.style.setProperty('text-align', alignment, 'important');
+  element.querySelectorAll<HTMLElement>(TEXT_CONTAINER_SELECTOR).forEach((childElement) => {
+    childElement.style.setProperty('text-align', alignment, 'important');
+  });
+}
+
+function applyTextAlignmentToSelection(editor: HTMLElement, selection: Selection, alignment: TextAlignment): boolean {
+  const containers = getSelectedTextContainers(editor, selection);
+  if (containers.length === 0) return false;
+
+  containers.forEach((container) => applyTextAlignmentToElement(container, alignment));
+
+  return true;
 }
 
 function wrapLooseTextNodes(editor: HTMLElement, fontSize: number) {
@@ -570,6 +649,12 @@ function applyFontSizeToAllContent(editor: HTMLElement, fontSize: number) {
 
   containers.forEach((container) => applyFontSizeToContainer(container, fontSize));
   wrapLooseTextNodes(editor, fontSize);
+}
+
+function replaceEditorWithPlainParagraphs(editor: HTMLElement): string {
+  const nextHtml = htmlFromVisibleText(editor.innerText);
+  editor.innerHTML = nextHtml;
+  return nextHtml;
 }
 
 export function ContractContentEditor({
@@ -616,6 +701,10 @@ export function ContractContentEditor({
     const selection = document.getSelection();
     if (mode !== 'visual' || !editor || !selection?.anchorNode || !editor.contains(selection.anchorNode)) return;
 
+    if (selection.rangeCount) {
+      savedRangeRef.current = selection.getRangeAt(0).cloneRange();
+    }
+
     setToolbarState({
       block: getSelectedBlock(editor),
       bold: getCommandState('bold'),
@@ -653,21 +742,33 @@ export function ContractContentEditor({
     setOpenColorMenu(null);
     setIsBlockMenuOpen(false);
     setIsFontSizeMenuOpen(false);
+    restoreEditorSelection();
     editorRef.current?.focus();
     document.execCommand(command, false, commandValue);
     emitVisualContent();
     requestAnimationFrame(updateToolbarState);
   };
 
+  const getActiveEditorSelection = (): Selection | null => {
+    const editor = editorRef.current;
+    if (!editor) return null;
+
+    const selection = document.getSelection();
+    if (isSelectionInsideEditor(editor, selection)) return selection;
+
+    restoreEditorSelection();
+    const restoredSelection = document.getSelection();
+    return isSelectionInsideEditor(editor, restoredSelection) ? restoredSelection : null;
+  };
+
   const applyBlockFormat = (format: BlockFormat) => {
     const editor = editorRef.current;
-    const selection = document.getSelection();
+    const selection = getActiveEditorSelection();
 
     if (
       format !== 'p' &&
       editor &&
-      selection?.rangeCount &&
-      editor.contains(selection.getRangeAt(0).commonAncestorContainer)
+      selection
     ) {
       clearSelectedFontSizeStyles(editor, selection);
     }
@@ -684,16 +785,30 @@ export function ContractContentEditor({
     setIsFontSizeMenuOpen(false);
     editor.focus();
 
-    const selection = getEditorSelection(editor);
-    const isFullCleanup = !selection;
-    if (selection) {
-      replaceSelectionWithPlainText(selection, selection.toString());
-      trimEditorBlankEdges(editor);
-      emitVisualContent();
-    } else {
-      const nextHtml = htmlFromVisibleText(editor.innerText);
-      editor.innerHTML = nextHtml;
+    const selection = getActiveEditorSelection();
+    const isFullCleanup = !selection || isFullEditorSelection(editor, selection);
+
+    if (isFullCleanup) {
+      const nextHtml = replaceEditorWithPlainParagraphs(editor);
       onChange(nextHtml);
+    } else if (selection) {
+      const targets = getFormatCleanupTargets(editor, selection);
+      const shouldCleanSelectedTargets = targets.length > 0 && (
+        selection.isCollapsed || selectionMatchesTextContainers(selection, targets)
+      );
+
+      if (shouldCleanSelectedTargets) {
+        const lastInserted = replaceElementsWithPlainParagraphs(targets);
+        trimEditorBlankEdges(editor);
+        if (lastInserted) placeCaretAfterNode(lastInserted);
+      } else if (!selection.isCollapsed) {
+        const lastInserted = targets.length > 0
+          ? replaceElementsWithPlainParagraphs(targets)
+          : replaceSelectionWithPlainParagraphs(selection);
+        trimEditorBlankEdges(editor);
+        if (lastInserted) placeCaretAfterNode(lastInserted);
+      }
+      emitVisualContent();
     }
 
     setToolbarState(initialToolbarState);
@@ -705,6 +820,24 @@ export function ContractContentEditor({
       }
       updateToolbarState();
     });
+  };
+
+  const applyTextAlignment = (alignment: TextAlignment) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    setOpenColorMenu(null);
+    setIsBlockMenuOpen(false);
+    setIsFontSizeMenuOpen(false);
+
+    const selection = getActiveEditorSelection();
+    if (selection && applyTextAlignmentToSelection(editor, selection, alignment)) {
+      emitVisualContent();
+      requestAnimationFrame(updateToolbarState);
+      return;
+    }
+
+    runCommand(alignment === 'justify' ? 'justifyFull' : `justify${alignment[0].toUpperCase()}${alignment.slice(1)}`);
   };
 
   const insertHtml = (html: string) => {
@@ -726,8 +859,8 @@ export function ContractContentEditor({
     setIsFontSizeMenuOpen(false);
     editor.focus();
 
-    const selection = document.getSelection();
-    if (selection?.rangeCount && editor.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+    const selection = getActiveEditorSelection();
+    if (selection) {
       if (selection.isCollapsed) {
         const currentContainer = getCurrentTextContainer(editor, selection.anchorNode);
         if (currentContainer) {
@@ -823,9 +956,14 @@ export function ContractContentEditor({
   const restoreEditorSelection = () => {
     const sel = window.getSelection();
     if (savedRangeRef.current && sel && editorRef.current) {
+      if (!editorRef.current.contains(savedRangeRef.current.commonAncestorContainer)) return;
       editorRef.current.focus();
-      sel.removeAllRanges();
-      sel.addRange(savedRangeRef.current);
+      try {
+        sel.removeAllRanges();
+        sel.addRange(savedRangeRef.current);
+      } catch {
+        savedRangeRef.current = null;
+      }
     }
   };
 
@@ -1010,16 +1148,16 @@ export function ContractContentEditor({
               <ToolbarButton title="Aumenta rientro" onClick={() => runCommand('indent')}>
                 <IndentIncrease className="w-4 h-4" />
               </ToolbarButton>
-              <ToolbarButton title="Allinea a sinistra" onClick={() => runCommand('justifyLeft')}>
+              <ToolbarButton title="Allinea a sinistra" onClick={() => applyTextAlignment('left')}>
                 <AlignLeft className="w-4 h-4" />
               </ToolbarButton>
-              <ToolbarButton title="Allinea al centro" onClick={() => runCommand('justifyCenter')}>
+              <ToolbarButton title="Allinea al centro" onClick={() => applyTextAlignment('center')}>
                 <AlignCenter className="w-4 h-4" />
               </ToolbarButton>
-              <ToolbarButton title="Allinea a destra" onClick={() => runCommand('justifyRight')}>
+              <ToolbarButton title="Allinea a destra" onClick={() => applyTextAlignment('right')}>
                 <AlignRight className="w-4 h-4" />
               </ToolbarButton>
-              <ToolbarButton title="Giustifica" onClick={() => runCommand('justifyFull')}>
+              <ToolbarButton title="Giustifica" onClick={() => applyTextAlignment('justify')}>
                 <AlignJustify className="w-4 h-4" />
               </ToolbarButton>
               <ToolbarButton title="Linea separatrice" onClick={() => runCommand('insertHorizontalRule')}>
