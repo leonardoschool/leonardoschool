@@ -33,6 +33,8 @@ import {
   Search,
   Calendar,
   ArrowUpDown,
+  Users,
+  FileX,
 } from 'lucide-react';
 
 type SortOption = 'name_asc' | 'name_desc' | 'date_desc' | 'date_asc';
@@ -43,6 +45,26 @@ export default function AdminContrattiContent() {
   const [previewContent, setPreviewContent] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('date_desc');
+  const [assignmentsModal, setAssignmentsModal] = useState<{
+    isOpen: boolean;
+    templateId: string;
+    templateName: string;
+  }>({
+    isOpen: false,
+    templateId: '',
+    templateName: '',
+  });
+  const [revokeAssignmentModal, setRevokeAssignmentModal] = useState<{
+    isOpen: boolean;
+    contractId: string;
+    contractStatus: 'PENDING' | 'SIGNED';
+    assigneeName: string;
+  }>({
+    isOpen: false,
+    contractId: '',
+    contractStatus: 'PENDING',
+    assigneeName: '',
+  });
 
   // Form state
   const [formData, setFormData] = useState({
@@ -64,6 +86,14 @@ export default function AdminContrattiContent() {
 
   // Fetch templates
   const { data: templates, isLoading } = trpc.contracts.getTemplates.useQuery();
+  const {
+    data: templateAssignments,
+    isLoading: isLoadingTemplateAssignments,
+    error: templateAssignmentsError,
+  } = trpc.contracts.getTemplateAssignments.useQuery(
+    { templateId: assignmentsModal.templateId },
+    { enabled: assignmentsModal.isOpen && !!assignmentsModal.templateId }
+  );
 
   // Mutations
   const createMutation = trpc.contracts.createTemplate.useMutation({
@@ -101,6 +131,32 @@ export default function AdminContrattiContent() {
     onError: handleMutationError,
   });
 
+  const revokeContractMutation = trpc.contracts.revokeContract.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.contracts.getTemplateAssignments.invalidate({ templateId: assignmentsModal.templateId }),
+        utils.users.getAll.invalidate(),
+        utils.users.getStats.invalidate(),
+      ]);
+      setRevokeAssignmentModal({ isOpen: false, contractId: '', contractStatus: 'PENDING', assigneeName: '' });
+      showSuccess('Contratto revocato', 'Il contratto è stato revocato con successo.');
+    },
+    onError: handleMutationError,
+  });
+
+  const revokeSignedContractMutation = trpc.contracts.revokeSignedContract.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.contracts.getTemplateAssignments.invalidate({ templateId: assignmentsModal.templateId }),
+        utils.users.getAll.invalidate(),
+        utils.users.getStats.invalidate(),
+      ]);
+      setRevokeAssignmentModal({ isOpen: false, contractId: '', contractStatus: 'PENDING', assigneeName: '' });
+      showSuccess('Contratto revocato', 'Il contratto firmato è stato revocato ed eliminato.');
+    },
+    onError: handleMutationError,
+  });
+
   // Delete modal state
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean;
@@ -125,6 +181,34 @@ export default function AdminContrattiContent() {
     setTouched({});
     setShowForm(false);
     setEditingId(null);
+  };
+
+  const closeAssignmentsModal = () => {
+    setAssignmentsModal({ isOpen: false, templateId: '', templateName: '' });
+    setRevokeAssignmentModal({ isOpen: false, contractId: '', contractStatus: 'PENDING', assigneeName: '' });
+  };
+
+  const formatDateTime = (value: Date | string | null | undefined) => {
+    if (!value) return '-';
+
+    return new Intl.DateTimeFormat('it-IT', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(value));
+  };
+
+  const handleConfirmRevokeAssignment = () => {
+    if (!revokeAssignmentModal.contractId) return;
+
+    if (revokeAssignmentModal.contractStatus === 'SIGNED') {
+      revokeSignedContractMutation.mutate({ contractId: revokeAssignmentModal.contractId });
+      return;
+    }
+
+    revokeContractMutation.mutate({ contractId: revokeAssignmentModal.contractId });
   };
 
   const handleEdit = (template: any) => {
@@ -794,6 +878,14 @@ Email: {{EMAIL}}</p>
                   </div>
                   <div className="flex gap-2 self-end lg:self-center">
                     <button
+                      onClick={() => setAssignmentsModal({ isOpen: true, templateId: template.id, templateName: template.name })}
+                      className={`px-4 py-2 rounded-lg ${colors.background.secondary} ${colors.text.primary} hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-2 text-sm font-medium`}
+                      title="Visualizza assegnazioni"
+                    >
+                      <Users className="w-4 h-4" />
+                      Assegnazioni
+                    </button>
+                    <button
                       onClick={() => setPreviewContent(template.content)}
                       className={`px-4 py-2 rounded-lg ${colors.background.secondary} ${colors.text.primary} hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-2 text-sm font-medium`}
                       title="Anteprima"
@@ -862,6 +954,182 @@ Email: {{EMAIL}}</p>
                   className={`contract-preview ${colors.text.primary}`}
                   dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewContent) }}
                 />
+              </div>
+            </div>
+          </div>
+        </Portal>
+      )}
+
+      {assignmentsModal.isOpen && (
+        <Portal>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+            <div className={`${colors.background.card} rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden`}>
+              <div className={`flex items-center justify-between px-6 py-4 border-b ${colors.border.primary}`}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-10 h-10 rounded-xl ${colors.primary.bg} flex items-center justify-center flex-shrink-0`}>
+                    <Users className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className={`font-semibold ${colors.text.primary}`}>Assegnazioni Template</h3>
+                    <p className={`text-sm ${colors.text.secondary} truncate`}>{assignmentsModal.templateName}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={closeAssignmentsModal}
+                  className={`p-2 rounded-lg ${colors.background.secondary} ${colors.text.secondary} hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors`}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto flex-1">
+                {isLoadingTemplateAssignments ? (
+                  <div className="py-12 text-center">
+                    <Spinner size="lg" />
+                    <p className={`mt-4 ${colors.text.secondary}`}>Caricamento assegnazioni...</p>
+                  </div>
+                ) : templateAssignmentsError ? (
+                  <div className={`p-4 rounded-xl ${colors.status.error.softBg} ${colors.status.error.text} text-sm`}>
+                    {templateAssignmentsError.message}
+                  </div>
+                ) : !templateAssignments?.length ? (
+                  <div className="py-12 text-center">
+                    <div className={`w-14 h-14 mx-auto rounded-2xl ${colors.background.secondary} flex items-center justify-center mb-4`}>
+                      <Users className={`w-7 h-7 ${colors.text.muted}`} />
+                    </div>
+                    <p className={`font-medium ${colors.text.primary}`}>Nessuna assegnazione attiva</p>
+                    <p className={`text-sm ${colors.text.muted} mt-1`}>
+                      Questo template non risulta assegnato a studenti o collaboratori.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {templateAssignments.map((assignment) => {
+                      const isSigned = assignment.status === 'SIGNED';
+                      const roleBadgeClass = assignment.targetType === 'COLLABORATOR'
+                        ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                        : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300';
+                      const statusBadgeClass = isSigned
+                        ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300';
+
+                      return (
+                        <div
+                          key={assignment.id}
+                          className={`p-4 rounded-2xl border ${colors.border.primary} ${colors.background.secondary}`}
+                        >
+                          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className={`font-semibold ${colors.text.primary}`}>{assignment.user.name}</p>
+                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${roleBadgeClass}`}>
+                                  {assignment.targetType === 'COLLABORATOR' ? (
+                                    <><UserCog className="w-3.5 h-3.5" /> Collaboratore</>
+                                  ) : (
+                                    <><GraduationCap className="w-3.5 h-3.5" /> Studente</>
+                                  )}
+                                </span>
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusBadgeClass}`}>
+                                  {isSigned ? 'Firmato' : 'In attesa firma'}
+                                </span>
+                              </div>
+                              <p className={`text-sm mt-1 ${colors.text.secondary}`}>{assignment.user.email}</p>
+                              <div className={`flex flex-wrap gap-4 mt-3 text-xs ${colors.text.muted}`}>
+                                <span>Assegnato: {formatDateTime(assignment.assignedAt)}</span>
+                                {isSigned ? (
+                                  <span>Firmato: {formatDateTime(assignment.signedAt)}</span>
+                                ) : (
+                                  <span>Scadenza firma: {formatDateTime(assignment.expiresAt)}</span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 self-end md:self-auto">
+                              <button
+                                onClick={() => globalThis.open(`/api/contracts/${assignment.id}/view`, '_blank')}
+                                className={`px-3 py-2 rounded-lg ${colors.status.info.softBg} ${colors.status.info.text} hover:opacity-80 transition-opacity flex items-center gap-2 text-sm font-medium`}
+                                title="Visualizza contratto"
+                              >
+                                <Eye className="w-4 h-4" />
+                                Visualizza
+                              </button>
+                              <button
+                                onClick={() => setRevokeAssignmentModal({
+                                  isOpen: true,
+                                  contractId: assignment.id,
+                                  contractStatus: assignment.status as 'PENDING' | 'SIGNED',
+                                  assigneeName: assignment.user.name,
+                                })}
+                                className={`px-3 py-2 rounded-lg ${isSigned ? colors.status.error.softBg : colors.status.warning.softBg} ${isSigned ? colors.status.error.text : colors.status.warning.text} hover:opacity-80 transition-opacity flex items-center gap-2 text-sm font-medium`}
+                                title={isSigned ? 'Revoca contratto firmato' : 'Revoca contratto'}
+                              >
+                                <FileX className="w-4 h-4" />
+                                Revoca
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className={`px-6 py-4 border-t ${colors.border.primary} flex justify-end`}>
+                <button
+                  onClick={closeAssignmentsModal}
+                  className={`px-4 py-2 rounded-xl ${colors.background.secondary} ${colors.text.primary} font-medium`}
+                >
+                  Chiudi
+                </button>
+              </div>
+            </div>
+          </div>
+        </Portal>
+      )}
+
+      {revokeAssignmentModal.isOpen && (
+        <Portal>
+          <div className="fixed inset-0 bg-black/55 flex items-center justify-center z-[70] p-4">
+            <div className={`${colors.background.card} rounded-2xl max-w-md w-full p-6 shadow-2xl`}>
+              <div className="flex items-start gap-4">
+                <div className={`w-12 h-12 rounded-xl ${revokeAssignmentModal.contractStatus === 'SIGNED' ? colors.status.error.softBg : colors.status.warning.softBg} flex items-center justify-center flex-shrink-0`}>
+                  <FileX className={`w-6 h-6 ${revokeAssignmentModal.contractStatus === 'SIGNED' ? colors.status.error.text : colors.status.warning.text}`} />
+                </div>
+                <div className="flex-1">
+                  <h3 className={`text-lg font-bold ${colors.text.primary}`}>
+                    {revokeAssignmentModal.contractStatus === 'SIGNED' ? 'Revoca Contratto Firmato' : 'Revoca Contratto'}
+                  </h3>
+                  <p className={`mt-2 ${colors.text.secondary}`}>
+                    {revokeAssignmentModal.contractStatus === 'SIGNED'
+                      ? `Il contratto firmato di "${revokeAssignmentModal.assigneeName}" verrà eliminato e l'utente verrà notificato.`
+                      : `Il contratto assegnato a "${revokeAssignmentModal.assigneeName}" verrà revocato immediatamente.`}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setRevokeAssignmentModal({ isOpen: false, contractId: '', contractStatus: 'PENDING', assigneeName: '' })}
+                  disabled={revokeContractMutation.isPending || revokeSignedContractMutation.isPending}
+                  className={`flex-1 px-4 py-3 rounded-xl ${colors.background.secondary} ${colors.text.primary} font-medium hover:opacity-80 transition-opacity disabled:opacity-50`}
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={handleConfirmRevokeAssignment}
+                  disabled={revokeContractMutation.isPending || revokeSignedContractMutation.isPending}
+                  className={`flex-1 px-4 py-3 rounded-xl ${revokeAssignmentModal.contractStatus === 'SIGNED' ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-600 hover:bg-amber-700'} text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+                >
+                  {revokeContractMutation.isPending || revokeSignedContractMutation.isPending ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Spinner size="xs" variant="white" />
+                      Revoca...
+                    </span>
+                  ) : (
+                    'Conferma revoca'
+                  )}
+                </button>
               </div>
             </div>
           </div>

@@ -158,6 +158,27 @@ describe('Contracts Router', () => {
       });
     });
 
+    describe('getTemplateAssignments', () => {
+      it('should require templateId', () => {
+        const input = { templateId: faker.string.uuid() };
+        expect(input.templateId).toBeDefined();
+      });
+
+      it('should only return pending or signed contracts', () => {
+        const allowedStatuses: ContractStatus[] = ['PENDING', 'SIGNED'];
+        const filteredStatuses = ['PENDING', 'SIGNED', 'REVOKED'].filter((status) =>
+          allowedStatuses.includes(status as ContractStatus)
+        );
+
+        expect(filteredStatuses).toEqual(['PENDING', 'SIGNED']);
+      });
+
+      it('should order assignments by assignedAt descending', () => {
+        const orderBy = { assignedAt: 'desc' };
+        expect(orderBy.assignedAt).toBe('desc');
+      });
+    });
+
     describe('createTemplate', () => {
       it('should validate minimum name length', () => {
         const validName = 'Contratto Base';

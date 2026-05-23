@@ -40,6 +40,85 @@ export const contractsRouter = router({
     }),
 
   /**
+   * Get active assignments for a contract template
+   */
+  getTemplateAssignments: adminProcedure
+    .input(
+      z.object({
+        templateId: z.string(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const template = await ctx.prisma.contractTemplate.findUnique({
+        where: { id: input.templateId },
+        select: { id: true },
+      });
+
+      if (!template) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Template non trovato',
+        });
+      }
+
+      const assignments = await ctx.prisma.contract.findMany({
+        where: {
+          templateId: input.templateId,
+          status: { in: ['PENDING', 'SIGNED'] },
+        },
+        include: {
+          student: {
+            select: {
+              id: true,
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+          },
+          collaborator: {
+            select: {
+              id: true,
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          assignedAt: 'desc',
+        },
+      });
+
+      return assignments.map((assignment) => {
+        const target = assignment.student ?? assignment.collaborator;
+        const targetType = assignment.student ? 'STUDENT' : 'COLLABORATOR';
+
+        return {
+          id: assignment.id,
+          status: assignment.status,
+          assignedAt: assignment.assignedAt,
+          expiresAt: assignment.expiresAt,
+          signedAt: assignment.signedAt,
+          canDownload: assignment.canDownload,
+          targetType,
+          user: {
+            id: target?.user.id ?? '',
+            name: target?.user.name ?? 'Utente',
+            email: target?.user.email ?? '',
+          },
+        };
+      });
+    }),
+
+  /**
    * Create a new contract template
    */
   createTemplate: adminProcedure
