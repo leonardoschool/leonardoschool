@@ -2645,6 +2645,7 @@ export default function AdminUtentiContent() {
                   ...(!isStudent ? [{ label: 'Tipo Collaboratore', value: (profile as any).kind === 'SECRETARY' ? 'Segreteria' : 'Tutor' }] : []),
                   { label: 'Codice Fiscale', value: profile.fiscalCode },
                   { label: 'Data di Nascita', value: profile.dateOfBirth ? new Date(profile.dateOfBirth).toLocaleDateString('it-IT') : null },
+                  { label: 'Comune di Nascita', value: (profile as any).birthPlace },
                   { label: 'Telefono', value: profile.phone },
                   { label: 'Indirizzo', value: profile.address },
                   { label: 'Città', value: profile.city },

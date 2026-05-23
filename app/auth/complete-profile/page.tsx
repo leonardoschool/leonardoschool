@@ -24,6 +24,7 @@ import {
   formatCitta,
   formatIndirizzo,
   validateDataNascita,
+  validateBirthPlace,
   validateProfileForm,
   validateParentGuardianForm,
   isMinor,
@@ -259,6 +260,9 @@ export default function CompleteProfilePage() {
       case 'postalCode':
         result = validateCAP(value);
         break;
+      case 'birthPlace':
+        result = validateBirthPlace(value);
+        break;
     }
     
     setFieldErrors(prev => ({
@@ -398,6 +402,7 @@ export default function CompleteProfilePage() {
         city: true,
         province: true,
         postalCode: true,
+        birthPlace: true,
       }));
       setError('Correggi gli errori nei campi evidenziati');
       return false;
@@ -470,7 +475,7 @@ export default function CompleteProfilePage() {
       city: formData.city,
       province: formData.province,
       postalCode: formData.postalCode,
-      birthPlace: formData.birthPlace || undefined,
+      birthPlace: formData.birthPlace.trim(),
     };
 
     if (isCollaborator) {
@@ -676,16 +681,26 @@ export default function CompleteProfilePage() {
               {/* Luogo di nascita */}
               <div>
                 <label htmlFor="birthPlace" className={`block text-sm font-medium ${colors.text.primary} mb-2`}>
-                  Luogo di nascita
+                  Luogo di nascita <span className={colors.status.error.text}>*</span>
                 </label>
                 <input
                   id="birthPlace"
                   type="text"
+                  required
                   value={formData.birthPlace || ''}
                   onChange={(e) => handleChange('birthPlace', e.target.value)}
-                  className={`block w-full px-4 py-2.5 text-base ${colors.background.input} ${colors.text.primary} border ${colors.border.primary} rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-[#A01B3B] focus:border-transparent transition-all`}
+                  onBlur={() => handleBlur('birthPlace')}
+                  className={getInputClass('birthPlace')}
                   placeholder="Es. Roma, Milano..."
                 />
+                {touched.birthPlace && fieldErrors.birthPlace && (
+                  <p className={`mt-1.5 text-sm ${colors.status.error.text} flex items-center gap-1`}>
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    {fieldErrors.birthPlace}
+                  </p>
+                )}
               </div>
 
               {/* Telefono */}

@@ -17,6 +17,7 @@ import {
   validateCAP,
   validateProvincia,
   validateDataNascita,
+  validateBirthPlace,
 } from '@/lib/validations/profileValidation';
 
 interface EditableUser {
@@ -122,6 +123,9 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSuccess }:
     const dob = validateDataNascita(profile.dateOfBirth);
     if (!dob.isValid) errors.dateOfBirth = dob.error ?? 'Data non valida';
 
+    const birthPlace = validateBirthPlace(profile.birthPlace);
+    if (!birthPlace.isValid) errors.birthPlace = birthPlace.error ?? 'Luogo di nascita obbligatorio';
+
     const phone = validateTelefono(profile.phone);
     if (!phone.isValid) errors.phone = phone.error ?? 'Telefono non valido';
 
@@ -168,7 +172,7 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSuccess }:
           city: profile.city,
           province: profile.province,
           postalCode: profile.postalCode,
-          birthPlace: profile.birthPlace || undefined,
+          birthPlace: profile.birthPlace.trim(),
         });
       }
 
@@ -287,7 +291,7 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSuccess }:
                   </div>
                   <div>
                     <label className={`block text-xs font-medium ${colors.text.secondary} mb-1`}>
-                      Luogo di nascita
+                      Luogo di nascita <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -296,6 +300,7 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSuccess }:
                       className={inputClass('birthPlace')}
                       placeholder="Roma"
                     />
+                    {fieldErrors.birthPlace && <p className="mt-1 text-xs text-red-500">{fieldErrors.birthPlace}</p>}
                   </div>
                 </div>
 

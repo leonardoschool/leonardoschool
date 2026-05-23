@@ -370,6 +370,7 @@ describe('profileValidation', () => {
       city: 'Roma',
       province: 'RM',
       postalCode: '00100',
+      birthPlace: 'Roma',
     };
 
     it('should validate complete valid profile', () => {
@@ -406,6 +407,7 @@ describe('profileValidation', () => {
         city: '',
         province: '',
         postalCode: '',
+        birthPlace: '',
       };
 
       const result = validateProfileForm(invalidData);
@@ -420,12 +422,14 @@ describe('profileValidation', () => {
         ...validProfileData,
         city: 'ROMA',
         province: 'rm',
+        birthPlace: 'milano',
       });
 
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.city).toBe('Roma');
         expect(result.data.province).toBe('RM');
+        expect(result.data.birthPlace).toBe('Milano');
       }
     });
   });

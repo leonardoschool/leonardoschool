@@ -7,7 +7,6 @@ import { TRPCError } from '@trpc/server';
 import { revalidateTag } from 'next/cache';
 import * as notificationService from '../../services/notificationService';
 import { CACHE_TAGS } from '@/lib/cache/serverCache';
-import { sanitizeText } from '@/lib/utils/escapeHtml';
 import {
   getContractTarget,
   getActiveTemplate,

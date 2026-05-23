@@ -197,6 +197,30 @@ export const formatCitta = (value: string): ValidationResult => {
   return { isValid: true, formattedValue: formatted };
 };
 
+export const validateBirthPlace = (value: string): ValidationResult => {
+  const cleaned = value.trim();
+
+  if (!cleaned) {
+    return { isValid: false, error: 'Il luogo di nascita è obbligatorio' };
+  }
+
+  if (cleaned.length < 2) {
+    return { isValid: false, error: 'Il luogo di nascita è troppo corto' };
+  }
+
+  if (cleaned.length > 100) {
+    return { isValid: false, error: 'Il luogo di nascita è troppo lungo' };
+  }
+
+  const formatted = cleaned
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+
+  return { isValid: true, formattedValue: formatted };
+};
+
 /**
  * Formats address with proper capitalization
  * "via roma 123" -> "Via Roma 123"
@@ -287,8 +311,8 @@ export type ProfileFormData = {
   city: string;
   province: string;
   postalCode: string;
-  // Optional fields for fiscal code calculation
-  birthPlace?: string;
+  birthPlace: string;
+  // Optional field for fiscal code calculation
   gender?: 'M' | 'F';
 };
 
@@ -303,6 +327,7 @@ export type ValidatedProfileData = {
   city: string;
   province: string;
   postalCode: string;
+  birthPlace: string;
 };
 
 /**
@@ -335,6 +360,9 @@ export const validateProfileForm = (data: ProfileFormData):
   
   const capResult = validateCAP(data.postalCode);
   if (!capResult.isValid) errors.postalCode = capResult.error!;
+
+  const birthPlaceResult = validateBirthPlace(data.birthPlace);
+  if (!birthPlaceResult.isValid) errors.birthPlace = birthPlaceResult.error!;
   
   if (Object.keys(errors).length > 0) {
     return { success: false, errors };
@@ -350,6 +378,7 @@ export const validateProfileForm = (data: ProfileFormData):
       city: cityResult.formattedValue!,
       province: provinceResult.formattedValue!,
       postalCode: capResult.formattedValue!,
+      birthPlace: birthPlaceResult.formattedValue!,
     }
   };
 };

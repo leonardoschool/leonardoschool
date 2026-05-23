@@ -278,8 +278,10 @@ export const collaboratorsRouter = router({
           .length(5, 'Il CAP deve essere di 5 cifre')
           .regex(/^\d{5}$/, 'Il CAP deve contenere solo numeri'),
         birthPlace: z.string()
+          .trim()
+          .min(2, 'Il luogo di nascita è obbligatorio')
           .max(100, 'Il comune di nascita è troppo lungo')
-          .optional(),
+          .transform((value) => value.charAt(0).toUpperCase() + value.slice(1).toLowerCase()),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -306,7 +308,7 @@ export const collaboratorsRouter = router({
           data: {
             fiscalCode: input.fiscalCode,
             dateOfBirth: input.dateOfBirth,
-            birthPlace: input.birthPlace ?? null,
+            birthPlace: input.birthPlace,
             phone: input.phone,
             address: input.address,
             city: input.city,

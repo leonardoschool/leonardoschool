@@ -322,6 +322,7 @@ export const usersRouter = router({
                 matricola: true,
                 fiscalCode: true,
                 dateOfBirth: true,
+                birthPlace: true,
                 phone: true,
                 address: true,
                 city: true,
@@ -435,6 +436,7 @@ export const usersRouter = router({
                 kind: true,
                 fiscalCode: true,
                 dateOfBirth: true,
+                birthPlace: true,
                 phone: true,
                 address: true,
                 city: true,
@@ -1868,7 +1870,11 @@ export const usersRouter = router({
         postalCode: z.string()
           .length(5, 'Il CAP deve essere di 5 cifre')
           .regex(/^\d{5}$/, 'Il CAP deve contenere solo numeri'),
-        birthPlace: z.string().max(100).optional(),
+        birthPlace: z.string()
+          .trim()
+          .min(2, 'Il luogo di nascita è obbligatorio')
+          .max(100, 'Il luogo di nascita è troppo lungo')
+          .transform(normalizeName),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -1894,7 +1900,7 @@ export const usersRouter = router({
             city: profileData.city,
             province: profileData.province,
             postalCode: profileData.postalCode,
-            birthPlace: profileData.birthPlace ?? null,
+            birthPlace: profileData.birthPlace,
           },
         });
       } else if ((user as any).collaborator) {
@@ -1908,7 +1914,7 @@ export const usersRouter = router({
             city: profileData.city,
             province: profileData.province,
             postalCode: profileData.postalCode,
-            birthPlace: profileData.birthPlace ?? null,
+            birthPlace: profileData.birthPlace,
           },
         });
       } else {
