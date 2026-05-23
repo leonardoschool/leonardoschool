@@ -32,11 +32,12 @@ import {
 interface QuestionFormProps {
   questionId?: string;
   basePath?: string;
+  returnTo?: string;
   initialData?: QuestionFormInitialData;
 }
 
-export default function QuestionForm({ questionId, basePath = '/domande', initialData }: QuestionFormProps) {
-  const form = useQuestionForm({ questionId, basePath, initialData });
+export default function QuestionForm({ questionId, basePath = '/domande', returnTo, initialData }: QuestionFormProps) {
+  const form = useQuestionForm({ questionId, basePath, returnTo, initialData });
 
   const questionTextRef = useRef<HTMLTextAreaElement>(null);
   const correctExplanationRef = useRef<HTMLTextAreaElement>(null);

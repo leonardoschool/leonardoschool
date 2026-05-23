@@ -47,6 +47,7 @@ export interface QuestionFormInitialData {
 interface UseQuestionFormOptions {
   questionId?: string;
   basePath?: string;
+  returnTo?: string;
   initialData?: QuestionFormInitialData;
 }
 
@@ -67,11 +68,15 @@ const defaultKeyword: QuestionKeywordInput = {
   synonyms: [],
 };
 
-export function useQuestionForm({ questionId, basePath = '/domande', initialData }: UseQuestionFormOptions) {
+export function useQuestionForm({ questionId, basePath = '/domande', returnTo, initialData }: UseQuestionFormOptions) {
   const router = useRouter();
   const { handleMutationError } = useApiError();
   const { showSuccess, showError } = useToast();
   const utils = trpc.useUtils();
+
+  const getQuestionDetailPath = useCallback((id: string) => {
+    return `${basePath}/${id}${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`;
+  }, [basePath, returnTo]);
 
   // Form state
   const [type, setType] = useState<QuestionType>(initialData?.type ?? 'SINGLE_CHOICE');
@@ -167,7 +172,7 @@ export function useQuestionForm({ questionId, basePath = '/domande', initialData
       showSuccess('Domanda creata', 'La domanda è stata salvata con successo.');
       utils.questions.getQuestions.invalidate();
       utils.questions.getQuestionStats.invalidate();
-      router.push(`${basePath}/${data?.id}`);
+      router.push(data?.id ? getQuestionDetailPath(data.id) : basePath);
     },
     onError: handleMutationError,
   });
@@ -185,7 +190,7 @@ export function useQuestionForm({ questionId, basePath = '/domande', initialData
       showSuccess('Domanda aggiornata', 'Le modifiche sono state salvate.');
       utils.questions.getQuestions.invalidate();
       utils.questions.getQuestion.invalidate({ id: questionId });
-      router.push(`${basePath}/${questionId}`);
+      router.push(questionId ? getQuestionDetailPath(questionId) : basePath);
     },
     onError: handleMutationError,
   });
@@ -409,6 +414,6 @@ export function useQuestionForm({ questionId, basePath = '/domande', initialData
     insertSymbolIntoTextarea, addAnswer, removeAnswer, updateAnswer,
     addKeyword, removeKeyword, updateKeyword, addSuggestedKeyword, handleSubmit,
     // Router
-    goBack: () => router.back(),
+    goBack: () => returnTo ? router.push(returnTo) : router.back(),
   };
 }

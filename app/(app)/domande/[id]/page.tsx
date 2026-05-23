@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { PageLoader } from '@/components/ui/loaders';
@@ -40,7 +40,11 @@ import { normalizeImageSrc } from '@/lib/utils/imageUrl';
 export default function DettaglioDomandaPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const questionId = params.id as string;
+  const rawReturnTo = searchParams.get('returnTo');
+  const returnTo = rawReturnTo?.startsWith('/domande') ? rawReturnTo : '/domande';
+  const editHref = `/domande/${questionId}/modifica?returnTo=${encodeURIComponent(returnTo)}`;
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
   const utils = trpc.useUtils();
@@ -56,7 +60,7 @@ export default function DettaglioDomandaPage() {
   const deleteMutation = trpc.questions.deleteQuestion.useMutation({
     onSuccess: () => {
       showSuccess('Domanda eliminata', 'La domanda è stata eliminata definitivamente.');
-      router.push('/domande');
+      router.push(returnTo);
     },
     onError: handleMutationError,
   });
@@ -85,7 +89,7 @@ export default function DettaglioDomandaPage() {
     onSuccess: (data) => {
       showSuccess('Domanda duplicata', 'È stata creata una copia della domanda.');
       if (data) {
-        router.push(`/domande/${data.id}/modifica`);
+        router.push(`/domande/${data.id}/modifica?returnTo=${encodeURIComponent(returnTo)}`);
       }
     },
     onError: handleMutationError,
@@ -107,7 +111,7 @@ export default function DettaglioDomandaPage() {
             La domanda richiesta non esiste o è stata eliminata.
           </p>
           <Link
-            href="/domande"
+            href={returnTo}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.bg} text-white`}
           >
             Torna alle domande
@@ -151,7 +155,7 @@ export default function DettaglioDomandaPage() {
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-4">
           <Link
-            href="/domande"
+            href={returnTo}
             className={`p-2 rounded-lg ${colors.background.secondary} hover:${colors.background.tertiary} transition-colors`}
           >
             <ArrowLeft className={`w-5 h-5 ${colors.text.secondary}`} />
@@ -177,7 +181,7 @@ export default function DettaglioDomandaPage() {
         <div className="relative">
           <div className="flex items-center gap-2">
             <Link
-              href={`/domande/${questionId}/modifica`}
+              href={editHref}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.bg} text-white hover:opacity-90 transition-opacity`}
             >
               <Edit2 className="w-4 h-4" />

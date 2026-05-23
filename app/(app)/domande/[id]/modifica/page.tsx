@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { PageLoader } from '@/components/ui/loaders';
 import QuestionForm from '@/components/admin/QuestionForm';
@@ -11,7 +11,10 @@ import type { QuestionAnswerInput, QuestionKeywordInput } from '@/lib/validation
 
 export default function ModificaDomandaPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const questionId = params.id as string;
+  const rawReturnTo = searchParams.get('returnTo');
+  const returnTo = rawReturnTo?.startsWith('/domande') ? rawReturnTo : '/domande';
 
   const { data: question, isLoading, error } = trpc.questions.getQuestion.useQuery(
     { id: questionId },
@@ -34,7 +37,7 @@ export default function ModificaDomandaPage() {
             La domanda richiesta non esiste o è stata eliminata.
           </p>
           <Link
-            href="/domande"
+            href={returnTo}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.bg} text-white`}
           >
             Torna alle domande
@@ -92,7 +95,7 @@ export default function ModificaDomandaPage() {
 
   return (
     <div className="p-6 sm:p-8 lg:p-10">
-      <QuestionForm questionId={questionId} initialData={initialData} />
+      <QuestionForm questionId={questionId} basePath="/domande" returnTo={returnTo} initialData={initialData} />
     </div>
   );
 }

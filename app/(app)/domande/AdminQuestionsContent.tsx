@@ -85,6 +85,11 @@ export default function AdminQuestionsContent() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
 
+  const currentListPath = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+  const returnToQuery = encodeURIComponent(currentListPath);
+  const questionHref = (id: string) => `/domande/${id}?returnTo=${returnToQuery}`;
+  const questionEditHref = (id: string) => `/domande/${id}/modifica?returnTo=${returnToQuery}`;
+
   // Helper to read comma-separated array from URL params
   const getParamArray = (key: string): string[] => {
     const val = searchParams.get(key);
@@ -159,13 +164,15 @@ export default function AdminQuestionsContent() {
   }, [openMenuId]);
 
   useEffect(() => {
+    if (search.trim() === debouncedSearch) return;
+
     const timeoutId = window.setTimeout(() => {
       setDebouncedSearch(search.trim());
       setPage(1);
     }, 300);
 
     return () => window.clearTimeout(timeoutId);
-  }, [search]);
+  }, [search, debouncedSearch]);
 
   // Sync all filter state to URL so they survive navigation to/from edit pages
   useEffect(() => {
@@ -1316,7 +1323,7 @@ export default function AdminQuestionsContent() {
               return (
                 <>
                   <Link
-                    href={`/domande/${question.id}`}
+                    href={questionHref(question.id)}
                     className={`flex items-center gap-2 px-4 py-2 text-sm ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
                     onClick={() => setOpenMenuId(null)}
                   >
@@ -1324,7 +1331,7 @@ export default function AdminQuestionsContent() {
                     Visualizza
                   </Link>
                   <Link
-                    href={`/domande/${question.id}/modifica`}
+                    href={questionEditHref(question.id)}
                     className={`flex items-center gap-2 px-4 py-2 text-sm ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
                     onClick={() => setOpenMenuId(null)}
                   >

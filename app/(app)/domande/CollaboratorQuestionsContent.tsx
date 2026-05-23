@@ -2,6 +2,7 @@
 
 import { keepPreviousData } from '@tanstack/react-query';
 import { useState, useMemo, useEffect } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
@@ -69,17 +70,33 @@ export default function CollaboratorQuestionsContent() {
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
   const utils = trpc.useUtils();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+
+  const getParamArray = (key: string): string[] => {
+    const value = searchParams.get(key);
+    return value ? value.split(',').filter(Boolean) : [];
+  };
+
+  const currentListPath = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+  const returnToQuery = encodeURIComponent(currentListPath);
+  const questionHref = (id: string) => `/domande/${id}?returnTo=${returnToQuery}`;
+  const questionEditHref = (id: string) => `/domande/${id}/modifica?returnTo=${returnToQuery}`;
 
   // Filters state
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [subjectIds, setSubjectIds] = useState<string[]>([]);
-  const [topicIds, setTopicIds] = useState<string[]>([]);
-  const [types, setTypes] = useState<string[]>([]);
-  const [statuses, setStatuses] = useState<string[]>([]);
-  const [difficulties, setDifficulties] = useState<string[]>([]);
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
+  const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('q') ?? '');
+  const [subjectIds, setSubjectIds] = useState<string[]>(() => getParamArray('subjects'));
+  const [topicIds, setTopicIds] = useState<string[]>(() => getParamArray('topics'));
+  const [types, setTypes] = useState<string[]>(() => getParamArray('types'));
+  const [statuses, setStatuses] = useState<string[]>(() => getParamArray('statuses'));
+  const [difficulties, setDifficulties] = useState<string[]>(() => getParamArray('difficulties'));
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>(() => getParamArray('tags'));
+  const [page, setPage] = useState(() => {
+    const pageParam = Number(searchParams.get('page'));
+    return pageParam > 0 ? pageParam : 1;
+  });
   const [pageSize] = useState(50);
 
   // Filter options
@@ -97,13 +114,30 @@ export default function CollaboratorQuestionsContent() {
   const { data: currentUser } = trpc.auth.me.useQuery();
 
   useEffect(() => {
+    if (search.trim() === debouncedSearch) return;
+
     const timeoutId = window.setTimeout(() => {
       setDebouncedSearch(search.trim());
       setPage(1);
     }, 300);
 
     return () => window.clearTimeout(timeoutId);
-  }, [search]);
+  }, [search, debouncedSearch]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set('q', debouncedSearch);
+    if (subjectIds.length) params.set('subjects', subjectIds.join(','));
+    if (topicIds.length) params.set('topics', topicIds.join(','));
+    if (types.length) params.set('types', types.join(','));
+    if (statuses.length) params.set('statuses', statuses.join(','));
+    if (difficulties.length) params.set('difficulties', difficulties.join(','));
+    if (selectedTagIds.length) params.set('tags', selectedTagIds.join(','));
+    if (page > 1) params.set('page', String(page));
+
+    const query = params.toString();
+    router.replace(`${pathname}${query ? `?${query}` : ''}`, { scroll: false });
+  }, [debouncedSearch, subjectIds, topicIds, types, statuses, difficulties, selectedTagIds, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch questions
   const { data: questionsData, isLoading } = trpc.questions.getQuestions.useQuery(
@@ -810,7 +844,7 @@ export default function CollaboratorQuestionsContent() {
               return (
                 <>
                   <Link
-                    href={`/domande/${question.id}`}
+                    href={questionHref(question.id)}
                     className={`flex items-center gap-2 px-4 py-2 text-sm ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
                     onClick={() => setOpenMenuId(null)}
                   >
@@ -820,7 +854,7 @@ export default function CollaboratorQuestionsContent() {
                   {isOwner && (
                     <>
                       <Link
-                        href={`/domande/${question.id}/modifica`}
+                        href={questionEditHref(question.id)}
                         className={`flex items-center gap-2 px-4 py-2 text-sm ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
                         onClick={() => setOpenMenuId(null)}
                       >
