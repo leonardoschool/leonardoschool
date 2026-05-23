@@ -1479,7 +1479,7 @@ export default function AdminUtentiContent() {
       utils.users.getAll.invalidate();
       utils.users.getStats.invalidate();
       closeConfirmModal();
-      showSuccess('Contratto revocato', 'Il contratto firmato è stato revocato. Ora puoi assegnare un nuovo contratto.');
+      showSuccess('Contratto revocato', 'Il contratto firmato è stato revocato ed eliminato. Ora puoi assegnare un nuovo contratto.');
     },
     onError: handleMutationError,
   });
@@ -1661,7 +1661,7 @@ export default function AdminUtentiContent() {
       case 'revokeSignedContract':
         return {
           title: 'Revoca Contratto Firmato',
-          message: `⚠️ ATTENZIONE: Stai per revocare un contratto già firmato da "${confirmModal.userName}". Il contratto verrà archiviato come "Revocato" e potrai assegnarne uno nuovo. L'utente verrà notificato della revoca.`,
+          message: `⚠️ ATTENZIONE: Stai per revocare un contratto già firmato da "${confirmModal.userName}". Il contratto verrà eliminato e potrai assegnarne uno nuovo. L'utente verrà notificato della revoca.`,
           confirmLabel: 'Revoca Contratto Firmato',
           variant: 'danger' as const,
           isLoading: revokeSignedContractMutation.isPending,
@@ -2596,7 +2596,11 @@ export default function AdminUtentiContent() {
                     viewUserModal.user.role === 'COLLABORATOR' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' :
                     'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
                   }`}>
-                    {getRoleBadge(viewUserModal.user.role, viewUserModal.user.collaborator?.kind).label}
+                    {getRoleBadge(
+                      viewUserModal.user.role,
+                      viewUserModal.user.collaborator?.kind,
+                      viewUserModal.user.collaborator?.subjects
+                    ).label}
                   </span>
                 </div>
               </div>

@@ -933,7 +933,7 @@ export const contractsRouter = router({
     }),
 
   /**
-   * Revoke a signed contract (keeps history, allows reassignment)
+   * Revoke a signed contract and remove it from storage
    */
   revokeSignedContract: adminProcedure
     .input(z.object({
@@ -964,24 +964,34 @@ export const contractsRouter = router({
         });
       }
 
-      // Update contract status to REVOKED
-      await ctx.prisma.contract.update({
+      const userName = contract.student?.user?.name || contract.collaborator?.user?.name || 'Utente';
+      const userUserId = contract.student?.user?.id || contract.collaborator?.user?.id;
+      const templateName = contract.template.name;
+      const studentId = contract.studentId;
+      const collaboratorId = contract.collaboratorId;
+
+      await ctx.prisma.contract.delete({
         where: { id: input.contractId },
-        data: { 
-          status: 'REVOKED',
-          revokedAt: new Date(),
-          revokedBy: ctx.user.id,
-          revokeNotes: input.revokeNotes ? sanitizeText(input.revokeNotes) : null,
-          canDownload: false, // Disable download on revocation
-        },
       });
 
-      // Get user info for return message
-      const userName = contract.student?.user?.name || contract.collaborator?.user?.name || 'Utente';
+      const getRecipientType = (): 'STUDENT' | 'COLLABORATOR' | undefined => {
+        if (studentId) return 'STUDENT';
+        if (collaboratorId) return 'COLLABORATOR';
+        return undefined;
+      };
+
+      await notificationService.notifyContractCancelled(ctx.prisma, {
+        contractId: input.contractId,
+        templateName,
+        recipientUserId: userUserId,
+        recipientName: userName,
+        recipientProfileId: studentId || collaboratorId || undefined,
+        recipientType: getRecipientType(),
+      });
 
       return { 
         success: true, 
-        message: `Contratto di ${userName} revocato. Ora puoi assegnarne uno nuovo.` 
+        message: `Contratto di ${userName} revocato ed eliminato. Ora puoi assegnarne uno nuovo.` 
       };
     }),
 

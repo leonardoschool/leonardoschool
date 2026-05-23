@@ -78,6 +78,19 @@ export interface SignerInfo {
   signerType: 'STUDENT' | 'COLLABORATOR';
 }
 
+function replaceYearOffsetPlaceholders(template: string, currentYear: number): string {
+  let content = template
+    .replaceAll('{{ANNO_SUCCESSIVO}}', (currentYear + 1).toString())
+    .replaceAll('{{ANNO_DOPO_2}}', (currentYear + 2).toString());
+
+  for (let offset = 1; offset <= 5; offset += 1) {
+    content = content.replaceAll(`{{ANNO+${offset}}}`, (currentYear + offset).toString());
+    content = content.replaceAll(`{{ANNO_PLUS_${offset}}}`, (currentYear + offset).toString());
+  }
+
+  return content;
+}
+
 // ==================== CONTRACT TARGET VALIDATION ====================
 
 export async function validateStudentForContract(
@@ -240,6 +253,7 @@ export function generateContractContent(
   extras?: { startDate?: Date | null; endDate?: Date | null; compensation?: number | null }
 ): string {
   const today = new Date();
+  const currentYear = today.getFullYear();
   const formattedDate = today.toLocaleDateString('it-IT', {
     day: 'numeric',
     month: 'long',
@@ -263,7 +277,7 @@ export function generateContractContent(
       : '';
   const specialization = 'specialization' in student ? student.specialization : null;
 
-  return template
+  return replaceYearOffsetPlaceholders(template, currentYear)
     .replaceAll('{{NOME_COMPLETO}}', sanitizeText(user.name))
     .replaceAll('{{EMAIL}}', sanitizeText(user.email))
     .replaceAll('{{CODICE_FISCALE}}', sanitizeText(student.fiscalCode))
@@ -276,7 +290,7 @@ export function generateContractContent(
     .replaceAll('{{PROVINCIA}}', sanitizeText(student.province))
     .replaceAll('{{CAP}}', sanitizeText(student.postalCode))
     .replaceAll('{{DATA_ODIERNA}}', sanitizeText(formattedDate))
-    .replaceAll('{{ANNO}}', today.getFullYear().toString())
+    .replaceAll('{{ANNO}}', currentYear.toString())
     .replaceAll('{{DATA_INIZIO}}', sanitizeText(fmt(extras?.startDate)))
     .replaceAll('{{DATA_FINE}}', sanitizeText(fmt(extras?.endDate)))
     .replaceAll('{{COMPENSO}}', sanitizeText(formattedCompensation))

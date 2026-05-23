@@ -4,15 +4,55 @@ export function ContractContentEditorStyles() {
   return (
     <style jsx global>{`
       .contract-rich-editor h1,
-      .contract-rich-editor h2 {
-        font-size: 1.35rem;
+      .contract-rich-editor h2,
+      .contract-rich-editor h3,
+      .contract-rich-editor h4,
+      .contract-rich-editor h5,
+      .contract-rich-editor h6 {
         font-weight: 700;
+        line-height: 1.25;
+      }
+      .contract-rich-editor h1,
+      .contract-rich-editor h1 * {
+        font-size: 1.55rem !important;
+      }
+      .contract-rich-editor h1 {
+        margin: 0 0 1rem;
+      }
+      .contract-rich-editor h2,
+      .contract-rich-editor h2 * {
+        font-size: 1.35rem !important;
+      }
+      .contract-rich-editor h2 {
         margin: 0 0 0.9rem;
       }
+      .contract-rich-editor h3,
+      .contract-rich-editor h3 * {
+        font-size: 1.18rem !important;
+      }
       .contract-rich-editor h3 {
-        font-size: 1.08rem;
-        font-weight: 650;
         margin: 1.15rem 0 0.65rem;
+      }
+      .contract-rich-editor h4,
+      .contract-rich-editor h4 * {
+        font-size: 1.05rem !important;
+      }
+      .contract-rich-editor h4 {
+        margin: 1rem 0 0.55rem;
+      }
+      .contract-rich-editor h5,
+      .contract-rich-editor h5 * {
+        font-size: 0.95rem !important;
+      }
+      .contract-rich-editor h5 {
+        margin: 0.9rem 0 0.5rem;
+      }
+      .contract-rich-editor h6,
+      .contract-rich-editor h6 * {
+        font-size: 0.88rem !important;
+      }
+      .contract-rich-editor h6 {
+        margin: 0.8rem 0 0.45rem;
       }
       .contract-rich-editor p {
         margin: 0 0 0.75rem;

@@ -5,6 +5,18 @@ export interface ContractPlaceholder {
   desc: string;
 }
 
+export interface YearOffsetContractPlaceholder extends ContractPlaceholder {
+  offset: number;
+  label: string;
+}
+
+export const yearOffsetContractPlaceholders: YearOffsetContractPlaceholder[] = [1, 2, 3, 4, 5].map((offset) => ({
+  offset,
+  label: `Anno +${offset}`,
+  tag: `{{ANNO+${offset}}}`,
+  desc: `Anno corrente + ${offset}`,
+}));
+
 export const baseContractPlaceholders: ContractPlaceholder[] = [
   { tag: '{{NOME_COMPLETO}}', desc: 'Nome e cognome' },
   { tag: '{{EMAIL}}', desc: 'Email' },

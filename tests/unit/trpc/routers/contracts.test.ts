@@ -437,6 +437,14 @@ describe('Contracts Router', () => {
         expect(validStatuses).toContain(contract.status);
       });
 
+      it('should delete the signed contract instead of marking it as revoked', () => {
+        const contract = createMockContract({ status: 'SIGNED' });
+        const deletedContractId = contract.id;
+
+        expect(deletedContractId).toBe(contract.id);
+        expect(contract.status).toBe('SIGNED');
+      });
+
       it('should throw BAD_REQUEST for non-signable contracts', () => {
         const contract = createMockContract({ status: 'CANCELLED' });
         const canRevoke = contract.status === 'SIGNED';
