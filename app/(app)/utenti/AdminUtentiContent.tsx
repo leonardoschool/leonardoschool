@@ -546,6 +546,8 @@ function AssignContractModal({
 
   // Reset handler for when modal closes - called from parent via onClose callback
   const resetState = () => {
+    userEditedContentRef.current = false;
+    userEditedPriceRef.current = false;
     setStep('select');
     setSelectedTemplate(null);
     setCustomContent('');
@@ -565,19 +567,24 @@ function AssignContractModal({
     onClose();
   };
 
-  // Sync content from preview when it loads
-  // Using a ref to track previous preview to avoid unnecessary updates
+  // Sync content from preview when it loads.
+  // The preview query refetches on window focus and whenever its inputs change
+  // (startDate/endDate/compensation), producing a new `preview` object. Without
+  // the edit guards below, each refetch would overwrite the admin's manual edits
+  // with the original template content. Once the admin edits a field, we stop
+  // auto-syncing it so the customization survives refetches.
   const prevPreviewRef = useRef<typeof preview>(null);
-  
+  const userEditedContentRef = useRef(false);
+  const userEditedPriceRef = useRef(false);
+
   useEffect(() => {
     if (preview && preview !== prevPreviewRef.current) {
       prevPreviewRef.current = preview;
-      // Only update if values are different to avoid re-render loops
-      if (customContent !== preview.previewContent) {
+      if (!userEditedContentRef.current && customContent !== preview.previewContent) {
         setCustomContent(preview.previewContent);
       }
       const newPrice = preview.template.price?.toString() || '';
-      if (customPrice !== newPrice) {
+      if (!userEditedPriceRef.current && customPrice !== newPrice) {
         setCustomPrice(newPrice);
       }
     }
@@ -585,11 +592,16 @@ function AssignContractModal({
   }, [preview]);
 
   const handleSelectTemplate = (templateId: string) => {
+    // New template selection: allow its content/price to populate the editor fresh.
+    userEditedContentRef.current = false;
+    userEditedPriceRef.current = false;
     setSelectedTemplate(templateId);
     setStep('customize');
   };
 
   const handleBack = () => {
+    userEditedContentRef.current = false;
+    userEditedPriceRef.current = false;
     setStep('select');
     setSelectedTemplate(null);
     setCustomContent('');
@@ -788,7 +800,10 @@ function AssignContractModal({
 
                   <ContractContentEditor
                     value={customContent}
-                    onChange={setCustomContent}
+                    onChange={(content) => {
+                      userEditedContentRef.current = true;
+                      setCustomContent(content);
+                    }}
                     placeholders={getContractPlaceholders(isCollaboratorTemplate ? 'COLLABORATOR' : 'STUDENT')}
                     label="Contenuto contratto"
                     minRows={10}
@@ -805,7 +820,10 @@ function AssignContractModal({
                         step="0.01"
                         min="0"
                         value={customPrice}
-                        onChange={(e) => setCustomPrice(e.target.value)}
+                        onChange={(e) => {
+                          userEditedPriceRef.current = true;
+                          setCustomPrice(e.target.value);
+                        }}
                         className={`w-full px-4 py-3 rounded-xl ${colors.background.input} ${colors.text.primary} ${colors.border.primary} border focus:ring-2 focus:ring-red-500`}
                         placeholder="Es: 1500,00"
                       />

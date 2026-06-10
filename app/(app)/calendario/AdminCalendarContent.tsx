@@ -79,6 +79,9 @@ export default function AdminCalendarContent() {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [showEventForm, setShowEventForm] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  // Invitations the edited event already had, kept to diff against the form selection
+  // on save so we can add/remove the right participants.
+  const [editingInvitations, setEditingInvitations] = useState<Array<{ id: string; userId?: string; groupId?: string }>>([]);
   const [formData, setFormData] = useState<EventFormData>(defaultFormData);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
   const [filterType, setFilterType] = useState<string>('');
@@ -264,6 +267,10 @@ export default function AdminCalendarContent() {
     onError: handleMutationError,
   });
 
+  // Participant changes while editing an existing event (server allows admins on any event)
+  const addInvitationsMutation = trpc.calendar.addInvitations.useMutation({ onError: handleMutationError });
+  const removeInvitationMutation = trpc.calendar.removeInvitation.useMutation({ onError: handleMutationError });
+
   // Transform events for Calendar component
   const events: CalendarEvent[] = useMemo(() => {
     const currentUserId = currentUser?.id;
@@ -346,6 +353,7 @@ export default function AdminCalendarContent() {
       startDateTime: formatDateTimeLocal(startDate),
       endDateTime: formatDateTimeLocal(endDate),
     });
+    setEditingInvitations([]);
     setEditingEventId(null);
     setShowEventForm(true);
   };
@@ -353,7 +361,8 @@ export default function AdminCalendarContent() {
   const openEditEvent = (event: CalendarEvent) => {
     const startDate = new Date(event.startDate);
     const endDate = new Date(event.endDate);
-    
+
+    const invitations = event.invitations ?? [];
     setFormData({
       title: event.title,
       description: event.description || '',
@@ -366,10 +375,11 @@ export default function AdminCalendarContent() {
       locationDetails: event.locationDetails || '',
       onlineLink: event.onlineLink || '',
       isPublic: false, // Will be fetched from full event
-      inviteUserIds: [], // Editing invites is not supported in edit mode
-      inviteGroupIds: [],
+      inviteUserIds: invitations.filter((i) => i.user).map((i) => i.user!.id),
+      inviteGroupIds: invitations.filter((i) => i.group).map((i) => i.group!.id),
       sendEmailInvites: false,
     });
+    setEditingInvitations(invitations.map((i) => ({ id: i.id, userId: i.user?.id, groupId: i.group?.id })));
     setEditingEventId(event.id);
     setSelectedEvent(null);
     setShowEventForm(true);
@@ -378,10 +388,11 @@ export default function AdminCalendarContent() {
   const closeEventForm = () => {
     setShowEventForm(false);
     setEditingEventId(null);
+    setEditingInvitations([]);
     setFormData(defaultFormData);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const startDateTime = new Date(formData.startDateTime);
@@ -428,7 +439,36 @@ export default function AdminCalendarContent() {
     };
 
     if (editingEventId) {
-      updateEventMutation.mutate({ id: editingEventId, ...eventData });
+      const eventId = editingEventId;
+      // Capture the participant diff before updateEvent's onSuccess resets the form.
+      const origUserIds = editingInvitations.filter((i) => i.userId).map((i) => i.userId!);
+      const origGroupIds = editingInvitations.filter((i) => i.groupId).map((i) => i.groupId!);
+      const addUserIds = formData.inviteUserIds.filter((id) => !origUserIds.includes(id));
+      const addGroupIds = formData.inviteGroupIds.filter((id) => !origGroupIds.includes(id));
+      const removedInvitations = editingInvitations.filter(
+        (i) =>
+          (i.userId && !formData.inviteUserIds.includes(i.userId)) ||
+          (i.groupId && !formData.inviteGroupIds.includes(i.groupId))
+      );
+
+      try {
+        await updateEventMutation.mutateAsync({ id: eventId, ...eventData });
+        if (addUserIds.length > 0 || addGroupIds.length > 0) {
+          await addInvitationsMutation.mutateAsync({
+            eventId,
+            userIds: addUserIds.length > 0 ? addUserIds : undefined,
+            groupIds: addGroupIds.length > 0 ? addGroupIds : undefined,
+          });
+        }
+        for (const invitation of removedInvitations) {
+          await removeInvitationMutation.mutateAsync({ invitationId: invitation.id });
+        }
+        if (addUserIds.length > 0 || addGroupIds.length > 0 || removedInvitations.length > 0) {
+          utils.calendar.getEvents.invalidate();
+        }
+      } catch {
+        // errors surfaced via handleMutationError
+      }
     } else {
       createEventMutation.mutate({
         ...eventData,
@@ -882,12 +922,12 @@ export default function AdminCalendarContent() {
                 />
               </div>
 
-              {/* Invites Section - Only for new events */}
-              {!editingEventId && (
+              {/* Participants section — invite on create, manage (add/remove) on edit */}
+              {(
                 <div className={`space-y-4 p-4 rounded-lg ${colors.background.secondary} border ${colors.border.primary}`}>
                   <h3 className={`font-medium ${colors.text.primary} flex items-center gap-2`}>
                     <Users className="w-4 h-4" />
-                    Invita partecipanti
+                    {editingEventId ? 'Gestisci partecipanti' : 'Invita partecipanti'}
                   </h3>
 
                   {/* Users (Students + Collaborators) */}
@@ -1097,12 +1137,14 @@ export default function AdminCalendarContent() {
 
                   {/* Email Notification Toggle */}
                   <div className="pt-2">
-                    <Checkbox
-                      id="sendEmailInvites"
-                      checked={formData.sendEmailInvites}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, sendEmailInvites: e.target.checked }))}
-                      label="Invia email di notifica agli invitati"
-                    />
+                    {!editingEventId && (
+                      <Checkbox
+                        id="sendEmailInvites"
+                        checked={formData.sendEmailInvites}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, sendEmailInvites: e.target.checked }))}
+                        label="Invia email di notifica agli invitati"
+                      />
+                    )}
                   </div>
                 </div>
               )}

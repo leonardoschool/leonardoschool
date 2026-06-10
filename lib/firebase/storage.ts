@@ -113,7 +113,10 @@ export const firebaseStorage = {
     onProgress?: (progress: number) => void
   ): Promise<{ url: string; path: string }> => {
     const fileName = `${nanoid()}-${file.name}`;
-    const filePath = `materials/${type}/${fileName}`;
+    // Storage rules match uppercase path segments (materials/PDF, materials/VIDEO,
+    // materials/DOCUMENT) mirroring the MaterialType enum — a lowercase segment
+    // matches no rule and is denied with 403.
+    const filePath = `materials/${type.toUpperCase()}/${fileName}`;
     const storageRef = ref(storage, filePath);
 
     return new Promise((resolve, reject) => {

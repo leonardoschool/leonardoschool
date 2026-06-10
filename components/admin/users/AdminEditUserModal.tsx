@@ -80,7 +80,11 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSuccess }:
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  const hasProfile = !!user?.profileCompleted && !!(user?.student || user?.collaborator);
+  // Gate the anagrafici section on the existence of a student/collaborator record,
+  // NOT on profileCompleted: admins must be able to view and save the data of
+  // profiles that haven't completed/verified their details yet. The server
+  // (adminUpdateUserProfile) already keys off the record's existence.
+  const hasProfile = !!(user?.student || user?.collaborator);
   const profileData = user?.student ?? user?.collaborator ?? null;
 
   useEffect(() => {

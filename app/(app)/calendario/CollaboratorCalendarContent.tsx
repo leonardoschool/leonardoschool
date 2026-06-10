@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { Calendar, CalendarEvent, CalendarView, EventDetail, eventTypeLabels } from '@/components/ui/Calendar';
 import { Spinner } from '@/components/ui/loaders';
@@ -34,6 +35,7 @@ export default function CollaboratorCalendarContent() {
   const [view, setView] = useState<CalendarView>('month');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [filterType, setFilterType] = useState<string>('');
+  const [filterTagId, setFilterTagId] = useState<string>('');
   const [selectedUserInfo, setSelectedUserInfo] = useState<{ userId: string; userType: 'STUDENT' | 'COLLABORATOR' } | null>(null);
   const [selectedGroupInfo, setSelectedGroupInfo] = useState<string | null>(null);
   const [statsModal, setStatsModal] = useState<{ type: 'total' | 'month' | 'upcoming' | 'absences'; title: string } | null>(null);
@@ -58,7 +60,7 @@ export default function CollaboratorCalendarContent() {
     closeEventForm,
     handleSubmit,
     deleteEvent,
-  } = useCalendarEvents({ selectedDate, view, filterType });
+  } = useCalendarEvents({ selectedDate, view, filterType, filterTagId });
 
   const {
     inviteSearch,
@@ -71,6 +73,8 @@ export default function CollaboratorCalendarContent() {
     filteredUsers,
     filteredGroups,
   } = useCalendarFilters();
+
+  const { data: tagsData } = trpc.calendar.listTags.useQuery({ includeInactive: false });
 
   return (
     <div className="space-y-6">
@@ -191,6 +195,22 @@ export default function CollaboratorCalendarContent() {
             </button>
           ))}
         </div>
+        {tagsData && tagsData.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className={`text-sm ${colors.text.secondary}`}>Etichetta:</span>
+            <div className="w-48">
+              <CustomSelect
+                value={filterTagId}
+                onChange={setFilterTagId}
+                options={[
+                  { value: '', label: 'Tutte le etichette' },
+                  ...tagsData.map((t) => ({ value: t.id, label: t.name })),
+                ]}
+                size="sm"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Calendar */}
@@ -258,6 +278,22 @@ export default function CollaboratorCalendarContent() {
                   options={Object.entries(eventTypeLabels).map(([value, label]) => ({ value, label }))}
                 />
               </div>
+
+              {tagsData && tagsData.length > 0 && (
+                <div>
+                  <label className={`block text-sm font-medium ${colors.text.primary} mb-1`}>
+                    Etichetta
+                  </label>
+                  <CustomSelect
+                    value={formData.tagId}
+                    onChange={(value) => setFormData((prev) => ({ ...prev, tagId: value }))}
+                    options={[
+                      { value: '', label: 'Nessuna etichetta' },
+                      ...tagsData.map((t) => ({ value: t.id, label: t.name })),
+                    ]}
+                  />
+                </div>
+              )}
 
               <Checkbox
                 id="isAllDay"

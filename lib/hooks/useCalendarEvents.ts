@@ -21,6 +21,7 @@ export interface EventFormData {
   inviteUserIds: string[];
   inviteGroupIds: string[];
   sendEmailInvites: boolean;
+  tagId: string; // empty string = no tag
 }
 
 export const defaultFormData: EventFormData = {
@@ -37,15 +38,17 @@ export const defaultFormData: EventFormData = {
   inviteUserIds: [],
   inviteGroupIds: [],
   sendEmailInvites: true,
+  tagId: '',
 };
 
 interface UseCalendarEventsOptions {
   selectedDate: Date;
   view: CalendarView;
   filterType: string;
+  filterTagId?: string;
 }
 
-export function useCalendarEvents({ selectedDate, view, filterType }: UseCalendarEventsOptions) {
+export function useCalendarEvents({ selectedDate, view, filterType, filterTagId }: UseCalendarEventsOptions) {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [formData, setFormData] = useState<EventFormData>(defaultFormData);
@@ -87,6 +90,7 @@ export function useCalendarEvents({ selectedDate, view, filterType }: UseCalenda
     startDate: dateRange.start,
     endDate: dateRange.end,
     type: filterType ? (filterType as CalendarEvent['type']) : undefined,
+    tagId: filterTagId || undefined,
     includeInvitations: true,
     includeCancelled: false,
     onlyMyEvents: true,
@@ -163,6 +167,7 @@ export function useCalendarEvents({ selectedDate, view, filterType }: UseCalenda
           isCancelled: e.isCancelled || false,
           isMine,
           createdBy: e.createdBy,
+          tag: e.tag ?? null,
           invitations: invitations?.map((inv) => ({
             id: inv.id,
             status: inv.status,
@@ -228,6 +233,7 @@ export function useCalendarEvents({ selectedDate, view, filterType }: UseCalenda
       inviteUserIds: [],
       inviteGroupIds: [],
       sendEmailInvites: false,
+      tagId: event.tag?.id ?? '',
     });
     setEditingEventId(event.id);
     setSelectedEvent(null);
@@ -280,6 +286,7 @@ export function useCalendarEvents({ selectedDate, view, filterType }: UseCalenda
       locationDetails: formData.locationDetails || undefined,
       onlineLink: formData.onlineLink || undefined,
       isPublic: formData.isPublic,
+      tagId: formData.tagId || null,
     };
 
     if (editingEventId) {
