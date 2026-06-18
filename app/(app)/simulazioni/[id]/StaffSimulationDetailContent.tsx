@@ -312,9 +312,9 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
       const unassignedQuestions = simulation.questions.filter(sq => !assignedIds.has(sq.question.id));
       if (unassignedQuestions.length > 0) {
         if (showSectionHeaders) questionsHtml += `<div class="section-header">Senza sezione</div>`;
+        // Last group rendered: nextNumber isn't needed afterwards, so we don't reassign.
         const result = renderQuestionsByType(unassignedQuestions, globalQuestionNumber, hasMultipleTypes);
         questionsHtml += result.html;
-        globalQuestionNumber = result.nextNumber;
       }
     } else {
       // No sections - just group by type
