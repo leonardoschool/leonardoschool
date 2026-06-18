@@ -51,6 +51,7 @@ type ContractWithTemplate = {
   id: string;
   status: 'PENDING' | 'SIGNED' | 'EXPIRED' | 'CANCELLED';
   signToken?: string | null;
+  priceSnapshot?: number | null;
   template: {
     name: string;
     description?: string | null;
@@ -196,11 +197,11 @@ export function CollaboratorDashboard({ userName, userInitial, isActive }: Colla
                   Firmalo per completare l&apos;attivazione del tuo account collaboratore.
                 </p>
                 
-                {contract.template.price && (
+                {(contract.priceSnapshot ?? contract.template.price) != null && (
                   <div className={`mt-4 inline-block px-4 py-2 rounded-lg ${colors.primary.softBg}`}>
                     <span className={`text-sm ${colors.text.secondary}`}>Compenso previsto: </span>
                     <span className={`font-bold ${colors.primary.text}`}>
-                      {new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(contract.template.price)}
+                      {new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(contract.priceSnapshot ?? contract.template.price!)}
                     </span>
                   </div>
                 )}

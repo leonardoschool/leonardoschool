@@ -640,6 +640,29 @@ export default function NewSimulationPage() {
     }
   };
 
+  // Selecting a simulation type from a card.
+  // When a template is applied, the template owns scoring/timing/sections — choosing a type
+  // must only toggle official-vs-practice behaviour, never clobber the template's parameters.
+  const handleSelectSimulationType = (type: SimulationType) => {
+    if (!selectedTemplateId) {
+      applyPreset(type);
+      return;
+    }
+
+    setSimulationType(type);
+    setIsPaperBased(false);
+    setPaperInstructions('');
+
+    const isOfficialType = type === 'OFFICIAL';
+    const antiCheat = isOfficialType ? SIMULATION_PRESETS.OFFICIAL_TOLC_MED : null;
+    setIsOfficial(isOfficialType);
+    setEnableAntiCheat(antiCheat?.enableAntiCheat ?? false);
+    setForceFullscreen(antiCheat?.forceFullscreen ?? false);
+    setBlockTabChange(antiCheat?.blockTabChange ?? false);
+    setBlockCopyPaste(antiCheat?.blockCopyPaste ?? false);
+    setLogSuspiciousEvents(antiCheat?.logSuspiciousEvents ?? false);
+  };
+
   const applyTemplateToForm = (templateId: string) => {
     setSelectedTemplateId(templateId);
     if (!templateId) {
@@ -1773,7 +1796,7 @@ export default function NewSimulationPage() {
                   {primaryTypeOptions.map((option) => (
                     <button
                       key={option.value}
-                      onClick={() => applyPreset(option.value)}
+                      onClick={() => handleSelectSimulationType(option.value)}
                       className={`p-6 rounded-xl border-2 text-left transition-all relative ${
                         simulationType === option.value && !isPaperBased
                           ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
@@ -2361,12 +2384,12 @@ export default function NewSimulationPage() {
                         {creationMode === 'simulation' && (
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => {
-                              setSectionMode('auto');
-                              setSections([]);
-                            }}
+                            // Don't wipe manual/template sections when switching to auto:
+                            // auto mode derives sections from the questions and ignores this array,
+                            // so keeping it lets the user switch back to manual without losing them.
+                            onClick={() => setSectionMode('auto')}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                              sectionMode === 'auto' 
+                              sectionMode === 'auto'
                                 ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' 
                                 : `${colors.background.card} ${colors.text.muted}`
                             }`}
@@ -4122,6 +4145,7 @@ export default function NewSimulationPage() {
             defaultSubjectIds={targetSection.subjectIds}
             defaultTopicIds={targetSection.topicIds}
             defaultTypes={targetSection.questionTypes}
+            defaultTypeCounts={(sourceTemplateSection?.questionTypeCounts ?? targetSection.questionTypeCounts) as Partial<Record<TemplateQuestionTypeValue, number>> | undefined}
             defaultDifficulties={targetSection.difficultyLevels}
             defaultTagIds={targetSection.tagIds}
             defaultLanguage={targetSection.language}

@@ -40,6 +40,8 @@ function createMockUser(
     firebaseUid: 'firebase-uid',
     email: 'test@example.com',
     name: 'Test User',
+    firstName: 'Test',
+    lastName: 'User',
     role,
     profileCompleted: true,
     isActive: true,

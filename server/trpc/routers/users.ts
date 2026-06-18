@@ -1825,8 +1825,12 @@ export const usersRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { userId, firstName, lastName } = input;
-      const fullName = normalizeName(`${firstName} ${lastName}`);
+      // Store the structured split AND keep `name` in sync as the full display
+      // name, so multi-word first names never collapse into the surname.
+      const firstName = normalizeName(input.firstName);
+      const lastName = normalizeName(input.lastName);
+      const { userId } = input;
+      const fullName = `${firstName} ${lastName}`;
 
       const user = await ctx.prisma.user.findUnique({ where: { id: userId } });
       if (!user) {
@@ -1835,7 +1839,7 @@ export const usersRouter = router({
 
       const updated = await ctx.prisma.user.update({
         where: { id: userId },
-        data: { name: fullName },
+        data: { name: fullName, firstName, lastName },
       });
 
       try {

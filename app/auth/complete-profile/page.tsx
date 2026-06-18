@@ -347,22 +347,20 @@ export default function CompleteProfilePage() {
       return;
     }
 
-    // Estrae nome e cognome dal campo name (assume formato "Nome Cognome")
-    const nameParts = user.name.trim().split(' ');
-    let firstName = '';
-    let lastName = '';
+    // Prefer the structured columns; fall back to splitting `name` for legacy
+    // users (assume "Nome Cognome", primo token = nome, resto = cognome).
+    let firstName = user.firstName?.trim() ?? '';
+    let lastName = user.lastName?.trim() ?? '';
 
-    if (nameParts.length === 1) {
-      // Solo un nome, usa come cognome
-      lastName = nameParts[0];
-      firstName = nameParts[0];
-    } else if (nameParts.length === 2) {
-      firstName = nameParts[0];
-      lastName = nameParts[1];
-    } else {
-      // Più di due parti: assume primo = nome, resto = cognome
-      firstName = nameParts[0];
-      lastName = nameParts.slice(1).join(' ');
+    if (!firstName && !lastName) {
+      const nameParts = user.name.trim().split(' ');
+      if (nameParts.length === 1) {
+        lastName = nameParts[0];
+        firstName = nameParts[0];
+      } else {
+        firstName = nameParts[0];
+        lastName = nameParts.slice(1).join(' ');
+      }
     }
 
     const datiCalcolo: DatiCodiceFiscale = {

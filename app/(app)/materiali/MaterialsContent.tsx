@@ -1803,7 +1803,7 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <dialog 
             open
-            className={`${colors.background.card} rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col m-0`}
+            className={`relative ${colors.background.card} rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col m-0`}
             aria-labelledby="assign-modal-title"
           >
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">

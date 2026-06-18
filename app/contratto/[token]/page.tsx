@@ -177,8 +177,10 @@ export default function ContractSignPage() {
     if (!contract) return;
 
     const contractName = contract.template?.name || 'Contratto';
-    const contractPrice = contract.template?.price 
-      ? new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(contract.template.price)
+    // Prefer the price frozen on the contract at assignment time over the live template price.
+    const effectivePrice = contract.priceSnapshot ?? contract.template?.price ?? null;
+    const contractPrice = effectivePrice != null
+      ? new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(effectivePrice)
       : '-';
     const contractDuration = contract.template?.duration || '-';
 
@@ -485,7 +487,7 @@ export default function ContractSignPage() {
                 <Euro className={`w-4 h-4 ${colors.text.secondary}`} />
                 <span className={`text-sm ${colors.text.secondary}`}>Importo</span>
               </div>
-              <p className={`font-semibold text-lg ${colors.text.primary}`}>{formatPrice(contract.template?.price ?? null)}</p>
+              <p className={`font-semibold text-lg ${colors.text.primary}`}>{formatPrice(contract.priceSnapshot ?? contract.template?.price ?? null)}</p>
             </div>
             <div className={`p-4 rounded-xl ${colors.background.secondary}`}>
               <div className="flex items-center gap-2 mb-1">

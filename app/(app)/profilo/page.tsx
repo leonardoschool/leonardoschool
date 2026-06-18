@@ -353,8 +353,8 @@ function ContractAlert({ contract }: ContractAlertProps) {
           </h3>
           <p className={`mt-1 ${colors.text.secondary}`}>
             Hai un contratto &quot;{contract.template.name}&quot; in attesa di firma.
-            {contract.template.price && (
-              <span className="font-medium"> Importo: €{contract.template.price.toFixed(2)}</span>
+            {(contract.priceSnapshot ?? contract.template.price) != null && (
+              <span className="font-medium"> Importo: €{(contract.priceSnapshot ?? contract.template.price).toFixed(2)}</span>
             )}
           </p>
           {daysLeft !== null && daysLeft > 0 && (

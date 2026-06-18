@@ -110,6 +110,8 @@ function createMockUser(overrides: Partial<User> = {}): User {
     firebaseUid: `firebase_${id}`,
     email: faker.internet.email().toLowerCase(),
     name: faker.person.fullName(),
+    firstName: faker.person.firstName(),
+    lastName: faker.person.lastName(),
     role: 'STUDENT' as UserRole,
     isActive: true,
     profileCompleted: false,
