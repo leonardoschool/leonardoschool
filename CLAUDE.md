@@ -90,7 +90,7 @@ The project uses **Prisma Migrate** (not `db push`) since `0_init`. Whenever you
 Single source of truth: `version` in `package.json` (SemVer `MAJOR.MINOR.PATCH`), surfaced to the UI via `next.config.ts` (`NEXT_PUBLIC_APP_VERSION`) and shown by `components/ui/VersionBadge.tsx` (bottom-left chip).
 On **every** user-visible or behavioral change:
 1. Bump `package.json` `version` (PATCH for fixes, MINOR for features, MAJOR for breaking changes).
-2. Add an entry under the new version heading in `CHANGELOG.md` (Keep a Changelog format: `Aggiunto`/`Modificato`/`Corretto`/`Infrastruttura`), dated, in Italian.
+2. Add an entry under the new version heading in `CHANGELOG.md` (Keep a Changelog format: `Added`/`Changed`/`Fixed`/`Infrastructure`), dated, in English.
 Pure internal refactors with no behavior change don't need a bump, but still note anything migration- or infra-related.
 
 ## Color System (MANDATORY)

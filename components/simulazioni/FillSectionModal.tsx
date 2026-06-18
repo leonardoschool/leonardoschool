@@ -84,6 +84,10 @@ const QUESTION_TYPE_LABELS: Record<SectionQuestionTypeFilter, string> = {
   OPEN_TEXT: 'a risposta aperta',
 };
 
+// Canonical order for filling a section: closed-answer types first, open-answer last,
+// so single-choice questions are drawn (and shown) before open ones.
+const QUESTION_TYPE_ORDER: SectionQuestionTypeFilter[] = ['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'OPEN_TEXT'];
+
 
 function getDefaultSubjectSelection(defaultSubjectIds?: string[], defaultSubjectId?: string | null) {
   return defaultSubjectIds && defaultSubjectIds.length > 0
@@ -111,7 +115,8 @@ function getTypeCountTargets(
   const allowed = selectedTypes.length > 0 ? new Set(selectedTypes) : null;
   return (Object.entries(typeCounts) as Array<[SectionQuestionTypeFilter, number | undefined]>)
     .filter(([type, count]) => Number.isFinite(count) && (count ?? 0) > 0 && (!allowed || allowed.has(type)))
-    .map(([type, count]) => ({ type, count: Math.floor(count as number) }));
+    .map(([type, count]) => ({ type, count: Math.floor(count as number) }))
+    .sort((a, b) => QUESTION_TYPE_ORDER.indexOf(a.type) - QUESTION_TYPE_ORDER.indexOf(b.type));
 }
 
 export default function FillSectionModal({
