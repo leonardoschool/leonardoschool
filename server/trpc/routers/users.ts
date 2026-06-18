@@ -1414,13 +1414,14 @@ export const usersRouter = router({
     );
 
     // ============ REVENUE STATS ============
-    // Get signed contracts with template prices
+    // Use the agreed amount frozen on each contract (priceSnapshot, admin override),
+    // falling back to the template price only for older contracts without a snapshot.
     const signedContracts = await ctx.prisma.contract.findMany({
       where: { status: 'SIGNED' },
       include: { template: { select: { price: true, name: true } } },
     });
 
-    const totalRevenue = signedContracts.reduce((sum, c) => sum + (c.template.price || 0), 0);
+    const totalRevenue = signedContracts.reduce((sum, c) => sum + (c.priceSnapshot ?? c.template.price ?? 0), 0);
     
     // Monthly revenue (last 12 months)
     const revenueByMonth = await Promise.all(
@@ -1434,7 +1435,7 @@ export const usersRouter = router({
           },
           include: { template: { select: { price: true } } },
         });
-        const revenue = contracts.reduce((sum, c) => sum + (c.template.price || 0), 0);
+        const revenue = contracts.reduce((sum, c) => sum + (c.priceSnapshot ?? c.template.price ?? 0), 0);
         // Format: "Dic '25" - clearer that 25 is year, not day
         const monthName = monthStart.toLocaleDateString('it-IT', { month: 'short' });
         const year = monthStart.getFullYear().toString().slice(-2);

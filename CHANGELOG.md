@@ -8,6 +8,12 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-06-18
+
+### Fixed
+- Contract assignment: the rendered/printed contract document now shows the admin-overridden amount (`priceSnapshot`) instead of the original template price. The "Importo" field kept the template price even when the admin changed it while personalizing the template.
+- Revenue stats now sum each contract's frozen `priceSnapshot` (falling back to the template price for older contracts), so admin price overrides are reflected in totals and monthly revenue.
+
 ## [1.0.1] - 2026-06-18
 
 ### Changed

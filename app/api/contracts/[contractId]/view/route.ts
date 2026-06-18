@@ -98,9 +98,13 @@ export async function GET(
           })
         )
       : '';
-    const safePrice = contract.template.price
+    // The admin can override the template price per-assignment; that override is frozen
+    // on the contract as priceSnapshot. Fall back to the template price only when no
+    // snapshot exists (older contracts) so the rendered document shows the agreed amount.
+    const effectivePrice = contract.priceSnapshot ?? contract.template.price;
+    const safePrice = effectivePrice
       ? sanitizeText(
-          `€ ${contract.template.price.toLocaleString('it-IT', {
+          `€ ${effectivePrice.toLocaleString('it-IT', {
             minimumFractionDigits: 2,
           })}`
         )
@@ -366,7 +370,7 @@ export async function GET(
         <span>${safeExpiresAt}</span>
       </div>
       ` : ''}
-      ${contract.template.price ? `
+      ${effectivePrice ? `
       <div class="info-item">
         <label>Importo</label>
         <span>${safePrice}</span>
