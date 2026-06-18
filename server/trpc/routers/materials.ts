@@ -986,7 +986,13 @@ export const materialsRouter = router({
               visibility,
               tags: tags || [],
               createdBy: ctx.user.id,
-              ...(categoryId ? { category: { connect: { id: categoryId } } } : {}),
+              // Material<->category is a many-to-many through MaterialCategoryLink,
+              // so the folder is linked via `categories`, not a direct `category` field.
+              ...(categoryId ? {
+                categories: {
+                  create: [{ category: { connect: { id: categoryId } } }]
+                }
+              } : {}),
               ...(subjectId ? { subject: { connect: { id: subjectId } } } : {}),
               ...(topicId ? { topic: { connect: { id: topicId } } } : {}),
               // Create group access records with nested write
