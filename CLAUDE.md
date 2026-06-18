@@ -78,6 +78,21 @@ Every procedure is wrapped with `withRequestContext` (AsyncLocalStorage, akin to
 ## Database (Prisma)
 Schema: `prisma/schema.prisma`. **UserRole**: `ADMIN`, `COLLABORATOR`, `STUDENT`. Subjects are dynamic DB rows (`CustomSubject`) with per-subject colors. Run `pnpm prisma:generate` after **every** schema change.
 
+### Migrations (MANDATORY on schema changes)
+The project uses **Prisma Migrate** (not `db push`) since `0_init`. Whenever you change `prisma/schema.prisma`:
+1. `pnpm prisma:migrate` → creates `prisma/migrations/<timestamp>_name/` and applies it locally.
+2. Commit the **new migration folder together with the schema change** — never one without the other.
+3. Production (Neon) applies pending migrations automatically: the Vercel **production** build runs `scripts/prisma-deploy.ts` → `prisma migrate deploy` (skipped in preview/local).
+- Keep migrations **additive/backward-compatible** (expand→contract for removals) so the running app never breaks mid-deploy. Never lose data.
+- Prisma CLI commands use Neon's **direct** URL via `prisma.config.ts` (`DATABASE_URL_UNPOOLED`); the app runtime uses the pooled `DATABASE_URL`.
+
+## Versioning & Changelog (MANDATORY)
+Single source of truth: `version` in `package.json` (SemVer `MAJOR.MINOR.PATCH`), surfaced to the UI via `next.config.ts` (`NEXT_PUBLIC_APP_VERSION`) and shown by `components/ui/VersionBadge.tsx` (bottom-left chip).
+On **every** user-visible or behavioral change:
+1. Bump `package.json` `version` (PATCH for fixes, MINOR for features, MAJOR for breaking changes).
+2. Add an entry under the new version heading in `CHANGELOG.md` (Keep a Changelog format: `Aggiunto`/`Modificato`/`Corretto`/`Infrastruttura`), dated, in Italian.
+Pure internal refactors with no behavior change don't need a bump, but still note anything migration- or infra-related.
+
 ## Color System (MANDATORY)
 Never hardcode hex values. Use `lib/theme/colors.ts`:
 ```typescript
@@ -111,6 +126,8 @@ Categories: `colors.primary.*`, `colors.background.*`, `colors.status.*`. If you
 - Prefer editing existing files over creating new ones
 - Code, folders, and comments in English; **all user-facing strings in Italian**
 - Comments explain WHY (non-obvious constraint/workaround), never WHAT
+- On schema changes: create a Prisma migration (`pnpm prisma:migrate`) and commit the migration folder (see Database → Migrations)
+- On user-visible/behavioral changes: bump `package.json` version + add a `CHANGELOG.md` entry (see Versioning & Changelog)
 
 ## Common Mistakes to Avoid
 1. Missing DB sync: after Firebase auth, always POST `/api/auth/me`
@@ -119,3 +136,5 @@ Categories: `colors.primary.*`, `colors.background.*`, `colors.status.*`. If you
 4. Wrong middleware file: use `proxy.ts`, NOT `middleware.ts`
 5. Hand-editing `.env`: switch with `pnpm env:*` instead
 6. Hardcoded Italian strings in English code paths: user messages stay Italian, code stays English
+7. Schema change without a migration, or a migration committed without its schema change
+8. Shipping a feature/fix without bumping `package.json` version + updating `CHANGELOG.md`

@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import AppHeader from '@/components/layout/AppHeader';
+import { VersionBadge } from '@/components/ui/VersionBadge';
 import { colors } from '@/lib/theme/colors';
 
 export default function AppLayout({
@@ -32,6 +33,7 @@ export default function AppLayout({
           {children}
         </div>
       </main>
+      <VersionBadge />
     </div>
   );
 }

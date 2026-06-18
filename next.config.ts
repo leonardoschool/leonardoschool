@@ -1,4 +1,13 @@
 import type { NextConfig } from "next";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+// Single source of truth for the app version: package.json. Exposed to the client
+// bundle so the frontend version badge can read it. Bump it together with CHANGELOG.md
+// on every release (see CLAUDE.md "Versioning & Changelog").
+const { version: appVersion } = JSON.parse(
+  readFileSync(join(process.cwd(), "package.json"), "utf8")
+) as { version: string };
 
 // Security headers for production
 const securityHeaders = [
@@ -35,6 +44,11 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // Prevent webpack from bundling server-only packages that use native Node.js modules
   serverExternalPackages: ['firebase-admin'],
+
+  // Inlined into the bundle so client components can render the current app version.
+  env: {
+    NEXT_PUBLIC_APP_VERSION: appVersion,
+  },
 
   async headers() {
     return [

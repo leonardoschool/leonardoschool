@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { config } from 'dotenv';
 import { resolve } from 'path';
 
@@ -30,11 +30,15 @@ if (vercelEnv !== 'production') {
   process.exit(0);
 }
 
+// Invoke the Prisma CLI through the current Node binary (both absolute paths) with an
+// arguments array via execFileSync: no shell is spawned and nothing is resolved from
+// PATH, so there is no command-injection surface.
+const prismaCli = resolve(__dirname, '../node_modules/prisma/build/index.js');
+
 try {
-  // Uses prisma.config.ts, which prefers DATABASE_URL_UNPOOLED (Neon direct connection)
-  // required for DDL.
+  // prisma.config.ts prefers DATABASE_URL_UNPOOLED (Neon direct connection) required for DDL.
   console.log('🚀 Applico le migrazioni pendenti su produzione (migrate deploy)...');
-  execSync('prisma migrate deploy --config ./prisma/prisma.config.ts', {
+  execFileSync(process.execPath, [prismaCli, 'migrate', 'deploy', '--config', './prisma/prisma.config.ts'], {
     stdio: 'inherit',
     cwd: resolve(__dirname, '..'),
   });
