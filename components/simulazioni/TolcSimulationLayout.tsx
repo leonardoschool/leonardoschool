@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
-import Image from 'next/image';
+import QuestionImage from '@/components/ui/QuestionImage';
 import { colors } from '@/lib/theme/colors';
 import { sanitizeStudentOpenAnswerInput } from '@/lib/utils/studentOpenAnswer';
 import { normalizeImageSrc } from '@/lib/utils/imageUrl';
@@ -365,7 +365,7 @@ export default function TolcSimulationLayout({
               {/* Question Image */}
               {currentQuestionImageSrc && (
                 <div className="mb-4 flex justify-center">
-                  <Image
+                  <QuestionImage
                     src={currentQuestionImageSrc}
                     alt="Immagine domanda"
                     width={600}
@@ -442,7 +442,7 @@ export default function TolcSimulationLayout({
                       <div className="flex-1">
                         {answerImageSrc && (
                           <div className="mb-2">
-                            <Image
+                            <QuestionImage
                               src={answerImageSrc}
                               alt={`Opzione ${letter}`}
                               width={200}

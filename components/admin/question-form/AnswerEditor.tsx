@@ -7,6 +7,7 @@ import Checkbox from '@/components/ui/Checkbox';
 import { Plus, Trash2, Check, AlertCircle } from 'lucide-react';
 import type { QuestionType, QuestionAnswerInput } from '@/lib/validations/questionValidation';
 import HtmlShortcutMenu from './HtmlShortcutMenu';
+import InsertImageButton from './InsertImageButton';
 
 interface AnswerEditorProps {
   answers: QuestionAnswerInput[];
@@ -22,7 +23,7 @@ interface AnswerEditorProps {
     field: keyof QuestionAnswerInput,
     value: string,
     snippet: string,
-    ref: RefObject<HTMLInputElement | null>
+    ref: RefObject<HTMLTextAreaElement | null>
   ) => void;
 }
 
@@ -36,8 +37,8 @@ export default function AnswerEditor({
   onShuffleChange,
   onInsertHtml,
 }: AnswerEditorProps) {
-  const answerTextRefs = useRef<Array<HTMLInputElement | null>>([]);
-  const explanationRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const answerTextRefs = useRef<Array<HTMLTextAreaElement | null>>([]);
+  const explanationRefs = useRef<Array<HTMLTextAreaElement | null>>([]);
 
   return (
     <div>
@@ -84,15 +85,15 @@ export default function AnswerEditor({
                 </span>
               </div>
               <div className="flex-1 space-y-2">
-                <input
+                <textarea
                   ref={(element) => {
                     answerTextRefs.current[index] = element;
                   }}
-                  type="text"
+                  rows={1}
                   value={answer.text}
                   onChange={(e) => onUpdate(index, 'text', e.target.value)}
                   placeholder={`Risposta ${answer.label}... (supporta LaTeX: $x^2$ e HTML: <sub>2</sub>)`}
-                  className={`w-full px-3 py-2 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-[#a8012b]/20 focus:border-[#a8012b] transition-colors`}
+                  className={`w-full px-3 py-2 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-[#a8012b]/20 focus:border-[#a8012b] transition-colors resize-y`}
                 />
                 <HtmlShortcutMenu
                   compact
@@ -102,21 +103,28 @@ export default function AnswerEditor({
                     })
                   }
                 />
-                <input
+                <textarea
                   ref={(element) => {
                     explanationRefs.current[index] = element;
                   }}
-                  type="text"
+                  rows={1}
                   value={answer.explanation ?? ''}
                   onChange={(e) => onUpdate(index, 'explanation', e.target.value)}
                   placeholder="Spiegazione per questa risposta (opzionale, supporta LaTeX/HTML)"
-                  className={`w-full px-3 py-2 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.muted} text-sm focus:ring-2 focus:ring-[#a8012b]/20 focus:border-[#a8012b] transition-colors`}
+                  className={`w-full px-3 py-2 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.muted} text-sm focus:ring-2 focus:ring-[#a8012b]/20 focus:border-[#a8012b] transition-colors resize-y`}
                 />
                 <HtmlShortcutMenu
                   compact
                   onInsert={(snippet) =>
                     onInsertHtml(index, 'explanation', answer.explanation ?? '', snippet, {
                       current: explanationRefs.current[index] ?? null,
+                    })
+                  }
+                />
+                <InsertImageButton
+                  onInsert={(snippet) =>
+                    onInsertHtml(index, 'text', answer.text, snippet, {
+                      current: answerTextRefs.current[index] ?? null,
                     })
                   }
                 />

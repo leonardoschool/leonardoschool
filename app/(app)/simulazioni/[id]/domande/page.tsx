@@ -167,7 +167,7 @@ function renderAnswerPreview(
         </p>
         <div className="space-y-0.5">
           {correctAnswers.map((a) => (
-            <p key={a.id} className="text-xs text-green-700 dark:text-green-300">{a.text}</p>
+            <RichTextRenderer key={a.id} text={a.text} className="text-xs text-green-700 dark:text-green-300" />
           ))}
         </div>
       </div>

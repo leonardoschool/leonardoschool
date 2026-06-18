@@ -5,6 +5,7 @@ import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { stripHtml } from '@/lib/utils/sanitizeHtml';
 import { normalizeImageSrc } from '@/lib/utils/imageUrl';
+import { renderLatexImagesForPrint } from '@/lib/utils/latex';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { Spinner } from '@/components/ui/loaders';
@@ -1052,9 +1053,9 @@ export default function NewSimulationPage() {
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;');
 
-    const removeLatexImageReferences = (text: string) => text
-      .replaceAll(/\\includegraphics(?:\[[^\]]*\])?\{[^}]+\}/g, '')
-      .trim();
+    // Render inline \includegraphics images into the print HTML (instead of stripping them),
+    // so images placed inside the text appear in the printed/PDF simulation too.
+    const removeLatexImageReferences = (text: string) => renderLatexImagesForPrint(text);
 
     const toPrintableImageSrc = (imageUrl?: string | null): string =>
       normalizeImageSrc(imageUrl) ?? '';

@@ -9,6 +9,7 @@ import { PageLoader, Spinner } from '@/components/ui/loaders';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import { normalizeImageSrc } from '@/lib/utils/imageUrl';
+import { renderLatexImagesForPrint } from '@/lib/utils/latex';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -201,9 +202,9 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;');
 
-    const removeLatexImageReferences = (text: string) => text
-      .replaceAll(/\\includegraphics(?:\[[^\]]*\])?\{[^}]+\}/g, '')
-      .trim();
+    // Render inline \includegraphics images into the print HTML (instead of stripping them),
+    // so images placed inside the text appear in the printed/PDF simulation too.
+    const removeLatexImageReferences = (text: string) => renderLatexImagesForPrint(text);
 
     const toPrintableImageSrc = (imageUrl?: string | null): string =>
       normalizeImageSrc(imageUrl) ?? '';
@@ -297,11 +298,21 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
         const sectionQuestions = sectionQuestionIds
           .map(id => simulation.questions.find(sq => sq.question.id === id))
           .filter((sq): sq is SimQuestion => sq !== undefined);
-        
+
         if (sectionQuestions.length === 0) continue;
 
         if (showSectionHeaders) questionsHtml += `<div class="section-header">${section.name}</div>`;
         const result = renderQuestionsByType(sectionQuestions, globalQuestionNumber, hasMultipleTypes);
+        questionsHtml += result.html;
+        globalQuestionNumber = result.nextNumber;
+      }
+
+      // Questions not assigned to any section would otherwise be dropped from the print.
+      const assignedIds = new Set(sortedSections.flatMap(section => section.questionIds || []));
+      const unassignedQuestions = simulation.questions.filter(sq => !assignedIds.has(sq.question.id));
+      if (unassignedQuestions.length > 0) {
+        if (showSectionHeaders) questionsHtml += `<div class="section-header">Senza sezione</div>`;
+        const result = renderQuestionsByType(unassignedQuestions, globalQuestionNumber, hasMultipleTypes);
         questionsHtml += result.html;
         globalQuestionNumber = result.nextNumber;
       }
@@ -687,7 +698,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
                     </p>
                     <div className="space-y-0.5">
                       {correctAnswers.map((a) => (
-                        <p key={a.id} className="text-xs text-green-700 dark:text-green-300">{a.text}</p>
+                        <RichTextRenderer key={a.id} text={a.text} className="text-xs text-green-700 dark:text-green-300" />
                       ))}
                     </div>
                   </>

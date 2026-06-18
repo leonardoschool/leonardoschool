@@ -1,6 +1,6 @@
 'use client';
 
-import Image from 'next/image';
+import QuestionImage from '@/components/ui/QuestionImage';
 import { colors } from '@/lib/theme/colors';
 import { normalizeImageSrc } from '@/lib/utils/imageUrl';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
@@ -116,7 +116,7 @@ export default function PreviewStandardLayout({
                 <div className={`p-6 rounded-xl ${colors.background.card} border ${colors.border.light} mb-6`}>
                   {currentQuestionImageSrc && (
                     <div className="mb-4 flex justify-center">
-                      <Image
+                      <QuestionImage
                         src={currentQuestionImageSrc}
                         alt="Immagine domanda"
                         width={600}
@@ -175,7 +175,7 @@ export default function PreviewStandardLayout({
                           <div className="flex-1">
                             {answerImageSrc && (
                               <div className="mb-2">
-                                <Image
+                                <QuestionImage
                                   src={answerImageSrc}
                                   alt={`Opzione ${label}`}
                                   width={200}
