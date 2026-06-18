@@ -15,6 +15,11 @@ export default defineConfig({
     path: resolve(__dirname, 'migrations'),
   },
   datasource: {
-    url: process.env.DATABASE_URL,
+    // Neon: schema changes (migrate/db push) must run over the DIRECT, non-pooled
+    // connection — DDL is unreliable through the PgBouncer pooler. Vercel/Neon exposes
+    // it as DATABASE_URL_UNPOOLED. Fall back to DATABASE_URL locally (Docker has no
+    // separate pooler). This only affects the Prisma CLI; the app runtime keeps using
+    // the pooled DATABASE_URL via lib/prisma/client.ts.
+    url: process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL,
   },
 });

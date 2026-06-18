@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "dev:lan": "next dev --turbopack -H 0.0.0.0",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && tsx scripts/prisma-deploy.ts && next build",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
@@ -28,6 +28,7 @@
     "prisma:studio": "tsx scripts/prisma-studio.ts",
     "prisma:seed": "tsx scripts/seed.ts",
     "prisma:push": "tsx scripts/prisma-push.ts",
+    "prisma:deploy": "tsx scripts/prisma-deploy.ts",
     "prisma:reset": "tsx scripts/prisma-reset.ts",
     "seed": "tsx scripts/seed.ts",
     "cleanup": "tsx scripts/cleanup.ts",
