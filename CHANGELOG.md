@@ -12,6 +12,7 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ### Changed
 - "Fill section": questions are now drawn (and listed) following a fixed type order — single-answer first, then open-answer — instead of the previous open-first order. The per-type split summary reflects the same order.
+- Homepage hero background reworked into an interactive pseudo-3D "molecular universe": a rotating DNA double-helix core whose rungs are complementary base pairs (A-T / G-C, each nucleotide colour-coded), surrounded by a network of chemistry/physics/math/biology notation (incl. DNA, RNA, NADH, ATP, Hb) linked by bonds, with electrons orbiting nuclei and signal pulses travelling along the bonds like nerve impulses. It has perspective depth, a framing vignette, tilts toward the pointer (mouse/touch), and renders on a plain 2D canvas with no new dependencies. Particle count and pixel density scale down on mobile; the animation respects `prefers-reduced-motion` (static frame) and pauses when off-screen or the tab is hidden. Replaces the previous static CSS symbol layer (`ScienceCanvasLight`).
 
 ## [1.0.0] - 2026-06-18
 

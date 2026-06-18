@@ -2,7 +2,7 @@ import TestCard from '@/components/ui/TestCard';
 import TestimonialsCarousel from '@/components/ui/TestimonialsCarousel';
 import Button from '@/components/ui/Button';
 import Link from '@/components/ui/MarketingLink';
-import ScienceCanvasLight from '@/components/ui/ScienceCanvasLight';
+import ScienceCanvas3D from '@/components/ui/ScienceCanvas3D';
 import AnimatedStats from '@/components/ui/AnimatedStats';
 import { TestCard as TestCardType, Testimonial } from '@/types';
 import { STATS } from '@/lib/constants';
@@ -215,8 +215,8 @@ export default function Home() {
     <>
       {/* Hero Section with Interactive Science Animation */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-black">
-        {/* Interactive Science Canvas Background */}
-        <ScienceCanvasLight />
+        {/* Interactive 3D Science Canvas Background */}
+        <ScienceCanvas3D />
 
         {/* Gradient overlay for better text readability */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/80 z-10" />

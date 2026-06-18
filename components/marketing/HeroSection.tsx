@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import Button from '@/components/ui/Button';
-import ScienceCanvasLight from '@/components/ui/ScienceCanvasLight';
+import ScienceCanvas3D from '@/components/ui/ScienceCanvas3D';
 import AnimatedStats from '@/components/ui/AnimatedStats';
 import { STATS } from '@/lib/constants';
 
@@ -11,8 +11,8 @@ import { STATS } from '@/lib/constants';
 export function HeroSection() {
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-black">
-      {/* Interactive Science Canvas Background */}
-      <ScienceCanvasLight />
+      {/* Interactive 3D Science Canvas Background */}
+      <ScienceCanvas3D />
 
       {/* Gradient overlay for better text readability */}
       <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/80 z-10" />
