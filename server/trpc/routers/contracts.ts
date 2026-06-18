@@ -585,12 +585,8 @@ export const contractsRouter = router({
         });
       }
 
-      if (!student.user.profileCompleted) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Lo studente non ha ancora completato il profilo',
-        });
-      }
+      // No profileCompleted gate: the admin must always be able to activate an
+      // account it created, even before the student confirms the anagrafica.
 
       if (!input.skipContractCheck && student.contracts.length === 0) {
         throw new TRPCError({

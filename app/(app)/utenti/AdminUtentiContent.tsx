@@ -1937,7 +1937,6 @@ export default function AdminUtentiContent() {
                 const isSelf = user.id === currentUser?.id;
                 
                 const isStudentOrCollab = user.role === 'STUDENT' || user.role === 'COLLABORATOR';
-                const hasProfileCompleted = user.profileCompleted;
                 const targetId = user.student?.id || user.collaborator?.id;
                 const targetType = user.role === 'COLLABORATOR' ? 'COLLABORATOR' as const : 'STUDENT' as const;
                 const studentContract = user.student?.contracts?.[0];
@@ -1945,7 +1944,8 @@ export default function AdminUtentiContent() {
                 const lastContract = studentContract || collabContract;
                 const hasActiveContract = lastContract && (lastContract.status === 'PENDING' || lastContract.status === 'SIGNED');
                 const hasPendingContract = lastContract?.status === 'PENDING';
-                const canAssignContract = isStudentOrCollab && hasProfileCompleted && !hasActiveContract && targetId && !isSelf;
+                // Admin can assign a contract before the student confirms the profile.
+                const canAssignContract = isStudentOrCollab && !hasActiveContract && targetId && !isSelf;
                 const hasSignedContract = lastContract?.status === 'SIGNED';
                 const contractId = lastContract?.id;
 
@@ -2130,7 +2130,7 @@ export default function AdminUtentiContent() {
                           <MessageSquare className="w-4 h-4" />
                         </button>
                       )}
-                      {user.profileCompleted && !isSelf && (
+                      {!isSelf && (
                         <button
                           onClick={() => openToggleActiveModal(user.id, user.name, user.isActive, lastContract?.status === 'SIGNED', user.role)}
                           className={`p-2 rounded-lg ${user.isActive ? colors.status.warning.softBg : colors.status.success.softBg} ${user.isActive ? colors.status.warning.text : colors.status.success.text}`}
@@ -2206,7 +2206,6 @@ export default function AdminUtentiContent() {
                     const isSelf = user.id === currentUser?.id;
                     
                     const isStudentOrCollab = user.role === 'STUDENT' || user.role === 'COLLABORATOR';
-                    const hasProfileCompleted = user.profileCompleted;
                     const targetId = user.student?.id || user.collaborator?.id;
                     const targetType = user.role === 'COLLABORATOR' ? 'COLLABORATOR' as const : 'STUDENT' as const;
                     const studentContract = user.student?.contracts?.[0];
@@ -2214,7 +2213,8 @@ export default function AdminUtentiContent() {
                     const lastContract = studentContract || collabContract;
                     const hasActiveContract = lastContract && (lastContract.status === 'PENDING' || lastContract.status === 'SIGNED');
                     const hasPendingContract = lastContract?.status === 'PENDING';
-                    const canAssignContract = isStudentOrCollab && hasProfileCompleted && !hasActiveContract && targetId && !isSelf;
+                    // Admin can assign a contract before the student confirms the profile.
+                    const canAssignContract = isStudentOrCollab && !hasActiveContract && targetId && !isSelf;
                     const hasSignedContract = lastContract?.status === 'SIGNED';
                     const contractId = lastContract?.id;
 
@@ -2491,7 +2491,7 @@ export default function AdminUtentiContent() {
                                 <MessageSquare className="w-3.5 h-3.5" />
                               </button>
                             )}
-                            {user.profileCompleted && (
+                            {!isSelf && (
                               <button
                                 onClick={() => openToggleActiveModal(user.id, user.name, user.isActive, lastContract?.status === 'SIGNED', user.role)}
                                 className={`p-1.5 rounded-lg transition-opacity hover:opacity-80 ${

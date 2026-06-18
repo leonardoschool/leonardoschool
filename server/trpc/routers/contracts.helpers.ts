@@ -108,12 +108,9 @@ export async function validateStudentForContract(
   if (!student) {
     throw new TRPCError({ code: 'NOT_FOUND', message: 'Studente non trovato' });
   }
-  if (!student.user.profileCompleted) {
-    throw new TRPCError({
-      code: 'BAD_REQUEST',
-      message: 'Lo studente non ha ancora completato il profilo',
-    });
-  }
+  // Admin can assign a contract before the student has confirmed/completed the
+  // profile: the anagrafica is entered by the admin and the student only confirms
+  // it later on first login. So we intentionally do not gate on profileCompleted.
   if (student.contracts.length > 0) {
     throw new TRPCError({
       code: 'CONFLICT',
@@ -149,12 +146,7 @@ export async function validateCollaboratorForContract(
       message: `Collaboratore con ID "${collaboratorId}" non trovato. Verifica che il record esista nella tabella collaborators.`,
     });
   }
-  if (!collaborator.user.profileCompleted) {
-    throw new TRPCError({
-      code: 'BAD_REQUEST',
-      message: 'Il collaboratore non ha ancora completato il profilo',
-    });
-  }
+  // See validateStudentForContract: admin may assign before profile confirmation.
   if (collaborator.contracts.length > 0) {
     throw new TRPCError({
       code: 'CONFLICT',
