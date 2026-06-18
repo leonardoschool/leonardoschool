@@ -498,9 +498,9 @@ export const contractsRouter = router({
         }
       );
       
-      // Use custom price if provided, otherwise use template price
-      // eslint-disable-next-line sonarjs/no-unused-vars -- price calculation reserved for future invoice feature
-      const _finalPrice = input.customPrice ?? template.price;
+      // Snapshot the price: admin override wins, otherwise freeze the template
+      // price as it is now so later template edits don't change this contract.
+      const priceSnapshot = input.customPrice ?? template.price;
 
       // Calculate expiration
       const expiresAt = new Date();
@@ -515,6 +515,7 @@ export const contractsRouter = router({
           ...(targetType === 'STUDENT' ? { studentId: targetId } : { collaboratorId: targetId }),
           templateId: input.templateId,
           contentSnapshot,
+          priceSnapshot,
           expiresAt,
           signTokenExpiresAt,
           adminNotes: input.adminNotes,
@@ -547,7 +548,7 @@ export const contractsRouter = router({
         recipientProfileId: targetId,
         signLink: signLinkRelative,
         signLinkAbsolute: signLinkAbsolute,
-        price: template.price || 0,
+        price: priceSnapshot ?? 0,
         expiresAt,
       });
 
@@ -584,12 +585,8 @@ export const contractsRouter = router({
         });
       }
 
-      if (!student.user.profileCompleted) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Lo studente non ha ancora completato il profilo',
-        });
-      }
+      // No profileCompleted gate: the admin must always be able to activate an
+      // account it created, even before the student confirms the anagrafica.
 
       if (!input.skipContractCheck && student.contracts.length === 0) {
         throw new TRPCError({
@@ -1403,7 +1400,7 @@ export const contractsRouter = router({
         signerType: signerType,
         signerProfileId: signerId,
         signedAt,
-        price: contract.template.price || 0,
+        price: contract.priceSnapshot ?? contract.template.price ?? 0,
       });
 
       return signedContract;

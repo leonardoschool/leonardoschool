@@ -272,7 +272,13 @@ model User {
   id               String   @id @default(cuid())
   firebaseUid      String   @unique // Link a Firebase Auth
   email            String   @unique
+  // `name` is the canonical full display name, kept in sync as "firstName lastName".
+  // firstName/lastName hold the structured split so multi-word first names
+  // (e.g. "Francesco Giovanni") never leak into the surname. Nullable for rows
+  // created before this split existed; backfilled lazily on first edit.
   name             String
+  firstName        String?
+  lastName         String?
   role             UserRole @default(STUDENT)
   isActive         Boolean  @default(false) // true solo quando profilo completo + admin approva
   profileCompleted Boolean  @default(false) // true quando compila dati anagrafici
@@ -1661,6 +1667,11 @@ model Contract {
 
   // Content snapshot (frozen at assignment time)
   contentSnapshot String @db.Text // HTML with student data filled in
+
+  // Price snapshot (frozen at assignment time): the admin can override the
+  // template price per-assignment, so it must be stored here independently of
+  // later edits to the template. Null = no price set for this contract.
+  priceSnapshot Float?
 
   // Signature
   signedAt           DateTime?

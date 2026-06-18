@@ -46,6 +46,8 @@ interface FillSectionModalProps {
   readonly defaultSubjectIds?: string[];
   readonly defaultTopicIds?: string[];
   readonly defaultTypes?: SectionQuestionTypeFilter[];
+  /** Exact per-type question counts from the template section (e.g. { SINGLE_CHOICE: 5, OPEN_TEXT: 3 }) */
+  readonly defaultTypeCounts?: Partial<Record<SectionQuestionTypeFilter, number>>;
   readonly defaultDifficulties?: SectionDifficultyFilter[];
   readonly defaultTagIds?: string[];
   readonly defaultLanguage?: SectionLanguageFilter | null;
@@ -76,6 +78,12 @@ const QUESTION_TYPE_OPTIONS = [
   { value: 'OPEN_TEXT', label: 'Risposta aperta' },
 ];
 
+const QUESTION_TYPE_LABELS: Record<SectionQuestionTypeFilter, string> = {
+  SINGLE_CHOICE: 'a risposta singola',
+  MULTIPLE_CHOICE: 'a risposta multipla',
+  OPEN_TEXT: 'a risposta aperta',
+};
+
 
 function getDefaultSubjectSelection(defaultSubjectIds?: string[], defaultSubjectId?: string | null) {
   return defaultSubjectIds && defaultSubjectIds.length > 0
@@ -91,6 +99,21 @@ function getLanguageFilter(value: string): SectionLanguageFilter | null {
   return value === 'IT' || value === 'EN' ? value : null;
 }
 
+/**
+ * Resolve the exact per-type pick targets from the template's configured counts,
+ * keeping only the types currently selected in the form.
+ */
+function getTypeCountTargets(
+  typeCounts: Partial<Record<SectionQuestionTypeFilter, number>> | undefined,
+  selectedTypes: string[]
+): Array<{ type: SectionQuestionTypeFilter; count: number }> {
+  if (!typeCounts) return [];
+  const allowed = selectedTypes.length > 0 ? new Set(selectedTypes) : null;
+  return (Object.entries(typeCounts) as Array<[SectionQuestionTypeFilter, number | undefined]>)
+    .filter(([type, count]) => Number.isFinite(count) && (count ?? 0) > 0 && (!allowed || allowed.has(type)))
+    .map(([type, count]) => ({ type, count: Math.floor(count as number) }));
+}
+
 export default function FillSectionModal({
   isOpen,
   onClose,
@@ -99,6 +122,7 @@ export default function FillSectionModal({
   defaultSubjectIds,
   defaultTopicIds,
   defaultTypes,
+  defaultTypeCounts,
   defaultDifficulties,
   defaultTagIds,
   defaultLanguage,
@@ -184,6 +208,11 @@ export default function FillSectionModal({
 
   const isPending = pickMutation.isPending || smartMutation.isPending;
 
+  const typeSplitTargets = getTypeCountTargets(defaultTypeCounts, selectedTypes);
+  const typeSplitSummary = typeSplitTargets
+    .map((target) => `${target.count} ${QUESTION_TYPE_LABELS[target.type]}`)
+    .join(' + ');
+
   const handleSubmit = async () => {
     const parsedCount = parseInt(count, 10);
     if (isNaN(parsedCount) || parsedCount < 1) {
@@ -224,14 +253,53 @@ export default function FillSectionModal({
             }));
           })()
         : await (async () => {
-            const result = await pickMutation.mutateAsync({
-              count: parsedCount,
+            const commonFilters = {
               subjectIds: selectedSubjectIds.length > 0 ? selectedSubjectIds : undefined,
-              types: selectedTypes.length > 0 ? selectedTypes as ('SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT')[] : undefined,
               topicIds: selectedTopicIds.length > 0 ? selectedTopicIds : undefined,
               difficulties: selectedDifficulties.length > 0 ? selectedDifficulties as ('EASY' | 'MEDIUM' | 'HARD')[] : undefined,
               tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
               language: selectedLanguage ? selectedLanguage as 'IT' | 'EN' : undefined,
+            };
+
+            const typeTargets = getTypeCountTargets(defaultTypeCounts, selectedTypes);
+
+            // Template defines an exact per-type split → pick that many of each type
+            // (e.g. X a risposta singola + Y a risposta aperta) instead of N random across types.
+            if (typeTargets.length > 0) {
+              const collected: PickedQuestion[] = [];
+              const excluded = [...excludeQuestionIds];
+
+              for (const target of typeTargets) {
+                const res = await pickMutation.mutateAsync({
+                  ...commonFilters,
+                  count: target.count,
+                  types: [target.type],
+                  excludeQuestionIds: excluded,
+                });
+                collected.push(...(res.questions as PickedQuestion[]));
+                excluded.push(...res.questions.map((q) => q.id));
+              }
+
+              const configuredTotal = typeTargets.reduce((sum, target) => sum + target.count, 0);
+              const remainder = parsedCount - configuredTotal;
+              if (remainder > 0) {
+                const res = await pickMutation.mutateAsync({
+                  ...commonFilters,
+                  count: remainder,
+                  types: selectedTypes.length > 0 ? selectedTypes as ('SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT')[] : undefined,
+                  excludeQuestionIds: excluded,
+                });
+                collected.push(...(res.questions as PickedQuestion[]));
+              }
+
+              return collected;
+            }
+
+            const result = await pickMutation.mutateAsync({
+              ...commonFilters,
+              count: parsedCount,
+              subjectIds: selectedSubjectIds.length > 0 ? selectedSubjectIds : undefined,
+              types: selectedTypes.length > 0 ? selectedTypes as ('SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT')[] : undefined,
               excludeQuestionIds,
             });
 
@@ -419,6 +487,16 @@ export default function FillSectionModal({
           options={LANGUAGE_OPTIONS}
           placeholder="Tutte le lingue"
         />
+
+        {/* Template per-type split note */}
+        {mode === 'random' && typeSplitSummary && (
+          <div
+            className={`text-xs ${colors.text.secondary} p-2 rounded-lg ${colors.background.secondary} border ${colors.border.light}`}
+          >
+            Suddivisione dal template: <strong>{typeSplitSummary}</strong>. Le domande verranno
+            pescate rispettando questa ripartizione per tipologia.
+          </div>
+        )}
 
         {/* Info */}
         <div

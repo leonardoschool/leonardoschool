@@ -88,13 +88,15 @@ export default function CompleteProfilePage() {
     retry: false,
   });
 
-  // Fetch existing profile for edit mode
+  // Fetch existing profile for edit mode AND for first-login completion, so that
+  // data entered by an admin appears already filled in (the student then just
+  // reviews/edits and confirms). Autonomous registrations simply get empty fields.
   const { data: studentProfile } = trpc.students.getProfile.useQuery(undefined, {
-    enabled: isEditMode && !!user && user.role === 'STUDENT',
+    enabled: !isParentDataMode && !!user && user.role === 'STUDENT',
   });
-  
+
   const { data: collaboratorProfile } = trpc.collaborators.getProfile.useQuery(undefined, {
-    enabled: isEditMode && !!user && user.role === 'COLLABORATOR',
+    enabled: !isParentDataMode && !!user && user.role === 'COLLABORATOR',
   });
 
   // Fetch existing parent/guardian data for parent data mode OR edit mode
@@ -106,10 +108,11 @@ export default function CompleteProfilePage() {
   const isCollaborator = (user?.role as string) === 'COLLABORATOR';
   const isStudent = (user?.role as string) === 'STUDENT';
 
-  // Pre-populate form data in edit mode
+  // Pre-populate form data in edit mode AND on first-login completion (admin
+  // may have already entered the anagrafica). Skipped when only editing parent data.
   useEffect(() => {
-    if (!isEditMode) return;
-    
+    if (isParentDataMode) return;
+
     const profile = isStudent ? studentProfile : isCollaborator ? collaboratorProfile : null;
     if (profile) {
       const birthPlace = 'birthPlace' in profile && typeof profile.birthPlace === 'string'
@@ -128,7 +131,7 @@ export default function CompleteProfilePage() {
         gender: undefined,
       });
     }
-  }, [isEditMode, studentProfile, collaboratorProfile, isStudent, isCollaborator]);
+  }, [isParentDataMode, studentProfile, collaboratorProfile, isStudent, isCollaborator]);
 
   // Pre-populate parent data in parent data mode OR edit mode
   useEffect(() => {
@@ -347,22 +350,20 @@ export default function CompleteProfilePage() {
       return;
     }
 
-    // Estrae nome e cognome dal campo name (assume formato "Nome Cognome")
-    const nameParts = user.name.trim().split(' ');
-    let firstName = '';
-    let lastName = '';
+    // Prefer the structured columns; fall back to splitting `name` for legacy
+    // users (assume "Nome Cognome", primo token = nome, resto = cognome).
+    let firstName = user.firstName?.trim() ?? '';
+    let lastName = user.lastName?.trim() ?? '';
 
-    if (nameParts.length === 1) {
-      // Solo un nome, usa come cognome
-      lastName = nameParts[0];
-      firstName = nameParts[0];
-    } else if (nameParts.length === 2) {
-      firstName = nameParts[0];
-      lastName = nameParts[1];
-    } else {
-      // Più di due parti: assume primo = nome, resto = cognome
-      firstName = nameParts[0];
-      lastName = nameParts.slice(1).join(' ');
+    if (!firstName && !lastName) {
+      const nameParts = user.name.trim().split(' ');
+      if (nameParts.length === 1) {
+        lastName = nameParts[0];
+        firstName = nameParts[0];
+      } else {
+        firstName = nameParts[0];
+        lastName = nameParts.slice(1).join(' ');
+      }
     }
 
     const datiCalcolo: DatiCodiceFiscale = {

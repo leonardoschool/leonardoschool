@@ -1,3 +1,5 @@
+import { normalizeImageSrc } from './imageUrl';
+
 // Known LaTeX math command names (without the leading backslash).
 // Used instead of a giant alternation regex to stay within SonarJS regex-complexity limits.
 const MATH_CMDS = new Set([
@@ -40,6 +42,48 @@ const MATH_CMDS = new Set([
 
 // Extracts the command name from a string that starts with `\name` (letters only).
 const CMD_NAME_RE = /^\\([a-zA-Z]+)/;
+
+// A \includegraphics{...} reference we can actually resolve to a real image: an absolute
+// URL, a data/blob URI, a storage path (has a slash), or a bare file with an image extension.
+// Plain names (e.g. \includegraphics{tabella}) can't be mapped to a file client-side, so they
+// stay stripped to avoid rendering a broken image.
+function isResolvableImageRef(ref: string): boolean {
+  return (
+    /^(https?:|data:|blob:)/i.test(ref) ||
+    ref.includes('/') ||
+    /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(ref)
+  );
+}
+
+/**
+ * Replaces every \includegraphics{ref} with buildImg(resolvedUrl) when the ref is resolvable,
+ * and with '' otherwise. Shared by the on-screen renderer and the print/PDF HTML builders.
+ */
+function replaceIncludegraphics(text: string, buildImg: (src: string) => string): string {
+  return text.replace(
+    /\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}/g,
+    (_full, rawRef: string) => {
+      const ref = rawRef.trim();
+      if (!isResolvableImageRef(ref)) return '';
+      const resolved = normalizeImageSrc(ref);
+      return resolved ? buildImg(resolved) : '';
+    }
+  );
+}
+
+/**
+ * Print/PDF path: turns \includegraphics references into raw <img> tags so inline images appear
+ * in the printed simulation too (the print builders assemble an HTML string, not React).
+ */
+export function renderLatexImagesForPrint(text: string): string {
+  return replaceIncludegraphics(text, (src) => {
+    const safeSrc = src.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+    // Cap the size to match the print sheet's .question-image/.answer-image (≤300×200px),
+    // otherwise max-width:100% blows up to full A4 width. Inline style is used because it
+    // overrides the stylesheet and keeps both print builders consistent.
+    return `<img src="${safeSrc}" alt="" class="inline-text-image" loading="eager" decoding="sync" style="display:block;max-width:300px;max-height:200px;width:auto;height:auto;margin:6px 0" />`;
+  }).trim();
+}
 
 /** Returns true if `slice` starts with a known math command (`\name` in MATH_CMDS). */
 function startsWithMathCmd(slice: string): boolean {
@@ -244,9 +288,13 @@ export function normalizeStoredRichText(value: string): string {
   let normalized = restoreKaTeXToLatex(value);
   normalized = normalizeLatexContent(normalized);
   normalized = normalized.replace(/\\newline\b/g, '\n');
-  // Strip LaTeX image references — paths can't be resolved client-side and the
-  // image is already served via the question's imageUrl field.
-  normalized = normalized.replace(/\\includegraphics(?:\[[^\]]*\])?\{[^}]+\}/g, '');
+  // Render LaTeX image references inline (in place of the command) when the target is
+  // resolvable, so an image can sit in the middle of the text — not only appended via the
+  // question's imageUrl field. Unresolvable bare names are stripped (see isResolvableImageRef).
+  normalized = replaceIncludegraphics(
+    normalized,
+    (src) => `<img src="${src}" alt="" style="max-width:100%;height:auto;display:block;margin:0.5rem auto" />`
+  );
   return wrapUndelimitedMath(normalized);
 }
 

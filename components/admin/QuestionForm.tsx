@@ -16,6 +16,7 @@ import SymbolKeyboard from '@/components/ui/SymbolKeyboard';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import AnswerEditor from '@/components/admin/question-form/AnswerEditor';
 import HtmlShortcutMenu from '@/components/admin/question-form/HtmlShortcutMenu';
+import InsertImageButton from '@/components/admin/question-form/InsertImageButton';
 import KeywordManager from '@/components/admin/question-form/KeywordManager';
 import { useQuestionForm, type QuestionFormInitialData } from '@/lib/hooks/useQuestionForm';
 import {
@@ -175,6 +176,9 @@ export default function QuestionForm({ questionId, basePath = '/domande', return
               onInsert={(symbol) => form.insertSymbolIntoTextarea(questionTextRef, form.text, form.setText, symbol)}
             />
             <HtmlShortcutMenu
+              onInsert={(snippet) => form.insertSymbolIntoTextarea(questionTextRef, form.text, form.setText, snippet)}
+            />
+            <InsertImageButton
               onInsert={(snippet) => form.insertSymbolIntoTextarea(questionTextRef, form.text, form.setText, snippet)}
             />
             <button

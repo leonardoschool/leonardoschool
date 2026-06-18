@@ -9,7 +9,7 @@ import DatePicker from '@/components/ui/DatePicker';
 import { ButtonLoader } from '@/components/ui/loaders';
 import { useToast } from '@/components/ui/Toast';
 import { useApiError } from '@/lib/hooks/useApiError';
-import { X, User, MapPin } from 'lucide-react';
+import { X, User, MapPin, Calculator } from 'lucide-react';
 import {
   PROVINCE_ITALIANE,
   validateCodiceFiscale,
@@ -19,10 +19,22 @@ import {
   validateDataNascita,
   validateBirthPlace,
 } from '@/lib/validations/profileValidation';
+import { calcolaCodiceFiscale, isComuneSupportato } from '@/lib/utils/codiceFiscaleCalculator';
+
+// Gender isn't stored in the DB; for an existing user it's encoded in the
+// fiscal code (the birth-day digits are +40 for females), so we can pre-fill it.
+function genderFromFiscalCode(cf: string): 'M' | 'F' | null {
+  if (!/^[A-Z]{6}\d{2}[A-Z]\d{2}/.test(cf)) return null;
+  const day = parseInt(cf.slice(9, 11), 10);
+  if (Number.isNaN(day)) return null;
+  return day > 40 ? 'F' : 'M';
+}
 
 interface EditableUser {
   id: string;
   name: string;
+  firstName?: string | null;
+  lastName?: string | null;
   role: string;
   profileCompleted: boolean;
   student?: {
@@ -54,9 +66,12 @@ interface AdminEditUserModalProps {
   onSuccess: () => void;
 }
 
+// Legacy fallback for users created before firstName/lastName were stored:
+// best-effort split of the full name (first token = name, rest = surname).
+// Once such a user is saved, the structured columns take over and this is unused.
 function splitName(fullName: string): { firstName: string; lastName: string } {
   const parts = fullName.trim().split(/\s+/);
-  if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+  if (parts.length <= 1) return { firstName: parts[0] ?? '', lastName: '' };
   return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
 }
 
@@ -66,6 +81,8 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSuccess }:
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  // Transient, calculation-only (not persisted): needed for the fiscal-code calc.
+  const [gender, setGender] = useState<'M' | 'F'>('M');
 
   const [profile, setProfile] = useState({
     fiscalCode: '',
@@ -89,12 +106,19 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSuccess }:
 
   useEffect(() => {
     if (!user) return;
-    const { firstName: fn, lastName: ln } = splitName(user.name);
-    setFirstName(fn);
-    setLastName(ln);
+    // Prefer the structured columns; fall back to splitting `name` for legacy users.
+    if (user.firstName != null || user.lastName != null) {
+      setFirstName(user.firstName ?? '');
+      setLastName(user.lastName ?? '');
+    } else {
+      const { firstName: fn, lastName: ln } = splitName(user.name);
+      setFirstName(fn);
+      setLastName(ln);
+    }
     setFieldErrors({});
 
     if (profileData) {
+      setGender(genderFromFiscalCode(profileData.fiscalCode ?? '') ?? 'M');
       setProfile({
         fiscalCode: profileData.fiscalCode ?? '',
         dateOfBirth: profileData.dateOfBirth
@@ -147,6 +171,48 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSuccess }:
 
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
+  };
+
+  const handleCalculateFiscalCode = () => {
+    if (!firstName.trim() || !lastName.trim()) {
+      showError('Dati mancanti', 'Inserisci nome e cognome prima di calcolare il codice fiscale.');
+      return;
+    }
+    if (!profile.dateOfBirth) {
+      showError('Dati mancanti', 'Inserisci la data di nascita.');
+      return;
+    }
+    if (!profile.birthPlace.trim()) {
+      showError('Dati mancanti', 'Inserisci il luogo di nascita.');
+      return;
+    }
+    if (!isComuneSupportato(profile.birthPlace)) {
+      showError(
+        'Comune non supportato',
+        `Il comune "${profile.birthPlace}" non è tra quelli supportati. Inserisci il codice fiscale manualmente.`
+      );
+      return;
+    }
+
+    const cf = calcolaCodiceFiscale({
+      nome: firstName.trim(),
+      cognome: lastName.trim(),
+      dataNascita: new Date(profile.dateOfBirth),
+      sesso: gender,
+      comuneNascita: profile.birthPlace.trim(),
+    });
+
+    if (cf) {
+      setProfile(p => ({ ...p, fiscalCode: cf }));
+      setFieldErrors(e => {
+        const next = { ...e };
+        delete next.fiscalCode;
+        return next;
+      });
+      showSuccess('Codice Fiscale calcolato', 'Generato automaticamente. Puoi modificarlo se necessario.');
+    } else {
+      showError('Errore nel calcolo', 'Impossibile calcolare il codice fiscale. Inseriscilo manualmente.');
+    }
   };
 
   const handleSave = async () => {
@@ -236,7 +302,7 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSuccess }:
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     className={inputClass('firstName')}
-                    placeholder="Mario"
+                    placeholder="Francesco Giovanni"
                   />
                 </div>
                 <div>
@@ -248,7 +314,7 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSuccess }:
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     className={inputClass('lastName')}
-                    placeholder="Rossi"
+                    placeholder="De Luca"
                   />
                 </div>
               </div>
@@ -264,9 +330,19 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSuccess }:
 
                 {/* Codice fiscale */}
                 <div>
-                  <label className={`block text-xs font-medium ${colors.text.secondary} mb-1`}>
-                    Codice Fiscale <span className="text-red-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className={`block text-xs font-medium ${colors.text.secondary}`}>
+                      Codice Fiscale <span className="text-red-500">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleCalculateFiscalCode}
+                      className={`px-2.5 py-1 text-xs font-medium ${colors.primary.text} ${colors.background.hover} rounded-lg transition-colors hover:opacity-80 flex items-center gap-1.5`}
+                    >
+                      <Calculator className="w-3.5 h-3.5" />
+                      Calcola automaticamente
+                    </button>
+                  </div>
                   <input
                     type="text"
                     maxLength={16}
@@ -278,8 +354,8 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSuccess }:
                   {fieldErrors.fiscalCode && <p className="mt-1 text-xs text-red-500">{fieldErrors.fiscalCode}</p>}
                 </div>
 
-                {/* Data di nascita + Luogo di nascita */}
-                <div className="grid grid-cols-2 gap-3">
+                {/* Data di nascita + Luogo di nascita + Sesso (sesso serve solo al calcolo CF) */}
+                <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3">
                   <div>
                     <label className={`block text-xs font-medium ${colors.text.secondary} mb-1`}>
                       Data di nascita <span className="text-red-500">*</span>
@@ -305,6 +381,18 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSuccess }:
                       placeholder="Roma"
                     />
                     {fieldErrors.birthPlace && <p className="mt-1 text-xs text-red-500">{fieldErrors.birthPlace}</p>}
+                  </div>
+                  <div className="sm:w-24">
+                    <label className={`block text-xs font-medium ${colors.text.secondary} mb-1`}>
+                      Sesso
+                    </label>
+                    <CustomSelect
+                      id="admin-edit-gender"
+                      value={gender}
+                      options={[{ value: 'M', label: 'M' }, { value: 'F', label: 'F' }]}
+                      onChange={(val) => setGender(val as 'M' | 'F')}
+                      placeholder="--"
+                    />
                   </div>
                 </div>
 

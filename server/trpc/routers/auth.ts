@@ -18,6 +18,8 @@ export const authRouter = router({
         name: z.string()
           .min(3, 'Il nome è troppo corto')
           .refine(val => val.trim().includes(' '), 'Inserisci nome e cognome'),
+        firstName: z.string().trim().min(1).max(50).optional(),
+        lastName: z.string().trim().min(1).max(50).optional(),
         role: z.enum(['STUDENT', 'ADMIN', 'COLLABORATOR']).default('STUDENT'),
       })
     )
@@ -36,7 +38,7 @@ export const authRouter = router({
         });
       }
 
-      const { firebaseUid, email, name } = input;
+      const { firebaseUid, email, name, firstName, lastName } = input;
       const enforcedRole = 'STUDENT' as const;
 
       // Check if user already exists by firebaseUid
@@ -72,6 +74,8 @@ export const authRouter = router({
           firebaseUid,
           email,
           name,
+          firstName,
+          lastName,
           role: enforcedRole,
           ...(enforcedRole === 'STUDENT' && {
             student: { create: { matricola } },
@@ -138,6 +142,8 @@ export const authRouter = router({
     return {
       id: user.id,
       name: user.name,
+      firstName: user.firstName,
+      lastName: user.lastName,
       email: user.email,
       role: user.role,
       isActive: user.isActive,

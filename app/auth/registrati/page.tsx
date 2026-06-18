@@ -179,6 +179,8 @@ export default function RegisterPage() {
         firebaseUid: userCredential.user.uid,
         email: formData.email,
         name: fullName,
+        firstName: normalizedFirst,
+        lastName: normalizedLast,
         role: formData.role,
       });
 

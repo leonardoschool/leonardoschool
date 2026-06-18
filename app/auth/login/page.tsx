@@ -153,7 +153,11 @@ export default function LoginPage() {
 
     try {
       // 1. Login con Firebase
-      const userCredential = await firebaseAuth.login(email, password);
+      // Browser autofill/password manager and copy-paste (especially on desktop)
+      // frequently inject leading/trailing whitespace, which makes Firebase reject
+      // otherwise-correct credentials ("works on iPad, not on PC"). Mirror the trim
+      // already done in registration and password recovery.
+      const userCredential = await firebaseAuth.login(email.trim(), password.trim());
       
       // 2. Verifica che l'email sia verificata
       if (!userCredential.user.emailVerified) {
