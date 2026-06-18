@@ -88,6 +88,12 @@ const QUESTION_TYPE_LABELS: Record<SectionQuestionTypeFilter, string> = {
 // so single-choice questions are drawn (and shown) before open ones.
 const QUESTION_TYPE_ORDER: SectionQuestionTypeFilter[] = ['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'OPEN_TEXT'];
 
+const QUESTION_TYPE_LABELS: Record<SectionQuestionTypeFilter, string> = {
+  SINGLE_CHOICE: 'a risposta singola',
+  MULTIPLE_CHOICE: 'a risposta multipla',
+  OPEN_TEXT: 'a risposta aperta',
+};
+
 
 function getDefaultSubjectSelection(defaultSubjectIds?: string[], defaultSubjectId?: string | null) {
   return defaultSubjectIds && defaultSubjectIds.length > 0
@@ -117,6 +123,21 @@ function getTypeCountTargets(
     .filter(([type, count]) => Number.isFinite(count) && (count ?? 0) > 0 && (!allowed || allowed.has(type)))
     .map(([type, count]) => ({ type, count: Math.floor(count as number) }))
     .sort((a, b) => QUESTION_TYPE_ORDER.indexOf(a.type) - QUESTION_TYPE_ORDER.indexOf(b.type));
+}
+
+/**
+ * Resolve the exact per-type pick targets from the template's configured counts,
+ * keeping only the types currently selected in the form.
+ */
+function getTypeCountTargets(
+  typeCounts: Partial<Record<SectionQuestionTypeFilter, number>> | undefined,
+  selectedTypes: string[]
+): Array<{ type: SectionQuestionTypeFilter; count: number }> {
+  if (!typeCounts) return [];
+  const allowed = selectedTypes.length > 0 ? new Set(selectedTypes) : null;
+  return (Object.entries(typeCounts) as Array<[SectionQuestionTypeFilter, number | undefined]>)
+    .filter(([type, count]) => Number.isFinite(count) && (count ?? 0) > 0 && (!allowed || allowed.has(type)))
+    .map(([type, count]) => ({ type, count: Math.floor(count as number) }));
 }
 
 export default function FillSectionModal({
