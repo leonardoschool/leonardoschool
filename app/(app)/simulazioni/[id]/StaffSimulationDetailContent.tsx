@@ -638,11 +638,15 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
   const questionsById = new Map<string, { question: DetailQuestion; index: number }>(
     questionEntries.map((entry) => [entry.question.questionId, entry])
   );
+  // Display each section's questions in their actual simulation order (the `order` field,
+  // reflected by `entry.index`), not the raw `questionIds` membership order — otherwise the
+  // progressive number badges look scrambled/non-sequential after questions are reordered or deleted.
   const sectionGroups = detailSections.map((section) => ({
     section,
     entries: section.questionIds
       .map((questionId) => questionsById.get(questionId))
-      .filter((entry): entry is { question: DetailQuestion; index: number } => Boolean(entry)),
+      .filter((entry): entry is { question: DetailQuestion; index: number } => Boolean(entry))
+      .sort((a, b) => a.index - b.index),
   }));
   const groupedQuestionIds = new Set(
     sectionGroups.flatMap((group) => group.entries.map((entry) => entry.question.questionId))

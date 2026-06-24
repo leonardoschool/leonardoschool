@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { keepPreviousData } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
@@ -155,6 +156,8 @@ export default function AdminSimulationsContent() {
   const { data: groupsData } = trpc.groups.getGroups.useQuery({ page: 1, pageSize: 100 });
 
   // Fetch simulations (templates only, no visibility/group filters)
+  // keepPreviousData keeps the current rows visible while a new search/filter fetches,
+  // so the page doesn't blank out (and the search input keeps focus) on every keystroke.
   const { data: simulationsData, isLoading } = trpc.simulations.getSimulations.useQuery({
     page,
     pageSize,
@@ -162,6 +165,8 @@ export default function AdminSimulationsContent() {
     type: type || undefined,
     status: status || undefined,
     isOfficial: isOfficial === '' ? undefined : isOfficial,
+  }, {
+    placeholderData: keepPreviousData,
   });
 
   // Fetch assignments
@@ -410,15 +415,16 @@ export default function AdminSimulationsContent() {
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
     const openUpward = spaceBelow < menuHeight && spaceAbove > menuHeight + 20;
+    // The menu is position:fixed, so coordinates are viewport-relative — never add scroll offsets.
     const top = openUpward
-      ? rect.top + window.scrollY - menuHeight - 4
-      : rect.bottom + window.scrollY + 4;
+      ? rect.top - menuHeight - 4
+      : rect.bottom + 4;
     let left: number;
     if (window.innerWidth < 640 || window.innerWidth - rect.right < menuWidth + 16) {
-      const idealLeft = rect.right + window.scrollX - menuWidth;
-      left = Math.max(window.scrollX + 8, idealLeft);
+      const idealLeft = rect.right - menuWidth;
+      left = Math.max(8, idealLeft);
     } else {
-      left = rect.right + window.scrollX - menuWidth;
+      left = rect.right - menuWidth;
     }
     setAssignmentMenuPosition({ top, left });
     setOpenAssignmentMenuId(openAssignmentMenuId === id ? null : id);
@@ -442,32 +448,31 @@ export default function AdminSimulationsContent() {
     // Determine if menu should open upward or downward
     // Only open upward if there's really not enough space below
     const openUpward = spaceBelow < menuHeight && spaceAbove > menuHeight + 20;
-    
-    // Calculate vertical position
+
+    // The menu is position:fixed, so coordinates are viewport-relative — never add scroll offsets.
     const top = openUpward
-      ? rect.top + window.scrollY - menuHeight - 4 // 4px gap
-      : rect.bottom + window.scrollY + 4; // 4px gap
-    
+      ? rect.top - menuHeight - 4 // 4px gap
+      : rect.bottom + 4; // 4px gap
+
     // Calculate horizontal position with responsive logic
     let left: number;
-    
+
     // On mobile/small screens or when not enough space on right
     if (window.innerWidth < 640 || spaceRight < menuWidth + 16) {
       // Align to right edge with padding, or center if very small screen
       if (window.innerWidth < menuWidth + 32) {
         // Center on very small screens
-        left = window.scrollX + (window.innerWidth - menuWidth) / 2;
+        left = (window.innerWidth - menuWidth) / 2;
       } else {
         // Align to right edge of button but ensure it stays on screen
-        const idealLeft = rect.right + window.scrollX - menuWidth;
-        const minLeft = window.scrollX + 8; // 8px padding from left edge
-        left = Math.max(minLeft, idealLeft);
+        const idealLeft = rect.right - menuWidth;
+        left = Math.max(8, idealLeft);
       }
     } else {
       // Desktop: align to right edge of button
-      left = rect.right + window.scrollX - menuWidth;
+      left = rect.right - menuWidth;
     }
-    
+
     setMenuPosition({ top, left });
     setOpenMenuId(openMenuId === id ? null : id);
   };
@@ -481,7 +486,9 @@ export default function AdminSimulationsContent() {
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   };
 
-  if (isLoading) {
+  // Only show the full-page loader on the very first load (no data yet),
+  // not on subsequent search/filter refetches.
+  if (isLoading && !simulationsData) {
     return <PageLoader />;
   }
 

@@ -127,7 +127,9 @@ export default function CollaboratorSimulationsContent() {
     toggleExpandGroup,
   } = useSimulationsList();
 
-  if (isLoading) {
+  // Only show the full-page loader on the very first load (no data yet),
+  // not on subsequent search/filter refetches.
+  if (isLoading && !simulationsData) {
     return <PageLoader />;
   }
 

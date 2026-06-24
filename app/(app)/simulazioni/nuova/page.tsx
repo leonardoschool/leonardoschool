@@ -358,6 +358,7 @@ export default function NewSimulationPage() {
   const [selectedQuestions, setSelectedQuestions] = useState<SelectedQuestion[]>([]);
   const [questionSearchTerm, setQuestionSearchTerm] = useState('');
   const [questionSubjectFilter, setQuestionSubjectFilter] = useState('');
+  const [questionTopicFilter, setQuestionTopicFilter] = useState('');
   const [questionDifficultyFilter, setQuestionDifficultyFilter] = useState('');
   const [questionTypeFilter, setQuestionTypeFilter] = useState<QuestionTypeFilter>('');
   const [questionTagFilter, setQuestionTagFilter] = useState<string[]>([]);
@@ -502,12 +503,28 @@ export default function NewSimulationPage() {
     setEditFormApplied(true);
   }, [isEditMode, editTemplateData, editFormApplied]);
 
+  // Topic options derived from the selected subject (or all subjects when none is picked).
+  const questionTopicOptions = useMemo(() => {
+    if (!subjectsData) return [];
+    const scopedSubjects = questionSubjectFilter
+      ? subjectsData.filter((s) => s.id === questionSubjectFilter)
+      : subjectsData;
+    const showSubjectName = scopedSubjects.length > 1;
+    return scopedSubjects.flatMap((s) =>
+      s.topics.map((t) => ({
+        value: t.id,
+        label: showSubjectName ? `${t.name} · ${s.name}` : t.name,
+      }))
+    );
+  }, [subjectsData, questionSubjectFilter]);
+
   // Questions query - include tag filter
   const { data: questionsData, isLoading: questionsLoading } = trpc.questions.getQuestions.useQuery({
     page: 1,
     pageSize: 100,
     search: questionSearchTerm || undefined,
     subjectIds: questionSubjectFilter ? [questionSubjectFilter] : undefined,
+    topicIds: questionTopicFilter ? [questionTopicFilter] : undefined,
     types: questionTypeFilter ? [questionTypeFilter as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT'] : undefined,
     difficulties: questionDifficultyFilter ? [questionDifficultyFilter as 'EASY' | 'MEDIUM' | 'HARD'] : undefined,
     statuses: ['PUBLISHED'],
@@ -2975,12 +2992,24 @@ export default function NewSimulationPage() {
                       <div className="flex-1">
                         <CustomSelect
                           value={questionSubjectFilter}
-                          onChange={setQuestionSubjectFilter}
+                          onChange={(value) => {
+                            setQuestionSubjectFilter(value);
+                            setQuestionTopicFilter('');
+                          }}
                           options={[
                             { value: '', label: 'Tutte le materie' },
                             ...(subjectsData?.map((s) => ({ value: s.id, label: s.name })) || []),
                           ]}
                           placeholder="Tutte le materie"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <CustomSelect
+                          value={questionTopicFilter}
+                          onChange={setQuestionTopicFilter}
+                          options={[{ value: '', label: 'Tutti gli argomenti' }, ...questionTopicOptions]}
+                          placeholder="Tutti gli argomenti"
+                          disabled={questionTopicOptions.length === 0}
                         />
                       </div>
                       <div className="flex-1">

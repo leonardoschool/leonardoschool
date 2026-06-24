@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useEffect } from 'react';
+import { use, useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { trpc } from '@/lib/trpc/client';
@@ -97,8 +97,14 @@ export default function EditSimulationPage({ params }: { params: Promise<{ id: s
     { enabled: Boolean(hasAccess) }
   );
 
+  // Populate the form from the server only once per simulation (keyed by id), not on every
+  // refetch. A background refetch (e.g. on window focus) returns a new object reference; without
+  // this guard the effect would re-run and clobber the user's in-progress edits with the old values.
+  const initializedIdRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!simulation) return;
+    if (!simulation || initializedIdRef.current === simulation.id) return;
+    initializedIdRef.current = simulation.id;
 
     setTitle(simulation.title);
     setDescription(simulation.description || '');

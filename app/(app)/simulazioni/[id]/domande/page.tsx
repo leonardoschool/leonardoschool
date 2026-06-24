@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useEffect } from 'react';
+import { use, useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { trpc } from '@/lib/trpc/client';
@@ -217,6 +217,7 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
   };
   const [questionSearchTerm, setQuestionSearchTerm] = useState('');
   const [questionSubjectFilter, setQuestionSubjectFilter] = useState('');
+  const [questionTopicFilter, setQuestionTopicFilter] = useState('');
   const [questionDifficultyFilter, setQuestionDifficultyFilter] = useState('');
   const [questionTypeFilter, setQuestionTypeFilter] = useState('');
   const [sections, setSections] = useState<ManagedSection[]>([]);
@@ -263,12 +264,28 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
   // Fetch subjects for filter
   const { data: subjectsData } = trpc.questions.getSubjects.useQuery();
 
+  // Topic options derived from the selected subject (or all subjects when none is picked).
+  const topicOptions = useMemo(() => {
+    if (!subjectsData) return [];
+    const scopedSubjects = questionSubjectFilter
+      ? subjectsData.filter((s) => s.id === questionSubjectFilter)
+      : subjectsData;
+    const showSubjectName = scopedSubjects.length > 1;
+    return scopedSubjects.flatMap((s) =>
+      s.topics.map((t) => ({
+        value: t.id,
+        label: showSubjectName ? `${t.name} · ${s.name}` : t.name,
+      }))
+    );
+  }, [subjectsData, questionSubjectFilter]);
+
   // Fetch available questions
   const { data: questionsData, isLoading: questionsLoading } = trpc.questions.getQuestions.useQuery({
     page: 1,
     pageSize: 50,
     search: questionSearchTerm || undefined,
     subjectIds: questionSubjectFilter ? [questionSubjectFilter] : undefined,
+    topicIds: questionTopicFilter ? [questionTopicFilter] : undefined,
     difficulties: questionDifficultyFilter ? [questionDifficultyFilter as 'EASY' | 'MEDIUM' | 'HARD'] : undefined,
     types: questionTypeFilter ? [questionTypeFilter as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT'] : undefined,
     statuses: ['PUBLISHED'],
@@ -368,6 +385,28 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
     [newQuestions[index], newQuestions[newIndex]] = [newQuestions[newIndex], newQuestions[index]];
     newQuestions.forEach((q, i) => (q.order = i));
     setSelectedQuestions(newQuestions);
+    setHasChanges(true);
+  };
+
+  // Reorder a question within its own group (its section, or the unassigned bucket),
+  // swapping with the adjacent question in the same group so section boundaries are preserved.
+  const moveQuestionInGroup = (questionId: string, direction: 'up' | 'down') => {
+    setSelectedQuestions((prev) => {
+      const section = sections.find((s) => s.questionIds.includes(questionId));
+      const inGroup = (qId: string) =>
+        section ? section.questionIds.includes(qId) : !sections.some((s) => s.questionIds.includes(qId));
+      const orderedGroup = prev.filter((q) => inGroup(q.questionId));
+      const posInGroup = orderedGroup.findIndex((q) => q.questionId === questionId);
+      const neighborPos = direction === 'up' ? posInGroup - 1 : posInGroup + 1;
+      if (neighborPos < 0 || neighborPos >= orderedGroup.length) return prev;
+
+      const neighborId = orderedGroup[neighborPos].questionId;
+      const next = [...prev];
+      const i = next.findIndex((q) => q.questionId === questionId);
+      const j = next.findIndex((q) => q.questionId === neighborId);
+      [next[i], next[j]] = [next[j], next[i]];
+      return next.map((q, idx) => ({ ...q, order: idx }));
+    });
     setHasChanges(true);
   };
 
@@ -491,12 +530,22 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
               </div>
               <CustomSelect
                 value={questionSubjectFilter}
-                onChange={setQuestionSubjectFilter}
+                onChange={(value) => {
+                  setQuestionSubjectFilter(value);
+                  setQuestionTopicFilter('');
+                }}
                 options={[
                   { value: '', label: 'Tutte le materie' },
                   ...(subjectsData?.map((s) => ({ value: s.id, label: s.name })) || []),
                 ]}
                 placeholder="Tutte le materie"
+              />
+              <CustomSelect
+                value={questionTopicFilter}
+                onChange={setQuestionTopicFilter}
+                options={[{ value: '', label: 'Tutti gli argomenti' }, ...topicOptions]}
+                placeholder="Tutti gli argomenti"
+                disabled={topicOptions.length === 0}
               />
               <div className="flex gap-2">
                 <div className="flex-1">
@@ -653,9 +702,9 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
               /* ── Grouped by section ── */
               <div>
                 {sections.map((section) => {
-                  const sectionQuestions = section.questionIds
-                    .map((qId) => selectedQuestions.find((sq) => sq.questionId === qId))
-                    .filter((sq): sq is SelectedQuestion => sq !== undefined);
+                  const sectionQuestions = selectedQuestions.filter((sq) =>
+                    section.questionIds.includes(sq.questionId)
+                  );
                   return (
                     <div key={section.id}>
                       {/* Section header */}
@@ -676,7 +725,7 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                         </div>
                       ) : (
                         <div className={`divide-y ${colors.border.light}`}>
-                          {sectionQuestions.map((sq) => {
+                          {sectionQuestions.map((sq, localIdx) => {
                             const globalIdx = selectedQuestions.findIndex((s) => s.questionId === sq.questionId);
                             const qType = sq.question?.type;
                             const isChoice = qType === 'SINGLE_CHOICE' || qType === 'MULTIPLE_CHOICE';
@@ -686,6 +735,24 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                             const isExpanded = expandedPreviews.has(sq.questionId);
                             return (
                               <div key={sq.questionId} className={`p-3 flex items-start gap-2 ${colors.background.card}`}>
+                                {canEdit && (
+                                  <div className="flex flex-col gap-1">
+                                    <button
+                                      onClick={() => moveQuestionInGroup(sq.questionId, 'up')}
+                                      disabled={localIdx === 0}
+                                      className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 transition-colors"
+                                    >
+                                      <ChevronUp className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => moveQuestionInGroup(sq.questionId, 'down')}
+                                      disabled={localIdx === sectionQuestions.length - 1}
+                                      className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 transition-colors"
+                                    >
+                                      <ChevronDown className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                )}
                                 <span className={`mt-1.5 w-6 h-6 shrink-0 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-medium ${colors.text.muted}`}>
                                   {globalIdx + 1}
                                 </span>
@@ -766,7 +833,7 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                         </div>
                       </div>
                       <div className={`divide-y ${colors.border.light}`}>
-                        {unassigned.map((sq) => {
+                        {unassigned.map((sq, localIdx) => {
                           const globalIdx = selectedQuestions.findIndex((s) => s.questionId === sq.questionId);
                           const qType = sq.question?.type;
                           const isChoice = qType === 'SINGLE_CHOICE' || qType === 'MULTIPLE_CHOICE';
@@ -776,6 +843,24 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                           const isExpanded = expandedPreviews.has(sq.questionId);
                           return (
                             <div key={sq.questionId} className={`p-3 flex items-start gap-2 ${colors.background.card}`}>
+                              {canEdit && (
+                                <div className="flex flex-col gap-1">
+                                  <button
+                                    onClick={() => moveQuestionInGroup(sq.questionId, 'up')}
+                                    disabled={localIdx === 0}
+                                    className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 transition-colors"
+                                  >
+                                    <ChevronUp className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => moveQuestionInGroup(sq.questionId, 'down')}
+                                    disabled={localIdx === unassigned.length - 1}
+                                    className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 transition-colors"
+                                  >
+                                    <ChevronDown className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              )}
                               <span className={`mt-1.5 w-6 h-6 shrink-0 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-medium ${colors.text.muted}`}>
                                 {globalIdx + 1}
                               </span>

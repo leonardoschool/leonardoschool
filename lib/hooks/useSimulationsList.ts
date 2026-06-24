@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { keepPreviousData } from '@tanstack/react-query';
 import { trpc } from '@/lib/trpc/client';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
@@ -87,12 +88,16 @@ export function useSimulationsList() {
   const { data: currentUser } = trpc.users.me.useQuery();
   const { data: groupsData } = trpc.groups.getGroups.useQuery({ page: 1, pageSize: 100 });
 
+  // keepPreviousData keeps the current rows visible while a new search/filter fetches,
+  // so the page doesn't blank out (and the search input keeps focus) on every keystroke.
   const { data: simulationsData, isLoading } = trpc.simulations.getSimulations.useQuery({
     page,
     pageSize,
     search: search || undefined,
     type: type || undefined,
     status: status || undefined,
+  }, {
+    placeholderData: keepPreviousData,
   });
 
   const { data: assignmentsData, isLoading: assignmentsLoading } = trpc.simulations.getAssignments.useQuery(
@@ -241,18 +246,18 @@ export function useSimulationsList() {
     const spaceBelow = globalThis.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
     const openUpward = spaceBelow < menuHeight && spaceAbove > menuHeight + 20;
-    const top = openUpward ? rect.top + globalThis.scrollY - menuHeight - 4 : rect.bottom + globalThis.scrollY + 4;
+    // The menu is position:fixed, so coordinates are viewport-relative — never add scroll offsets.
+    const top = openUpward ? rect.top - menuHeight - 4 : rect.bottom + 4;
     let left: number;
     if (globalThis.innerWidth < 640 || globalThis.innerWidth - rect.right < menuWidth + 16) {
-      const idealLeft = rect.right + globalThis.scrollX - menuWidth;
-      const minLeft = globalThis.scrollX + 8;
+      const idealLeft = rect.right - menuWidth;
       if (globalThis.innerWidth < menuWidth + 32) {
-        left = globalThis.scrollX + (globalThis.innerWidth - menuWidth) / 2;
+        left = (globalThis.innerWidth - menuWidth) / 2;
       } else {
-        left = Math.max(minLeft, idealLeft);
+        left = Math.max(8, idealLeft);
       }
     } else {
-      left = rect.right + globalThis.scrollX - menuWidth;
+      left = rect.right - menuWidth;
     }
     return { top, left };
   }
