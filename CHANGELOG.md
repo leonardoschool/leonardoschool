@@ -8,6 +8,20 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-24
+
+### Added
+- Simulation question management ("Gestione Domande"): added a **topic ("argomento") filter** to the "Domande disponibili" panel, alongside the existing subject, difficulty and type filters. The topic list is scoped to the selected subject (or shows all topics across subjects when none is selected) and resets when the subject changes. Available both when creating a simulation and when editing an existing one.
+
+### Changed
+- Editing an existing simulation's questions now supports **reordering questions with up/down arrows in the sectioned view** (and in the "Senza sezione" bucket), matching the flat-list behaviour. Arrows move a question only within its own section so section boundaries are preserved; within each section questions are now listed in their actual simulation order.
+
+### Fixed
+- Simulations list: the **search box no longer blanks the page and loses focus on every keystroke**. The list now keeps the previous rows visible while the new search/filter result loads (`keepPreviousData`), and the full-page loader only shows on the very first load. Applies to both the admin and collaborator views.
+- Simulations list: the **row actions menu (⋮) now opens correctly under the button** instead of being pushed off-screen when the page is scrolled. The menu is `position: fixed`, so its coordinates are computed from the viewport without adding scroll offsets — fixing both the misplacement and the cases where the menu appeared not to open. Applies to the simulation and assignment action menus in both views.
+- Simulation detail: the **progressive question number badges are now sequential** within each section. Questions are listed in their actual simulation order (the `order` field) instead of the raw section membership order, so after reordering or deleting questions the numbers no longer appear scrambled/out of sequence.
+- Edit simulation: form fields **no longer reset to their previous value** while editing. The form is now populated from the server only once per simulation instead of on every background refetch (e.g. on window focus), which was overwriting in-progress edits as soon as the user moved to the next field.
+
 ## [1.0.2] - 2026-06-18
 
 ### Fixed
