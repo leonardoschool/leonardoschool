@@ -24,8 +24,13 @@ export function generateSecureId(prefix = ''): string {
 export function secureShuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
   const randomValues = new Uint32Array(shuffled.length);
-  crypto.getRandomValues(randomValues);
-  
+  // crypto.getRandomValues rejects views larger than 65536 bytes (16384 uint32s),
+  // so fill in chunks to keep the shuffle correct for large question pools.
+  const MAX_UINT32_PER_CALL = 16384;
+  for (let offset = 0; offset < randomValues.length; offset += MAX_UINT32_PER_CALL) {
+    crypto.getRandomValues(randomValues.subarray(offset, offset + MAX_UINT32_PER_CALL));
+  }
+
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = randomValues[i] % (i + 1);
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];

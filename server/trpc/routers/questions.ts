@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { secureShuffleArray } from '@/lib/utils';
+import { partitionBySeen, sortBySeenRankAsc, buildStudentSeenRank, type SeenRank } from '@/lib/utils/questionRotation';
 import {
   createQuestionSchema,
   updateQuestionSchema,
@@ -457,30 +458,6 @@ function calculateDifficultyTargets(
   return targets;
 }
 
-/**
- * Build order by clause for smart question selection
- */
-function buildSmartOrderBy(
-  avoidRecentlyUsed: boolean,
-  preferRecentQuestions: boolean,
-  maximizeTopicCoverage: boolean
-): Array<{ [key: string]: 'asc' | 'desc' }> {
-  const orderBy: Array<{ [key: string]: 'asc' | 'desc' }> = [];
-  
-  if (avoidRecentlyUsed) {
-    orderBy.push({ timesUsed: 'asc' });
-  }
-  if (preferRecentQuestions) {
-    orderBy.push({ createdAt: 'desc' });
-  }
-  if (maximizeTopicCoverage) {
-    orderBy.push({ topicId: 'asc' });
-  }
-  orderBy.push({ id: 'asc' }); // Stable fallback
-  
-  return orderBy;
-}
-
 // Type for question with topic for topic coverage
 type QuestionWithTopic = {
   id: string;
@@ -579,6 +556,8 @@ type SelectionConfig = {
   avoidRecentlyUsed: boolean;
   preferRecentQuestions: boolean;
   maximizeTopicCoverage: boolean;
+  // Per-student recency map: fresh (unseen) questions are picked before repeats.
+  seenRank: SeenRank;
 };
 
 // Common select clause for question queries
@@ -598,8 +577,77 @@ const questionSelectClause = {
   },
 };
 
+// Lightweight pool row used only to rank/shuffle candidates before fetching full data.
+type PoolRow = { id: string; topicId: string | null; createdAt: Date };
+
+// Columns needed to rank/shuffle the candidate pool without loading full question data.
+const poolSelectClause = { id: true, topicId: true, createdAt: true };
+
 /**
- * Select questions for a specific difficulty level
+ * Order a single bucket: newest-first when the student asked to prefer recent
+ * questions, otherwise a uniform crypto shuffle for variety.
+ */
+function orderBucket(bucket: PoolRow[], config: SelectionConfig): PoolRow[] {
+  return config.preferRecentQuestions
+    ? [...bucket].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    : secureShuffleArray(bucket);
+}
+
+/**
+ * Pick up to `count` question ids from a candidate pool. Never-seen questions are
+ * always exhausted before any already-seen one is reused, and topic coverage is
+ * applied *within* each bucket so it can't pull a stale question ahead of a fresh
+ * one. When the fresh bucket can't fill the target, the remainder comes from the
+ * least-recently-seen questions.
+ */
+function pickFromPool(pool: PoolRow[], count: number, config: SelectionConfig): string[] {
+  const { fresh, stale } = partitionBySeen(pool, config.seenRank);
+
+  const orderedFresh = orderBucket(fresh, config);
+  const freshPick = config.maximizeTopicCoverage
+    ? applyTopicCoverage(orderedFresh, count)
+    : orderedFresh.slice(0, count);
+
+  const remaining = count - freshPick.length;
+  let stalePick: PoolRow[] = [];
+  if (remaining > 0 && stale.length > 0) {
+    const orderedStale = sortBySeenRankAsc(stale, config.seenRank);
+    stalePick = config.maximizeTopicCoverage
+      ? applyTopicCoverage(orderedStale, remaining)
+      : orderedStale.slice(0, remaining);
+  }
+
+  return [...freshPick, ...stalePick].map((q) => q.id);
+}
+
+/**
+ * Fetch full question data for a set of ids, preserving the order of `ids`
+ * (Prisma's `in` returns an arbitrary order, so we re-map).
+ */
+async function fetchQuestionsByIds(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  prisma: any,
+  ids: string[]
+): Promise<QuestionQueryResult[]> {
+  if (ids.length === 0) return [];
+  const rows: QuestionQueryResult[] = await prisma.question.findMany({
+    where: { id: { in: ids } },
+    select: questionSelectClause,
+  });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return ids
+    .map((id) => byId.get(id))
+    .filter((row): row is QuestionQueryResult => row !== undefined);
+}
+
+/**
+ * Select questions for a specific difficulty level.
+ *
+ * Samples uniformly across the ENTIRE eligible pool (fetching only ids first, then
+ * the full data for the picked ones) instead of a deterministically pre-sliced
+ * window, and prioritises questions the student has never seen. This is what makes
+ * repeated self-practice rotate through the whole bank instead of showing the same
+ * subset every time.
  */
 async function selectQuestionsForDifficulty(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -610,37 +658,29 @@ async function selectQuestionsForDifficulty(
   excludeIds: string[],
   config: SelectionConfig
 ): Promise<{ questions: SmartSelectedQuestion[]; selectedIds: string[]; orderStart: number }> {
-  const orderByClause = buildSmartOrderBy(
-    config.avoidRecentlyUsed,
-    config.preferRecentQuestions,
-    config.maximizeTopicCoverage
-  );
-
-  const questions = await prisma.question.findMany({
+  const pool: PoolRow[] = await prisma.question.findMany({
     where: {
       ...config.baseWhere,
       subjectId,
       difficulty: difficulty as 'EASY' | 'MEDIUM' | 'HARD',
       id: { notIn: excludeIds },
     },
-    take: count * 3, // Get more than needed for shuffling
-    orderBy: orderByClause,
-    select: questionSelectClause,
+    select: poolSelectClause,
   });
 
-  // Apply topic coverage maximization using helper
-  const finalQuestions = config.maximizeTopicCoverage
-    ? applyTopicCoverage(questions, count)
-    : questions;
+  if (pool.length === 0) {
+    return { questions: [], selectedIds: [], orderStart: 0 };
+  }
 
-  // Shuffle and take only what we need
-  const shuffled = secureShuffleArray(finalQuestions);
-  const picked = shuffled.slice(0, count);
+  const pickedIds = pickFromPool(pool, count, config);
+  const picked = await fetchQuestionsByIds(prisma, pickedIds);
+  const selectedQuestions = picked.map((q, idx) => transformToSelectedQuestion(q, idx));
 
-  const selectedIds = picked.map((q: QuestionQueryResult) => q.id);
-  const selectedQuestions = picked.map((q: QuestionQueryResult, idx: number) => transformToSelectedQuestion(q, idx));
-
-  return { questions: selectedQuestions, selectedIds, orderStart: picked.length };
+  return {
+    questions: selectedQuestions,
+    selectedIds: picked.map((q) => q.id),
+    orderStart: picked.length,
+  };
 }
 
 /**
@@ -663,17 +703,19 @@ async function fillRemainingQuestions(
   const difficultyEntries = Object.entries(remainingTargets).filter(([, count]) => count > 0);
 
   for (const [difficulty, count] of difficultyEntries) {
-    const extraQuestions = await prisma.question.findMany({
+    const pool: PoolRow[] = await prisma.question.findMany({
       where: {
         ...config.baseWhere,
         subjectId,
         difficulty: difficulty as 'EASY' | 'MEDIUM' | 'HARD',
         id: { notIn: [...excludeIds, ...allIds] },
       },
-      take: count,
-      orderBy: config.avoidRecentlyUsed ? { timesUsed: 'asc' } : { createdAt: 'desc' },
-      select: questionSelectClause,
+      select: poolSelectClause,
     });
+    if (pool.length === 0) continue;
+
+    const pickedIds = pickFromPool(pool, count, config);
+    const extraQuestions = await fetchQuestionsByIds(prisma, pickedIds);
 
     for (const q of extraQuestions) {
       allIds.push(q.id);
@@ -2692,6 +2734,13 @@ export const questionsRouter = router({
         input.language ?? undefined,
       );
 
+      // Per-student memory: when the student wants to avoid recently-used questions,
+      // build the recency map so self-practice rotates through the whole bank before
+      // repeating. Other roles (e.g. staff previewing) simply get an empty map.
+      const seenRank: SeenRank = avoidRecentlyUsed
+        ? await buildStudentSeenRank(ctx.prisma, ctx.user.id)
+        : new Map();
+
       // Build selection config
       const selectionConfig: SelectionConfig = {
         baseWhere,
@@ -2699,6 +2748,7 @@ export const questionsRouter = router({
         avoidRecentlyUsed,
         preferRecentQuestions,
         maximizeTopicCoverage,
+        seenRank,
       };
 
       // Step 5: Select questions per subject with smart ordering
