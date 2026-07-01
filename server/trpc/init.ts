@@ -4,9 +4,40 @@ import { Context } from './context';
 import { transformer } from '@/lib/trpc/transformer';
 import { runWithContext } from '@/lib/utils/requestContext';
 
+// Raw exceptions (Prisma, DB drivers, unexpected throws) must never reach the client: they leak
+// internals and read as jargon. We detect them and replace the message with a readable Italian one,
+// while deliberate TRPCError messages (thrown by our code, already user-facing) pass through untouched.
+const TECHNICAL_ERROR_PATTERNS = [
+  /Invalid `.*prisma/i,
+  /PrismaClient/i,
+  /Unknown argument/i,
+  /invocation/i,
+  /ListStringFieldRefInput|FieldRefInput/i,
+];
+
+const GENERIC_SERVER_ERROR_MESSAGE =
+  'Si è verificato un errore imprevisto. Riprova; se il problema persiste contatta il supporto.';
+
+function isTechnicalMessage(message: string): boolean {
+  return (
+    TECHNICAL_ERROR_PATTERNS.some((pattern) => pattern.test(message)) ||
+    (message.includes('\n') && message.length > 250)
+  );
+}
+
 const t = initTRPC.context<Context>().create({
   transformer,
-  errorFormatter({ shape }) {
+  errorFormatter({ shape, error }) {
+    // `error.cause` is set when tRPC wrapped an unexpected throw (e.g. a Prisma error).
+    // Combined with the technical-message check, this catches raw errors without touching
+    // our own TRPCErrors that carry a clean Italian message.
+    const isUnexpected = error.cause !== undefined || isTechnicalMessage(shape.message);
+    if (shape.data?.code === 'INTERNAL_SERVER_ERROR' && isUnexpected) {
+      return {
+        ...shape,
+        message: GENERIC_SERVER_ERROR_MESSAGE,
+      };
+    }
     return shape;
   },
 });
