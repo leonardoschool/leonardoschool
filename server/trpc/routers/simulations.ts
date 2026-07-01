@@ -21,6 +21,7 @@ import { createLogger } from '@/lib/utils/logger';
 import { stripHtml } from '@/lib/utils/sanitizeHtml';
 import { sanitizeStudentAnswerText } from '@/lib/utils/studentOpenAnswer';
 import { secureShuffleArray } from '@/lib/utils';
+import { orderPoolFreshFirst, buildStudentSeenRank, type SeenRank } from '@/lib/utils/questionRotation';
 
 const log = createLogger('Simulations');
 
@@ -285,7 +286,7 @@ async function deleteCalendarEventsForAssignment(
   // Get simulation details to match event title
   const simulation = await prisma.simulation.findUnique({
     where: { id: simulationId },
-    select: { title: true, type: true },
+    select: { title: true, type: true, calendarEventId: true },
   });
 
   if (!simulation) {
@@ -317,7 +318,7 @@ async function deleteCalendarEventsForAssignment(
   const events = await prisma.calendarEvent.findMany({
     where: {
       type: 'SIMULATION',
-      title: { in: eventTitles },
+      title: eventTitlePrefix, // Exact match, not startsWith
       ...(invitationFilter ? { invitations: invitationFilter } : {}),
     },
     select: { id: true },
@@ -2176,17 +2177,18 @@ async function pickRandomTemplateQuestions(
   sectionId: string,
   where: Prisma.QuestionWhereInput,
   count: number,
-  pickedIds: Set<string>
+  pickedIds: Set<string>,
+  seenRank: SeenRank
 ): Promise<PickedTemplateQuestion[]> {
   if (count <= 0) return [];
 
+  // Sample uniformly across the whole eligible pool and prefer questions the student
+  // has never seen, so repeated template runs rotate through the full bank.
   const candidates = await prisma.question.findMany({
     where: {
       ...where,
       id: { notIn: Array.from(pickedIds) },
     },
-    take: Math.max(count * 5, 20),
-    orderBy: [{ timesUsed: 'asc' }, { createdAt: 'desc' }],
     select: {
       id: true,
       type: true,
@@ -2194,7 +2196,7 @@ async function pickRandomTemplateQuestions(
     },
   });
 
-  const picked = secureShuffleArray(candidates).slice(0, count);
+  const picked = orderPoolFreshFirst(candidates, seenRank).slice(0, count);
   picked.forEach((question) => pickedIds.add(question.id));
   return picked.map((question) => ({ ...question, sectionId }));
 }
@@ -2225,7 +2227,8 @@ function parseTemplateSections(sections: Prisma.JsonValue | null): SelfPracticeT
 async function pickQuestionsForTemplateSection(
   prisma: PrismaClient,
   section: SelfPracticeTemplateSection,
-  alreadyPickedIds: string[]
+  alreadyPickedIds: string[],
+  seenRank: SeenRank
 ): Promise<PickedTemplateQuestion[]> {
   const targetCount = section.questionCount ?? 0;
   if (targetCount <= 0) return [];
@@ -2242,7 +2245,8 @@ async function pickQuestionsForTemplateSection(
         section.id ?? 'section',
         buildTemplateQuestionWhere(section, { subjectId: subjectTarget.subjectId, type: typeTarget.type }),
         typeTarget.count,
-        pickedIds
+        pickedIds,
+        seenRank
       ));
     }
 
@@ -2254,7 +2258,8 @@ async function pickQuestionsForTemplateSection(
         section.id ?? 'section',
         buildTemplateQuestionWhere(section, { subjectId: subjectTarget.subjectId }),
         subjectRemaining,
-        pickedIds
+        pickedIds,
+        seenRank
       ));
     }
   }
@@ -2266,7 +2271,8 @@ async function pickQuestionsForTemplateSection(
       section.id ?? 'section',
       buildTemplateQuestionWhere(section),
       remaining,
-      pickedIds
+      pickedIds,
+      seenRank
     ));
   }
 
@@ -2879,11 +2885,12 @@ export const simulationsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const existing = await ctx.prisma.simulation.findUnique({
         where: { id: input.id },
-        select: { 
-          createdById: true, 
-          status: true, 
+        select: {
+          createdById: true,
+          status: true,
           title: true,
           type: true,
+          calendarEventId: true,
           _count: { 
             select: { 
               results: true,
@@ -2917,19 +2924,23 @@ export const simulationsRouter = router({
         log.info(`Force delete: "${existing.title}" with ${existing._count.results} results, ${existing._count.assignments} assignments`);
       }
 
-      // Delete ALL calendar events related to this simulation
-      // Events are created with a title pattern: "TOLC: Title" or "Simulazione: Title"
-      const tolcTitle = `TOLC: ${existing.title}`;
-      const simTitle = `Simulazione: ${existing.title}`;
-      
-      // Find all calendar events matching either title
+      // Delete ALL calendar events related to this simulation.
+      // Match the simulation's own scheduled event by id, plus per-assignment events by exact
+      // title (bare title since 1.1.1, legacy "TOLC: "/"Simulazione: " prefixes before that).
+      // NOTE: no `contains` match — a substring filter deletes unrelated simulations' events
+      // (e.g. deleting "IMAT" would wipe every event whose title merely contains "IMAT").
+      const eventTitles = [
+        existing.title,
+        `TOLC: ${existing.title}`,
+        `Simulazione: ${existing.title}`,
+      ];
+
       const eventsToDelete = await ctx.prisma.calendarEvent.findMany({
         where: {
           type: 'SIMULATION',
           OR: [
-            { title: tolcTitle },
-            { title: simTitle },
-            { title: { contains: existing.title } },
+            ...(existing.calendarEventId ? [{ id: existing.calendarEventId }] : []),
+            { title: { in: eventTitles } },
           ],
         },
         select: { id: true, title: true },
@@ -4770,7 +4781,9 @@ export const simulationsRouter = router({
       }
 
       // Create simulation
-      const simulation = await ctx.prisma.simulation.create({
+      const simulationQuestionIds = finalQuestions.map((q) => q.id);
+      const simulation = await ctx.prisma.$transaction(async (tx) => {
+        const created = await tx.simulation.create({
         data: {
           title: `Autoesercitazione ${titleSubject} - ${new Date().toLocaleDateString('it-IT')}`,
           description: `Esercitazione autogenerata con ${finalQuestions.length} domande.${
@@ -4817,7 +4830,16 @@ export const simulationsRouter = router({
             },
           },
         },
-      });
+        });
+
+        // Keep the global usage stat accurate for admin analytics.
+        await tx.question.updateMany({
+          where: { id: { in: simulationQuestionIds } },
+          data: { timesUsed: { increment: 1 } },
+        });
+
+        return created;
+      }, { timeout: 15000 });
 
       const hasOpenQuestions = simulation.questions.some(q => q.question.type === 'OPEN_TEXT');
 
@@ -4879,11 +4901,15 @@ export const simulationsRouter = router({
       const selectedQuestions: PickedTemplateQuestion[] = [];
       const sectionQuestionIds = new Map<string, string[]>();
 
+      // Per-student memory so repeated template runs rotate through the whole bank.
+      const seenRank = await buildStudentSeenRank(ctx.prisma, ctx.user.id);
+
       for (const section of sections) {
         const picked = await pickQuestionsForTemplateSection(
           ctx.prisma,
           section,
-          selectedQuestions.map((question) => question.id)
+          selectedQuestions.map((question) => question.id),
+          seenRank
         );
         selectedQuestions.push(...picked);
         sectionQuestionIds.set(section.id ?? 'section', picked.map((question) => question.id));
@@ -4917,7 +4943,9 @@ export const simulationsRouter = router({
         return acc;
       }, {} as Record<string, number>);
 
-      const simulation = await ctx.prisma.simulation.create({
+      const simulationQuestionIds = selectedQuestions.map((question) => question.id);
+      const simulation = await ctx.prisma.$transaction(async (tx) => {
+        const created = await tx.simulation.create({
         data: {
           title: `Autoesercitazione ${template.title} - ${new Date().toLocaleDateString('it-IT')}`,
           description: `Autoesercitazione generata dal template "${template.title}".`,
@@ -4959,7 +4987,16 @@ export const simulationsRouter = router({
             },
           },
         },
-      });
+        });
+
+        // Keep the global usage stat accurate for admin analytics.
+        await tx.question.updateMany({
+          where: { id: { in: simulationQuestionIds } },
+          data: { timesUsed: { increment: 1 } },
+        });
+
+        return created;
+      }, { timeout: 15000 });
 
       const hasOpenQuestions = simulation.questions.some((question) => question.question.type === 'OPEN_TEXT');
 

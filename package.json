@@ -34,6 +34,8 @@
     "cleanup": "tsx scripts/cleanup.ts",
     "cleanup:dry": "tsx scripts/cleanup.ts --dry-run",
     "cleanup:stats": "tsx scripts/cleanup.ts --stats",
+    "normalize:sim-events": "tsx --env-file .env scripts/normalize-simulation-event-titles.ts",
+    "normalize:sim-events:dry": "tsx --env-file .env scripts/normalize-simulation-event-titles.ts --dry-run",
     "migrate:questions": "tsx --env-file .env scripts/migrate-questions-from-firestore.ts",
     "migrate:questions:dry": "tsx --env-file .env scripts/migrate-questions-from-firestore.ts --dry-run",
     "migrate:questions:inspect": "tsx --env-file .env scripts/migrate-questions-from-firestore.ts --inspect"

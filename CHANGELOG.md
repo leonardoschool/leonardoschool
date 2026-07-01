@@ -8,6 +8,27 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-07-01
+
+### Fixed
+- **Gli eventi calendario delle simulazioni sparivano (regressione della 1.1.1).** Dalla 1.1.1 gli eventi delle assegnazioni usano il **titolo nudo** della simulazione, ma quel titolo coincide con l'evento programmato della simulazione stessa (`createSimulationCalendarEvent`, collegato via `calendarEventId`). Due percorsi di cancellazione basati sul titolo lo intercettavano per errore:
+  - **Rimozione di un'assegnazione** (`removeAssignment`): cancellava per titolo tutti gli eventi `SIMULATION`, compreso l'evento programmato condiviso dalla classe. Ora quell'evento è **escluso esplicitamente** dalla cancellazione (matcha per id `calendarEventId`), quindi togliere una singola assegnazione non cancella più l'evento dell'intera classe.
+  - **Eliminazione di una simulazione** (`delete`): usava un match a **sottostringa** (`title contains`) che cancellava gli eventi di *tutte* le simulazioni il cui titolo conteneva quel testo (es. eliminare "IMAT"/"SNT" azzerava gli eventi di ogni simulazione contenente "IMAT"/"SNT"). Ora la cancellazione è a **corrispondenza esatta** del titolo (più l'evento programmato per id), senza più il match a sottostringa.
+
+### Infrastructure
+- Aggiunto lo script una-tantum `pnpm normalize:sim-events` (con `:dry` per l'anteprima) che rimuove il prefisso legacy `TOLC: ` / `Simulazione: ` dai titoli degli eventi calendario `SIMULATION` già presenti nel DB, creati prima della 1.1.1. Gli eventi nuovi già usano il titolo nudo.
+
+## [1.2.0] - 2026-07-01
+
+### Changed
+- **Autoesercitazioni – motore di selezione domande riscritto per non ripetere sempre le stesse domande.** Prima il pool candidato veniva pre-tagliato dal DB con un ordinamento **deterministico** (`take: N×3` / `N×5` con `orderBy` su `timesUsed`/`id`/`createdAt`) e solo dopo mescolato: poiché `timesUsed` non veniva mai aggiornato (restava sempre `0`), ogni esercitazione ripescava sempre lo stesso sottoinsieme iniziale di domande, indipendentemente dalla materia. Ora la selezione:
+  - **Campiona in modo uniforme sull'intero pool ammissibile** (recupera prima solo gli id, poi i dati completi delle domande scelte), eliminando la finestra deterministica.
+  - **Ricorda le domande già viste dallo studente** (per-studente, lato server): le domande mai viste vengono proposte per prime, e solo quando il bank è esaurito si ripescano le domande viste, partendo da quelle viste meno di recente. Vale sia per le autoesercitazioni libere (multi-materia / per materia) sia per quelle da template. L'opzione "Evita domande usate di recente" del modal ora guida davvero questo comportamento.
+- Le autoesercitazioni ora **incrementano `timesUsed`** delle domande utilizzate (in transazione con la creazione della simulazione), così la statistica di utilizzo mostrata nel dettaglio domanda è finalmente corretta.
+
+### Fixed
+- `secureShuffleArray` **non crasha più su pool molto grandi**: `crypto.getRandomValues` rifiuta viste oltre 65536 byte (16384 `uint32`), quindi il riempimento avviene ora a blocchi. Prima uno shuffle di oltre ~16k elementi avrebbe sollevato un'eccezione.
+
 ## [1.1.1] - 2026-07-01
 
 ### Changed
