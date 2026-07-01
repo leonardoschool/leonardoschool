@@ -39,7 +39,10 @@ import {
   User,
   BookOpen,
   Copy,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
+import { parseError } from '@/lib/utils/errorHandler';
 import type { SimulationType, SimulationStatus } from '@/lib/validations/simulationValidation';
 import { SimulationAssignModal } from '@/components/ui/SimulationAssignModal';
 import DateTimePicker from '@/components/ui/DateTimePicker';
@@ -170,7 +173,13 @@ export default function AdminSimulationsContent() {
   });
 
   // Fetch assignments
-  const { data: assignmentsData, isLoading: assignmentsLoading } = trpc.simulations.getAssignments.useQuery(
+  const {
+    data: assignmentsData,
+    isLoading: assignmentsLoading,
+    error: assignmentsError,
+    isFetching: assignmentsFetching,
+    refetch: refetchAssignments,
+  } = trpc.simulations.getAssignments.useQuery(
     {
       page: assignmentPage,
       pageSize: 20,
@@ -834,6 +843,24 @@ export default function AdminSimulationsContent() {
           {assignmentsLoading ? (
             <div className="flex items-center justify-center py-12">
               <Spinner size="lg" />
+            </div>
+          ) : assignmentsError ? (
+            <div className="py-12 text-center">
+              <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-red-500" />
+              <h3 className={`text-lg font-medium ${colors.text.primary} mb-2`}>
+                {parseError(assignmentsError).title}
+              </h3>
+              <p className={`text-sm ${colors.text.muted} mb-4 max-w-md mx-auto`}>
+                {parseError(assignmentsError).message}
+              </p>
+              <button
+                onClick={() => refetchAssignments()}
+                disabled={assignmentsFetching}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.bg} text-white hover:opacity-90 disabled:opacity-50`}
+              >
+                <RefreshCw className={`w-4 h-4 ${assignmentsFetching ? 'animate-spin' : ''}`} />
+                Riprova
+              </button>
             </div>
           ) : !assignmentsData?.assignments.length ? (
             <div className="py-12 text-center">

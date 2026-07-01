@@ -5360,18 +5360,23 @@ export const simulationsRouter = router({
             });
             completedCount = result?.completedAt ? 1 : 0;
           } else if (assignment.groupId) {
-            // Group assignment - count members and their completions
+            // Group assignment - count members and their completions.
+            // A group member can be a student OR a collaborator, so studentId is nullable:
+            // filter to students only, otherwise the null studentIds break the `in` query below.
             const members = await ctx.prisma.groupMember.findMany({
-              where: { groupId: assignment.groupId },
+              where: { groupId: assignment.groupId, studentId: { not: null } },
               select: { studentId: true },
             });
-            totalTargeted = members.length;
+            const studentIds = members
+              .map(m => m.studentId)
+              .filter((id): id is string => id !== null);
+            totalTargeted = studentIds.length;
 
-            if (members.length > 0) {
+            if (studentIds.length > 0) {
               const results = await ctx.prisma.simulationResult.findMany({
                 where: {
                   simulationId: assignment.simulationId,
-                  studentId: { in: members.map(m => m.studentId) },
+                  studentId: { in: studentIds },
                   assignmentId: assignment.id, // Filter by this specific assignment
                   completedAt: { not: null },
                 },

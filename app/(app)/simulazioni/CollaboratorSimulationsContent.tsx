@@ -32,10 +32,13 @@ import {
   Archive,
   User,
   AlertCircle,
+  AlertTriangle,
+  RefreshCw,
   BookOpen,
 } from 'lucide-react';
 import type { SimulationType, SimulationStatus } from '@/lib/validations/simulationValidation';
 import { useSimulationsList } from '@/lib/hooks/useSimulationsList';
+import { parseError } from '@/lib/utils/errorHandler';
 import TemplatesContent from './TemplatesContent';
 
 type AssignmentStatus = 'ACTIVE' | 'CLOSED';
@@ -110,6 +113,9 @@ export default function CollaboratorSimulationsContent() {
     isLoading,
     assignmentsData,
     assignmentsLoading,
+    assignmentsError,
+    assignmentsFetching,
+    refetchAssignments,
     simulations,
     pagination,
     groupedAssignments,
@@ -482,7 +488,26 @@ export default function CollaboratorSimulationsContent() {
                 </div>
               );
             }
-            
+
+            if (assignmentsError) {
+              const { title, message } = parseError(assignmentsError);
+              return (
+                <div className="py-12 text-center">
+                  <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-red-500" />
+                  <h3 className={`text-lg font-medium ${colors.text.primary} mb-2`}>{title}</h3>
+                  <p className={`text-sm ${colors.text.muted} mb-4 max-w-md mx-auto`}>{message}</p>
+                  <button
+                    onClick={() => refetchAssignments()}
+                    disabled={assignmentsFetching}
+                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.bg} text-white hover:opacity-90 disabled:opacity-50`}
+                  >
+                    <RefreshCw className={`w-4 h-4 ${assignmentsFetching ? 'animate-spin' : ''}`} />
+                    Riprova
+                  </button>
+                </div>
+              );
+            }
+
             if (!assignmentsData?.assignments.length) {
               return (
                 <div className="py-12 text-center">
