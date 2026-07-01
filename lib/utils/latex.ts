@@ -44,14 +44,15 @@ const MATH_CMDS = new Set([
 const CMD_NAME_RE = /^\\([a-zA-Z]+)/;
 
 // A \includegraphics{...} reference we can actually resolve to a real image: an absolute
-// URL, a data/blob URI, a storage path (has a slash), or a bare file with an image extension.
-// Plain names (e.g. \includegraphics{tabella}) can't be mapped to a file client-side, so they
-// stay stripped to avoid rendering a broken image.
+// URL, a data/blob URI, or a storage path (has a slash).
+// A BARE filename (e.g. \includegraphics{47bec697-….png}) is NOT resolvable client-side: it
+// would map to a token-less Firebase URL that 403s, showing a broken image. Such references
+// only come from imports (e.g. CINECA), which also store the real picture in the question's
+// `imageUrl` field — rendered separately — so we strip the bare inline reference instead.
 function isResolvableImageRef(ref: string): boolean {
   return (
     /^(https?:|data:|blob:)/i.test(ref) ||
-    ref.includes('/') ||
-    /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(ref)
+    ref.includes('/')
   );
 }
 

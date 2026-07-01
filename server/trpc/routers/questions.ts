@@ -2591,6 +2591,8 @@ export const questionsRouter = router({
           id: true,
           text: true,
           textLatex: true,
+          imageUrl: true,
+          imageAlt: true,
           difficulty: true,
           generalExplanation: true,
           type: true,
@@ -2604,6 +2606,7 @@ export const questionsRouter = router({
             select: {
               id: true,
               text: true,
+              imageUrl: true,
               isCorrect: true,
               order: true,
             },

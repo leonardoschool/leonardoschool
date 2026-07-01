@@ -1604,6 +1604,7 @@ export const studentsRouter = router({
                     text: true,
                     textLatex: true,
                     imageUrl: true,
+                    imageAlt: true,
                     generalExplanation: true,
                     correctExplanation: true,
                     wrongExplanation: true,
@@ -1655,6 +1656,8 @@ export const studentsRouter = router({
         const wrongBySubject = new Map<string, Array<{
           questionId: string;
           questionText: string;
+          questionImageUrl: string | null;
+          questionImageAlt: string | null;
           selectedAnswerText: string | null;
           correctAnswerText: string;
           explanation: string | null;
@@ -1719,6 +1722,8 @@ export const studentsRouter = router({
               wrongList.push({
                 questionId: answer.questionId,
                 questionText: question.text,
+                questionImageUrl: question.imageUrl || null,
+                questionImageAlt: question.imageAlt || null,
                 selectedAnswerText: selectedAnswer?.text || null,
                 correctAnswerText: correctAnswer?.text || 'N/A',
                 explanation: question.generalExplanation || question.correctExplanation || null,

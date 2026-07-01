@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/Toast';
 import { PageLoader, Spinner } from '@/components/ui/loaders';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import QuestionImage from '@/components/ui/QuestionImage';
 import { normalizeImageSrc } from '@/lib/utils/imageUrl';
 import { renderLatexImagesForPrint } from '@/lib/utils/latex';
 import Link from 'next/link';
@@ -688,6 +689,19 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
                 <span className={`text-xs ${colors.text.muted} truncate`}>{sq.question.topic.name}</span>
               )}
             </div>
+            {/* Question image (only when expanded, to keep the list compact) */}
+            {isExpanded && sq.question.imageUrl && (
+              <div className="mt-2">
+                <QuestionImage
+                  src={sq.question.imageUrl}
+                  alt={sq.question.imageAlt || 'Immagine domanda'}
+                  width={400}
+                  height={260}
+                  className="max-w-full h-auto rounded-lg"
+                  style={{ maxHeight: '220px', objectFit: 'contain' }}
+                />
+              </div>
+            )}
             {/* Answer/keyword preview */}
             {isExpanded && hasPreview && (
               <div className={`mt-2 p-2 rounded-lg ${
@@ -700,9 +714,23 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
                     <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">
                       {sq.question.type === 'MULTIPLE_CHOICE' ? 'Risposte corrette:' : 'Risposta corretta:'}
                     </p>
-                    <div className="space-y-0.5">
+                    <div className="space-y-1">
                       {correctAnswers.map((a) => (
-                        <RichTextRenderer key={a.id} text={a.text} className="text-xs text-green-700 dark:text-green-300" />
+                        <div key={a.id}>
+                          {a.imageUrl && (
+                            <div className="mb-1">
+                              <QuestionImage
+                                src={a.imageUrl}
+                                alt="Immagine risposta"
+                                width={160}
+                                height={100}
+                                className="rounded"
+                                style={{ maxHeight: '100px', objectFit: 'contain' }}
+                              />
+                            </div>
+                          )}
+                          <RichTextRenderer text={a.text} className="text-xs text-green-700 dark:text-green-300" />
+                        </div>
                       ))}
                     </div>
                   </>

@@ -8,6 +8,7 @@ import { colors } from '@/lib/theme/colors';
 import { PageLoader } from '@/components/ui/loaders';
 import { getSimulationTypeLabel, getSimulationTypeColors } from '@/lib/utils/simulationLabels';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import QuestionImage from '@/components/ui/QuestionImage';
 import {
   ArrowLeft,
   Trophy,
@@ -453,6 +454,18 @@ export default function StudentSimulationsPage({ params }: { readonly params: Pr
                                                 text={question.questionText}
                                                 className={`${colors.text.primary} mb-3`}
                                               />
+                                              {question.questionImageUrl && (
+                                                <div className="mb-3">
+                                                  <QuestionImage
+                                                    src={question.questionImageUrl}
+                                                    alt={question.questionImageAlt || 'Immagine domanda'}
+                                                    width={500}
+                                                    height={320}
+                                                    className="max-w-full h-auto rounded-lg"
+                                                    style={{ maxHeight: '260px', objectFit: 'contain' }}
+                                                  />
+                                                </div>
+                                              )}
                                               {question.topicName && (
                                                 <span className={`text-xs px-2 py-1 rounded-full ${colors.background.secondary} ${colors.text.muted}`}>
                                                   {question.topicName}

@@ -8,6 +8,7 @@ import { PageLoader } from '@/components/ui/loaders';
 import Button from '@/components/ui/Button';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import QuestionImage from '@/components/ui/QuestionImage';
 import {
   BookOpen,
   ChevronLeft,
@@ -125,6 +126,18 @@ export default function StudyModeContent({ questionIds }: StudyModeContentProps)
         <div className="p-4 sm:p-6">
           <div className={`text-base sm:text-lg ${colors.text.primary} mb-6`}>
             {renderQuestionText(question.text, question.textLatex)}
+            {question.imageUrl && (
+              <div className="mt-4 flex justify-center">
+                <QuestionImage
+                  src={question.imageUrl}
+                  alt={question.imageAlt || 'Immagine domanda'}
+                  width={600}
+                  height={400}
+                  className="max-w-full h-auto rounded-lg"
+                  style={{ maxHeight: '300px', objectFit: 'contain' }}
+                />
+              </div>
+            )}
           </div>
 
           {/* Answers */}
@@ -155,6 +168,18 @@ export default function StudyModeContent({ questionIds }: StudyModeContentProps)
 
                   {/* Answer text */}
                   <div className="flex-1 min-w-0">
+                    {answer.imageUrl && (
+                      <div className="mb-2">
+                        <QuestionImage
+                          src={answer.imageUrl}
+                          alt={`Opzione ${letterLabel}`}
+                          width={200}
+                          height={120}
+                          className="rounded-lg"
+                          style={{ maxHeight: '120px', objectFit: 'contain' }}
+                        />
+                      </div>
+                    )}
                     <div className={`${colors.text.primary}`}>
                       <RichTextRenderer text={answer.text} />
                     </div>

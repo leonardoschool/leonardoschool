@@ -8,6 +8,23 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-01
+
+### Changed
+- Calendar events created when assigning a simulation now use the **simulation name as-is**, without the `TOLC: ` / `Simulazione: ` prefix (the event is already tagged as a simulation). Deletion of assignment events still matches the old prefixed titles, so events created before this change are cleaned up correctly.
+
+### Fixed
+- Question/answer **images now appear everywhere a question is shown**, not just in the TOLC layout and admin question detail. Previously several views rendered only the question text and dropped the picture stored in the `imageUrl` field — so figures were missing for students (e.g. CINECA-imported questions, whose text keeps a raw `\includegraphics{filename}` that can't be resolved client-side while the real picture lives in `imageUrl`). Fixed views:
+  - **Standard simulation player** (`QuestionPanel`) — the main test-taking layout: question image + per-answer images.
+  - **Result review** (`/simulazioni/[id]/risultato`) — question image + answer images in the per-question breakdown.
+  - **Study mode** (`/simulazioni/studio`) — question image + answer images.
+  - **Simulation print sheet** (`/simulazioni/[id]/stampa`) — added the per-answer images (the question image was already printed).
+  - **Staff simulation detail** — shows the question image and correct-answer images when a question row is expanded.
+  - **Open-answer correction** (`/simulazioni/risposte-aperte/[id]`) — shows the question image.
+  - **Student simulations history** (`/studenti/[id]/simulazioni`) — shows the image on each wrong question.
+  The relevant tRPC queries now also select `imageUrl`/`imageAlt` where they weren't before (`getResultDetails`, `getByIds`, `getOpenAnswersForResult`, `getStudentSimulations`).
+- Text rendering: a bare-filename `\includegraphics{file.png}` (with no path or URL) is **no longer turned into a broken `<img>`**. Such references only come from imports that also store the real picture in `imageUrl`, and the token-less Firebase URL they produced returned 403 — showing a broken image and causing layout jumps. They are now stripped, and the picture is served from `imageUrl` instead.
+
 ## [1.1.0] - 2026-06-24
 
 ### Added

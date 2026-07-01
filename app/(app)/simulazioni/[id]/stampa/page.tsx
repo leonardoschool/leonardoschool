@@ -367,6 +367,16 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
                                   {String.fromCodePoint(65 + ansIndex)})
                                 </span>
                                 <div className="flex-1">
+                                  {normalizeImageSrc(answer.imageUrl) && (
+                                    <div className="my-1">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img
+                                        src={normalizeImageSrc(answer.imageUrl) ?? undefined}
+                                        alt={`Opzione ${String.fromCodePoint(65 + ansIndex)}`}
+                                        className="max-w-[8rem] max-h-24"
+                                      />
+                                    </div>
+                                  )}
                                   <RichTextRenderer text={answer.text} />
                                 </div>
                               </div>
