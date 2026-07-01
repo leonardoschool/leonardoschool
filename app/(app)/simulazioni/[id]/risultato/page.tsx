@@ -12,6 +12,7 @@ import { sanitizeStudentOpenAnswerInput } from '@/lib/utils/studentOpenAnswer';
 import { auth } from '@/lib/firebase/config';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import QuestionImage from '@/components/ui/QuestionImage';
 import SimulationResultBreakdown from './SimulationResultBreakdown';
 import CustomSelect from '@/components/ui/CustomSelect';
 import type { SelectOption } from '@/components/ui/CustomSelect';
@@ -605,10 +606,12 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                 id: string;
                 text: string;
                 textLatex?: string | null;
+                imageUrl?: string | null;
+                imageAlt?: string | null;
                 subject: string;
                 subjectColor?: string | null;
                 section?: string | null;
-                answers: { id: string; text: string; textLatex?: string | null; isCorrect: boolean }[];
+                answers: { id: string; text: string; textLatex?: string | null; imageUrl?: string | null; isCorrect: boolean }[];
                 explanation?: string;
               };
               selectedAnswerId: string | null;
@@ -678,6 +681,19 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                         {/* Question text */}
                         {answer.question.text && (
                           <RichTextRenderer text={answer.question.text} />
+                        )}
+                        {/* Question image */}
+                        {answer.question.imageUrl && (
+                          <div className="mt-3 flex justify-center">
+                            <QuestionImage
+                              src={answer.question.imageUrl}
+                              alt={answer.question.imageAlt || 'Immagine domanda'}
+                              width={600}
+                              height={400}
+                              className="max-w-full h-auto rounded-lg"
+                              style={{ maxHeight: '300px', objectFit: 'contain' }}
+                            />
+                          </div>
                         )}
                         {/* LaTeX formula if present */}
                         {answer.question.textLatex && (
@@ -764,7 +780,7 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                       ) : (
                         /* Multiple choice answers */
                         <div className="space-y-2">
-                          {answer.question.answers.map((a: { id: string; text: string; textLatex?: string | null; isCorrect: boolean }, i: number) => {
+                          {answer.question.answers.map((a: { id: string; text: string; textLatex?: string | null; imageUrl?: string | null; isCorrect: boolean }, i: number) => {
                           const label = String.fromCodePoint(65 + i);
                           const isSelected = answer.selectedAnswerId === a.id;
                           const isCorrectAnswer = a.isCorrect;
@@ -782,6 +798,18 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                                 {label}
                               </span>
                               <div className="flex-1">
+                                {a.imageUrl && (
+                                  <div className="mb-2">
+                                    <QuestionImage
+                                      src={a.imageUrl}
+                                      alt={`Opzione ${label}`}
+                                      width={200}
+                                      height={120}
+                                      className="rounded-lg"
+                                      style={{ maxHeight: '120px', objectFit: 'contain' }}
+                                    />
+                                  </div>
+                                )}
                                 {a.textLatex ? (
                                   <LaTeXRenderer latex={a.textLatex} displayMode={false} />
                                 ) : (

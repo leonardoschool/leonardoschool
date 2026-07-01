@@ -9,6 +9,7 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import QuestionImage from '@/components/ui/QuestionImage';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -301,6 +302,18 @@ export default function ReviewResultPage() {
                   <div className={`mt-1 ${colors.text.primary}`}>
                     <RichTextRenderer text={oa.question.text} />
                   </div>
+                  {oa.question.imageUrl && (
+                    <div className="mt-2 flex justify-center">
+                      <QuestionImage
+                        src={oa.question.imageUrl}
+                        alt={oa.question.imageAlt || 'Immagine domanda'}
+                        width={600}
+                        height={400}
+                        className="max-w-full h-auto rounded-lg"
+                        style={{ maxHeight: '300px', objectFit: 'contain' }}
+                      />
+                    </div>
+                  )}
                   {oa.question.textLatex && (
                     <div className="mt-2">
                       <LaTeXRenderer latex={oa.question.textLatex} className={colors.text.primary} />

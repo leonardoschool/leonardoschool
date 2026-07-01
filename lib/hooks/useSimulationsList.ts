@@ -100,7 +100,13 @@ export function useSimulationsList() {
     placeholderData: keepPreviousData,
   });
 
-  const { data: assignmentsData, isLoading: assignmentsLoading } = trpc.simulations.getAssignments.useQuery(
+  const {
+    data: assignmentsData,
+    isLoading: assignmentsLoading,
+    error: assignmentsError,
+    isFetching: assignmentsFetching,
+    refetch: refetchAssignments,
+  } = trpc.simulations.getAssignments.useQuery(
     {
       page: assignmentPage,
       pageSize: 20,
@@ -335,6 +341,9 @@ export function useSimulationsList() {
     isLoading,
     assignmentsData,
     assignmentsLoading,
+    assignmentsError,
+    assignmentsFetching,
+    refetchAssignments,
     // Derived
     simulations,
     pagination,

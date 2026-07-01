@@ -217,7 +217,8 @@ async function processAssignmentForCalendar(
   }
 
   return {
-    title: `${simulation.type === 'OFFICIAL' ? 'TOLC' : 'Simulazione'}: ${simulation.title}`,
+    // The event already carries type: 'SIMULATION', so no "TOLC:"/"Simulazione:" prefix — just the name.
+    title: simulation.title,
     description: buildEventDescription(startDate, endDate, isMultiDay),
     type: 'SIMULATION',
     startDate,
@@ -292,7 +293,13 @@ async function deleteCalendarEventsForAssignment(
     return;
   }
 
-  const eventTitlePrefix = `${simulation.type === 'OFFICIAL' ? 'TOLC' : 'Simulazione'}: ${simulation.title}`;
+  // Events are now created with the bare simulation title, but older events may still carry the
+  // legacy "TOLC: "/"Simulazione: " prefix — match all of them so deletion stays backward-compatible.
+  const eventTitles = [
+    simulation.title,
+    `TOLC: ${simulation.title}`,
+    `Simulazione: ${simulation.title}`,
+  ];
 
   // Build the query to find events
   // Look for events with matching title and either:
@@ -310,13 +317,13 @@ async function deleteCalendarEventsForAssignment(
   const events = await prisma.calendarEvent.findMany({
     where: {
       type: 'SIMULATION',
-      title: eventTitlePrefix, // Exact match, not startsWith
+      title: { in: eventTitles },
       ...(invitationFilter ? { invitations: invitationFilter } : {}),
     },
     select: { id: true },
   });
 
-  log.debug(`Found ${events.length} calendar events matching title "${eventTitlePrefix}" for deletion`);
+  log.debug(`Found ${events.length} calendar events matching title "${simulation.title}" for deletion`);
 
   if (events.length > 0) {
     const eventIds = events.map(e => e.id);
@@ -4468,6 +4475,7 @@ export const simulationsRouter = router({
               id: true,
               text: true,
               textLatex: true,
+              imageUrl: true,
               isCorrect: result.simulation.showCorrectAnswers,
             },
           },
@@ -4509,6 +4517,8 @@ export const simulationsRouter = router({
             id: question?.id || '',
             text: question?.text || '',
             textLatex: question?.textLatex || null,
+            imageUrl: question?.imageUrl || null,
+            imageAlt: question?.imageAlt || null,
             subject: question?.subject?.name || 'UNKNOWN',
             subjectColor: question?.subject?.color || null,
             section: questionSections.get(answer.questionId) || null,
@@ -5350,18 +5360,23 @@ export const simulationsRouter = router({
             });
             completedCount = result?.completedAt ? 1 : 0;
           } else if (assignment.groupId) {
-            // Group assignment - count members and their completions
+            // Group assignment - count members and their completions.
+            // A group member can be a student OR a collaborator, so studentId is nullable:
+            // filter to students only, otherwise the null studentIds break the `in` query below.
             const members = await ctx.prisma.groupMember.findMany({
-              where: { groupId: assignment.groupId },
+              where: { groupId: assignment.groupId, studentId: { not: null } },
               select: { studentId: true },
             });
-            totalTargeted = members.length;
+            const studentIds = members
+              .map(m => m.studentId)
+              .filter((id): id is string => id !== null);
+            totalTargeted = studentIds.length;
 
-            if (members.length > 0) {
+            if (studentIds.length > 0) {
               const results = await ctx.prisma.simulationResult.findMany({
                 where: {
                   simulationId: assignment.simulationId,
-                  studentId: { in: members.map(m => m.studentId) },
+                  studentId: { in: studentIds },
                   assignmentId: assignment.id, // Filter by this specific assignment
                   completedAt: { not: null },
                 },
@@ -6574,16 +6589,18 @@ export const simulationsRouter = router({
           },
           openAnswerSubmissions: {
             include: {
-              question: { 
-                select: { 
-                  id: true, 
-                  text: true, 
+              question: {
+                select: {
+                  id: true,
+                  text: true,
                   textLatex: true,
+                  imageUrl: true,
+                  imageAlt: true,
                   points: true,
                   keywords: true,
                   openValidationType: true,
                   correctExplanation: true,
-                } 
+                }
               },
             },
             orderBy: { submittedAt: 'asc' },
@@ -6623,6 +6640,8 @@ export const simulationsRouter = router({
           question: {
             text: oa.question.text,
             textLatex: oa.question.textLatex,
+            imageUrl: oa.question.imageUrl,
+            imageAlt: oa.question.imageAlt,
             points: oa.question.points,
             keywords: oa.question.keywords,
             validationType: oa.question.openValidationType,

@@ -11,10 +11,12 @@ import { sanitizeStudentOpenAnswerInput } from '@/lib/utils/studentOpenAnswer';
 import { TextareaWithSymbols } from '@/components/ui/SymbolKeyboard';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import QuestionImage from '@/components/ui/QuestionImage';
 
 interface Answer {
   id: string;
   text: string;
+  imageUrl?: string | null;
 }
 
 interface Question {
@@ -23,6 +25,8 @@ interface Question {
     text: string;
     textLatex?: string | null;
     type: string;
+    imageUrl?: string | null;
+    imageAlt?: string | null;
     answers: Answer[];
   };
 }
@@ -37,7 +41,7 @@ interface AnswerState {
 interface QuestionPanelProps {
   readonly currentQuestionIndex: number;
   readonly totalQuestions: number;
-  readonly question: Question | { questionId?: string; question?: { text?: string; textLatex?: string | null; type?: string; answers?: Answer[] } };
+  readonly question: Question | { questionId?: string; question?: { text?: string; textLatex?: string | null; type?: string; imageUrl?: string | null; imageAlt?: string | null; answers?: Answer[] } };
   readonly answer: AnswerState | undefined;
   readonly onAnswerSelect: (answerId: string) => void;
   readonly onOpenTextChange: (text: string) => void;
@@ -102,6 +106,18 @@ export default function QuestionPanel({
             text={question.question.text}
             className={`prose prose-sm max-w-none ${colors.text.primary}`}
           />
+          {question.question.imageUrl && (
+            <div className="mt-4 flex justify-center">
+              <QuestionImage
+                src={question.question.imageUrl}
+                alt={question.question.imageAlt || 'Immagine domanda'}
+                width={600}
+                height={400}
+                className="max-w-full h-auto rounded-lg"
+                style={{ maxHeight: '300px', objectFit: 'contain' }}
+              />
+            </div>
+          )}
           {question.question.textLatex && (
             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
               <LaTeXRenderer
@@ -215,10 +231,24 @@ function MultipleChoiceAnswers({
             >
               {label}
             </span>
-            <RichTextRenderer
-              text={answerOption.text}
-              className={`flex-1 ${colors.text.primary}`}
-            />
+            <div className="flex-1">
+              {answerOption.imageUrl && (
+                <div className="mb-2">
+                  <QuestionImage
+                    src={answerOption.imageUrl}
+                    alt={`Opzione ${label}`}
+                    width={200}
+                    height={120}
+                    className="rounded-lg"
+                    style={{ maxHeight: '120px', objectFit: 'contain' }}
+                  />
+                </div>
+              )}
+              <RichTextRenderer
+                text={answerOption.text}
+                className={colors.text.primary}
+              />
+            </div>
           </button>
         );
       })}
