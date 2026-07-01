@@ -75,9 +75,9 @@
     "zod": "^3.25.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.28.5",
-    "@faker-js/faker": "^10.2.0",
-    "@playwright/test": "^1.57.0",
+    "@babel/core": "^7.29.7",
+    "@faker-js/faker": "^10.5.0",
+    "@playwright/test": "^1.61.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
@@ -85,15 +85,15 @@
     "@types/nodemailer": "^8.0.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "autoprefixer": "^10.5.0",
+    "autoprefixer": "^10.5.2",
     "eslint": "^9",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.2.10",
     "eslint-plugin-sonarjs": "^3.0.7",
-    "postcss": "^8.5.14",
-    "prisma": "^7.3.0",
+    "postcss": "^8.5.16",
+    "prisma": "^7.8.0",
     "tailwindcss": "^3.4.19",
-    "tsx": "^4.19.2",
+    "tsx": "^4.22.4",
     "typescript": "^5",
-    "vitest": "^4.0.17"
+    "vitest": "^4.1.9"
   }
 }
