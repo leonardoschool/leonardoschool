@@ -318,7 +318,11 @@ async function deleteCalendarEventsForAssignment(
   const events = await prisma.calendarEvent.findMany({
     where: {
       type: 'SIMULATION',
-      title: eventTitlePrefix, // Exact match, not startsWith
+      title: { in: eventTitles }, // Exact match on any known (current/legacy) title
+      // Never delete the simulation's own scheduled event (created by
+      // createSimulationCalendarEvent and linked via calendarEventId): since 1.1.1 it shares the
+      // bare title with per-assignment events, so removing one assignment must not wipe it.
+      ...(simulation.calendarEventId ? { id: { not: simulation.calendarEventId } } : {}),
       ...(invitationFilter ? { invitations: invitationFilter } : {}),
     },
     select: { id: true },
