@@ -8,6 +8,22 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-03
+
+### Added
+- **Storico invii email (Log Email).** Nuova pagina admin `/log-email` che mostra ogni email inviata dalla piattaforma con destinatario, oggetto, categoria, esito (**Inviata**/**Fallita**), messaggio d'errore e data. Filtri per stato, categoria e ricerca su destinatario/oggetto, più contatori sintetici (totali/inviate/fallite). Serve a distinguere "email mai partita" da "email partita ma finita in spam" senza dipendere dai log di Vercel (retention breve senza piano Pro).
+
+### Infrastructure
+- Nuovo modello Prisma `EmailLog` (+ enum `EmailLogStatus`) con migration `add_email_log`. Ogni invio viene registrato nel punto centrale `sendEmail` (`server/services/emailService.ts`) e nelle email eventi/simulazioni (`lib/email/eventEmails.ts`), tramite l'helper condiviso `logEmail`. La scrittura del log non può mai far fallire l'invio. Nuovo router tRPC admin `emailLog` (`getAll` paginato + `getStats`).
+
+## [1.2.2] - 2026-07-03
+
+### Changed
+- **Email di benvenuto (creazione utente da admin) unificata al template email condiviso.** Il messaggio "Imposta la tua password" ora usa lo stesso template brandizzato (header/footer, pulsante, box informativi) delle altre email transazionali, per un aspetto coerente.
+
+### Infrastructure
+- Rimossa la duplicazione del trasporto SMTP: `sendWelcomeEmail` è stata spostata da `lib/email/userEmails.ts` (eliminato) a `server/services/emailService.ts`, riutilizzando `sendEmail` e `getBaseEmailTemplate`. Nessuna modifica alla firma della funzione né al flusso di invio.
+
 ## [1.2.1] - 2026-07-01
 
 ### Fixed

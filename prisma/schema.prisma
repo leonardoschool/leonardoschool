@@ -2355,3 +2355,26 @@ model GroupMember {
   @@index([collaboratorId])
   @@map("group_members")
 }
+
+enum EmailLogStatus {
+  SENT   // Accettata dal server SMTP
+  FAILED // Invio fallito (errore SMTP o connessione)
+}
+
+// Storico invii email — persistito in DB perché i log applicativi (Vercel)
+// hanno retention breve senza piano Pro
+model EmailLog {
+  id        String         @id @default(cuid())
+  to        String
+  subject   String
+  category  String // es. "AUTH_PASSWORD_RESET", "WELCOME", "CONTRACT_ASSIGNED"...
+  status    EmailLogStatus
+  error     String?        @db.Text
+  createdAt DateTime       @default(now())
+
+  @@index([to])
+  @@index([category])
+  @@index([status])
+  @@index([createdAt])
+  @@map("email_logs")
+}

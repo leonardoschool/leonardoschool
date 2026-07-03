@@ -10,7 +10,7 @@ import { getAdminAuth } from '@/lib/firebase/admin';
 import { Prisma } from '@prisma/client';
 import { generateMatricola } from '@/lib/utils/matricolaUtils';
 import { CACHE_TAGS } from '@/lib/cache/serverCache';
-import { sendWelcomeEmail } from '@/lib/email/userEmails';
+import { sendWelcomeEmail } from '@/server/services/emailService';
 import { normalizeName } from '@/lib/utils/stringUtils';
 import { PROVINCE_ITALIANE } from '@/lib/validations/profileValidation';
 
