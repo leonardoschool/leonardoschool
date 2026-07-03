@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import nodemailer, { type Transporter, type SendMailOptions } from 'nodemailer';
 import { prisma } from '@/lib/prisma/client';
 import type { EmailLogStatus } from '@prisma/client';
 
@@ -85,16 +85,74 @@ interface ProfileCompletedNotificationData {
 // TRANSPORTER
 // =============================================================================
 
-function createTransporter() {
+const smtpAuth = () => ({
+  user: process.env.SMTP_USER,
+  pass: process.env.SMTP_PASSWORD,
+});
+const smtpPort = () => Number.parseInt(process.env.SMTP_PORT || '465', 10);
+// `secure` va tenuto esplicito nella call a createTransport, altrimenti
+// sonarjs/no-clear-text-protocols non riesce a verificarlo e segnala un falso positivo.
+
+// Transporter per invio singolo (una email, un destinatario)
+export function createTransporter(): Transporter {
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
-    port: Number.parseInt(process.env.SMTP_PORT || '465', 10),
+    port: smtpPort(),
     secure: process.env.SMTP_SECURE === 'true',
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASSWORD,
-    },
+    auth: smtpAuth(),
   });
+}
+
+// Transporter per invii massivi (loop su molti destinatari): riusa UNA sola
+// connessione e limita la cadenza. Evita il throttling dei provider SMTP: Aruba
+// rifiuta le raffiche di connessioni ("550 ... temporarily rejected"), Resend ha un
+// rate-limit di default di ~2 req/s. Una connessione riusata + pacing sta sotto
+// entrambi. Va chiuso con `.close()` al termine del loop.
+export function createBulkTransporter(): Transporter {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: smtpPort(),
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: smtpAuth(),
+    pool: true,
+    maxConnections: 1,
+    rateDelta: 1000,
+    rateLimit: 2, // max ~2 email/secondo: sotto il rate-limit di default di Resend e il throttling di Aruba
+  });
+}
+
+// Rileva i rifiuti SMTP TEMPORANEI (ritentabili). Aruba usa il codice 550 con
+// testo "temporaneamente rifiutata / temporarily rejected" per il throttling,
+// oltre ai classici 421/450/451.
+function isTemporarySmtpError(error: unknown): boolean {
+  const e = error as { responseCode?: number; response?: string };
+  const code = e?.responseCode;
+  const response = (e?.response || '').toLowerCase();
+  if (code === 421 || code === 450 || code === 451) return true;
+  if (code === 550 && (response.includes('temporan') || response.includes('temporarily') || response.includes('rejected'))) {
+    return true;
+  }
+  return false;
+}
+
+// Invia con retry a backoff sui soli errori temporanei (es. throttling Aruba).
+// Sugli errori permanenti (indirizzo inesistente, ecc.) rilancia subito.
+export async function sendMailWithRetry(
+  transporter: Transporter,
+  mailOptions: SendMailOptions,
+  attempts = 3,
+  baseDelayMs = 1500,
+): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      await transporter.sendMail(mailOptions);
+      return;
+    } catch (error) {
+      const isLastAttempt = attempt === attempts - 1;
+      if (isLastAttempt || !isTemporarySmtpError(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, baseDelayMs * (attempt + 1)));
+    }
+  }
 }
 
 // =============================================================================
@@ -137,7 +195,7 @@ async function sendEmail(options: EmailOptions): Promise<{ success: boolean; err
 
     const transporter = createTransporter();
 
-    await transporter.sendMail({
+    await sendMailWithRetry(transporter, {
       from: `"Leonardo School" <${process.env.EMAIL_FROM}>`,
       to: options.to,
       subject: options.subject,

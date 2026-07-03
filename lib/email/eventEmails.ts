@@ -3,9 +3,8 @@
  * Handles sending email notifications for calendar events
  */
 
-import nodemailer from 'nodemailer';
 import type { EventType, EventLocationType, StaffAbsenceStatus } from '@prisma/client';
-import { logEmail } from '@/server/services/emailService';
+import { logEmail, createBulkTransporter, createTransporter, sendMailWithRetry } from '@/server/services/emailService';
 
 // =============================================================================
 // TYPES
@@ -158,22 +157,6 @@ export function generateICalendar(
   lines.push('END:VCALENDAR');
   
   return lines.join('\r\n');
-}
-
-// =============================================================================
-// EMAIL TRANSPORTER
-// =============================================================================
-
-function createEmailTransporter() {
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || '465'),
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASSWORD,
-    },
-  });
 }
 
 // =============================================================================
@@ -373,39 +356,43 @@ Leonardo School - www.leonardoschool.it
   // Generate iCalendar file for calendar integration
   const icsContent = generateICalendar(event, 'REQUEST');
 
-  const transporter = createEmailTransporter();
+  const transporter = createBulkTransporter();
 
-  // Send to each invitee individually
-  for (const invitee of invitees) {
-    try {
-      await transporter.sendMail({
-        from: `"Leonardo School" <${process.env.EMAIL_FROM}>`,
-        to: invitee.email,
-        subject,
-        html: htmlContent.replace('Ciao,', `Ciao ${invitee.name},`),
-        text: textContent,
-        attachments: [
-          {
-            filename: 'evento.ics',
+  // Send to each invitee individually (single reused connection + retry)
+  try {
+    for (const invitee of invitees) {
+      try {
+        await sendMailWithRetry(transporter, {
+          from: `"Leonardo School" <${process.env.EMAIL_FROM}>`,
+          to: invitee.email,
+          subject,
+          html: htmlContent.replace('Ciao,', `Ciao ${invitee.name},`),
+          text: textContent,
+          attachments: [
+            {
+              filename: 'evento.ics',
+              content: icsContent,
+              contentType: 'text/calendar; charset=utf-8; method=REQUEST',
+            },
+          ],
+          // Alternative calendar content for better compatibility
+          icalEvent: {
+            filename: 'invite.ics',
+            method: 'REQUEST',
             content: icsContent,
-            contentType: 'text/calendar; charset=utf-8; method=REQUEST',
           },
-        ],
-        // Alternative calendar content for better compatibility
-        icalEvent: {
-          filename: 'invite.ics',
-          method: 'REQUEST',
-          content: icsContent,
-        },
-      });
-      sentCount++;
-      await logEmail({ to: invitee.email, subject, category: 'EVENT_INVITATION', status: 'SENT' });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
-      console.error(`Error sending event invitation to ${invitee.email}:`, error);
-      errors.push(`${invitee.email}: ${errorMessage}`);
-      await logEmail({ to: invitee.email, subject, category: 'EVENT_INVITATION', status: 'FAILED', error: errorMessage });
+        });
+        sentCount++;
+        await logEmail({ to: invitee.email, subject, category: 'EVENT_INVITATION', status: 'SENT' });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
+        console.error(`Error sending event invitation to ${invitee.email}:`, error);
+        errors.push(`${invitee.email}: ${errorMessage}`);
+        await logEmail({ to: invitee.email, subject, category: 'EVENT_INVITATION', status: 'FAILED', error: errorMessage });
+      }
     }
+  } finally {
+    transporter.close();
   }
 
   return { success: errors.length === 0, sentCount, errors };
@@ -499,37 +486,41 @@ Leonardo School - www.leonardoschool.it
   // Generate updated iCalendar file
   const icsContent = generateICalendar(event, 'REQUEST');
 
-  const transporter = createEmailTransporter();
+  const transporter = createBulkTransporter();
 
-  for (const invitee of invitees) {
-    try {
-      await transporter.sendMail({
-        from: `"Leonardo School" <${process.env.EMAIL_FROM}>`,
-        to: invitee.email,
-        subject,
-        html: htmlContent,
-        text: textContent,
-        attachments: [
-          {
-            filename: 'evento-aggiornato.ics',
+  try {
+    for (const invitee of invitees) {
+      try {
+        await sendMailWithRetry(transporter, {
+          from: `"Leonardo School" <${process.env.EMAIL_FROM}>`,
+          to: invitee.email,
+          subject,
+          html: htmlContent,
+          text: textContent,
+          attachments: [
+            {
+              filename: 'evento-aggiornato.ics',
+              content: icsContent,
+              contentType: 'text/calendar; charset=utf-8; method=REQUEST',
+            },
+          ],
+          icalEvent: {
+            filename: 'invite.ics',
+            method: 'REQUEST',
             content: icsContent,
-            contentType: 'text/calendar; charset=utf-8; method=REQUEST',
           },
-        ],
-        icalEvent: {
-          filename: 'invite.ics',
-          method: 'REQUEST',
-          content: icsContent,
-        },
-      });
-      sentCount++;
-      await logEmail({ to: invitee.email, subject, category: 'EVENT_MODIFICATION', status: 'SENT' });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
-      console.error(`Error sending event modification to ${invitee.email}:`, error);
-      errors.push(`${invitee.email}: ${errorMessage}`);
-      await logEmail({ to: invitee.email, subject, category: 'EVENT_MODIFICATION', status: 'FAILED', error: errorMessage });
+        });
+        sentCount++;
+        await logEmail({ to: invitee.email, subject, category: 'EVENT_MODIFICATION', status: 'SENT' });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
+        console.error(`Error sending event modification to ${invitee.email}:`, error);
+        errors.push(`${invitee.email}: ${errorMessage}`);
+        await logEmail({ to: invitee.email, subject, category: 'EVENT_MODIFICATION', status: 'FAILED', error: errorMessage });
+      }
     }
+  } finally {
+    transporter.close();
   }
 
   return { success: errors.length === 0, sentCount, errors };
@@ -604,37 +595,41 @@ Leonardo School - www.leonardoschool.it
   // Generate CANCEL iCalendar to remove event from calendars
   const icsContent = generateICalendar(event, 'CANCEL');
 
-  const transporter = createEmailTransporter();
+  const transporter = createBulkTransporter();
 
-  for (const invitee of invitees) {
-    try {
-      await transporter.sendMail({
-        from: `"Leonardo School" <${process.env.EMAIL_FROM}>`,
-        to: invitee.email,
-        subject,
-        html: htmlContent,
-        text: textContent,
-        attachments: [
-          {
-            filename: 'evento-annullato.ics',
+  try {
+    for (const invitee of invitees) {
+      try {
+        await sendMailWithRetry(transporter, {
+          from: `"Leonardo School" <${process.env.EMAIL_FROM}>`,
+          to: invitee.email,
+          subject,
+          html: htmlContent,
+          text: textContent,
+          attachments: [
+            {
+              filename: 'evento-annullato.ics',
+              content: icsContent,
+              contentType: 'text/calendar; charset=utf-8; method=CANCEL',
+            },
+          ],
+          icalEvent: {
+            filename: 'cancel.ics',
+            method: 'CANCEL',
             content: icsContent,
-            contentType: 'text/calendar; charset=utf-8; method=CANCEL',
           },
-        ],
-        icalEvent: {
-          filename: 'cancel.ics',
-          method: 'CANCEL',
-          content: icsContent,
-        },
-      });
-      sentCount++;
-      await logEmail({ to: invitee.email, subject, category: 'EVENT_CANCELLATION', status: 'SENT' });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
-      console.error(`Error sending event cancellation to ${invitee.email}:`, error);
-      errors.push(`${invitee.email}: ${errorMessage}`);
-      await logEmail({ to: invitee.email, subject, category: 'EVENT_CANCELLATION', status: 'FAILED', error: errorMessage });
+        });
+        sentCount++;
+        await logEmail({ to: invitee.email, subject, category: 'EVENT_CANCELLATION', status: 'SENT' });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
+        console.error(`Error sending event cancellation to ${invitee.email}:`, error);
+        errors.push(`${invitee.email}: ${errorMessage}`);
+        await logEmail({ to: invitee.email, subject, category: 'EVENT_CANCELLATION', status: 'FAILED', error: errorMessage });
+      }
     }
+  } finally {
+    transporter.close();
   }
 
   return { success: errors.length === 0, sentCount, errors };
@@ -743,9 +738,9 @@ Leonardo School - www.leonardoschool.it
   `.trim();
 
   try {
-    const transporter = createEmailTransporter();
-    
-    await transporter.sendMail({
+    const transporter = createTransporter();
+
+    await sendMailWithRetry(transporter, {
       from: `"Leonardo School" <${process.env.EMAIL_FROM}>`,
       to: absence.requesterEmail,
       subject,
@@ -974,38 +969,42 @@ Leonardo School - www.leonardoschool.it
 
   const icsContent = generateICalendar(eventData, 'REQUEST');
 
-  const transporter = createEmailTransporter();
+  const transporter = createBulkTransporter();
 
-  // Send to each invitee individually
-  for (const invitee of invitees) {
-    try {
-      await transporter.sendMail({
-        from: `"Leonardo School" <${process.env.EMAIL_FROM}>`,
-        to: invitee.email,
-        subject,
-        html: htmlContent.replace('Ciao,', `Ciao ${invitee.name},`),
-        text: textContent,
-        attachments: [
-          {
-            filename: 'simulazione.ics',
+  // Send to each invitee individually (single reused connection + retry)
+  try {
+    for (const invitee of invitees) {
+      try {
+        await sendMailWithRetry(transporter, {
+          from: `"Leonardo School" <${process.env.EMAIL_FROM}>`,
+          to: invitee.email,
+          subject,
+          html: htmlContent.replace('Ciao,', `Ciao ${invitee.name},`),
+          text: textContent,
+          attachments: [
+            {
+              filename: 'simulazione.ics',
+              content: icsContent,
+              contentType: 'text/calendar; charset=utf-8; method=REQUEST',
+            },
+          ],
+          icalEvent: {
+            filename: 'invite.ics',
+            method: 'REQUEST',
             content: icsContent,
-            contentType: 'text/calendar; charset=utf-8; method=REQUEST',
           },
-        ],
-        icalEvent: {
-          filename: 'invite.ics',
-          method: 'REQUEST',
-          content: icsContent,
-        },
-      });
-      sentCount++;
-      await logEmail({ to: invitee.email, subject, category: 'SIMULATION_INVITATION', status: 'SENT' });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
-      console.error(`Error sending simulation invitation to ${invitee.email}:`, error);
-      errors.push(`${invitee.email}: ${errorMessage}`);
-      await logEmail({ to: invitee.email, subject, category: 'SIMULATION_INVITATION', status: 'FAILED', error: errorMessage });
+        });
+        sentCount++;
+        await logEmail({ to: invitee.email, subject, category: 'SIMULATION_INVITATION', status: 'SENT' });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
+        console.error(`Error sending simulation invitation to ${invitee.email}:`, error);
+        errors.push(`${invitee.email}: ${errorMessage}`);
+        await logEmail({ to: invitee.email, subject, category: 'SIMULATION_INVITATION', status: 'FAILED', error: errorMessage });
+      }
     }
+  } finally {
+    transporter.close();
   }
 
   return { success: errors.length === 0, sentCount, errors };

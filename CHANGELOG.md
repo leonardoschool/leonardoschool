@@ -13,6 +13,9 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 ### Added
 - **Storico invii email (Log Email).** Nuova pagina admin `/log-email` che mostra ogni email inviata dalla piattaforma con destinatario, oggetto, categoria, esito (**Inviata**/**Fallita**), messaggio d'errore e data. Filtri per stato, categoria e ricerca su destinatario/oggetto, più contatori sintetici (totali/inviate/fallite). Serve a distinguere "email mai partita" da "email partita ma finita in spam" senza dipendere dai log di Vercel (retention breve senza piano Pro).
 
+### Fixed
+- **Email di gruppo che non arrivavano ad alcuni destinatari.** Negli invii massivi (inviti/modifiche/cancellazioni eventi, inviti simulazione) ogni email apriva una **nuova connessione SMTP** e partivano tutte in raffica: Aruba, superata la sua soglia, rifiutava le connessioni successive (`550 ... temporarily rejected`), quindi i primi destinatari ricevevano e i restanti no. Ora gli invii massivi **riusano una singola connessione** (transporter con `pool`, `maxConnections: 1`) con cadenza limitata, e ogni invio viene **ritentato con backoff** sui soli errori SMTP temporanei (421/450/451 e i 550 "temporarily rejected" di Aruba); gli errori permanenti (indirizzo inesistente) falliscono subito senza retry inutili. L'autenticazione email (SPF/DKIM/DMARC) era già corretta: il problema era solo il rate-limit di Aruba sugli invii a raffica.
+
 ### Infrastructure
 - Nuovo modello Prisma `EmailLog` (+ enum `EmailLogStatus`) con migration `add_email_log`. Ogni invio viene registrato nel punto centrale `sendEmail` (`server/services/emailService.ts`) e nelle email eventi/simulazioni (`lib/email/eventEmails.ts`), tramite l'helper condiviso `logEmail`. La scrittura del log non può mai far fallire l'invio. Nuovo router tRPC admin `emailLog` (`getAll` paginato + `getStats`).
 
