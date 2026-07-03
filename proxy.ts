@@ -30,6 +30,7 @@ const PAGE_PERMISSIONS: Record<string, string[]> = {
   '/candidature': ['ADMIN'],
   '/assenze': ['ADMIN'],
   '/richieste': ['ADMIN'],
+  '/log-email': ['ADMIN'],
   '/statistiche': ['ADMIN', 'STUDENT'], // Admin and Student only
   
   // Collaborator only pages
@@ -416,6 +417,7 @@ export const config = {
     '/candidature/:path*',
     '/assenze/:path*',
     '/richieste/:path*',
+    '/log-email/:path*',
     '/le-mie-assenze/:path*',
     '/gruppo/:path*',
     '/statistiche/:path*',

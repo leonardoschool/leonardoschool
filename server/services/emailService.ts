@@ -1,13 +1,34 @@
 import nodemailer from 'nodemailer';
+import { prisma } from '@/lib/prisma/client';
+import type { EmailLogStatus } from '@prisma/client';
 
 // =============================================================================
 // TYPES
 // =============================================================================
 
+// Categoria dell'email, usata per filtrare lo storico invii (EmailLog)
+export type EmailCategory =
+  | 'CONTRACT_ASSIGNED'
+  | 'CONTRACT_SIGNED_CONFIRMATION'
+  | 'CONTRACT_REMINDER'
+  | 'CONTRACT_EXPIRED'
+  | 'ACCOUNT_ACTIVATED'
+  | 'ADMIN_NOTIFICATION_PROFILE_COMPLETED'
+  | 'ADMIN_NOTIFICATION_CONTRACT_SIGNED'
+  | 'AUTH_EMAIL_VERIFICATION'
+  | 'AUTH_PASSWORD_RESET'
+  | 'WELCOME'
+  | 'EVENT_INVITATION'
+  | 'EVENT_MODIFICATION'
+  | 'EVENT_CANCELLATION'
+  | 'ABSENCE_STATUS'
+  | 'SIMULATION_INVITATION';
+
 interface EmailOptions {
   to: string;
   subject: string;
   html: string;
+  category: EmailCategory;
   replyTo?: string;
   attachments?: Array<{
     filename: string;
@@ -80,12 +101,37 @@ function createTransporter() {
 // BASE EMAIL SENDER
 // =============================================================================
 
+// Persiste ogni esito di invio in DB: i log applicativi (Vercel) hanno retention
+// breve senza piano Pro, quindi sono l'unico storico consultabile in modo affidabile.
+// Non deve mai far fallire l'invio: eventuali errori di scrittura restano interni.
+// Esportata così anche eventEmails.ts (transporter separato) può registrare i suoi invii.
+export async function logEmail(entry: {
+  to: string;
+  subject: string;
+  category: EmailCategory;
+  status: EmailLogStatus;
+  error?: string;
+}): Promise<void> {
+  try {
+    await prisma.emailLog.create({ data: entry });
+  } catch (err) {
+    console.error('[Email] Failed to write EmailLog:', err);
+  }
+}
+
 async function sendEmail(options: EmailOptions): Promise<{ success: boolean; error?: string }> {
   try {
     // Skip email sending if SMTP is not configured (development)
     if (!process.env.SMTP_HOST || !process.env.SMTP_USER) {
       console.log('[Email] SMTP not configured, skipping email to:', options.to);
       console.log('[Email] Subject:', options.subject);
+      await logEmail({
+        to: options.to,
+        subject: options.subject,
+        category: options.category,
+        status: 'FAILED',
+        error: 'SMTP non configurato',
+      });
       return { success: true }; // Return success to not break flows
     }
 
@@ -100,12 +146,27 @@ async function sendEmail(options: EmailOptions): Promise<{ success: boolean; err
       attachments: options.attachments,
     });
 
+    await logEmail({
+      to: options.to,
+      subject: options.subject,
+      category: options.category,
+      status: 'SENT',
+    });
+
     return { success: true };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
     console.error('Error sending email:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Errore sconosciuto' 
+    await logEmail({
+      to: options.to,
+      subject: options.subject,
+      category: options.category,
+      status: 'FAILED',
+      error: errorMessage,
+    });
+    return {
+      success: false,
+      error: errorMessage,
     };
   }
 }
@@ -328,6 +389,7 @@ export async function sendContractAssignedEmail(data: ContractEmailData): Promis
     to: data.studentEmail,
     subject: `📋 Contratto da firmare - ${data.contractName}`,
     html: getBaseEmailTemplate(content, 'Contratto da Firmare'),
+    category: 'CONTRACT_ASSIGNED',
   });
 }
 
@@ -394,6 +456,7 @@ export async function sendContractSignedConfirmationEmail(data: ContractSignedEm
     to: data.studentEmail,
     subject: `✅ Contratto firmato - ${data.contractName}`,
     html: getBaseEmailTemplate(content, 'Contratto Firmato'),
+    category: 'CONTRACT_SIGNED_CONFIRMATION',
   });
 }
 
@@ -446,6 +509,7 @@ export async function sendContractReminderEmail(data: ContractReminderEmailData)
     to: data.recipientEmail,
     subject: `⏰ Promemoria: Contratto in scadenza - ${data.contractName}`,
     html: getBaseEmailTemplate(content, 'Promemoria Contratto'),
+    category: 'CONTRACT_REMINDER',
   });
 }
 
@@ -475,6 +539,7 @@ export async function sendContractExpiredEmail(data: ContractExpiredEmailData): 
     to: data.recipientEmail,
     subject: `⚠️ Contratto scaduto - ${data.contractName}`,
     html: getBaseEmailTemplate(content, 'Contratto Scaduto'),
+    category: 'CONTRACT_EXPIRED',
   });
 }
 
@@ -516,6 +581,7 @@ export async function sendAccountActivatedEmail(data: AccountActivatedEmailData)
     to: data.studentEmail,
     subject: '🎉 Account attivato - Benvenuto in Leonardo School!',
     html: getBaseEmailTemplate(content, 'Account Attivato'),
+    category: 'ACCOUNT_ACTIVATED',
   });
 }
 
@@ -569,6 +635,7 @@ export async function sendProfileCompletedAdminNotification(data: ProfileComplet
     to: adminEmail,
     subject: `👤 Nuovo studente: ${data.studentName}`,
     html: getBaseEmailTemplate(content, 'Nuovo Studente Registrato'),
+    category: 'ADMIN_NOTIFICATION_PROFILE_COMPLETED',
   });
 }
 
@@ -639,6 +706,7 @@ export async function sendContractSignedAdminNotification(data: {
     to: adminEmail,
     subject: `✍️ Contratto firmato: ${data.studentName}`,
     html: getBaseEmailTemplate(content, 'Contratto Firmato'),
+    category: 'ADMIN_NOTIFICATION_CONTRACT_SIGNED',
   });
 }
 
@@ -657,6 +725,19 @@ interface AuthPasswordResetData {
   email: string;
   resetLink: string;
 }
+
+interface WelcomeEmailData {
+  name: string;
+  email: string;
+  passwordSetLink: string;
+  role: string;
+}
+
+const roleLabels: Record<string, string> = {
+  STUDENT: 'Studente',
+  COLLABORATOR: 'Collaboratore',
+  ADMIN: 'Amministratore',
+};
 
 /**
  * Invia email di verifica indirizzo con link generato da Firebase Admin
@@ -687,6 +768,7 @@ export async function sendAuthEmailVerification(data: AuthEmailVerificationData)
     to: data.email,
     subject: 'Verifica il tuo indirizzo email – Leonardo School',
     html: getBaseEmailTemplate(content, 'Verifica Email'),
+    category: 'AUTH_EMAIL_VERIFICATION',
   });
 }
 
@@ -720,6 +802,45 @@ export async function sendAuthPasswordReset(data: AuthPasswordResetData): Promis
     to: data.email,
     subject: 'Reimposta la tua password – Leonardo School',
     html: getBaseEmailTemplate(content, 'Reimposta Password'),
+    category: 'AUTH_PASSWORD_RESET',
+  });
+}
+
+/**
+ * Invia email di benvenuto con link per impostare la password (creazione utente da admin)
+ */
+export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<{ success: boolean; error?: string }> {
+  const roleLabel = roleLabels[data.role] ?? data.role;
+
+  const content = `
+    <p class="greeting">Ciao <strong>${data.name}</strong>! 👋</p>
+
+    <p>Il tuo account su <strong>Leonardo School</strong> è stato creato con il ruolo di <strong>${roleLabel}</strong>.</p>
+
+    <p>Per accedere alla piattaforma devi prima impostare la tua password cliccando sul pulsante qui sotto.</p>
+
+    <p style="text-align: center;">
+      <a href="${data.passwordSetLink}" class="button">🔑 Imposta la tua password</a>
+    </p>
+
+    <div class="warning-box">
+      <strong>⏰ Il link è valido per 24 ore</strong>
+      <p style="margin: 5px 0 0 0;">Se il link scade, potrai richiederne uno nuovo dalla pagina di recupero password.</p>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="info-box">
+      <strong>🔒 Non hai richiesto questo account?</strong>
+      <p style="margin: 5px 0 0 0;">Se non ti aspettavi questa email, puoi ignorarla in tutta sicurezza oppure contattare il supporto.</p>
+    </div>
+  `;
+
+  return sendEmail({
+    to: data.email,
+    subject: 'Benvenuto in Leonardo School — Imposta la tua password',
+    html: getBaseEmailTemplate(content, 'Benvenuto'),
+    category: 'WELCOME',
   });
 }
 
@@ -734,6 +855,7 @@ export const emailService = {
   // Auth emails
   sendAuthEmailVerification,
   sendAuthPasswordReset,
+  sendWelcomeEmail,
 
   // Contract emails (to student/collaborator)
   sendContractAssignedEmail,

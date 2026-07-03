@@ -5,6 +5,7 @@
 
 import nodemailer from 'nodemailer';
 import type { EventType, EventLocationType, StaffAbsenceStatus } from '@prisma/client';
+import { logEmail } from '@/server/services/emailService';
 
 // =============================================================================
 // TYPES
@@ -398,9 +399,12 @@ Leonardo School - www.leonardoschool.it
         },
       });
       sentCount++;
+      await logEmail({ to: invitee.email, subject, category: 'EVENT_INVITATION', status: 'SENT' });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
       console.error(`Error sending event invitation to ${invitee.email}:`, error);
-      errors.push(`${invitee.email}: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`);
+      errors.push(`${invitee.email}: ${errorMessage}`);
+      await logEmail({ to: invitee.email, subject, category: 'EVENT_INVITATION', status: 'FAILED', error: errorMessage });
     }
   }
 
@@ -519,9 +523,12 @@ Leonardo School - www.leonardoschool.it
         },
       });
       sentCount++;
+      await logEmail({ to: invitee.email, subject, category: 'EVENT_MODIFICATION', status: 'SENT' });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
       console.error(`Error sending event modification to ${invitee.email}:`, error);
-      errors.push(`${invitee.email}: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`);
+      errors.push(`${invitee.email}: ${errorMessage}`);
+      await logEmail({ to: invitee.email, subject, category: 'EVENT_MODIFICATION', status: 'FAILED', error: errorMessage });
     }
   }
 
@@ -621,9 +628,12 @@ Leonardo School - www.leonardoschool.it
         },
       });
       sentCount++;
+      await logEmail({ to: invitee.email, subject, category: 'EVENT_CANCELLATION', status: 'SENT' });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
       console.error(`Error sending event cancellation to ${invitee.email}:`, error);
-      errors.push(`${invitee.email}: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`);
+      errors.push(`${invitee.email}: ${errorMessage}`);
+      await logEmail({ to: invitee.email, subject, category: 'EVENT_CANCELLATION', status: 'FAILED', error: errorMessage });
     }
   }
 
@@ -742,13 +752,16 @@ Leonardo School - www.leonardoschool.it
       html: htmlContent,
       text: textContent,
     });
-    
+
+    await logEmail({ to: absence.requesterEmail, subject, category: 'ABSENCE_STATUS', status: 'SENT' });
     return { success: true };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
     console.error(`Error sending absence status email to ${absence.requesterEmail}:`, error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Errore sconosciuto' 
+    await logEmail({ to: absence.requesterEmail, subject, category: 'ABSENCE_STATUS', status: 'FAILED', error: errorMessage });
+    return {
+      success: false,
+      error: errorMessage,
     };
   }
 }
@@ -986,9 +999,12 @@ Leonardo School - www.leonardoschool.it
         },
       });
       sentCount++;
+      await logEmail({ to: invitee.email, subject, category: 'SIMULATION_INVITATION', status: 'SENT' });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
       console.error(`Error sending simulation invitation to ${invitee.email}:`, error);
-      errors.push(`${invitee.email}: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`);
+      errors.push(`${invitee.email}: ${errorMessage}`);
+      await logEmail({ to: invitee.email, subject, category: 'SIMULATION_INVITATION', status: 'FAILED', error: errorMessage });
     }
   }
 

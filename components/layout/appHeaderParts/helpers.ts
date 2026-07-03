@@ -9,6 +9,7 @@ import {
   FileSignature,
   Briefcase,
   Mail,
+  MailCheck,
   GraduationCap,
   ClipboardCheck,
   UserMinus,
@@ -135,6 +136,7 @@ export function getGestioneItems(isAdmin: boolean): NavItem[] {
     { href: '/contratti', label: 'Contratti', icon: FileSignature },
     { href: '/candidature', label: 'Candidature', icon: Briefcase },
     { href: '/richieste', label: 'Richieste', icon: Mail },
+    { href: '/log-email', label: 'Log Email', icon: MailCheck },
   ];
 
   const collaboratorItems: NavItem[] = [
