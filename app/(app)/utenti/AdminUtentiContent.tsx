@@ -1377,6 +1377,7 @@ export default function AdminUtentiContent() {
       : status === 'pending_contract' ? 'PENDING_CONTRACT'
       : status === 'pending_sign' ? 'PENDING_SIGN'
       : status === 'pending_activation' ? 'PENDING_ACTIVATION'
+      : status === 'no_signed_contract' ? 'NO_SIGNED_CONTRACT'
       : 'ALL',
     page,
     limit: 15,

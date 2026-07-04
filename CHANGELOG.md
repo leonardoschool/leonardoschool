@@ -8,6 +8,11 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-07-04
+
+### Fixed
+- **Filtro "No Firma" (Gestione Utenti) che mostrava anche utenti con contratto firmato.** Selezionando il filtro, il mapping dello stato lato client non gestiva il valore `no_signed_contract` e ricadeva su `ALL`, inviando al server la richiesta di *tutti* gli utenti. Ora il filtro invia correttamente `NO_SIGNED_CONTRACT` e mostra solo studenti e collaboratori **senza un contratto firmato** (inclusi quelli in "attesa contratto" e "attesa firma"), escludendo gli admin.
+
 ## [1.3.0] - 2026-07-03
 
 ### Added
