@@ -8,6 +8,16 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-07-06
+
+### Changed
+- **Aggiornati date e documenti dei test di ammissione** (homepage e pagina `/test`) al ciclo 2026:
+  - **Semestre Aperto:** nuovi link ai Syllabus 2026 di Chimica e Propedeutica Biochimica, Fisica e Biologia.
+  - **IMAT:** data del test aggiornata al **30 settembre 2026**.
+  - **Professioni Sanitarie:** la voce unica "Test LM" è stata sostituita da **Test LM IT (5 ottobre 2026)** e **Test LM ENG (7 ottobre 2026)**; aggiornate anche Test IT (**16 settembre 2026**) e Test ENG (**17 settembre 2026**).
+  - **Test ARCHED:** nuovi link al Decreto Ministeriale n. 706 del 04-06-2026 e ai relativi Syllabi (Allegato A).
+  - **Scienze della Formazione Primaria (LM-85 bis):** data del test aggiornata all'**11 settembre 2026**; nuovi link al Decreto Ministeriale n. 931 del 03-07-2026 e ai relativi Syllabi.
+
 ## [1.3.1] - 2026-07-04
 
 ### Fixed
