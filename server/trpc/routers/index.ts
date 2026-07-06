@@ -19,6 +19,7 @@ import { messagesRouter } from './messages';
 import { virtualRoomRouter } from './virtualRoom';
 import { fcmRouter } from './fcm';
 import { emailLogRouter } from './emailLog';
+import { permissionsRouter } from './permissions';
 
 export const appRouter = router({
   auth: authRouter,
@@ -40,6 +41,7 @@ export const appRouter = router({
   virtualRoom: virtualRoomRouter,
   fcm: fcmRouter,
   emailLog: emailLogRouter,
+  permissions: permissionsRouter,
 });
 
 // Export type definition of API

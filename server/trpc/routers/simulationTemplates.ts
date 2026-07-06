@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { router, staffProcedure, studentProcedure } from '../init';
+import { router, staffProcedure, studentProcedure, assertCapability } from '../init';
 import {
   createSimulationTemplateSchema,
   simulationTemplateFilterSchema,
@@ -172,6 +172,7 @@ export const simulationTemplatesRouter = router({
   list: staffProcedure
     .input(simulationTemplateFilterSchema)
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.view');
       const { page, pageSize, sortBy, sortOrder } = input;
       const where = buildTemplateWhereClause(input, ctx.user.role, ctx.user.id);
 
@@ -203,6 +204,7 @@ export const simulationTemplatesRouter = router({
   get: staffProcedure
     .input(z.object({ id: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.view');
       const template = await ctx.prisma.simulationTemplate.findUnique({
         where: { id: input.id },
         include: {
@@ -232,6 +234,7 @@ export const simulationTemplatesRouter = router({
   create: staffProcedure
     .input(createSimulationTemplateSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.manage');
       const sections = cleanTemplateSections(input.sections);
       const totalQuestions = input.totalQuestions || sumTemplateQuestions(sections);
       const assignedStudentIds = input.assignedStudentIds ?? [];
@@ -294,6 +297,7 @@ export const simulationTemplatesRouter = router({
   update: staffProcedure
     .input(updateSimulationTemplateSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.manage');
       const existing = await ctx.prisma.simulationTemplate.findUnique({
         where: { id: input.id },
         select: { createdById: true, status: true },
@@ -359,6 +363,7 @@ export const simulationTemplatesRouter = router({
   delete: staffProcedure
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.manage');
       const existing = await ctx.prisma.simulationTemplate.findUnique({
         where: { id: input.id },
         select: { createdById: true, status: true },
@@ -376,6 +381,7 @@ export const simulationTemplatesRouter = router({
   duplicate: staffProcedure
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.manage');
       const original = await ctx.prisma.simulationTemplate.findUnique({
         where: { id: input.id },
       });
@@ -398,6 +404,7 @@ export const simulationTemplatesRouter = router({
     }),
 
   listMySelfPracticeTemplates: studentProcedure.query(async ({ ctx }) => {
+    assertCapability(ctx, 'student.selfPractice');
     const student = await ctx.prisma.student.findUnique({
       where: { userId: ctx.user.id },
       select: {

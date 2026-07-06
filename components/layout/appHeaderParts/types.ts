@@ -24,6 +24,11 @@ export interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
+  /**
+   * Capabilities that make this item visible. The item shows if the user holds ANY of them
+   * (or is ADMIN). Omit for items that are purely role-gated (e.g. inherently admin pages).
+   */
+  capabilities?: string[];
 }
 
 export interface NotificationData {

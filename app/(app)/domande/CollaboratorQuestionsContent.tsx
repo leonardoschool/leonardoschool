@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useToast } from '@/components/ui/Toast';
 import { PageLoader } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
@@ -35,13 +36,18 @@ import {
   Upload,
   Tag,
   Download,
+  CheckSquare,
+  Square,
+  Languages,
 } from 'lucide-react';
 import {
   questionTypeLabels,
   questionStatusLabels,
+  questionLanguageLabels,
   difficultyLabels,
   type QuestionType,
   type QuestionStatus,
+  type QuestionLanguage,
   type DifficultyLevel,
 } from '@/lib/validations/questionValidation';
 
@@ -66,6 +72,11 @@ const difficultyColors: Record<DifficultyLevel, string> = {
   HARD: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
 };
 
+const languageColors: Record<QuestionLanguage, string> = {
+  IT: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300',
+  EN: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
+};
+
 export default function CollaboratorQuestionsContent() {
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
@@ -79,7 +90,8 @@ export default function CollaboratorQuestionsContent() {
     return value ? value.split(',').filter(Boolean) : [];
   };
 
-  const currentListPath = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+  const currentSearch = searchParams.toString();
+  const currentListPath = `${pathname}${currentSearch ? `?${currentSearch}` : ''}`;
   const returnToQuery = encodeURIComponent(currentListPath);
   const questionHref = (id: string) => `/domande/${id}?returnTo=${returnToQuery}`;
   const questionEditHref = (id: string) => `/domande/${id}/modifica?returnTo=${returnToQuery}`;
@@ -104,6 +116,15 @@ export default function CollaboratorQuestionsContent() {
 
   // Export state
   const [isExporting, setIsExporting] = useState(false);
+
+  // Selection / bulk-ops state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkSubjectSelect, setShowBulkSubjectSelect] = useState(false);
+  const [showBulkLanguageSelect, setShowBulkLanguageSelect] = useState(false);
+  const [showBulkTagSelect, setShowBulkTagSelect] = useState(false);
+  const [bulkTagMode, setBulkTagMode] = useState<'add' | 'remove' | 'replace'>('add');
+  const [selectedBulkTagIds, setSelectedBulkTagIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
 
   // Action menus state
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -136,8 +157,55 @@ export default function CollaboratorQuestionsContent() {
     if (page > 1) params.set('page', String(page));
 
     const query = params.toString();
-    router.replace(`${pathname}${query ? `?${query}` : ''}`, { scroll: false });
+    const nextPath = query ? `${pathname}?${query}` : pathname;
+    router.replace(nextPath, { scroll: false });
   }, [debouncedSearch, subjectIds, topicIds, types, statuses, difficulties, selectedTagIds, page]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Close bulk subject dropdown on click outside
+  useEffect(() => {
+    if (!showBulkSubjectSelect) return;
+
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-bulk-subject-dropdown]')) {
+        setShowBulkSubjectSelect(false);
+      }
+    };
+
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [showBulkSubjectSelect]);
+
+  // Close bulk language dropdown on click outside
+  useEffect(() => {
+    if (!showBulkLanguageSelect) return;
+
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-bulk-language-dropdown]')) {
+        setShowBulkLanguageSelect(false);
+      }
+    };
+
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [showBulkLanguageSelect]);
+
+  // Close bulk tag dropdown on click outside
+  useEffect(() => {
+    if (!showBulkTagSelect) return;
+
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-bulk-tag-dropdown]')) {
+        setShowBulkTagSelect(false);
+        setSelectedBulkTagIds(new Set());
+      }
+    };
+
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [showBulkTagSelect]);
 
   // Fetch questions
   const { data: questionsData, isLoading } = trpc.questions.getQuestions.useQuery(
@@ -176,17 +244,31 @@ export default function CollaboratorQuestionsContent() {
     pageSize: 200,
   });
 
+  // Capability checks drive both the entry-point cards below and their count queries,
+  // so a collaborator without the capability neither sees the card nor fires a FORBIDDEN query.
+  const { can } = usePermissions();
+  const canReviewFeedback = can('questions.reviewFeedback');
+  const canCorrectOpenAnswers = can('simulations.correctOpenAnswers');
+  // Cross-ownership management + publish gate the question action menu below.
+  const canManage = can('questions.manage');
+  const canManageAll = can('questions.manageAll');
+  const canPublish = can('questions.publish');
+  const canImport = can('questions.import');
+  const canBulkOps = can('questions.bulkOps');
+
   // Fetch stats
   const { data: stats } = trpc.questions.getQuestionStats.useQuery();
-  const { data: pendingFeedbacksData } = trpc.questions.getPendingFeedbacks.useQuery({
-    page: 1,
-    pageSize: 1,
-    status: 'PENDING',
-  });
-  const { data: collaboratorProfile } = trpc.collaborators.getProfile.useQuery();
+  const { data: pendingFeedbacksData } = trpc.questions.getPendingFeedbacks.useQuery(
+    {
+      page: 1,
+      pageSize: 1,
+      status: 'PENDING',
+    },
+    { enabled: canReviewFeedback }
+  );
   const { data: pendingReviewsData } = trpc.simulations.getResultsWithPendingReviews.useQuery(
     { limit: 1, offset: 0 },
-    { enabled: collaboratorProfile?.kind === 'TUTOR' }
+    { enabled: canCorrectOpenAnswers }
   );
 
   // Mutations
@@ -227,6 +309,70 @@ export default function CollaboratorQuestionsContent() {
     onError: handleMutationError,
   });
 
+  // Bulk mutations
+  const bulkDeleteMutation = trpc.questions.bulkDelete.useMutation({
+    onSuccess: (result) => {
+      const skippedText = result.skipped > 0 ? `, ${result.skipped} saltate (in uso)` : '';
+      showSuccess(
+        'Eliminazione completata',
+        `${result.deleted} domande eliminate${skippedText}.`
+      );
+      utils.questions.getQuestions.invalidate();
+      utils.questions.getQuestionStats.invalidate();
+      setSelectedIds(new Set());
+      setBulkDeleteConfirm(false);
+    },
+    onError: handleMutationError,
+  });
+
+  const bulkStatusMutation = trpc.questions.bulkUpdateStatus.useMutation({
+    onSuccess: (result) => {
+      showSuccess('Stato aggiornato', `${result.updated} domande aggiornate.`);
+      utils.questions.getQuestions.invalidate();
+      utils.questions.getQuestionStats.invalidate();
+      setSelectedIds(new Set());
+    },
+    onError: handleMutationError,
+  });
+
+  const bulkSubjectMutation = trpc.questions.bulkUpdateSubject.useMutation({
+    onSuccess: (result) => {
+      showSuccess('Materia aggiornata', `${result.updated} domande spostate in "${result.subjectName}".`);
+      utils.questions.getQuestions.invalidate();
+      utils.questions.getQuestionStats.invalidate();
+      setSelectedIds(new Set());
+      setShowBulkSubjectSelect(false);
+    },
+    onError: handleMutationError,
+  });
+
+  const bulkLanguageMutation = trpc.questions.bulkUpdateLanguage.useMutation({
+    onSuccess: (result) => {
+      showSuccess(
+        'Lingua aggiornata',
+        `${result.updated} domande impostate su ${questionLanguageLabels[result.language as QuestionLanguage]}.`
+      );
+      utils.questions.getQuestions.invalidate();
+      utils.questions.getQuestionStats.invalidate();
+      setSelectedIds(new Set());
+      setShowBulkLanguageSelect(false);
+    },
+    onError: handleMutationError,
+  });
+
+  const bulkTagMutation = trpc.questions.bulkAddTags.useMutation({
+    onSuccess: (result) => {
+      const modeText = result.mode === 'add' ? 'aggiunti a' : result.mode === 'remove' ? 'rimossi da' : 'sostituiti su';
+      showSuccess('Tag aggiornati', `Tag ${modeText} ${result.updated} domande: ${result.tags || '(nessuno)'}.`);
+      utils.questions.getQuestions.invalidate();
+      utils.questions.getQuestionStats.invalidate();
+      setSelectedIds(new Set());
+      setShowBulkTagSelect(false);
+      setSelectedBulkTagIds(new Set());
+    },
+    onError: handleMutationError,
+  });
+
   // Export function
   const handleExportCSV = async () => {
     setIsExporting(true);
@@ -259,10 +405,58 @@ export default function CollaboratorQuestionsContent() {
   };
 
   // Helpers
-  const questions = questionsData?.questions ?? [];
+  const questions = useMemo(() => questionsData?.questions ?? [], [questionsData?.questions]);
   const pagination = questionsData?.pagination ?? { page: 1, pageSize: 20, total: 0, totalPages: 0 };
   const pendingFeedbacksCount = pendingFeedbacksData?.pagination.total ?? 0;
   const pendingReviewsCount = pendingReviewsData?.total ?? 0;
+
+  const allSelected = useMemo(
+    () => questions.length > 0 && questions.every((q) => selectedIds.has(q.id)),
+    [questions, selectedIds]
+  );
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(questions.map((q) => q.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  // Unique tags across the selected questions — used by the "remove" bulk-tag mode.
+  const selectedQuestionsTags = useMemo(() => {
+    if (selectedIds.size === 0) return [];
+
+    const tagsMap = new Map<string, { id: string; name: string; color: string | null; categoryName: string | null; categoryColor: string | null }>();
+
+    questions
+      .filter(q => selectedIds.has(q.id))
+      .forEach(q => {
+        q.questionTags?.forEach((qt: { tag: { id: string; name: string; color: string | null; category: { id: string; name: string; color: string } | null } }) => {
+          if (!tagsMap.has(qt.tag.id)) {
+            tagsMap.set(qt.tag.id, {
+              id: qt.tag.id,
+              name: qt.tag.name,
+              color: qt.tag.color,
+              categoryName: qt.tag.category?.name || null,
+              categoryColor: qt.tag.category?.color || null,
+            });
+          }
+        });
+      });
+
+    return Array.from(tagsMap.values());
+  }, [questions, selectedIds]);
 
   const clearFilters = () => {
     setSearch('');
@@ -305,9 +499,10 @@ export default function CollaboratorQuestionsContent() {
     [tagsData?.tags]
   );
 
-  // Check if user can edit/delete a question (only own questions)
-  const canEditQuestion = (question: typeof questions[0]) => {
-    return question.createdById === currentUser?.id;
+  // Check if user can manage a question: needs the base 'manage' flag, then own questions
+  // (or any question when 'manageAll' is granted).
+  const canManageQuestion = (question: typeof questions[0]) => {
+    return canManage && (question.createdById === currentUser?.id || canManageAll);
   };
 
   if (isLoading && !questionsData) {
@@ -337,20 +532,24 @@ export default function CollaboratorQuestionsContent() {
               {isExporting ? 'Esportando...' : 'Esporta'}
             </span>
           </button>
-          <Link
-            href="/domande/importa"
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border ${colors.border.primary} ${colors.text.secondary} hover:${colors.background.secondary} transition-colors`}
-          >
-            <Upload className="w-4 h-4" />
-            <span className="hidden sm:inline">Importa</span>
-          </Link>
-          <Link
-            href="/domande/nuova"
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.bg} text-white hover:opacity-90 transition-opacity`}
-          >
-            <Plus className="w-4 h-4" />
-            Nuova Domanda
-          </Link>
+          {canImport && (
+            <Link
+              href="/domande/importa"
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border ${colors.border.primary} ${colors.text.secondary} hover:${colors.background.secondary} transition-colors`}
+            >
+              <Upload className="w-4 h-4" />
+              <span className="hidden sm:inline">Importa</span>
+            </Link>
+          )}
+          {canManage && (
+            <Link
+              href="/domande/nuova"
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.bg} text-white hover:opacity-90 transition-opacity`}
+            >
+              <Plus className="w-4 h-4" />
+              Nuova Domanda
+            </Link>
+          )}
         </div>
       </div>
 
@@ -415,7 +614,9 @@ export default function CollaboratorQuestionsContent() {
         </div>
       )}
 
+      {(canReviewFeedback || canCorrectOpenAnswers) && (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {canReviewFeedback && (
         <Link
           href="/domande/segnalazioni"
           className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} border ${colors.border.primary} hover:${colors.background.secondary} transition-colors`}
@@ -438,7 +639,9 @@ export default function CollaboratorQuestionsContent() {
             </div>
           </div>
         </Link>
+        )}
 
+        {canCorrectOpenAnswers && (
         <Link
           href="/simulazioni/risposte-aperte"
           className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} border ${colors.border.primary} hover:${colors.background.secondary} transition-colors`}
@@ -461,7 +664,9 @@ export default function CollaboratorQuestionsContent() {
             </div>
           </div>
         </Link>
+        )}
       </div>
+      )}
 
       {/* Search and Filters */}
       <div className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm}`}>
@@ -593,12 +798,259 @@ export default function CollaboratorQuestionsContent() {
         )}
       </div>
 
+      {/* Bulk Actions */}
+      {canBulkOps && selectedIds.size > 0 && (
+        <div className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
+          <span className={colors.text.secondary}>
+            {selectedIds.size} domand{selectedIds.size === 1 ? 'a' : 'e'} selezionat{selectedIds.size === 1 ? 'a' : 'e'}
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Change Subject Dropdown */}
+            <div className="relative" data-bulk-subject-dropdown>
+              <button
+                onClick={() => setShowBulkSubjectSelect(!showBulkSubjectSelect)}
+                disabled={bulkSubjectMutation.isPending}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors text-sm"
+              >
+                <BookOpen className="w-4 h-4" />
+                Cambia Materia
+              </button>
+              {showBulkSubjectSelect && (
+                <div className={`absolute top-full left-0 mt-1 z-50 min-w-[200px] ${colors.background.card} ${colors.effects.shadow.lg} rounded-lg border ${colors.border.primary} py-1`}>
+                  {subjects?.map((subject) => (
+                    <button
+                      key={subject.id}
+                      onClick={() => {
+                        bulkSubjectMutation.mutate({
+                          ids: [...selectedIds],
+                          subjectId: subject.id,
+                        });
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:${colors.background.secondary} ${colors.text.primary} flex items-center gap-2 transition-colors`}
+                    >
+                      <span
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: subject.color || '#6b7280' }}
+                      />
+                      {subject.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* Change Language Dropdown */}
+            <div className="relative" data-bulk-language-dropdown>
+              <button
+                onClick={() => setShowBulkLanguageSelect(!showBulkLanguageSelect)}
+                disabled={bulkLanguageMutation.isPending}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 hover:bg-sky-200 dark:hover:bg-sky-900/50 transition-colors text-sm"
+              >
+                <Languages className="w-4 h-4" />
+                Cambia Lingua
+              </button>
+              {showBulkLanguageSelect && (
+                <div className={`absolute top-full left-0 mt-1 z-50 min-w-[180px] ${colors.background.card} ${colors.effects.shadow.lg} rounded-lg border ${colors.border.primary} py-1`}>
+                  {(['IT', 'EN'] as QuestionLanguage[]).map((languageOption) => (
+                    <button
+                      key={languageOption}
+                      onClick={() => {
+                        bulkLanguageMutation.mutate({
+                          ids: [...selectedIds],
+                          language: languageOption,
+                        });
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:${colors.background.secondary} ${colors.text.primary} flex items-center gap-2 transition-colors`}
+                    >
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${languageColors[languageOption]}`}>
+                        {languageOption}
+                      </span>
+                      {questionLanguageLabels[languageOption]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* Change Tag Dropdown */}
+            <div className="relative" data-bulk-tag-dropdown>
+              <button
+                onClick={() => setShowBulkTagSelect(!showBulkTagSelect)}
+                disabled={bulkTagMutation.isPending}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors text-sm"
+              >
+                <Tag className="w-4 h-4" />
+                Cambia Tag
+              </button>
+              {showBulkTagSelect && (
+                <div className={`absolute top-full left-0 mt-1 z-50 min-w-[280px] max-h-[400px] overflow-y-auto ${colors.background.card} ${colors.effects.shadow.lg} rounded-lg border ${colors.border.primary} py-2`}>
+                  {/* Mode toggle */}
+                  <div className="px-4 pb-2 border-b border-gray-200 dark:border-gray-700 mb-2">
+                    <div className={`text-xs font-medium ${colors.text.muted} block mb-1.5`}>
+                      Modalità
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setBulkTagMode('add'); setSelectedBulkTagIds(new Set()); }}
+                        className={`flex-1 text-xs px-2 py-1.5 rounded transition-colors ${
+                          bulkTagMode === 'add'
+                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300'
+                            : `${colors.background.secondary} ${colors.text.muted}`
+                        }`}
+                      >
+                        Aggiungi
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setBulkTagMode('remove'); setSelectedBulkTagIds(new Set()); }}
+                        className={`flex-1 text-xs px-2 py-1.5 rounded transition-colors ${
+                          bulkTagMode === 'remove'
+                            ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300'
+                            : `${colors.background.secondary} ${colors.text.muted}`
+                        }`}
+                      >
+                        Rimuovi
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setBulkTagMode('replace'); setSelectedBulkTagIds(new Set()); }}
+                        className={`flex-1 text-xs px-2 py-1.5 rounded transition-colors ${
+                          bulkTagMode === 'replace'
+                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
+                            : `${colors.background.secondary} ${colors.text.muted}`
+                        }`}
+                      >
+                        Sostituisci
+                      </button>
+                    </div>
+                    <p className={`text-xs ${colors.text.muted} mt-1`}>
+                      {bulkTagMode === 'add'
+                        ? 'I tag selezionati verranno aggiunti'
+                        : bulkTagMode === 'remove'
+                          ? 'I tag selezionati verranno rimossi'
+                          : 'Tutti i tag esistenti verranno sostituiti con quelli selezionati'}
+                    </p>
+                  </div>
+
+                  {/* Tags list */}
+                  <div className="px-2">
+                    {bulkTagMode === 'remove' && selectedQuestionsTags.length === 0 ? (
+                      <p className={`text-xs ${colors.text.muted} text-center py-4`}>
+                        Le domande selezionate non hanno tag
+                      </p>
+                    ) : (() => {
+                      const tagsToShow = bulkTagMode === 'remove' ? selectedQuestionsTags : (tagsData?.tags || []);
+                      return tagsToShow.map((tag) => {
+                        const tagId = tag.id;
+                        const tagName = tag.name;
+                        const tagColor = tag.color || ('categoryColor' in tag ? tag.categoryColor : tag.category?.color) || '#6366f1';
+                        const categoryName = 'categoryName' in tag ? tag.categoryName : tag.category?.name;
+
+                        return (
+                          <button
+                            key={tagId}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const newSet = new Set(selectedBulkTagIds);
+                              if (newSet.has(tagId)) {
+                                newSet.delete(tagId);
+                              } else {
+                                newSet.add(tagId);
+                              }
+                              setSelectedBulkTagIds(newSet);
+                            }}
+                            className={`w-full text-left px-3 py-2 text-sm rounded-lg mb-1 flex items-center gap-2 transition-colors ${
+                              selectedBulkTagIds.has(tagId)
+                                ? 'bg-purple-100 dark:bg-purple-900/40'
+                                : `hover:${colors.background.secondary}`
+                            } ${colors.text.primary}`}
+                          >
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: tagColor }}
+                            />
+                            <span className="flex-1 truncate">
+                              {categoryName ? `${categoryName} > ${tagName}` : tagName}
+                            </span>
+                            {selectedBulkTagIds.has(tagId) && (
+                              <Check className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+                            )}
+                          </button>
+                        );
+                      });
+                    })()}
+                  </div>
+
+                  {/* Apply button */}
+                  {(selectedBulkTagIds.size > 0 || bulkTagMode === 'replace') && (
+                    <div className="px-4 pt-2 mt-2 border-t border-gray-200 dark:border-gray-700">
+                      <button
+                        onClick={() => {
+                          bulkTagMutation.mutate({
+                            ids: [...selectedIds],
+                            tagIds: [...selectedBulkTagIds],
+                            mode: bulkTagMode,
+                          });
+                        }}
+                        disabled={bulkTagMutation.isPending}
+                        className={`w-full py-2 rounded-lg ${
+                          bulkTagMode === 'remove' ? 'bg-red-600' :
+                          bulkTagMode === 'replace' ? 'bg-amber-600' :
+                          colors.primary.bg
+                        } text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50`}
+                      >
+                        {bulkTagMode === 'add'
+                          ? `Aggiungi ${selectedBulkTagIds.size} tag a ${selectedIds.size} domande`
+                          : bulkTagMode === 'remove'
+                            ? `Rimuovi ${selectedBulkTagIds.size} tag da ${selectedIds.size} domande`
+                            : `Sostituisci tag su ${selectedIds.size} domande` + (selectedBulkTagIds.size > 0 ? ` con ${selectedBulkTagIds.size} tag` : ' (rimuovi tutti)')}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => bulkStatusMutation.mutate({ ids: [...selectedIds], status: 'PUBLISHED' })}
+              disabled={bulkStatusMutation.isPending}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors text-sm"
+            >
+              <Check className="w-4 h-4" />
+              Pubblica
+            </button>
+            <button
+              onClick={() => bulkStatusMutation.mutate({ ids: [...selectedIds], status: 'ARCHIVED' })}
+              disabled={bulkStatusMutation.isPending}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm"
+            >
+              <Archive className="w-4 h-4" />
+              Archivia
+            </button>
+            <button
+              onClick={() => setBulkDeleteConfirm(true)}
+              disabled={bulkDeleteMutation.isPending}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors text-sm"
+            >
+              <Trash2 className="w-4 h-4" />
+              Elimina
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Questions Table */}
       <div className={`${colors.background.card} rounded-xl ${colors.effects.shadow.sm} overflow-visible`}>
         <div className="pb-16 overflow-x-auto overflow-y-visible">
           <table className="w-full min-w-[1000px]">
             <thead>
               <tr className={`border-b ${colors.border.primary}`}>
+                {canBulkOps && (
+                  <th className="px-3 py-3 text-left w-12">
+                    <button onClick={toggleSelectAll} className="p-1">
+                      {allSelected ? (
+                        <CheckSquare className={`w-5 h-5 ${colors.primary.text}`} />
+                      ) : (
+                        <Square className={`w-5 h-5 ${colors.text.muted}`} />
+                      )}
+                    </button>
+                  </th>
+                )}
                 <th className={`px-4 py-3 text-left text-sm font-medium ${colors.text.secondary}`}>
                   Domanda
                 </th>
@@ -631,7 +1083,7 @@ export default function CollaboratorQuestionsContent() {
             <tbody>
               {questions.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center">
+                  <td colSpan={canBulkOps ? 10 : 9} className="px-4 py-12 text-center">
                     <div className="flex flex-col items-center">
                       <FileText className={`w-12 h-12 ${colors.text.muted} mb-3`} />
                       <p className={`font-medium ${colors.text.primary}`}>Nessuna domanda trovata</p>
@@ -640,7 +1092,7 @@ export default function CollaboratorQuestionsContent() {
                           ? 'Prova a modificare i filtri di ricerca'
                           : 'Inizia creando la tua prima domanda'}
                       </p>
-                      {!hasActiveFilters && (
+                      {!hasActiveFilters && canManage && (
                         <Link
                           href="/domande/nuova"
                           className={`mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.bg} text-white hover:opacity-90 transition-opacity`}
@@ -658,6 +1110,17 @@ export default function CollaboratorQuestionsContent() {
                     key={question.id}
                     className={`border-b ${colors.border.primary} hover:${colors.background.secondary} transition-colors`}
                   >
+                    {canBulkOps && (
+                      <td className="px-3 py-3">
+                        <button onClick={() => toggleSelect(question.id)} className="p-1">
+                          {selectedIds.has(question.id) ? (
+                            <CheckSquare className={`w-5 h-5 ${colors.primary.text}`} />
+                          ) : (
+                            <Square className={`w-5 h-5 ${colors.text.muted}`} />
+                          )}
+                        </button>
+                      </td>
+                    )}
                     <td className="px-4 py-3">
                       <div className="max-w-sm">
                         <div className={`font-medium ${colors.text.primary} line-clamp-2 overflow-hidden`}>
@@ -840,7 +1303,7 @@ export default function CollaboratorQuestionsContent() {
             {(() => {
               const question = questions.find(q => q.id === openMenuId);
               if (!question) return null;
-              const isOwner = canEditQuestion(question);
+              const canManage = canManageQuestion(question);
               return (
                 <>
                   <Link
@@ -851,7 +1314,7 @@ export default function CollaboratorQuestionsContent() {
                     <Eye className="w-4 h-4" />
                     Visualizza
                   </Link>
-                  {isOwner && (
+                  {canManage && (
                     <>
                       <Link
                         href={questionEditHref(question.id)}
@@ -873,7 +1336,7 @@ export default function CollaboratorQuestionsContent() {
                         Duplica
                       </button>
                       <hr className={`my-1 ${colors.border.primary}`} />
-                      {question.status !== 'PUBLISHED' && (
+                      {canPublish && question.status !== 'PUBLISHED' && (
                         <button
                           onClick={() => {
                             publishMutation.mutate({ id: question.id, publish: true });
@@ -886,7 +1349,7 @@ export default function CollaboratorQuestionsContent() {
                           Pubblica
                         </button>
                       )}
-                      {question.status === 'PUBLISHED' && (
+                      {canPublish && question.status === 'PUBLISHED' && (
                         <button
                           onClick={() => {
                             publishMutation.mutate({ id: question.id, publish: false });
@@ -941,7 +1404,7 @@ export default function CollaboratorQuestionsContent() {
                       </button>
                     </>
                   )}
-                  {!isOwner && (
+                  {!canManage && (
                     <button
                       onClick={() => {
                         duplicateMutation.mutate({ id: question.id });
@@ -972,6 +1435,19 @@ export default function CollaboratorQuestionsContent() {
         cancelLabel="Annulla"
         variant="danger"
         isLoading={deleteMutation.isPending}
+      />
+
+      {/* Bulk Delete Confirm Modal */}
+      <ConfirmModal
+        isOpen={bulkDeleteConfirm}
+        onClose={() => setBulkDeleteConfirm(false)}
+        onConfirm={() => bulkDeleteMutation.mutate({ ids: [...selectedIds] })}
+        title="Elimina domande selezionate"
+        message={`Sei sicuro di voler eliminare ${selectedIds.size} domand${selectedIds.size === 1 ? 'a' : 'e'}?\n\nLe domande in uso in simulazioni verranno saltate.\nQuesta azione non può essere annullata.`}
+        confirmLabel="Elimina"
+        cancelLabel="Annulla"
+        variant="danger"
+        isLoading={bulkDeleteMutation.isPending}
       />
     </div>
   );

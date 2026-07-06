@@ -7,6 +7,7 @@ import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { isStaff } from '@/lib/permissions';
 import { ButtonLoader, Spinner } from '@/components/ui/loaders';
 import Link from 'next/link';
@@ -63,13 +64,15 @@ export default function ImportaDomandePage() {
   const utils = trpc.useUtils();
   const { user, loading } = useAuth();
   const userRole = user?.role;
+  const { can, isLoading: permsLoading } = usePermissions();
 
-  // Staff access control
+  // Access control: staff + explicit 'questions.import' capability (admins always pass).
   useEffect(() => {
-    if (!loading && !isStaff(userRole)) {
-      router.replace('/dashboard');
+    if (loading || permsLoading) return;
+    if (!isStaff(userRole) || !can('questions.import')) {
+      router.replace('/domande');
     }
-  }, [loading, userRole, router]);
+  }, [loading, permsLoading, userRole, can, router]);
 
   const [file, setFile] = useState<File | null>(null);
   // eslint-disable-next-line sonarjs/no-unused-vars -- state reserved for data preview feature

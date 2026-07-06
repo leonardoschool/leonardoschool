@@ -161,10 +161,10 @@ describe('permissions.ts', () => {
     });
 
     describe('student-only pages', () => {
-      it('should allow only student to access /statistiche', () => {
+      it('should allow all roles to access /statistiche (content is role-based)', () => {
         expect(PAGE_PERMISSIONS['/statistiche']).toContain('STUDENT');
-        expect(PAGE_PERMISSIONS['/statistiche']).not.toContain('ADMIN');
-        expect(PAGE_PERMISSIONS['/statistiche']).not.toContain('COLLABORATOR');
+        expect(PAGE_PERMISSIONS['/statistiche']).toContain('ADMIN');
+        expect(PAGE_PERMISSIONS['/statistiche']).toContain('COLLABORATOR');
       });
     });
   });
@@ -199,6 +199,13 @@ describe('permissions.ts', () => {
 
       it('should allow admin access to nested routes', () => {
         expect(hasAccess('/utenti/edit/abc123', 'ADMIN')).toBe(true);
+      });
+
+      it('should match the most specific (longest) prefix, not the first in map order', () => {
+        // '/simulazioni' (all roles) must NOT shadow '/simulazioni/risposte-aperte' (staff only)
+        expect(hasAccess('/simulazioni/risposte-aperte/abc123', 'STUDENT')).toBe(false);
+        expect(hasAccess('/simulazioni/risposte-aperte/abc123', 'COLLABORATOR')).toBe(true);
+        expect(hasAccess('/simulazioni/nuova', 'STUDENT')).toBe(false);
       });
     });
 

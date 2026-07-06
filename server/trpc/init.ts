@@ -3,6 +3,7 @@ import { initTRPC, TRPCError } from '@trpc/server';
 import { Context } from './context';
 import { transformer } from '@/lib/trpc/transformer';
 import { runWithContext } from '@/lib/utils/requestContext';
+import { isValidCapability } from '@/lib/permissions/capabilities';
 
 // Raw exceptions (Prisma, DB drivers, unexpected throws) must never reach the client: they leak
 // internals and read as jargon. We detect them and replace the message with a readable Italian one,
@@ -140,3 +141,36 @@ export const adminProcedure = t.procedure.use(withRequestContext).use(isAdmin);
 export const collaboratorProcedure = t.procedure.use(withRequestContext).use(isCollaborator);
 export const staffProcedure = t.procedure.use(withRequestContext).use(isStaff); // Admin OR Collaborator
 export const studentProcedure = t.procedure.use(withRequestContext).use(isStudent);
+
+// ==================== Capabilities ====================
+// Fine-grained, admin-configurable permissions layered on top of the role wrappers above.
+// ADMIN always passes (fixed super-user) so it can never be locked out.
+
+// Fail fast on typo'd capability keys during development, before they cause a silent
+// (and dangerous) fail-open/fail-closed at runtime.
+function assertKnownCapability(capability: string): void {
+  if (process.env.NODE_ENV !== 'production' && !isValidCapability(capability)) {
+    throw new Error(`Unknown capability "${capability}" — not in the catalog (lib/permissions/capabilities.ts)`);
+  }
+}
+
+/** Whether the current request's user holds a capability. Admin bypasses the matrix. */
+export function hasCapability(ctx: Context, capability: string): boolean {
+  assertKnownCapability(capability);
+  return ctx.user?.role === 'ADMIN' || ctx.capabilities.has(capability);
+}
+
+/** Throw FORBIDDEN unless the current user holds the capability. Use inside procedures. */
+export function assertCapability(ctx: Context, capability: string): void {
+  if (!hasCapability(ctx, capability)) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Non hai i permessi necessari per eseguire questa azione.',
+    });
+  }
+}
+
+// NOTE: there is deliberately no capability-only procedure wrapper. A capability check without
+// a role wrapper would let a matrix toggle grant an endpoint across roles (e.g. ticking a staff
+// capability for STUDENT would open a staff endpoint to students). Always pair a role procedure
+// (staffProcedure/studentProcedure/...) with assertCapability() inside the handler.

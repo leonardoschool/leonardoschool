@@ -11,8 +11,9 @@ export type PermissionRole = 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
 export type RoleInput = UserRole | string | undefined;
 
 /**
- * Page permissions mapping
- * Defines which roles can access each route
+ * Page permissions mapping — the SINGLE SOURCE OF TRUTH for route access control.
+ * Defines which roles can access each route. Consumed both client-side (useUserRole) and
+ * server-side by the edge middleware (`proxy.ts` imports this map), so the two can never drift.
  */
 export const PAGE_PERMISSIONS: Record<string, PermissionRole[]> = {
   // Common pages - all authenticated users
@@ -24,14 +25,16 @@ export const PAGE_PERMISSIONS: Record<string, PermissionRole[]> = {
   '/messaggi': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
   '/notifiche': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
   '/materiali': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
-  
+  '/profilo': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
+  '/impostazioni': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
+
   // Staff pages - admin and collaborators
   '/domande': ['ADMIN', 'COLLABORATOR'],
   '/tags': ['ADMIN', 'COLLABORATOR'],
   '/presenze': ['ADMIN', 'COLLABORATOR'],
   '/studenti': ['ADMIN', 'COLLABORATOR'],
   '/gruppi': ['ADMIN', 'COLLABORATOR'],
-  
+
   // Admin only pages
   '/utenti': ['ADMIN'],
   '/collaboratori': ['ADMIN'],
@@ -39,13 +42,18 @@ export const PAGE_PERMISSIONS: Record<string, PermissionRole[]> = {
   '/candidature': ['ADMIN'],
   '/assenze': ['ADMIN'],
   '/richieste': ['ADMIN'],
-  
+  '/log-email': ['ADMIN'],
+  '/permessi': ['ADMIN'],
+
+  // Mixed access — the page renders platform stats for staff (gated by `stats.viewPlatform`)
+  // and personal stats for students (gated by `student.viewOwnStats`)
+  '/statistiche': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
+
   // Collaborator only pages
   '/le-mie-assenze': ['COLLABORATOR'],
-  
+
   // Student only pages
-  '/il-mio-gruppo': ['STUDENT'],
-  '/statistiche': ['STUDENT'],
+  '/gruppo': ['STUDENT'],
 };
 
 /**
@@ -62,14 +70,22 @@ export function hasAccess(path: string, role: RoleInput): boolean {
   if (PAGE_PERMISSIONS[normalizedPath]) {
     return PAGE_PERMISSIONS[normalizedPath].includes(role as PermissionRole);
   }
-  
-  // Check prefix match (for nested routes like /simulazioni/[id])
-  for (const [routePath, allowedRoles] of Object.entries(PAGE_PERMISSIONS)) {
-    if (normalizedPath.startsWith(routePath + '/') || normalizedPath === routePath) {
-      return allowedRoles.includes(role as PermissionRole);
+
+  // Prefix match for nested routes (e.g. /simulazioni/[id]). The LONGEST matching prefix wins:
+  // first-match-in-insertion-order would let a broad entry like '/simulazioni' shadow a more
+  // restrictive nested one like '/simulazioni/risposte-aperte' for its sub-paths.
+  let bestMatch: string | null = null;
+  for (const routePath of Object.keys(PAGE_PERMISSIONS)) {
+    if (normalizedPath.startsWith(routePath + '/')) {
+      if (bestMatch === null || routePath.length > bestMatch.length) {
+        bestMatch = routePath;
+      }
     }
   }
-  
+  if (bestMatch !== null) {
+    return PAGE_PERMISSIONS[bestMatch].includes(role as PermissionRole);
+  }
+
   // Default: deny access if route not in permissions
   return false;
 }
@@ -150,8 +166,8 @@ export const NAVIGATION_ITEMS: NavItem[] = [
   { label: 'Le mie Assenze', href: '/le-mie-assenze', icon: 'CalendarX', roles: ['COLLABORATOR'] },
   
   // Student items
-  { label: 'Il mio Gruppo', href: '/il-mio-gruppo', icon: 'Users', roles: ['STUDENT'] },
-  { label: 'Statistiche', href: '/statistiche', icon: 'BarChart3', roles: ['STUDENT'] },
+  { label: 'Il mio Gruppo', href: '/gruppo', icon: 'Users', roles: ['STUDENT'] },
+  { label: 'Statistiche', href: '/statistiche', icon: 'BarChart3', roles: ['ADMIN', 'COLLABORATOR', 'STUDENT'] },
 ];
 
 /**

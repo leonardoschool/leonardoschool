@@ -6,6 +6,7 @@ import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
 import { useApiError } from '@/lib/hooks/useApiError';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useToast } from '@/components/ui/Toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import CustomSelect from '@/components/ui/CustomSelect';
@@ -73,9 +74,14 @@ export default function CollaboratorTagsContent() {
   // Get current user to check ownership
   const { data: currentUser } = trpc.auth.me.useQuery();
 
-  // Helper to check if user owns a tag/category
-  const isOwner = (createdBy: string | null | undefined) => {
-    return createdBy === currentUser?.id;
+  // Cross-ownership management: with 'tags.manageAll' a collaborator can edit/delete
+  // any category or tag; otherwise only their own.
+  const { can } = usePermissions();
+  const canManageAll = can('tags.manageAll');
+
+  // Helper to check if user can manage a tag/category (own, or any when 'manageAll' is granted)
+  const canManage = (createdBy: string | null | undefined) => {
+    return createdBy === currentUser?.id || canManageAll;
   };
 
   // Queries
@@ -326,7 +332,8 @@ export default function CollaboratorTagsContent() {
         </div>
       </div>
 
-      {/* Info Banner for collaborators */}
+      {/* Info Banner for collaborators — hidden when the collaborator can manage everyone's tags */}
+      {!canManageAll && (
       <div className={`p-4 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800`}>
         <div className="flex items-start gap-3">
           <Lock className="w-5 h-5 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
@@ -341,6 +348,7 @@ export default function CollaboratorTagsContent() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Stats Cards */}
       {stats && (
@@ -436,7 +444,7 @@ export default function CollaboratorTagsContent() {
         ) : (
           <div className="divide-y divide-gray-200 dark:divide-gray-700">
             {categories.map((category) => {
-              const canEditCategory = isOwner(category.createdBy);
+              const canEditCategory = canManage(category.createdBy);
               
               return (
                 <div key={category.id}>
@@ -534,7 +542,7 @@ export default function CollaboratorTagsContent() {
                   {expandedCategories.has(category.id) && category.tags.length > 0 && (
                     <div className={`${colors.background.secondary} border-t ${colors.border.primary}`}>
                       {category.tags.map((tag) => {
-                        const canEditTag = isOwner(tag.createdBy);
+                        const canEditTag = canManage(tag.createdBy);
                         
                         return (
                           <div
@@ -641,7 +649,7 @@ export default function CollaboratorTagsContent() {
                 {/* Uncategorized Tags */}
                 <div className={`${colors.background.secondary} border-t ${colors.border.primary}`}>
                   {uncategorizedTags.map((tag) => {
-                    const canEditTag = isOwner(tag.createdBy);
+                    const canEditTag = canManage(tag.createdBy);
                     
                     return (
                       <div

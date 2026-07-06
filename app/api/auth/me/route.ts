@@ -110,15 +110,24 @@ export async function POST(request: NextRequest) {
     // Check if student needs to provide parent data
     // Already calculated above
 
-    // Genera un nuovo session token per gli studenti (single-device enforcement).
-    // Ogni login invalida la sessione precedente su altri dispositivi.
+    // Session token per gli studenti (single-device enforcement).
+    // Rigeneriamo SOLO se questo dispositivo non ne ha già uno valido: se il cookie in arrivo
+    // combacia con l'`activeSessionToken` nel DB è lo stesso device (resync di onAuthStateChanged
+    // o login ripetuti), quindi lo riusiamo. Rigenerarlo a ogni chiamata creava una race — su Safari
+    // le due chiamate quasi concorrenti a /api/auth/me (auto-resync + login manuale) lasciavano
+    // cookie e DB disallineati, invalidando la sessione appena creata e rimbalzando lo studente al login.
     let sessionToken: string | null = null;
     if (user.role === 'STUDENT') {
-      sessionToken = randomUUID();
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { activeSessionToken: sessionToken },
-      });
+      const existingToken = request.cookies.get('session-device-token')?.value;
+      if (existingToken && existingToken === user.activeSessionToken) {
+        sessionToken = existingToken;
+      } else {
+        sessionToken = randomUUID();
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { activeSessionToken: sessionToken },
+        });
+      }
     }
 
     // Check if user has a pending contract to sign

@@ -19,6 +19,7 @@ import HtmlShortcutMenu from '@/components/admin/question-form/HtmlShortcutMenu'
 import InsertImageButton from '@/components/admin/question-form/InsertImageButton';
 import KeywordManager from '@/components/admin/question-form/KeywordManager';
 import { useQuestionForm, type QuestionFormInitialData } from '@/lib/hooks/useQuestionForm';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import {
   questionTypeLabels,
   questionLanguageLabels,
@@ -39,6 +40,8 @@ interface QuestionFormProps {
 
 export default function QuestionForm({ questionId, basePath = '/domande', returnTo, initialData }: QuestionFormProps) {
   const form = useQuestionForm({ questionId, basePath, returnTo, initialData });
+  const { can } = usePermissions();
+  const canPublish = can('questions.publish');
 
   const questionTextRef = useRef<HTMLTextAreaElement>(null);
   const correctExplanationRef = useRef<HTMLTextAreaElement>(null);
@@ -516,19 +519,21 @@ export default function QuestionForm({ questionId, basePath = '/domande', return
               Salva come bozza
             </ButtonLoader>
           </button>
-          <button
-            type="button"
-            onClick={() => form.handleSubmit('PUBLISHED')}
-            disabled={form.isLoading}
-            className={`px-6 py-2 rounded-lg ${colors.primary.bg} text-white hover:opacity-90 transition-opacity disabled:opacity-50`}
-          >
-            <ButtonLoader loading={form.isLoading} loadingText="Pubblicazione...">
-              <span className="flex items-center gap-2">
-                <Save className="w-4 h-4" />
-                Pubblica
-              </span>
-            </ButtonLoader>
-          </button>
+          {canPublish && (
+            <button
+              type="button"
+              onClick={() => form.handleSubmit('PUBLISHED')}
+              disabled={form.isLoading}
+              className={`px-6 py-2 rounded-lg ${colors.primary.bg} text-white hover:opacity-90 transition-opacity disabled:opacity-50`}
+            >
+              <ButtonLoader loading={form.isLoading} loadingText="Pubblicazione...">
+                <span className="flex items-center gap-2">
+                  <Save className="w-4 h-4" />
+                  Pubblica
+                </span>
+              </ButtonLoader>
+            </button>
+          )}
         </div>
       </div>
 

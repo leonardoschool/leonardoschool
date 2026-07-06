@@ -281,6 +281,10 @@ model User {
   lastName         String?
   role             UserRole @default(STUDENT)
   isActive         Boolean  @default(false) // true solo quando profilo completo + admin approva
+  // Valorizzato quando un admin disattiva manualmente l'account; null quando attivo o mai disattivato.
+  // Distingue una disattivazione esplicita da un utente che sta ancora aspettando il contratto:
+  // senza questo flag i due casi sono identici (isActive=false, profileCompleted=true, nessun contratto).
+  deactivatedAt    DateTime?
   profileCompleted Boolean  @default(false) // true quando compila dati anagrafici
   emailVerified    Boolean  @default(false)
 
@@ -485,11 +489,13 @@ model Collaborator {
   province    String?
   postalCode  String?
 
-  // Permissions
+  // DEPRECATED — superseded by the capability matrix (RolePermission / lib/permissions).
+  // No longer read or written by app code; kept only so the column drop can be a separate
+  // backward-compatible "contract" migration (see CLAUDE.md → Database → Migrations).
   canManageQuestions Boolean @default(true)
   canManageMaterials Boolean @default(true)
   canViewStats       Boolean @default(true)
-  canViewStudents    Boolean @default(true) // Vista limitata (no dati sensibili)
+  canViewStudents    Boolean @default(true)
 
   // Employment info
   hireDate       DateTime @default(now())
@@ -1153,6 +1159,11 @@ model SimulationResult {
   pendingOpenAnswers Int       @default(0) // Number of open answers awaiting manual review
   reviewedAt         DateTime? // When all open answers were reviewed
   reviewedById       String? // Who completed the review
+
+  // Staff reset (attempt recovery): a reset attempt is never auto-invalidated,
+  // so the student can resume it keeping the saved answers
+  resetAt   DateTime? // When a staff member last reset this attempt
+  resetById String? // Staff user who performed the reset
 
   // Answers (JSON array)
   answers Json // [{questionId, answer: 'A'|'B'|'C'|'D'|'E'|'BLANK', isCorrect, timeSpent}]
@@ -2377,4 +2388,30 @@ model EmailLog {
   @@index([status])
   @@index([createdAt])
   @@map("email_logs")
+}
+
+// ==================== PERMISSIONS ====================
+
+// Subjects whose capabilities are configurable by an admin. ADMIN is intentionally
+// absent: it is a fixed super-user that always holds every capability (enforced in
+// lib/permissions/resolve.ts), so it can never be locked out.
+enum PermissionSubject {
+  STUDENT
+  COLLABORATOR_TUTOR
+  COLLABORATOR_SECRETARY
+}
+
+// Override store for the capability matrix. A row exists ONLY when an admin has set an
+// explicit value for a (subject, capability) pair; otherwise the code-defined default in
+// lib/permissions/capabilities.ts applies. An empty table therefore reproduces the app's
+// pre-existing behavior exactly. `capability` is a catalog key (not an enum) so new
+// capabilities can be added in code without a schema migration.
+model RolePermission {
+  subject    PermissionSubject
+  capability String
+  enabled    Boolean
+  updatedAt  DateTime          @updatedAt
+
+  @@id([subject, capability])
+  @@map("role_permissions")
 }

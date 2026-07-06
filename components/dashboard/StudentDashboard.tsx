@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import SelfPracticeModal from '@/components/student/SelfPracticeModal';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import {
   Zap,
   BookOpen,
@@ -76,6 +77,11 @@ interface StudentDashboardProps {
  */
 export function StudentDashboard({ user }: StudentDashboardProps) {
   const [showSelfPracticeModal, setShowSelfPracticeModal] = useState(false);
+
+  // Capability gating: hide actions the admin revoked from students (mirrors the header nav;
+  // while capabilities load we show everything to avoid flicker).
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canDo = (capability: string) => permissionsLoading || can(capability);
 
   // Get student's contract
   const { data: contract, isLoading: contractLoading } = trpc.contracts.getMyContract.useQuery(
@@ -191,7 +197,7 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
 
   const contractAlert = getContractAlert();
 
-  // Quick links configuration
+  // Quick links configuration (same capability keys as the header nav, so the two stay in sync)
   const quickLinks = [
     {
       href: '/simulazioni',
@@ -199,6 +205,7 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
       label: 'Simulazioni',
       description: 'Esercitati con i test',
       color: 'bg-blue-500',
+      capability: 'student.takeSimulations',
     },
     {
       href: '/materiali',
@@ -206,6 +213,7 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
       label: 'Materiali',
       description: 'PDF, video e risorse',
       color: 'bg-teal-500',
+      capability: 'student.viewMaterials',
     },
     {
       href: '/statistiche',
@@ -213,6 +221,7 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
       label: 'Statistiche',
       description: 'Analizza il progresso',
       color: 'bg-purple-500',
+      capability: 'student.viewOwnStats',
     },
     {
       href: '/calendario',
@@ -220,6 +229,7 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
       label: 'Calendario',
       description: 'Lezioni e appuntamenti',
       color: 'bg-amber-500',
+      capability: 'calendar.view',
     },
     {
       href: '/messaggi',
@@ -227,6 +237,7 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
       label: 'Messaggi',
       description: 'Chat con i docenti',
       color: 'bg-green-500',
+      capability: 'messages.use',
     },
     {
       href: '/gruppo',
@@ -234,8 +245,9 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
       label: 'Il mio Gruppo',
       description: 'Compagni di studio',
       color: 'bg-pink-500',
+      capability: 'student.viewGroup',
     },
-  ];
+  ].filter((link) => canDo(link.capability));
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
@@ -316,6 +328,7 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
       {user?.isActive && (
         <>
           {/* Self-Practice CTA - Hero Button */}
+          {canDo('student.selfPractice') && (
           <button
             onClick={() => setShowSelfPracticeModal(true)}
             className="w-full group relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 p-6 sm:p-8 hover:shadow-2xl transition-all duration-300"
@@ -345,6 +358,7 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
               </div>
             </div>
           </button>
+          )}
 
           {/* Two-Column Layout: Calendar & Stats */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -414,13 +428,15 @@ export function StudentDashboard({ user }: StudentDashboardProps) {
                         : `Hai già completato ${statsData.overview.totalSimulations} simulazioni. Continua per vedere il tuo trend!`}
                   </p>
                 </div>
-                <Link
-                  href="/simulazioni"
-                  className={`px-4 py-2 rounded-xl ${colors.primary.gradient} text-white text-sm font-medium flex items-center gap-2 flex-shrink-0`}
-                >
-                  Nuova simulazione
-                  <ArrowRight className="w-4 h-4" />
-                </Link>
+                {canDo('student.takeSimulations') && (
+                  <Link
+                    href="/simulazioni"
+                    className={`px-4 py-2 rounded-xl ${colors.primary.gradient} text-white text-sm font-medium flex items-center gap-2 flex-shrink-0`}
+                  >
+                    Nuova simulazione
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                )}
               </div>
             </div>
           )}

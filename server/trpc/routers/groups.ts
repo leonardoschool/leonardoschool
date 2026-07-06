@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { adminProcedure, protectedProcedure, router, staffProcedure } from '../init';
+import { adminProcedure, protectedProcedure, router, staffProcedure, assertCapability, hasCapability } from '../init';
 import { notifications } from '@/lib/notifications/notificationHelpers';
 import {
   uniqueReferenceIds,
@@ -28,6 +28,7 @@ export const groupsRouter = router({
       })
     )
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.view');
       const { page, pageSize, type, search, includeInactive, onlyMyGroups } = input;
 
       const where: Record<string, unknown> = {};
@@ -103,6 +104,7 @@ export const groupsRouter = router({
       }).optional()
     )
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.view');
       const andConditions = [
         ...(input?.search ? [{
           OR: [
@@ -196,6 +198,7 @@ export const groupsRouter = router({
   getById: staffProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.view');
       const group = await ctx.prisma.group.findUnique({
         where: { id: input.id },
         include: {
@@ -365,7 +368,7 @@ export const groupsRouter = router({
     }),
 
   // Create a new group
-  create: adminProcedure
+  create: staffProcedure
     .input(
       z.object({
         name: z.string().min(2, 'Nome troppo corto').max(100),
@@ -380,6 +383,7 @@ export const groupsRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.manage');
       const legacyReference = parseLegacyReference(input.referenceCollaboratorId);
       const referenceStudentIds = uniqueReferenceIds([...(input.referenceStudentIds ?? []), input.referenceStudentId]);
       const referenceCollaboratorIds = uniqueReferenceIds([
@@ -387,6 +391,19 @@ export const groupsRouter = router({
         ...legacyReference.collaboratorIds,
       ]);
       const referenceAdminIds = uniqueReferenceIds([...(input.referenceAdminIds ?? []), ...legacyReference.adminIds]);
+
+      // A collaborator creating a group (e.g. via the simplified collaborator modal, which sends no
+      // references) must become a referent, otherwise the group would not surface in their
+      // "I Miei Gruppi" (getMyGroups filters by referent/member). Admin-created groups are unaffected.
+      if (ctx.user.role === 'COLLABORATOR') {
+        const self = await ctx.prisma.collaborator.findUnique({
+          where: { userId: ctx.user.id },
+          select: { id: true },
+        });
+        if (self && !referenceCollaboratorIds.includes(self.id)) {
+          referenceCollaboratorIds.push(self.id);
+        }
+      }
 
       await validateReferenceIds(ctx.prisma, referenceStudentIds, referenceCollaboratorIds, referenceAdminIds);
 
@@ -439,7 +456,7 @@ export const groupsRouter = router({
     }),
 
   // Update a group
-  update: adminProcedure
+  update: staffProcedure
     .input(
       z.object({
         id: z.string(),
@@ -456,6 +473,7 @@ export const groupsRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.manage');
       const {
         id,
         referenceCollaboratorId: rawCollaboratorId,
@@ -574,9 +592,10 @@ export const groupsRouter = router({
     }),
 
   // Delete a group (hard delete - removes group and all members)
-  delete: adminProcedure
+  delete: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.manage');
       const group = await ctx.prisma.group.findUnique({
         where: { id: input.id },
       });
@@ -612,6 +631,7 @@ export const groupsRouter = router({
       )
     )
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.manageMembers');
       // Check group exists and is active
       const group = await ctx.prisma.group.findUnique({
         where: { id: input.groupId },
@@ -625,12 +645,12 @@ export const groupsRouter = router({
         });
       }
 
-      // If collaborator, check if they are the referent
-      if (ctx.user?.role === 'COLLABORATOR') {
+      // If collaborator, check if they are the referent (unless 'manageAllMembers' is granted)
+      if (ctx.user?.role === 'COLLABORATOR' && !hasCapability(ctx, 'groups.manageAllMembers')) {
         const collaborator = await ctx.prisma.collaborator.findUnique({
           where: { userId: ctx.user.id },
         });
-        
+
         const isReferenceCollaborator = collaborator && (
           group.referenceCollaboratorId === collaborator.id
           || group.referenceCollaborators.some((reference) => reference.collaboratorId === collaborator.id)
@@ -863,6 +883,7 @@ export const groupsRouter = router({
   removeMember: staffProcedure
     .input(z.object({ memberId: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.manageMembers');
       const member = await ctx.prisma.groupMember.findUnique({
         where: { id: input.memberId },
         include: { group: { include: { referenceCollaborators: { select: { collaboratorId: true } } } } },
@@ -875,12 +896,12 @@ export const groupsRouter = router({
         });
       }
 
-      // If collaborator, check if they are the referent
-      if (ctx.user?.role === 'COLLABORATOR') {
+      // If collaborator, check if they are the referent (unless 'manageAllMembers' is granted)
+      if (ctx.user?.role === 'COLLABORATOR' && !hasCapability(ctx, 'groups.manageAllMembers')) {
         const collaborator = await ctx.prisma.collaborator.findUnique({
           where: { userId: ctx.user.id },
         });
-        
+
         const isReferenceCollaborator = collaborator && (
           member.group.referenceCollaboratorId === collaborator.id
           || member.group.referenceCollaborators.some((reference) => reference.collaboratorId === collaborator.id)
@@ -905,6 +926,7 @@ export const groupsRouter = router({
   getMembers: staffProcedure
     .input(z.object({ groupId: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.view');
       const members = await ctx.prisma.groupMember.findMany({
         where: { groupId: input.groupId },
         include: {
@@ -934,6 +956,7 @@ export const groupsRouter = router({
       })
     )
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.view');
       // First get the student/collaborator id from user id
       let entityId: string | null = null;
 
@@ -1091,6 +1114,7 @@ export const groupsRouter = router({
     }),
 
   getStats: staffProcedure.query(async ({ ctx }) => {
+    assertCapability(ctx, 'groups.view');
     const [total, byType, activeGroups] = await Promise.all([
       ctx.prisma.group.count(),
       ctx.prisma.group.groupBy({ by: ['type'], _count: true, where: { isActive: true } }),
@@ -1126,22 +1150,22 @@ export const groupsRouter = router({
       return [];
     }
 
-    // Get groups where this user is the reference (as collaborator or admin)
-    // OR where they are a member
+    // With 'groups.manageAllMembers' the list shows EVERY active group (so members can be managed
+    // across all of them); otherwise it stays scoped to groups the user references or belongs to.
+    const canManageAll = hasCapability(ctx, 'groups.manageAllMembers');
+    const selfScopedOr = [
+      // Referent as collaborator
+      ...(collaborator ? [{ referenceCollaboratorId: collaborator.id }] : []),
+      ...(collaborator ? [{ referenceCollaborators: { some: { collaboratorId: collaborator.id } } }] : []),
+      // Referent as admin
+      ...(admin ? [{ referenceAdminId: admin.id }] : []),
+      ...(admin ? [{ referenceAdmins: { some: { adminId: admin.id } } }] : []),
+      // Member as collaborator
+      ...(collaborator ? [{ members: { some: { collaboratorId: collaborator.id } } }] : []),
+    ];
+
     const groups = await ctx.prisma.group.findMany({
-      where: {
-        isActive: true,
-        OR: [
-          // Referent as collaborator
-          ...(collaborator ? [{ referenceCollaboratorId: collaborator.id }] : []),
-          ...(collaborator ? [{ referenceCollaborators: { some: { collaboratorId: collaborator.id } } }] : []),
-          // Referent as admin
-          ...(admin ? [{ referenceAdminId: admin.id }] : []),
-          ...(admin ? [{ referenceAdmins: { some: { adminId: admin.id } } }] : []),
-          // Member as collaborator
-          ...(collaborator ? [{ members: { some: { collaboratorId: collaborator.id } } }] : []),
-        ],
-      },
+      where: canManageAll ? { isActive: true } : { isActive: true, OR: selfScopedOr },
       orderBy: { name: 'asc' },
       include: {
         _count: {

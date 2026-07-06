@@ -7,6 +7,7 @@ import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { isStaff } from '@/lib/permissions';
 import { PageLoader, ButtonLoader } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
@@ -74,13 +75,16 @@ export default function FeedbacksPage() {
   const utils = trpc.useUtils();
   const { user, loading } = useAuth();
   const userRole = user?.role;
+  const { can, isLoading: permsLoading } = usePermissions();
   const questionId = searchParams.get('questionId') ?? undefined;
 
+  // Access control: staff + explicit 'questions.reviewFeedback' capability (admins always pass).
   useEffect(() => {
-    if (!loading && !isStaff(userRole)) {
-      router.replace('/dashboard');
+    if (loading || permsLoading) return;
+    if (!isStaff(userRole) || !can('questions.reviewFeedback')) {
+      router.replace('/domande');
     }
-  }, [loading, userRole, router]);
+  }, [loading, permsLoading, userRole, can, router]);
 
   // State
   const [statusFilter, setStatusFilter] = useState<FeedbackStatus | ''>('');

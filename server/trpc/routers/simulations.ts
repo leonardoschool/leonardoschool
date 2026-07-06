@@ -1,7 +1,8 @@
 // Simulations Router - Manage tests and simulations
-import { router, staffProcedure, studentProcedure, protectedProcedure, adminProcedure } from '../init';
+import { router, staffProcedure, studentProcedure, protectedProcedure, adminProcedure, assertCapability, hasCapability } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import { subjectForUser, subjectHasCapability } from '@/lib/permissions/resolve';
 import {
   createSimulationWithQuestionsSchema,
   createSimulationAutoSchema,
@@ -22,6 +23,7 @@ import { stripHtml } from '@/lib/utils/sanitizeHtml';
 import { sanitizeStudentAnswerText } from '@/lib/utils/studentOpenAnswer';
 import { secureShuffleArray } from '@/lib/utils';
 import { orderPoolFreshFirst, buildStudentSeenRank, type SeenRank } from '@/lib/utils/questionRotation';
+import { parseSavedProgress, performAttemptReset } from './simulations.helpers';
 
 const log = createLogger('Simulations');
 
@@ -29,11 +31,14 @@ function jsonOrUndefined(value: Prisma.JsonValue | null): Prisma.InputJsonValue 
   return value === null ? undefined : value as Prisma.InputJsonValue;
 }
 
+// The reviewer chosen for open-answer correction must hold the `simulations.correctOpenAnswers`
+// capability. By default only tutors do (secretaries don't), matching the previous behavior,
+// but an admin can reconfigure this via the permissions matrix.
 async function validateTutorCorrectionTarget(prisma: PrismaClient, reviewerUserId?: string) {
   if (!reviewerUserId) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
-      message: 'Seleziona un collaboratore tutor per la correzione.',
+      message: 'Seleziona un collaboratore per la correzione.',
     });
   }
 
@@ -43,26 +48,19 @@ async function validateTutorCorrectionTarget(prisma: PrismaClient, reviewerUserI
       role: 'COLLABORATOR',
       isActive: true,
       profileCompleted: true,
-      collaborator: {
-        kind: 'TUTOR',
-      },
     },
-    select: { id: true },
+    select: { role: true, collaborator: { select: { kind: true } } },
   });
 
-  if (!reviewer) {
+  const subject = reviewer ? subjectForUser(reviewer) : null;
+  if (
+    subject === null ||
+    subject === 'ADMIN' ||
+    !(await subjectHasCapability(subject, 'simulations.correctOpenAnswers'))
+  ) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
-      message: 'Collaboratore tutor selezionato non valido.',
-    });
-  }
-}
-
-function assertCanReviewOpenAnswers(user: { role: string; collaborator?: { kind?: string | null } | null }) {
-  if (user.role === 'COLLABORATOR' && user.collaborator?.kind === 'SECRETARY') {
-    throw new TRPCError({
-      code: 'FORBIDDEN',
-      message: 'I collaboratori di segreteria non possono accedere alle correzioni delle simulazioni.',
+      message: 'Collaboratore selezionato non valido per la correzione.',
     });
   }
 }
@@ -822,62 +820,12 @@ function hasSimulationAccess(
   return simulation.isPublic || simulation.assignments.length > 0 || isOwnSelfPractice;
 }
 
-// Types for saved answer parsing
-interface SavedAnswerItem {
-  questionId: string;
-  answerId: string | null;
-  answerText: string | null;
-  timeSpent: number;
-  flagged: boolean;
-}
-
-interface ParsedSavedProgress {
-  savedAnswers: SavedAnswerItem[];
-  savedSectionTimes: Record<number, number>;
-  savedCurrentSectionIndex: number;
-  savedCurrentQuestionIndex: number;
-}
-
-/**
- * Parse saved answers from simulation result - handles both old and new format
- */
-function parseSavedProgress(savedData: unknown): ParsedSavedProgress {
-  let savedAnswers: SavedAnswerItem[] = [];
-  let savedSectionTimes: Record<number, number> = {};
-  let savedCurrentSectionIndex = 0;
-  let savedCurrentQuestionIndex = 0;
-
-  if (Array.isArray(savedData)) {
-    // Old format: just an array of answers
-    savedAnswers = savedData as SavedAnswerItem[];
-  } else if (savedData && typeof savedData === 'object' && 'items' in savedData) {
-    // New format: object with items, sectionTimes, currentSectionIndex
-    const meta = savedData as {
-      items: SavedAnswerItem[];
-      sectionTimes?: Record<string, number>;
-      currentSectionIndex?: number;
-      currentQuestionIndex?: number;
-    };
-    savedAnswers = meta.items || [];
-    // Convert string keys to number keys for sectionTimes
-    if (meta.sectionTimes) {
-      savedSectionTimes = Object.fromEntries(
-        Object.entries(meta.sectionTimes).map(([k, v]) => [Number(k), v])
-      );
-    }
-    savedCurrentSectionIndex = meta.currentSectionIndex ?? 0;
-    savedCurrentQuestionIndex = meta.currentQuestionIndex ?? 0;
-  }
-
-  return { savedAnswers, savedSectionTimes, savedCurrentSectionIndex, savedCurrentQuestionIndex };
-}
-
 /**
  * Check if an in-progress attempt should be invalidated due to new session
  */
 async function shouldInvalidateOldAttempt(
   prisma: PrismaClient,
-  inProgressAttempt: { id: string; startedAt: Date | null },
+  inProgressAttempt: { id: string; startedAt: Date | null; resetAt: Date | null },
   assignmentId: string,
   studentId: string
 ): Promise<{ shouldDelete: boolean; currentSessionId?: string; currentSessionCreatedAt?: Date }> {
@@ -892,10 +840,22 @@ async function shouldInvalidateOldAttempt(
   });
 
   if (currentSession && inProgressAttempt.startedAt && inProgressAttempt.startedAt < currentSession.createdAt) {
-    return { 
-      shouldDelete: true, 
-      currentSessionId: currentSession.id, 
-      currentSessionCreatedAt: currentSession.createdAt 
+    // A recently staff-reset attempt is explicitly meant to be resumed: protect
+    // it from invalidation. The protection is time-boxed so a reset from months
+    // ago doesn't leak old answers into a genuinely new session.
+    const RESET_PROTECTION_MS = 24 * 60 * 60 * 1000;
+    if (
+      inProgressAttempt.resetAt &&
+      (inProgressAttempt.resetAt > currentSession.createdAt ||
+        Date.now() - inProgressAttempt.resetAt.getTime() < RESET_PROTECTION_MS)
+    ) {
+      return { shouldDelete: false };
+    }
+
+    return {
+      shouldDelete: true,
+      currentSessionId: currentSession.id,
+      currentSessionCreatedAt: currentSession.createdAt
     };
   }
 
@@ -1298,7 +1258,7 @@ async function getOrCreateSimulationResult(
   studentId: string,
   totalQuestions: number,
   isRepeatable: boolean
-): Promise<{ id: string }> {
+): Promise<{ id: string; resetAt: Date | null }> {
   // Try to find existing in-progress result
   const existingResult = await prisma.simulationResult.findFirst({
     where: { simulationId, studentId, completedAt: null },
@@ -1364,7 +1324,11 @@ async function checkActiveVirtualRoomSession(
   assignmentStatus: string | undefined
 ): Promise<boolean> {
   if (assignmentStatus !== 'ACTIVE' || !assignmentId) return false;
-  
+
+  // The bypass stays scoped to the attempted assignment's own room: matching by
+  // participant alone would let any lingering STARTED session of the simulation
+  // bypass the date window of unrelated assignments. Manually inserted students
+  // don't need it: their on-the-fly assignment always has a valid window.
   const session = await prisma.simulationSession.findFirst({
     where: {
       simulationId,
@@ -1373,7 +1337,7 @@ async function checkActiveVirtualRoomSession(
       participants: { some: { studentId } },
     },
   });
-  
+
   return !!session;
 }
 
@@ -1382,7 +1346,7 @@ async function checkActiveVirtualRoomSession(
  */
 async function handleExistingAttempts(
   prisma: PrismaClient,
-  existingResults: Array<{ id: string; completedAt: Date | null; startedAt: Date; answers: Prisma.JsonValue; durationSeconds: number | null }>,
+  existingResults: Array<{ id: string; completedAt: Date | null; startedAt: Date; resetAt: Date | null; answers: Prisma.JsonValue; durationSeconds: number | null }>,
   assignmentId: string | null,
   studentId: string
 ): Promise<{ inProgressAttempt: typeof existingResults[0] | undefined; completedAttempts: number }> {
@@ -2297,6 +2261,7 @@ export const simulationsRouter = router({
   getSimulations: staffProcedure
     .input(simulationFilterSchema)
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.view');
       const { page, pageSize, sortBy, sortOrder } = input;
 
       // Build where clause using helper function
@@ -2340,6 +2305,7 @@ export const simulationsRouter = router({
   getSimulation: staffProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.view');
       const simulation = await ctx.prisma.simulation.findUnique({
         where: { id: input.id },
         include: {
@@ -2407,6 +2373,7 @@ export const simulationsRouter = router({
   createWithQuestions: staffProcedure
     .input(createSimulationWithQuestionsSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.manage');
       const { questions, assignments, ...simulationData } = input;
 
       // Validate collaborator assignments
@@ -2516,6 +2483,7 @@ export const simulationsRouter = router({
   createAutomatic: staffProcedure
     .input(createSimulationAutoSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.manage');
       const { subjectDistribution, difficultyDistribution, topicIds, assignments, ...simulationData } = input;
 
       // Validate collaborator assignments
@@ -2625,9 +2593,10 @@ export const simulationsRouter = router({
     }),
 
   // Update simulation metadata
-  update: adminProcedure
+  update: staffProcedure
     .input(updateSimulationSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.manage');
       const { id, ...data } = input;
 
       // Check simulation exists
@@ -2638,6 +2607,11 @@ export const simulationsRouter = router({
 
       if (!existing) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
+      }
+
+      // Collaborators can edit only their own simulations, unless 'manageAll' is granted
+      if (ctx.user.role === 'COLLABORATOR' && existing.createdById !== ctx.user.id && !hasCapability(ctx, 'simulations.manageAll')) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Puoi modificare solo le simulazioni che hai creato.' });
       }
 
       // Can't make official if not admin
@@ -2673,9 +2647,10 @@ export const simulationsRouter = router({
     }),
 
   // Duplicate simulation as a draft copy without assignments, results or calendar events
-  duplicate: adminProcedure
+  duplicate: staffProcedure
     .input(z.object({ id: z.string().min(1, 'ID simulazione obbligatorio') }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.manage');
       const original = await ctx.prisma.simulation.findUnique({
         where: { id: input.id },
         include: {
@@ -2766,9 +2741,10 @@ export const simulationsRouter = router({
     }),
 
   // Update simulation questions
-  updateQuestions: adminProcedure
+  updateQuestions: staffProcedure
     .input(updateSimulationQuestionsSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.manage');
       const { simulationId, questions, mode, sections } = input;
 
       // Check simulation
@@ -2779,6 +2755,11 @@ export const simulationsRouter = router({
 
       if (!existing) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
+      }
+
+      // Collaborators can edit only their own simulations, unless 'manageAll' is granted
+      if (ctx.user.role === 'COLLABORATOR' && existing.createdById !== ctx.user.id && !hasCapability(ctx, 'simulations.manageAll')) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Puoi modificare solo le simulazioni che hai creato.' });
       }
 
       if (existing.status === 'ARCHIVED') {
@@ -2985,6 +2966,7 @@ export const simulationsRouter = router({
   publish: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.manage');
       const simulation = await ctx.prisma.simulation.findUnique({
         where: { id: input.id },
         include: {
@@ -2996,7 +2978,7 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
       }
 
-      if (ctx.user.role === 'COLLABORATOR' && simulation.createdById !== ctx.user.id) {
+      if (ctx.user.role === 'COLLABORATOR' && simulation.createdById !== ctx.user.id && !hasCapability(ctx, 'simulations.manageAll')) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi' });
       }
 
@@ -3029,6 +3011,7 @@ export const simulationsRouter = router({
   archive: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.manage');
       const existing = await ctx.prisma.simulation.findUnique({
         where: { id: input.id },
         select: { createdById: true },
@@ -3038,7 +3021,7 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
       }
 
-      if (ctx.user.role === 'COLLABORATOR' && existing.createdById !== ctx.user.id) {
+      if (ctx.user.role === 'COLLABORATOR' && existing.createdById !== ctx.user.id && !hasCapability(ctx, 'simulations.manageAll')) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi' });
       }
 
@@ -3052,10 +3035,11 @@ export const simulationsRouter = router({
 
   // Close assignment(s) manually - students/groups can no longer access
   closeAssignment: staffProcedure
-    .input(z.object({ 
+    .input(z.object({
       assignmentIds: z.array(z.string()).min(1),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.assign');
       // Get assignments
       const assignments = await ctx.prisma.simulationAssignment.findMany({
         where: { id: { in: input.assignmentIds } },
@@ -3065,13 +3049,13 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Assegnazioni non trovate' });
       }
 
-      // For collaborators, verify they created all assignments
-      if (ctx.user.role === 'COLLABORATOR') {
+      // For collaborators, verify they created all assignments — unless granted the "manage all" capability.
+      if (ctx.user.role === 'COLLABORATOR' && !hasCapability(ctx, 'simulations.manageAllAssignments')) {
         const notOwnedByUser = assignments.some(a => a.assignedById !== ctx.user.id);
         if (notOwnedByUser) {
-          throw new TRPCError({ 
-            code: 'FORBIDDEN', 
-            message: 'Puoi chiudere solo le assegnazioni che hai creato tu' 
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Puoi chiudere solo le assegnazioni che hai creato tu'
           });
         }
       }
@@ -3091,10 +3075,11 @@ export const simulationsRouter = router({
 
   // Reopen assignment(s) - students/groups can access again
   reopenAssignment: staffProcedure
-    .input(z.object({ 
+    .input(z.object({
       assignmentIds: z.array(z.string()).min(1),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.assign');
       // Get assignments
       const assignments = await ctx.prisma.simulationAssignment.findMany({
         where: { id: { in: input.assignmentIds } },
@@ -3104,13 +3089,13 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Assegnazioni non trovate' });
       }
 
-      // For collaborators, verify they created all assignments
-      if (ctx.user.role === 'COLLABORATOR') {
+      // For collaborators, verify they created all assignments — unless granted the "manage all" capability.
+      if (ctx.user.role === 'COLLABORATOR' && !hasCapability(ctx, 'simulations.manageAllAssignments')) {
         const notOwnedByUser = assignments.some(a => a.assignedById !== ctx.user.id);
         if (notOwnedByUser) {
-          throw new TRPCError({ 
-            code: 'FORBIDDEN', 
-            message: 'Puoi riaprire solo le assegnazioni che hai creato tu' 
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Puoi riaprire solo le assegnazioni che hai creato tu'
           });
         }
       }
@@ -3137,11 +3122,69 @@ export const simulationsRouter = router({
         data: { status: 'ACTIVE' },
       });
 
-      return { 
-        success: true, 
+      return {
+        success: true,
         reopenedCount: result.count,
         message: `${result.count} assegnazione/i riaperta/e con successo`,
       };
+    }),
+
+  // Reset a student's attempt (in-progress or completed) so they can resume it
+  // keeping the saved answers. Optionally resets the elapsed timer.
+  resetAttempt: staffProcedure
+    .input(z.object({
+      resultId: z.string(),
+      resetTimer: z.boolean().default(false),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.manageAttempts');
+
+      const result = await ctx.prisma.simulationResult.findUnique({
+        where: { id: input.resultId },
+        select: {
+          id: true,
+          answers: true,
+          durationSeconds: true,
+          sessionParticipant: { select: { id: true } },
+          assignment: {
+            select: { id: true, studentId: true, status: true, startDate: true, endDate: true },
+          },
+          simulation: { select: { durationMinutes: true, endDate: true } },
+          student: { select: { user: { select: { name: true } } } },
+        },
+      });
+
+      if (!result) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Tentativo non trovato' });
+      }
+
+      const outcome = await performAttemptReset(ctx.prisma, {
+        result,
+        participantId: result.sessionParticipant?.id,
+        assignment: result.assignment,
+        simulationEndDate: result.simulation.endDate,
+        maxDurationSeconds: result.simulation.durationMinutes * 60,
+      }, {
+        resetTimer: input.resetTimer,
+        byUserId: ctx.user.id,
+      });
+
+      log.info('Attempt reset by staff', {
+        resultId: input.resultId,
+        resetTimer: input.resetTimer,
+        assignmentExtended: outcome.assignmentExtended,
+        staffId: ctx.user.id,
+      });
+
+      const studentName = result.student.user.name;
+      let message = `Il tentativo di ${studentName} è stato ripristinato: lo studente può riprendere la simulazione`;
+      if (outcome.assignmentExtended) {
+        message += '. La finestra di accesso era chiusa ed è stata riaperta per 24 ore';
+      } else if (outcome.assignmentWindowClosed) {
+        message += '. Attenzione: la finestra dell\'assegnazione di gruppo è chiusa — riaprila o modificane le date per permettere la ripresa';
+      }
+
+      return { success: true, message };
     }),
 
   // ==================== ASSIGNMENTS ====================
@@ -3150,6 +3193,7 @@ export const simulationsRouter = router({
   addAssignments: staffProcedure
     .input(bulkAssignmentSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.assign');
       const { simulationId, targets } = input;
 
       // Check simulation exists and get details for calendar events
@@ -3258,6 +3302,7 @@ export const simulationsRouter = router({
   getExistingAssignmentIds: staffProcedure
     .input(z.object({ simulationId: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.assign');
       const assignments = await ctx.prisma.simulationAssignment.findMany({
         where: { simulationId: input.simulationId },
         select: {
@@ -3298,6 +3343,7 @@ export const simulationsRouter = router({
       groupId: z.string(),
     }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.assign');
       // Get all members of the group
       const groupMembers = await ctx.prisma.groupMember.findMany({
         where: { groupId: input.groupId },
@@ -3344,6 +3390,7 @@ export const simulationsRouter = router({
       simulationId: z.string(),
     }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.assign');
       // Get all members of the group
       const groupMembers = await ctx.prisma.groupMember.findMany({
         where: { groupId: input.groupId },
@@ -3486,6 +3533,7 @@ export const simulationsRouter = router({
       endDate: z.string().datetime().optional().nullable(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.assign');
       const { assignmentIds, startDate, endDate } = input;
 
       const assignments = await ctx.prisma.simulationAssignment.findMany({
@@ -3497,8 +3545,8 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Assegnazioni non trovate' });
       }
 
-      // Collaborators can only edit assignments they created
-      if (ctx.user.role === 'COLLABORATOR') {
+      // Collaborators can only edit assignments they created — unless granted the "manage all" capability.
+      if (ctx.user.role === 'COLLABORATOR' && !hasCapability(ctx, 'simulations.manageAllAssignments')) {
         const notOwned = assignments.some(a => a.assignedById !== ctx.user.id);
         if (notOwned) {
           throw new TRPCError({
@@ -3523,6 +3571,7 @@ export const simulationsRouter = router({
   removeAssignment: staffProcedure
     .input(z.object({ assignmentId: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.assign');
       const assignment = await ctx.prisma.simulationAssignment.findUnique({
         where: { id: input.assignmentId },
         select: {
@@ -3549,11 +3598,11 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Assegnazione non trovata' });
       }
 
-      // For collaborators, verify they created the assignment
-      if (ctx.user.role === 'COLLABORATOR' && assignment.assignedById !== ctx.user.id) {
-        throw new TRPCError({ 
-          code: 'FORBIDDEN', 
-          message: 'Puoi eliminare solo le assegnazioni che hai creato tu' 
+      // For collaborators, verify they created the assignment — unless granted the "manage all" capability.
+      if (ctx.user.role === 'COLLABORATOR' && assignment.assignedById !== ctx.user.id && !hasCapability(ctx, 'simulations.manageAllAssignments')) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Puoi eliminare solo le assegnazioni che hai creato tu'
         });
       }
 
@@ -3599,6 +3648,7 @@ export const simulationsRouter = router({
   getAvailableSimulations: studentProcedure
     .input(studentSimulationFilterSchema)
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'student.takeSimulations');
       const { page, pageSize, search, type, status, isOfficial, sortBy, sortOrder, selfCreated, assignedToMe } = input;
 
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
@@ -3696,6 +3746,7 @@ export const simulationsRouter = router({
       assignmentId: z.string().optional(), // Specific assignment to use for dates/access
     }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'student.takeSimulations');
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
       const studentId = student.id;
       const now = new Date();
@@ -3895,6 +3946,7 @@ export const simulationsRouter = router({
       assignmentId: z.string().optional(), // Specific assignment for this attempt
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'student.takeSimulations');
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
       const studentId = student.id;
 
@@ -3930,12 +3982,16 @@ export const simulationsRouter = router({
                   }
               ),
             },
-            select: { 
+            select: {
               id: true,
               status: true,
               startDate: true,
               endDate: true,
             },
+            // Prefer the newest assignment when none is specified: with multiple
+            // assignments (e.g. an expired one + a staff-created recovery one)
+            // the most recent is the one meant to grant access
+            orderBy: { assignedAt: 'desc' },
             take: 1,
           },
         },
@@ -3988,6 +4044,7 @@ export const simulationsRouter = router({
           id: true,
           completedAt: true,
           startedAt: true,
+          resetAt: true,
           answers: true,
           durationSeconds: true,
         },
@@ -4006,9 +4063,12 @@ export const simulationsRouter = router({
         // Parse saved answers using helper
         const savedProgress = parseSavedProgress(inProgressAttempt.answers);
 
-        return { 
-          resultId: inProgressAttempt.id, 
+        return {
+          resultId: inProgressAttempt.id,
           resumed: true,
+          // Echoed back by saveProgress/submit: writes from a tab opened before
+          // a staff reset carry a stale token and are rejected
+          resetToken: inProgressAttempt.resetAt?.getTime() ?? null,
           savedTimeSpent: inProgressAttempt.durationSeconds || 0,
           savedAnswers: savedProgress.savedAnswers,
           savedSectionTimes: savedProgress.savedSectionTimes,
@@ -4037,7 +4097,7 @@ export const simulationsRouter = router({
         },
       });
 
-      return { resultId: result.id, resumed: false };
+      return { resultId: result.id, resumed: false, resetToken: null };
     }),
 
   // Save progress (partial save)
@@ -4056,8 +4116,11 @@ export const simulationsRouter = router({
       sectionTimes: z.record(z.number()).optional(),
       currentSectionIndex: z.number().int().min(0).optional(),
       currentQuestionIndex: z.number().int().min(0).optional(),
+      // Reset token from startAttempt (guards against stale tabs after a staff reset)
+      resetToken: z.number().nullable().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'student.takeSimulations');
       const { resultId, answers, timeSpent, sectionTimes, currentSectionIndex, currentQuestionIndex } = input;
       const sanitizedAnswers = answers.map(answer => ({
         ...answer,
@@ -4067,7 +4130,7 @@ export const simulationsRouter = router({
 
       const result = await ctx.prisma.simulationResult.findUnique({
         where: { id: resultId },
-        select: { studentId: true, completedAt: true },
+        select: { studentId: true, completedAt: true, resetAt: true },
       });
 
       if (!result) {
@@ -4080,6 +4143,15 @@ export const simulationsRouter = router({
 
       if (result.completedAt) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Tentativo già completato' });
+      }
+
+      // A tab opened before a staff reset carries a stale (or missing) token:
+      // reject its autosaves so they can't overwrite the reset state
+      if (result.resetAt && input.resetToken !== result.resetAt.getTime()) {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: 'Il tentativo è stato ripristinato dallo staff. Ricarica la pagina per riprendere la simulazione.',
+        });
       }
 
       // Prepare answers with section progress metadata
@@ -4105,6 +4177,7 @@ export const simulationsRouter = router({
   submit: studentProcedure
     .input(submitSimulationSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'student.takeSimulations');
       const { simulationId, answers, totalTimeSpent } = input;
       const sanitizedAnswers = answers.map(answer => ({
         ...answer,
@@ -4143,6 +4216,15 @@ export const simulationsRouter = router({
         simulation.totalQuestions,
         simulation.isRepeatable
       );
+
+      // A tab opened before a staff reset carries a stale (or missing) token:
+      // reject its submit so it can't re-complete the freshly reset attempt
+      if (result.resetAt && input.resetToken !== result.resetAt.getTime()) {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: 'Il tentativo è stato ripristinato dallo staff. Ricarica la pagina per riprendere la simulazione.',
+        });
+      }
 
       // Calculate scores using helper
       const scoringResult = calculateSubmissionScores(
@@ -4259,6 +4341,7 @@ export const simulationsRouter = router({
       isCorrect: z.boolean(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'student.takeSimulations');
       const { resultId, questionId, isCorrect } = input;
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
 
@@ -4577,6 +4660,7 @@ export const simulationsRouter = router({
       assignedToMe: z.boolean().optional(),
     }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'student.viewOwnStats');
       const { simulationId, page, pageSize, selfCreated, assignedToMe } = input;
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
       const studentId = student.id;
@@ -4631,6 +4715,7 @@ export const simulationsRouter = router({
   generateQuickQuiz: studentProcedure
     .input(quickQuizConfigSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'student.selfPractice');
       const { subjectIds, topicIds, difficulty, questionCount, durationMinutes, correctPoints, wrongPoints, showResultsImmediately, showCorrectAnswers } = input;
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
 
@@ -4721,6 +4806,7 @@ export const simulationsRouter = router({
       testTemplate: z.string().max(40).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'student.selfPractice');
       const { questionIds, durationMinutes, includeOpenQuestions, openQuestionCorrection, requestCorrectionFromId, correctPoints, wrongPoints, blankPoints, testTemplate } = input;
 
       // Validate questions exist
@@ -4860,6 +4946,7 @@ export const simulationsRouter = router({
       requestCorrectionFromId: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'student.selfPractice');
       const student = await ctx.prisma.student.findUnique({
         where: { userId: ctx.user.id },
         select: {
@@ -5016,16 +5103,18 @@ export const simulationsRouter = router({
   getStatistics: staffProcedure
     .input(z.object({ simulationId: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.viewStats');
       const simulation = await ctx.prisma.simulation.findUnique({
         where: { id: input.simulationId },
-        select: { createdById: true, passingScore: true },
+        select: { createdById: true, passingScore: true, status: true },
       });
 
       if (!simulation) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
       }
 
-      if (ctx.user.role === 'COLLABORATOR' && simulation.createdById !== ctx.user.id) {
+      // Stats visibility mirrors simulation visibility: own simulations, plus any published one.
+      if (ctx.user.role === 'COLLABORATOR' && simulation.createdById !== ctx.user.id && simulation.status !== 'PUBLISHED') {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai accesso alle statistiche' });
       }
 
@@ -5082,6 +5171,7 @@ export const simulationsRouter = router({
   getQuestionAnalysis: staffProcedure
     .input(z.object({ simulationId: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.viewStats');
       const simulation = await ctx.prisma.simulation.findUnique({
         where: { id: input.simulationId },
         include: {
@@ -5104,7 +5194,8 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
       }
 
-      if (ctx.user.role === 'COLLABORATOR' && simulation.createdById !== ctx.user.id) {
+      // Stats visibility mirrors simulation visibility: own simulations, plus any published one.
+      if (ctx.user.role === 'COLLABORATOR' && simulation.createdById !== ctx.user.id && simulation.status !== 'PUBLISHED') {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai accesso a questa analisi' });
       }
 
@@ -5318,6 +5409,7 @@ export const simulationsRouter = router({
       assignmentStatus: z.enum(['ACTIVE', 'CLOSED', 'ALL']).default('ALL'),
     }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.view');
       const { page, pageSize, simulationId, groupId, completionStatus, assignmentStatus } = input;
       const skip = (page - 1) * pageSize;
 
@@ -5742,6 +5834,7 @@ export const simulationsRouter = router({
       wasPresent: z.boolean().default(true),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.paperResults');
       const { simulationId, studentId, answers, wasPresent } = input;
 
       // Get simulation with questions
@@ -5861,6 +5954,7 @@ export const simulationsRouter = router({
   getPaperBasedStudents: staffProcedure
     .input(z.object({ simulationId: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.paperResults');
       const simulation = await ctx.prisma.simulation.findUnique({
         where: { id: input.simulationId },
         include: {
@@ -5972,6 +6066,7 @@ export const simulationsRouter = router({
   getTemplateStatistics: staffProcedure
     .input(z.object({ simulationId: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.viewStats');
       const simulation = await ctx.prisma.simulation.findUnique({
         where: { id: input.simulationId },
         select: {
@@ -5985,6 +6080,7 @@ export const simulationsRouter = router({
           correctPoints: true,
           wrongPoints: true,
           blankPoints: true,
+          status: true,
           _count: { select: { assignments: true } },
         },
       });
@@ -5993,7 +6089,8 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
       }
 
-      if (ctx.user.role === 'COLLABORATOR' && simulation.createdById !== ctx.user.id) {
+      // Stats visibility mirrors simulation visibility: own simulations, plus any published one.
+      if (ctx.user.role === 'COLLABORATOR' && simulation.createdById !== ctx.user.id && simulation.status !== 'PUBLISHED') {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai accesso alle statistiche' });
       }
 
@@ -6194,12 +6291,13 @@ export const simulationsRouter = router({
    * Includes: per-student details, questions wrong by student
    */
   getAssignmentStatistics: staffProcedure
-    .input(z.object({ 
+    .input(z.object({
       simulationId: z.string(),
       assignmentId: z.string().optional(), // If provided, filter by specific assignment
       groupId: z.string().optional(), // If provided, filter by group
     }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.viewStats');
       // Build assignment filter
       const buildAssignmentFilter = () => {
         if (input.assignmentId) return { id: input.assignmentId };
@@ -6246,7 +6344,8 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
       }
 
-      if (ctx.user.role === 'COLLABORATOR' && simulation.createdById !== ctx.user.id) {
+      // Stats visibility mirrors simulation visibility: own simulations, plus any published one.
+      if (ctx.user.role === 'COLLABORATOR' && simulation.createdById !== ctx.user.id && simulation.status !== 'PUBLISHED') {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai accesso alle statistiche' });
       }
 
@@ -6455,6 +6554,7 @@ export const simulationsRouter = router({
         }
 
         return {
+          resultId: r.id,
           studentId: r.student?.id ?? '',
           studentName: r.student?.user?.name ?? 'Studente',
           studentEmail: r.student?.user?.email ?? '',
@@ -6533,7 +6633,7 @@ export const simulationsRouter = router({
       offset: z.number().min(0).default(0),
     }))
     .query(async ({ ctx, input }) => {
-      assertCanReviewOpenAnswers(ctx.user);
+      assertCapability(ctx, 'simulations.correctOpenAnswers');
 
       const whereClause: Prisma.SimulationResultWhereInput = {
         pendingOpenAnswers: { gt: 0 },
@@ -6607,7 +6707,7 @@ export const simulationsRouter = router({
   getOpenAnswersForResult: staffProcedure
     .input(z.object({ resultId: z.string() }))
     .query(async ({ ctx, input }) => {
-      assertCanReviewOpenAnswers(ctx.user);
+      assertCapability(ctx, 'simulations.correctOpenAnswers');
 
       const result = await ctx.prisma.simulationResult.findUnique({
         where: { id: input.resultId },
@@ -6709,7 +6809,7 @@ export const simulationsRouter = router({
       validatorNotes: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      assertCanReviewOpenAnswers(ctx.user);
+      assertCapability(ctx, 'simulations.correctOpenAnswers');
 
       const openAnswer = await ctx.prisma.openAnswerSubmission.findUnique({
         where: { id: input.openAnswerId },
@@ -6786,7 +6886,7 @@ export const simulationsRouter = router({
       })),
     }))
     .mutation(async ({ ctx, input }) => {
-      assertCanReviewOpenAnswers(ctx.user);
+      assertCapability(ctx, 'simulations.correctOpenAnswers');
 
       const result = await ctx.prisma.simulationResult.findUnique({
         where: { id: input.resultId },

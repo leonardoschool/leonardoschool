@@ -4,6 +4,7 @@ import "./globals.css";
 import Preloader from "@/components/ui/Preloader";
 import { ToastProvider } from "@/components/ui/Toast";
 import { SessionInvalidationHandler } from "@/components/auth/SessionInvalidationHandler";
+import { PermissionDeniedHandler } from "@/components/auth/PermissionDeniedHandler";
 import { SITE_NAME, SITE_DESCRIPTION, SITE_KEYWORDS } from "@/lib/constants";
 import { Analytics } from '@vercel/analytics/next';
 import { GoogleAnalytics } from '@next/third-parties/google';
@@ -109,6 +110,7 @@ export default function RootLayout({
         <TRPCProvider>
           <ToastProvider>
             <SessionInvalidationHandler />
+            <PermissionDeniedHandler />
             <Preloader />
             {children}
             <Analytics />

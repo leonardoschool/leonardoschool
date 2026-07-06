@@ -7,6 +7,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { colors } from '@/lib/theme/colors';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { sanitizeStudentOpenAnswerInput } from '@/lib/utils/studentOpenAnswer';
 import { TextareaWithSymbols } from '@/components/ui/SymbolKeyboard';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
@@ -68,6 +69,8 @@ export default function QuestionPanel({
   canGoNext,
 }: QuestionPanelProps) {
   const isOpenText = question.question.type === 'OPEN_TEXT';
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canReportQuestion = permissionsLoading || can('student.submitQuestionFeedback');
 
   return (
     <div className="flex-1 px-4 py-6 overflow-y-auto">
@@ -89,14 +92,16 @@ export default function QuestionPanel({
             >
               <Flag className="w-4 h-4" />
             </button>
-            <button
-              onClick={onReportQuestion}
-              className={`flex items-center justify-center rounded-lg p-2 transition-colors ${colors.background.hover} ${colors.text.secondary} hover:text-orange-500`}
-              title="Segnala una domanda errata a tutor o admin"
-              aria-label="Segnala una domanda errata a tutor o admin"
-            >
-              <AlertTriangle className="w-4 h-4" />
-            </button>
+            {canReportQuestion && (
+              <button
+                onClick={onReportQuestion}
+                className={`flex items-center justify-center rounded-lg p-2 transition-colors ${colors.background.hover} ${colors.text.secondary} hover:text-orange-500`}
+                title="Segnala una domanda errata a tutor o admin"
+                aria-label="Segnala una domanda errata a tutor o admin"
+              >
+                <AlertTriangle className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 

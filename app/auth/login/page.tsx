@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { firebaseAuth } from '@/lib/firebase/auth';
@@ -69,6 +69,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [isDarkTheme, setIsDarkTheme] = useState(false);
+  // Durante un login manuale, handleLogin gestisce già sync cookie + redirect. L'effetto
+  // onAuthStateChanged scatta anch'esso al login (Firebase segnala il nuovo utente): se non
+  // lo bloccassimo, chiamerebbe /api/auth/me in parallelo e — per gli studenti — rigenererebbe
+  // un secondo session token in race con quello di handleLogin, disallineando cookie e DB.
+  const isLoggingInRef = useRef(false);
 
   // Show error from URL params (e.g., account deactivated)
   useEffect(() => {
@@ -105,6 +110,10 @@ export default function LoginPage() {
   // Check if user is already logged in Firebase - if so, sync cookies and redirect
   useEffect(() => {
     const unsubscribe = firebaseAuth.onAuthStateChanged(async (user) => {
+      // Skip auto-resync while a manual login is in flight — handleLogin owns cookie sync + redirect.
+      if (isLoggingInRef.current) {
+        return;
+      }
       if (user) {
         // Check if email is verified
         if (!user.emailVerified) {
@@ -150,6 +159,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     setLoading(true);
+    isLoggingInRef.current = true;
 
     try {
       // 1. Login con Firebase
@@ -189,6 +199,7 @@ export default function LoginPage() {
           setError(errorData.error || 'Il tuo account è stato disattivato');
           showError('Account disattivato', errorData.error || 'Il tuo account è stato disattivato. Contatta l\'amministrazione.');
           setLoading(false);
+          isLoggingInRef.current = false;
           return;
         }
         
@@ -233,6 +244,7 @@ export default function LoginPage() {
       setError(errorMessage);
       showError('Errore di accesso', errorMessage);
       setLoading(false);
+      isLoggingInRef.current = false;
     }
   };
 
@@ -317,7 +329,7 @@ export default function LoginPage() {
           {hintParam === 'existing' && (
             <div className={`${colors.status.info?.bgLight ?? 'bg-blue-50 dark:bg-blue-900/20'} border border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-200 px-4 py-3 rounded mb-4 text-sm`}>
               Hai già un account. Inserisci la tua password oppure{' '}
-              <Link href={`/auth/recupera-password${emailParam ? `?email=${encodeURIComponent(emailParam)}` : ''}`} className="font-semibold underline">
+              <Link href={emailParam ? `/auth/recupera-password?email=${encodeURIComponent(emailParam)}` : '/auth/recupera-password'} className="font-semibold underline">
                 recupera la password
               </Link>.
             </div>

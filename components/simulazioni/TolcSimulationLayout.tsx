@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import QuestionImage from '@/components/ui/QuestionImage';
 import { colors } from '@/lib/theme/colors';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { sanitizeStudentOpenAnswerInput } from '@/lib/utils/studentOpenAnswer';
 import { normalizeImageSrc } from '@/lib/utils/imageUrl';
 import { TextareaWithSymbols } from '@/components/ui/SymbolKeyboard';
@@ -86,6 +87,8 @@ export default function TolcSimulationLayout({
   // answeredCount, totalQuestions - for progress display
 }: TolcSimulationLayoutProps) {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canReportQuestion = permissionsLoading || can('student.submitQuestionFeedback');
 
   // Current section
   const currentSection = sections[currentSectionIndex];
@@ -237,14 +240,16 @@ export default function TolcSimulationLayout({
             >
               <Flag className={`w-5 h-5 ${currentAnswer?.flagged ? 'text-amber-500' : 'text-gray-500 dark:text-gray-400'}`} />
             </button>
-            <button
-              onClick={onReportQuestion}
-              className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-              title="Segnala una domanda errata a tutor o admin"
-              aria-label="Segnala una domanda errata a tutor o admin"
-            >
-              <AlertTriangle className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-            </button>
+            {canReportQuestion && (
+              <button
+                onClick={onReportQuestion}
+                className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                title="Segnala una domanda errata a tutor o admin"
+                aria-label="Segnala una domanda errata a tutor o admin"
+              >
+                <AlertTriangle className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              </button>
+            )}
           </div>
         </div>
       </header>

@@ -1720,6 +1720,10 @@ export default function AdminUtentiContent() {
     if (!user.profileCompleted) {
       return { label: 'Profilo incompleto', color: '#a16207', bg: '#fef9c3' }; // yellow-700, yellow-100
     }
+    // Disattivazione manuale: ha precedenza sugli stati "in attesa" del contratto.
+    if (user.deactivatedAt) {
+      return { label: 'Disattivato', color: '#b91c1c', bg: '#fee2e2' }; // red-700, red-100
+    }
     // Check contract status for students/collaborators
     const hasContract = user.student?.contracts?.length > 0 || user.collaborator?.contracts?.length > 0;
     const contract = user.student?.contracts?.[0] || user.collaborator?.contracts?.[0];

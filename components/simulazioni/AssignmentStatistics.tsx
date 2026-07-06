@@ -5,6 +5,10 @@ import { colors } from '@/lib/theme/colors';
 import { Spinner } from '@/components/ui/loaders';
 import { trpc } from '@/lib/trpc/client';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import { ResetAttemptModal } from '@/components/simulazioni/ResetAttemptModal';
+import { usePermissions } from '@/lib/hooks/usePermissions';
+import { useToast } from '@/components/ui/Toast';
+import { useApiError } from '@/lib/hooks/useApiError';
 import {
   Users,
   TrendingUp,
@@ -19,6 +23,7 @@ import {
   Percent,
   HelpCircle,
   User,
+  RotateCcw,
 } from 'lucide-react';
 
 interface AssignmentStatisticsProps {
@@ -34,11 +39,27 @@ interface AssignmentStatisticsProps {
 export function AssignmentStatistics({ simulationId, assignmentId, groupId }: AssignmentStatisticsProps) {
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
   const [showAllStudents, setShowAllStudents] = useState(false);
+  const [resetTarget, setResetTarget] = useState<{ resultId: string; name: string } | null>(null);
+
+  const { can } = usePermissions();
+  const canManageAttempts = can('simulations.manageAttempts');
+  const { showSuccess } = useToast();
+  const { handleMutationError } = useApiError();
+  const utils = trpc.useUtils();
 
   const { data, isLoading, error } = trpc.simulations.getAssignmentStatistics.useQuery({
     simulationId,
     assignmentId,
     groupId,
+  });
+
+  const resetAttempt = trpc.simulations.resetAttempt.useMutation({
+    onSuccess: (result) => {
+      showSuccess('Tentativo ripristinato', result.message);
+      setResetTarget(null);
+      utils.simulations.getAssignmentStatistics.invalidate({ simulationId, assignmentId, groupId });
+    },
+    onError: handleMutationError,
   });
 
   if (isLoading) {
@@ -285,9 +306,10 @@ export function AssignmentStatistics({ simulationId, assignmentId, groupId }: As
 
             return (
               <div key={student.studentId}>
+                <div className={`flex items-center ${canManageAttempts ? 'pr-4' : ''} ${colors.background.hover}`}>
                 <button
                   onClick={() => hasErrors && toggleStudent(student.studentId)}
-                  className={`w-full px-6 py-4 flex items-center gap-4 text-left ${colors.background.hover} ${hasErrors ? 'cursor-pointer' : 'cursor-default'}`}
+                  className={`flex-1 min-w-0 px-6 py-4 flex items-center gap-4 text-left ${hasErrors ? 'cursor-pointer' : 'cursor-default'}`}
                   disabled={!hasErrors}
                 >
                   {/* Rank/Avatar */}
@@ -338,6 +360,18 @@ export function AssignmentStatistics({ simulationId, assignmentId, groupId }: As
                   )}
                 </button>
 
+                {/* Reset attempt action */}
+                {canManageAttempts && (
+                  <button
+                    onClick={() => setResetTarget({ resultId: student.resultId, name: student.studentName })}
+                    className="p-2 rounded-xl bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 border border-amber-300 dark:border-amber-500/30 text-amber-600 dark:text-amber-400 transition-all flex-shrink-0"
+                    title="Resetta tentativo (mantiene le risposte)"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </button>
+                )}
+                </div>
+
                 {/* Expanded Details */}
                 {isExpanded && hasErrors && (
                   <div className={`px-6 pb-4 ${colors.background.secondary} mx-4 mb-4 rounded-lg`}>
@@ -356,7 +390,9 @@ export function AssignmentStatistics({ simulationId, assignmentId, groupId }: As
                                   {q.order}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className={`text-sm ${colors.text.primary} mb-1`}>{q.text}</p>
+                                  <div className={`text-sm ${colors.text.primary} mb-1`}>
+                                    <RichTextRenderer text={q.text} />
+                                  </div>
                                   {q.subject && (
                                     <span className={`text-xs ${colors.text.muted}`}>{q.subject}</span>
                                   )}
@@ -367,7 +403,9 @@ export function AssignmentStatistics({ simulationId, assignmentId, groupId }: As
                                 <div className={`flex items-start gap-2 p-2 rounded ${colors.background.secondary}`}>
                                   <span className="text-red-600 font-bold text-sm flex-shrink-0 mt-0.5">{q.studentAnswer})</span>
                                   <div className="flex-1">
-                                    <p className={`text-sm ${colors.text.primary}`}>{q.studentAnswerText}</p>
+                                    <div className={`text-sm ${colors.text.primary}`}>
+                                      <RichTextRenderer text={q.studentAnswerText} />
+                                    </div>
                                     <p className={`text-xs ${colors.text.muted} mt-0.5`}>Risposta dello studente</p>
                                   </div>
                                   <XCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
@@ -376,7 +414,9 @@ export function AssignmentStatistics({ simulationId, assignmentId, groupId }: As
                                 <div className={`flex items-start gap-2 p-2 rounded ${colors.background.secondary}`}>
                                   <span className="text-green-600 font-bold text-sm flex-shrink-0 mt-0.5">{q.correctAnswer})</span>
                                   <div className="flex-1">
-                                    <p className={`text-sm ${colors.text.primary}`}>{q.correctAnswerText}</p>
+                                    <div className={`text-sm ${colors.text.primary}`}>
+                                      <RichTextRenderer text={q.correctAnswerText} />
+                                    </div>
                                     <p className={`text-xs ${colors.text.muted} mt-0.5`}>Risposta corretta</p>
                                   </div>
                                   <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
@@ -430,14 +470,27 @@ export function AssignmentStatistics({ simulationId, assignmentId, groupId }: As
               onClick={() => setShowAllStudents(!showAllStudents)}
               className={`w-full text-center ${colors.primary.text} text-sm font-medium hover:underline`}
             >
-              {showAllStudents 
-                ? 'Mostra meno' 
+              {showAllStudents
+                ? 'Mostra meno'
                 : `Mostra tutti (${studentDetails.length - 10} altri)`
               }
             </button>
           </div>
         )}
       </div>
+
+      {/* Reset Attempt Modal */}
+      <ResetAttemptModal
+        isOpen={!!resetTarget}
+        studentName={resetTarget?.name ?? ''}
+        isPending={resetAttempt.isPending}
+        onConfirm={(resetTimer) => {
+          if (resetTarget) {
+            resetAttempt.mutate({ resultId: resetTarget.resultId, resetTimer });
+          }
+        }}
+        onClose={() => setResetTarget(null)}
+      />
     </div>
   );
 }

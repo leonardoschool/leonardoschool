@@ -66,6 +66,52 @@ export function extractInvitedStudents(assignments: Assignment[]): InvitedStuden
   return invitedStudents;
 }
 
+type ParticipantWithStudent = {
+  student?: StudentMember | null;
+};
+
+/**
+ * Adds the students of existing session participants to the invited list.
+ * Manually inserted students are participants of a room whose assignment does
+ * not target them, so they would otherwise be missing from the invited list
+ * (and from the connected/total counters).
+ */
+export function unionInvitedWithParticipants(
+  invited: InvitedStudent[],
+  participants: ParticipantWithStudent[]
+): InvitedStudent[] {
+  const seenIds = new Set(invited.map((s) => s.id));
+  const merged = [...invited];
+
+  for (const p of participants) {
+    if (!p.student || seenIds.has(p.student.id)) continue;
+    merged.push({
+      id: p.student.id,
+      userId: p.student.userId,
+      name: p.student.user?.name ?? '',
+      email: p.student.user?.email ?? '',
+    });
+    seenIds.add(p.student.id);
+  }
+
+  return merged;
+}
+
+/**
+ * ID-set counterpart of unionInvitedWithParticipants: adds the studentIds of
+ * existing session participants (e.g. manually inserted students) to a Set of
+ * invited student IDs. Mutates and returns the same Set.
+ */
+export function addParticipantStudentIds(
+  ids: Set<string>,
+  participants: Array<{ studentId: string }>
+): Set<string> {
+  for (const p of participants) {
+    ids.add(p.studentId);
+  }
+  return ids;
+}
+
 /**
  * Returns a Set of all invited student IDs across multiple assignments.
  * Used for counting/checking invitation status without building full objects.

@@ -138,20 +138,25 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
       setParticipantId(sessionStatus.participantId);
     }
     
-    // Check if session has been terminated by admin
-    if (sessionStatus?.hasSession && 'status' in sessionStatus && sessionStatus.status === 'COMPLETED' && hasStarted) {
-      console.log('[VirtualRoom] Session terminated by admin, auto-submitting...');
-      // Auto-submit if session ended
-      if (autoSubmitRef.current) {
-        autoSubmitRef.current();
-      }
-    }
-    
-    // Check if kicked
-    if (sessionStatus?.hasSession && 'isKicked' in sessionStatus && sessionStatus.isKicked) {
+    // A kicked/disconnected student also gets a synthetic status: 'COMPLETED' from the
+    // server (see getStudentSessionStatus). Handle the kick FIRST and never auto-submit
+    // in that case, otherwise a connection loss would finalize an attempt the student
+    // never actually finished, locking them out of the simulation.
+    const isKickedNow = sessionStatus?.hasSession && 'isKicked' in sessionStatus && sessionStatus.isKicked;
+
+    if (isKickedNow) {
       setIsKicked(true);
       const reason = 'kickedReason' in sessionStatus ? sessionStatus.kickedReason : 'Sei stato espulso dalla sessione';
       setKickedReason(typeof reason === 'string' ? reason : 'Sei stato espulso dalla sessione');
+    }
+
+    // Check if the session has been genuinely terminated by admin (not a kick)
+    if (sessionStatus?.hasSession && 'status' in sessionStatus && sessionStatus.status === 'COMPLETED' && hasStarted && !isKickedNow) {
+      console.log('[VirtualRoom] Session terminated by admin, auto-submitting...');
+      // Auto-submit only when the whole session ended normally
+      if (autoSubmitRef.current) {
+        autoSubmitRef.current();
+      }
     }
   }, [sessionStatus, hasStarted]);
 
@@ -215,10 +220,15 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     }
   }, []);
 
+  // Echoed back on every saveProgress/submit so the server can reject writes
+  // from a tab opened before a staff reset of this attempt
+  const resetTokenRef = useRef<number | null>(null);
+
   // Mutations
   const startAttemptMutation = trpc.simulations.startAttempt.useMutation({
     onSuccess: (data) => {
       console.log('[VirtualRoom] startAttemptMutation onSuccess, resumed:', data.resumed);
+      resetTokenRef.current = ('resetToken' in data ? data.resetToken : null) ?? null;
       if (data.resumed) {
         // Extract saved data with type narrowing
         const savedData = {
@@ -261,8 +271,10 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     onError: handleMutationError,
   });
 
-  // Log cheating event for virtual room (silent - no error toast)
-  const logCheatingEvent = trpc.virtualRoom.logCheatingEvent.useMutation();
+  // Log cheating event for virtual room (silent - no error toast).
+  // Only the stable `mutate` is referenced below: the mutation object changes
+  // identity on every render and would re-register the anti-cheat listeners.
+  const { mutate: logCheatingEventMutate } = trpc.virtualRoom.logCheatingEvent.useMutation();
 
   // Map anti-cheat event type to DB enum
   const mapEventType = useCallback((type: string) => {
@@ -283,11 +295,11 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   // Anti-cheat configuration
   const antiCheatConfig = useMemo(() => ({
     enabled: hasStarted && (simulation?.enableAntiCheat ?? false),
-    requireFullscreen: simulation?.forceFullscreen ?? false,
+    forceFullscreen: simulation?.forceFullscreen ?? false,
     blockTabSwitch: true,
-    blockDevTools: true,
-    blockClipboard: true,
-    blockShortcuts: true,
+    blockCopyPaste: true,
+    blockRightClick: true,
+    blockKeyboardShortcuts: true,
     blockReload: true,
     maxViolations: 10,
     onViolation: (event: { type: string; timestamp: Date; details?: string }) => {
@@ -295,7 +307,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
       // Log to database if in virtual room mode - use ref to get current participantId
       const currentParticipantId = participantIdRef.current;
       if (isVirtualRoom && currentParticipantId) {
-        logCheatingEvent.mutate({
+        logCheatingEventMutate({
           participantId: currentParticipantId,
           eventType: mapEventType(event.type),
           description: event.details,
@@ -303,14 +315,11 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
         });
       }
     },
-    onMaxViolations: () => {
+    onMaxViolationsReached: () => {
       showError('Attenzione', 'Troppe violazioni rilevate. La simulazione verrà terminata.');
       autoSubmitRef.current?.();
     },
-    onFullscreenExit: () => {
-      // Fullscreen exit is handled automatically by the hook
-    },
-  }), [hasStarted, simulation?.enableAntiCheat, simulation?.forceFullscreen, showError, isVirtualRoom, logCheatingEvent, mapEventType]);
+  }), [hasStarted, simulation?.enableAntiCheat, simulation?.forceFullscreen, showError, isVirtualRoom, logCheatingEventMutate, mapEventType]);
 
   const antiCheat = useAntiCheat(antiCheatConfig);
 
@@ -332,6 +341,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
         simulationId: id,
         answers: finalAnswers,
         totalTimeSpent: timeSpent,
+        resetToken: resetTokenRef.current,
       });
     };
   }, [simulation, isSubmitting, answers, questionTimes, timeSpent, id, submitMutation]);
@@ -417,6 +427,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     sectionTimes: sectionTimesRef.current,
     currentSectionIndex: currentSectionIndexRef.current,
     currentQuestionIndex: currentQuestionIndexRef.current,
+    resetToken: resetTokenRef.current,
   }), []);
 
   const flushProgressToApi = useCallback((resultId: string) => {
@@ -671,6 +682,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
       simulationId: id,
       answers: finalAnswers,
       totalTimeSpent: timeSpent,
+      resetToken: resetTokenRef.current,
     });
   }, [simulation, trackQuestionTime, answers, questionTimes, submitMutation, id, timeSpent]);
 
@@ -916,7 +928,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
           <AntiCheatWarningOverlay
             isBlurred={antiCheat.isBlurred}
             isFullscreen={antiCheat.isFullscreen}
-            requireFullscreen={simulation.forceFullscreen}
+            requireFullscreen={simulation.forceFullscreen && antiCheat.canEnforceFullscreen}
             onRequestFullscreen={antiCheat.requestFullscreen}
           />
         )}
@@ -1009,7 +1021,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
         <AntiCheatWarningOverlay
           isBlurred={antiCheat.isBlurred}
           isFullscreen={antiCheat.isFullscreen}
-          requireFullscreen={simulation.forceFullscreen}
+          requireFullscreen={simulation.forceFullscreen && antiCheat.canEnforceFullscreen}
           onRequestFullscreen={antiCheat.requestFullscreen}
           violationCount={antiCheat.violationCount}
         />

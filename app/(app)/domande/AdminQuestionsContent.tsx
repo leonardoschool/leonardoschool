@@ -85,7 +85,8 @@ export default function AdminQuestionsContent() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
 
-  const currentListPath = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+  const currentSearch = searchParams.toString();
+  const currentListPath = `${pathname}${currentSearch ? `?${currentSearch}` : ''}`;
   const returnToQuery = encodeURIComponent(currentListPath);
   const questionHref = (id: string) => `/domande/${id}?returnTo=${returnToQuery}`;
   const questionEditHref = (id: string) => `/domande/${id}/modifica?returnTo=${returnToQuery}`;
@@ -193,7 +194,8 @@ export default function AdminQuestionsContent() {
     if (sortOrder !== 'asc') params.set('sortOrder', sortOrder);
 
     const query = params.toString();
-    router.replace(`${pathname}${query ? `?${query}` : ''}`, { scroll: false });
+    const nextPath = query ? `${pathname}?${query}` : pathname;
+    router.replace(nextPath, { scroll: false });
   }, [debouncedSearch, subjectIds, topicIds, types, statuses, difficulties, languages, selectedTagIds, selectedYears, selectedSources, page, pageSize, sortBy, sortOrder]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close bulk subject dropdown on click outside

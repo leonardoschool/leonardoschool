@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { Calendar, CalendarEvent, CalendarView, EventDetail, eventTypeLabels } from '@/components/ui/Calendar';
 import { Spinner } from '@/components/ui/loaders';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -32,6 +33,11 @@ import {
 } from 'lucide-react';
 
 export default function CollaboratorCalendarContent() {
+  // 'events.manage' gates creating/editing own events; 'events.manageAll' unlocks others' events.
+  const { can } = usePermissions();
+  const canManageEvents = can('events.manage');
+  const canManageAllEvents = can('events.manageAll');
+
   const [view, setView] = useState<CalendarView>('month');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [filterType, setFilterType] = useState<string>('');
@@ -90,13 +96,15 @@ export default function CollaboratorCalendarContent() {
           </p>
         </div>
 
-        <button
-          onClick={() => openAddEvent(new Date())}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${colors.primary.gradient} text-white`}
-        >
-          <Plus className="w-4 h-4" />
-          Nuovo Evento
-        </button>
+        {canManageEvents && (
+          <button
+            onClick={() => openAddEvent(new Date())}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${colors.primary.gradient} text-white`}
+          >
+            <Plus className="w-4 h-4" />
+            Nuovo Evento
+          </button>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -221,7 +229,7 @@ export default function CollaboratorCalendarContent() {
         selectedDate={selectedDate}
         onDateChange={setSelectedDate}
         onEventClick={setSelectedEvent}
-        onAddEvent={openAddEvent}
+        onAddEvent={canManageEvents ? openAddEvent : undefined}
         isLoading={isLoading}
       />
 
@@ -230,8 +238,8 @@ export default function CollaboratorCalendarContent() {
         <EventDetail
           event={selectedEvent}
           onClose={() => setSelectedEvent(null)}
-          onEdit={selectedEvent.isMine ? () => openEditEvent(selectedEvent) : undefined}
-          onDelete={selectedEvent.isMine ? () => setDeleteConfirm({ id: selectedEvent.id, title: selectedEvent.title }) : undefined}
+          onEdit={canManageEvents && (selectedEvent.isMine || canManageAllEvents) ? () => openEditEvent(selectedEvent) : undefined}
+          onDelete={canManageEvents && (selectedEvent.isMine || canManageAllEvents) ? () => setDeleteConfirm({ id: selectedEvent.id, title: selectedEvent.title }) : undefined}
           onUserClick={(userId, userType) => setSelectedUserInfo({ userId, userType })}
           onGroupClick={(groupId) => setSelectedGroupInfo(groupId)}
         />

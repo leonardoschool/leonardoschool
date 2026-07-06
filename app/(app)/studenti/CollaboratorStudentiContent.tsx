@@ -25,6 +25,7 @@ import {
   CreditCard,
   MapPin,
   User,
+  ShieldCheck,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -165,6 +166,66 @@ function StudentDetailModal({
                     )}
                   </div>
                 </div>
+
+                {/* Sensitive anagraphic data — shown when the caller has 'students.viewSensitive'
+                    (server-provided flag); placeholders make "no data" distinct from "no permission". */}
+                {student.canViewSensitive && (
+                  <div>
+                    <h4 className={`text-lg font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
+                      <ShieldCheck className="w-5 h-5" />
+                      Dati Anagrafici Sensibili
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className={`p-4 rounded-lg ${colors.background.secondary}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Calendar className={`w-4 h-4 ${colors.text.muted}`} />
+                          <span className={`text-sm ${colors.text.muted}`}>Data di Nascita</span>
+                        </div>
+                        <p className={`font-medium ${colors.text.primary}`}>
+                          {student.dateOfBirth ? formatDate(student.dateOfBirth) : 'Non specificata'}
+                        </p>
+                      </div>
+                      <div className={`p-4 rounded-lg ${colors.background.secondary}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <CreditCard className={`w-4 h-4 ${colors.text.muted}`} />
+                          <span className={`text-sm ${colors.text.muted}`}>Codice Fiscale</span>
+                        </div>
+                        <p className={`font-medium font-mono ${colors.text.primary}`}>
+                          {student.fiscalCode || 'Non specificato'}
+                        </p>
+                      </div>
+                      <div className={`p-4 rounded-lg ${colors.background.secondary}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <MapPin className={`w-4 h-4 ${colors.text.muted}`} />
+                          <span className={`text-sm ${colors.text.muted}`}>Comune di Nascita</span>
+                        </div>
+                        <p className={`font-medium ${colors.text.primary}`}>
+                          {student.birthPlace || 'Non specificato'}
+                        </p>
+                      </div>
+                      <div className={`p-4 rounded-lg ${colors.background.secondary}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Phone className={`w-4 h-4 ${colors.text.muted}`} />
+                          <span className={`text-sm ${colors.text.muted}`}>Telefono</span>
+                        </div>
+                        <p className={`font-medium ${colors.text.primary}`}>
+                          {student.phone || 'Non specificato'}
+                        </p>
+                      </div>
+                      {(student.address || student.city) && (
+                        <div className={`p-4 rounded-lg ${colors.background.secondary} md:col-span-2`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <MapPin className={`w-4 h-4 ${colors.text.muted}`} />
+                            <span className={`text-sm ${colors.text.muted}`}>Indirizzo</span>
+                          </div>
+                          <p className={`font-medium ${colors.text.primary}`}>
+                            {[student.address, student.postalCode, student.city, student.province].filter(Boolean).join(', ')}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Parent/Guardian Section */}
                 {student.parentGuardian && (

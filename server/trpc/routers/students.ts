@@ -1,5 +1,5 @@
 // Students Router - Handles student profile and data
-import { router, protectedProcedure, adminProcedure, staffProcedure } from '../init';
+import { router, protectedProcedure, adminProcedure, staffProcedure, assertCapability, hasCapability } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import * as notificationService from '../../services/notificationService';
@@ -656,6 +656,7 @@ export const studentsRouter = router({
   getById: staffProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'students.view');
       const user = await ctx.prisma.user.findUnique({
         where: { id: input.id },
         include: {
@@ -694,6 +695,8 @@ export const studentsRouter = router({
   getPublicInfo: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
+      // Sensitive anagraphic fields are returned only to callers with the dedicated capability.
+      const canViewSensitive = hasCapability(ctx, 'students.viewSensitive');
       const user = await ctx.prisma.user.findUnique({
         where: { id: input.id },
         select: {
@@ -706,6 +709,12 @@ export const studentsRouter = router({
               matricola: true,
               phone: true,
               enrollmentDate: true,
+              fiscalCode: true,
+              dateOfBirth: true,
+              address: true,
+              city: true,
+              province: true,
+              postalCode: true,
               groupMemberships: {
                 include: {
                   group: {
@@ -729,7 +738,19 @@ export const studentsRouter = router({
         });
       }
 
-      return user;
+      // Mask sensitive fields when the caller lacks 'students.viewSensitive'.
+      return {
+        ...user,
+        student: {
+          ...user.student,
+          fiscalCode: canViewSensitive ? user.student.fiscalCode : null,
+          dateOfBirth: canViewSensitive ? user.student.dateOfBirth : null,
+          address: canViewSensitive ? user.student.address : null,
+          city: canViewSensitive ? user.student.city : null,
+          province: canViewSensitive ? user.student.province : null,
+          postalCode: canViewSensitive ? user.student.postalCode : null,
+        },
+      };
     }),
 
   /**
@@ -749,10 +770,46 @@ export const studentsRouter = router({
    * Get students list for collaborators (limited view - no sensitive data)
    */
   getListForCollaborator: staffProcedure.query(async ({ ctx }) => {
+    assertCapability(ctx, 'students.view');
+
+    // By default a collaborator sees only the students of their own groups; 'students.viewAll'
+    // (and ADMIN) lift the restriction to every student.
+    let scopedStudentUserIds: string[] | null = null;
+    if (ctx.user.role === 'COLLABORATOR' && !hasCapability(ctx, 'students.viewAll')) {
+      scopedStudentUserIds = [];
+      const collaborator = await ctx.prisma.collaborator.findUnique({
+        where: { userId: ctx.user.id },
+        select: { id: true },
+      });
+      if (collaborator) {
+        const groups = await ctx.prisma.group.findMany({
+          where: {
+            OR: [
+              { referenceCollaboratorId: collaborator.id },
+              { referenceCollaborators: { some: { collaboratorId: collaborator.id } } },
+              { members: { some: { collaboratorId: collaborator.id } } },
+            ],
+          },
+          select: { id: true },
+        });
+        const groupIds = groups.map((g) => g.id);
+        if (groupIds.length > 0) {
+          const members = await ctx.prisma.groupMember.findMany({
+            where: { groupId: { in: groupIds }, studentId: { not: null } },
+            select: { student: { select: { userId: true } } },
+          });
+          scopedStudentUserIds = [
+            ...new Set(members.map((m) => m.student?.userId).filter((id): id is string => Boolean(id))),
+          ];
+        }
+      }
+    }
+
     const students = await ctx.prisma.user.findMany({
-      where: { 
+      where: {
         role: 'STUDENT',
         isActive: true,
+        ...(scopedStudentUserIds !== null ? { id: { in: scopedStudentUserIds } } : {}),
       },
       select: {
         id: true,
@@ -813,6 +870,7 @@ export const studentsRouter = router({
       onlyMyGroups: z.boolean().optional().default(false), // For collaborators: only students in their groups
     }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'students.view');
       const { page, pageSize, search, isActive, onlyMyGroups } = input;
 
       const where: Record<string, unknown> = {
@@ -914,6 +972,10 @@ export const studentsRouter = router({
         message: 'Not authenticated',
       });
     }
+    // Shared procedure: only gate the student path so staff callers are unaffected
+    if (ctx.user.role === 'STUDENT') {
+      assertCapability(ctx, 'student.viewOwnStats');
+    }
 
     const student = await ctx.prisma.student.findUnique({
       where: { userId: ctx.user.id },
@@ -1013,6 +1075,9 @@ export const studentsRouter = router({
         code: 'UNAUTHORIZED',
         message: 'Not authenticated',
       });
+    }
+    if (ctx.user.role === 'STUDENT') {
+      assertCapability(ctx, 'student.viewOwnStats');
     }
 
     const student = await ctx.prisma.student.findUnique({
@@ -1141,6 +1206,9 @@ export const studentsRouter = router({
         message: 'Not authenticated',
       });
     }
+    if (ctx.user.role === 'STUDENT') {
+      assertCapability(ctx, 'student.viewGroup');
+    }
 
     const student = await ctx.prisma.student.findUnique({
       where: { userId: ctx.user.id },
@@ -1247,6 +1315,10 @@ export const studentsRouter = router({
   getStudentDetailForCollaborator: staffProcedure
     .input(z.object({ studentId: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'students.view');
+      // Sensitive anagraphic fields (DOB, parent/guardian) require the dedicated capability;
+      // without it the detail is still visible but those fields are masked.
+      const canViewSensitive = hasCapability(ctx, 'students.viewSensitive');
       // The ID can be either a userId or a studentId, try both
       let user = await ctx.prisma.user.findUnique({
         where: { id: input.studentId },
@@ -1397,9 +1469,19 @@ export const studentsRouter = router({
         matricola: user.student.matricola,
         enrollmentDate: user.student.enrollmentDate,
         graduationYear: user.student.graduationYear,
-        dateOfBirth: user.student.dateOfBirth,
+        // Expose the flag so the UI can render the sensitive section (with placeholders) even when
+        // the fields happen to be empty — otherwise "no permission" and "no data" look identical.
+        canViewSensitive,
+        dateOfBirth: canViewSensitive ? user.student.dateOfBirth : null,
+        fiscalCode: canViewSensitive ? user.student.fiscalCode : null,
+        birthPlace: canViewSensitive ? user.student.birthPlace : null,
+        phone: canViewSensitive ? user.student.phone : null,
+        address: canViewSensitive ? user.student.address : null,
+        city: canViewSensitive ? user.student.city : null,
+        province: canViewSensitive ? user.student.province : null,
+        postalCode: canViewSensitive ? user.student.postalCode : null,
         stats: user.student.stats,
-        parentGuardian: user.student.parentGuardian,
+        parentGuardian: canViewSensitive ? user.student.parentGuardian : null,
         groups: user.student.groupMemberships.map(gm => ({
           id: gm.group.id,
           name: gm.group.name,
@@ -1481,10 +1563,11 @@ export const studentsRouter = router({
 
   // Get all simulations and results for a specific student (staff only)
   getStudentSimulations: staffProcedure
-    .input(z.object({ 
+    .input(z.object({
       studentId: z.string().min(1), // This can be either userId or studentId from the URL
     }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'students.view');
       // Staff (ADMIN and COLLABORATOR) can view all students' simulations
       // The ID can be either a userId or a studentId, try both
       
@@ -2073,6 +2156,7 @@ export const studentsRouter = router({
       studentId: z.string(),
     }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'students.viewSensitive');
       // Find the student (can be userId or studentId)
       const student = await ctx.prisma.student.findFirst({
         where: {
@@ -2112,6 +2196,7 @@ export const studentsRouter = router({
   getFullStudentDetails: staffProcedure
     .input(z.object({ studentId: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'students.viewSensitive');
       // Find student by userId or studentId
       const user = await ctx.prisma.user.findFirst({
         where: {

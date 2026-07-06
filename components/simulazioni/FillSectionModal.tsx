@@ -241,7 +241,7 @@ export default function FillSectionModal({
               avoidRecentlyUsed,
               maximizeTopicCoverage,
               tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
-              types: selectedTypes.length > 0 ? selectedTypes as ('SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT')[] : undefined,
+              types: selectedTypes.length > 0 ? selectedTypes as SectionQuestionTypeFilter[] : undefined,
               subjectIds: selectedSubjectIds.length > 1 ? selectedSubjectIds : undefined,
               topicIds: selectedTopicIds.length > 0 ? selectedTopicIds : undefined,
               language: selectedLanguage ? selectedLanguage as 'IT' | 'EN' : undefined,
@@ -291,7 +291,7 @@ export default function FillSectionModal({
                 const res = await pickMutation.mutateAsync({
                   ...commonFilters,
                   count: remainder,
-                  types: selectedTypes.length > 0 ? selectedTypes as ('SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT')[] : undefined,
+                  types: selectedTypes.length > 0 ? selectedTypes as SectionQuestionTypeFilter[] : undefined,
                   excludeQuestionIds: excluded,
                 });
                 collected.push(...(res.questions as PickedQuestion[]));
@@ -304,7 +304,7 @@ export default function FillSectionModal({
               ...commonFilters,
               count: parsedCount,
               subjectIds: selectedSubjectIds.length > 0 ? selectedSubjectIds : undefined,
-              types: selectedTypes.length > 0 ? selectedTypes as ('SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'OPEN_TEXT')[] : undefined,
+              types: selectedTypes.length > 0 ? selectedTypes as SectionQuestionTypeFilter[] : undefined,
               excludeQuestionIds,
             });
 

@@ -75,7 +75,8 @@ export function useQuestionForm({ questionId, basePath = '/domande', returnTo, i
   const utils = trpc.useUtils();
 
   const getQuestionDetailPath = useCallback((id: string) => {
-    return `${basePath}/${id}${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`;
+    const returnToSuffix = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : '';
+    return `${basePath}/${id}${returnToSuffix}`;
   }, [basePath, returnTo]);
 
   // Form state

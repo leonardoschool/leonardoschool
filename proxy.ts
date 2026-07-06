@@ -1,44 +1,12 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { PAGE_PERMISSIONS, hasAccess } from '@/lib/permissions';
 
 /**
- * Centralized route permission checking
- * Matches the PAGE_PERMISSIONS in lib/permissions.ts
+ * Route permissions are defined once in `lib/permissions.ts` and imported here so the edge
+ * middleware and the client-side checks (useUserRole) can never diverge. The type-only
+ * `@prisma/client` import in that module is erased at build time, keeping it edge-safe.
  */
-const PAGE_PERMISSIONS: Record<string, string[]> = {
-  // Common pages - all authenticated users
-  '/dashboard': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
-  '/simulazioni': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
-  '/calendario': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
-  '/messaggi': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
-  '/notifiche': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
-  '/materiali': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
-  '/profilo': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
-  '/impostazioni': ['ADMIN', 'COLLABORATOR', 'STUDENT'],
-  
-  // Staff pages - admin and collaborators
-  '/domande': ['ADMIN', 'COLLABORATOR'],
-  '/tags': ['ADMIN', 'COLLABORATOR'],
-  '/presenze': ['ADMIN', 'COLLABORATOR'],
-  '/studenti': ['ADMIN', 'COLLABORATOR'],
-  '/gruppi': ['ADMIN', 'COLLABORATOR'],
-  
-  // Admin only pages
-  '/utenti': ['ADMIN'],
-  '/collaboratori': ['ADMIN'],
-  '/contratti': ['ADMIN'],
-  '/candidature': ['ADMIN'],
-  '/assenze': ['ADMIN'],
-  '/richieste': ['ADMIN'],
-  '/log-email': ['ADMIN'],
-  '/statistiche': ['ADMIN', 'STUDENT'], // Admin and Student only
-  
-  // Collaborator only pages
-  '/le-mie-assenze': ['COLLABORATOR'],
-  
-  // Student only pages
-  '/gruppo': ['STUDENT'],
-};
 
 /** Paths allowed while user is waiting for contract assignment */
 const WAITING_PATHS = ['/dashboard', '/profilo', '/impostazioni'];
@@ -63,26 +31,7 @@ interface UserContext {
 // Route Checking Functions
 // ============================================================================
 
-/**
- * Check if a role has access to a specific path
- */
-function hasAccess(path: string, role: string | undefined): boolean {
-  if (!role) return false;
-  
-  const normalizedPath = path.split('?')[0];
-  
-  if (PAGE_PERMISSIONS[normalizedPath]) {
-    return PAGE_PERMISSIONS[normalizedPath].includes(role);
-  }
-  
-  for (const [routePath, allowedRoles] of Object.entries(PAGE_PERMISSIONS)) {
-    if (normalizedPath.startsWith(routePath + '/') || normalizedPath === routePath) {
-      return allowedRoles.includes(role);
-    }
-  }
-  
-  return false;
-}
+// `hasAccess` is imported from lib/permissions (shared with the client) — see top of file.
 
 /**
  * Check if a path is a protected unified route
@@ -418,6 +367,7 @@ export const config = {
     '/assenze/:path*',
     '/richieste/:path*',
     '/log-email/:path*',
+    '/permessi/:path*',
     '/le-mie-assenze/:path*',
     '/gruppo/:path*',
     '/statistiche/:path*',
