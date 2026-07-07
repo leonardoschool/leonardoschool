@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getAdminAuth } from '@/lib/firebase/admin';
 import { sendAuthPasswordReset } from '@/server/services/emailService';
+import { logApp } from '@/lib/logging/appLog';
 
 const schema = z.object({ email: z.string().email() });
 
@@ -49,6 +50,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('[send-reset-password] fatal error:', error);
+    await logApp({
+      source: 'AUTH',
+      level: 'ERROR',
+      message: 'Errore nella richiesta di reset password',
+      error,
+      path: 'POST /api/auth/send-reset-password',
+      statusCode: 500,
+    });
     return NextResponse.json({ success: true });
   }
 }

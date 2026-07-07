@@ -5,6 +5,7 @@
 
 import nodemailer from 'nodemailer';
 import { NextResponse } from 'next/server';
+import { logApp } from '@/lib/logging/appLog';
 import { 
   validateContactForm, 
   sanitizeContactForm, 
@@ -416,6 +417,14 @@ export async function handleContactRequest(options: HandleContactRequestOptions)
     
   } catch (error) {
     console.error(`Error handling ${type} request:`, error);
+    await logApp({
+      source: 'API',
+      level: 'ERROR',
+      message: `Errore nella gestione della richiesta ${type}`,
+      error,
+      path: type === 'job-application' ? 'POST /api/lavora-con-noi' : 'POST /api/contact',
+      statusCode: 500,
+    });
     return NextResponse.json(
       { error: "Errore durante l'elaborazione. Riprova più tardi." },
       { status: 500 }

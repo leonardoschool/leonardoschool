@@ -1,12 +1,11 @@
 import nodemailer, { type Transporter, type SendMailOptions } from 'nodemailer';
-import { prisma } from '@/lib/prisma/client';
-import type { EmailLogStatus } from '@prisma/client';
+import { logApp } from '@/lib/logging/appLog';
 
 // =============================================================================
 // TYPES
 // =============================================================================
 
-// Categoria dell'email, usata per filtrare lo storico invii (EmailLog)
+// Categoria dell'email, usata per contestualizzare i log di invio falliti (ApplicationLog)
 export type EmailCategory =
   | 'CONTRACT_ASSIGNED'
   | 'CONTRACT_SIGNED_CONFIRMATION'
@@ -159,22 +158,25 @@ export async function sendMailWithRetry(
 // BASE EMAIL SENDER
 // =============================================================================
 
-// Persiste ogni esito di invio in DB: i log applicativi (Vercel) hanno retention
-// breve senza piano Pro, quindi sono l'unico storico consultabile in modo affidabile.
-// Non deve mai far fallire l'invio: eventuali errori di scrittura restano interni.
-// Esportata così anche eventEmails.ts (transporter separato) può registrare i suoi invii.
+// Registra l'esito di un invio email. Solo i FALLIMENTI vengono persistiti, come
+// errore applicativo nel log centralizzato (ApplicationLog): gli invii riusciti non
+// vengono più tracciati. Non deve mai far fallire l'invio: logApp non lancia mai.
+// Esportata così anche eventEmails.ts (transporter separato) può registrare i suoi esiti.
 export async function logEmail(entry: {
   to: string;
   subject: string;
   category: EmailCategory;
-  status: EmailLogStatus;
+  status: 'SENT' | 'FAILED';
   error?: string;
 }): Promise<void> {
-  try {
-    await prisma.emailLog.create({ data: entry });
-  } catch (err) {
-    console.error('[Email] Failed to write EmailLog:', err);
-  }
+  if (entry.status !== 'FAILED') return;
+  await logApp({
+    source: 'EMAIL',
+    level: 'ERROR',
+    message: `Invio email fallito (${entry.category}): ${entry.subject}`,
+    error: entry.error,
+    metadata: { to: entry.to, subject: entry.subject, category: entry.category },
+  });
 }
 
 async function sendEmail(options: EmailOptions): Promise<{ success: boolean; error?: string }> {

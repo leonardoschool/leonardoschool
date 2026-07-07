@@ -42,7 +42,7 @@ export const PAGE_PERMISSIONS: Record<string, PermissionRole[]> = {
   '/candidature': ['ADMIN'],
   '/assenze': ['ADMIN'],
   '/richieste': ['ADMIN'],
-  '/log-email': ['ADMIN'],
+  '/log-errori': ['ADMIN'],
   '/permessi': ['ADMIN'],
 
   // Mixed access — the page renders platform stats for staff (gated by `stats.viewPlatform`)

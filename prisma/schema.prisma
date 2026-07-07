@@ -2367,27 +2367,39 @@ model GroupMember {
   @@map("group_members")
 }
 
-enum EmailLogStatus {
-  SENT   // Accettata dal server SMTP
-  FAILED // Invio fallito (errore SMTP o connessione)
+enum LogLevel {
+  ERROR
+  WARN
+  INFO
 }
 
-// Storico invii email — persistito in DB perché i log applicativi (Vercel)
-// hanno retention breve senza piano Pro
-model EmailLog {
-  id        String         @id @default(cuid())
-  to        String
-  subject   String
-  category  String // es. "AUTH_PASSWORD_RESET", "WELCOME", "CONTRACT_ASSIGNED"...
-  status    EmailLogStatus
-  error     String?        @db.Text
-  createdAt DateTime       @default(now())
+// Log applicativo centralizzato: ogni errore/eccezione della piattaforma (procedure
+// tRPC, route API, invii email, cron…) viene persistito qui. I log runtime di Vercel
+// hanno retention breve senza piano Pro, quindi questa tabella è l'unico storico
+// affidabile per diagnosticare i problemi in produzione.
+model ApplicationLog {
+  id         String   @id @default(cuid())
+  level      LogLevel @default(ERROR)
+  source     String // Area che ha generato il log: "TRPC", "API", "AUTH", "EMAIL", "SIMULATION", "CRON"...
+  path       String? // Procedura tRPC o route API che ha originato l'errore
+  message    String   @db.Text
+  stack      String?  @db.Text
+  method     String?
+  statusCode Int?
+  userId     String?
+  userEmail  String?
+  userRole   String?
+  requestId  String?
+  ip         String?
+  userAgent  String?  @db.Text
+  metadata   Json? // Contesto aggiuntivo specifico dell'evento (destinatario email, id simulazione...)
+  createdAt  DateTime @default(now())
 
-  @@index([to])
-  @@index([category])
-  @@index([status])
+  @@index([level])
+  @@index([source])
+  @@index([userId])
   @@index([createdAt])
-  @@map("email_logs")
+  @@map("application_logs")
 }
 
 // ==================== PERMISSIONS ====================

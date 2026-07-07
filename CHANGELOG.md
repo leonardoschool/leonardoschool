@@ -8,6 +8,18 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-07-07
+
+### Added
+- **Log Errori centralizzato.** Nuova pagina admin **`/log-errori`** (menu *Gestione → Log Errori*) che raccoglie **ogni errore applicativo** della piattaforma: procedure API (tRPC), login/sincronizzazione utente, simulazioni, invii email, cron. Per ogni evento sono registrati livello (Errore/Warning/Info), sorgente, percorso, messaggio, **stack trace** e metadati, oltre a utente, IP e request-id quando disponibili. La pagina offre **filtri** per livello e sorgente, ricerca su messaggio/percorso/utente, contatori sintetici, dettaglio espandibile con stack, e un'azione per **eliminare i log più vecchi di 30 giorni**. Sostituisce i log runtime di Vercel (retention breve senza piano Pro) con uno storico affidabile e consultabile.
+- **Cattura automatica degli errori.** Un middleware centrale intercetta e registra automaticamente ogni errore imprevisto di **tutte** le procedure API, senza doverlo gestire endpoint per endpoint; gli errori "attesi" (permessi, validazione, non autorizzato) non vengono loggati per non generare rumore. Aggiunto inoltre il logging esplicito nei punti critici fuori da tRPC (login, salvataggio progresso simulazione, invio email di verifica/reset, cron, form pubblici).
+
+### Removed
+- **Rimossa la sezione *Log Email*.** La pagina `/log-email` e la relativa tabella sono state eliminate: i **fallimenti di invio email** confluiscono ora nel nuovo **Log Errori** (sorgente `EMAIL`), mentre gli invii riusciti non vengono più tracciati.
+
+### Infrastructure
+- Migrazione DB: rimossa la tabella `email_logs` (+ enum `EmailLogStatus`) e introdotta `application_logs` (+ enum `LogLevel`) con indici su livello, sorgente, utente e data.
+
 ## [1.12.0] - 2026-07-07
 
 ### Added

@@ -7,15 +7,14 @@ import { isAdmin } from '@/lib/permissions';
 import { PageLoader } from '@/components/ui/loaders';
 import dynamic from 'next/dynamic';
 
-const LogEmailContent = dynamic(
-  () => import('./LogEmailContent'),
-  { loading: () => <PageLoader /> }
-);
+const LogErroriContent = dynamic(() => import('./LogErroriContent'), {
+  loading: () => <PageLoader />,
+});
 
 /**
- * Pagina Log Email (Admin only) — storico invii email
+ * Pagina Log Errori (Admin only) — storico degli errori applicativi della piattaforma.
  */
-export default function LogEmailPage() {
+export default function LogErroriPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const userRole = user?.role;
@@ -30,5 +29,5 @@ export default function LogEmailPage() {
     return <PageLoader />;
   }
 
-  return <LogEmailContent />;
+  return <LogErroriContent />;
 }

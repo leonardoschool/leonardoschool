@@ -366,7 +366,7 @@ export const config = {
     '/candidature/:path*',
     '/assenze/:path*',
     '/richieste/:path*',
-    '/log-email/:path*',
+    '/log-errori/:path*',
     '/permessi/:path*',
     '/le-mie-assenze/:path*',
     '/gruppo/:path*',

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma/client';
 import { getAdminAuth } from '@/lib/firebase/admin';
 import { Prisma } from '@prisma/client';
 import { sanitizeStudentAnswerText } from '@/lib/utils/studentOpenAnswer';
+import { logApp } from '@/lib/logging/appLog';
 
 /**
  * API endpoint for saving simulation progress via sendBeacon
@@ -103,6 +104,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('[SaveProgress API] Error:', error);
+    await logApp({
+      source: 'SIMULATION',
+      level: 'ERROR',
+      message: 'Errore nel salvataggio progresso simulazione',
+      error,
+      path: 'POST /api/simulations/save-progress',
+      statusCode: 500,
+    });
     return NextResponse.json({ error: 'Errore interno' }, { status: 500 });
   }
 }

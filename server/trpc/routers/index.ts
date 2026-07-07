@@ -18,7 +18,7 @@ import { calendarRouter } from './calendar';
 import { messagesRouter } from './messages';
 import { virtualRoomRouter } from './virtualRoom';
 import { fcmRouter } from './fcm';
-import { emailLogRouter } from './emailLog';
+import { appLogRouter } from './appLog';
 import { permissionsRouter } from './permissions';
 
 export const appRouter = router({
@@ -40,7 +40,7 @@ export const appRouter = router({
   messages: messagesRouter,
   virtualRoom: virtualRoomRouter,
   fcm: fcmRouter,
-  emailLog: emailLogRouter,
+  appLog: appLogRouter,
   permissions: permissionsRouter,
 });
 

@@ -9,7 +9,7 @@ import {
   FileSignature,
   Briefcase,
   Mail,
-  MailCheck,
+  FileWarning,
   GraduationCap,
   ClipboardCheck,
   UserMinus,
@@ -138,7 +138,7 @@ export function getGestioneItems(isAdmin: boolean): NavItem[] {
     { href: '/contratti', label: 'Contratti', icon: FileSignature },
     { href: '/candidature', label: 'Candidature', icon: Briefcase },
     { href: '/richieste', label: 'Richieste', icon: Mail },
-    { href: '/log-email', label: 'Log Email', icon: MailCheck },
+    { href: '/log-errori', label: 'Log Errori', icon: FileWarning },
     { href: '/permessi', label: 'Permessi', icon: ShieldCheck },
   ];
 

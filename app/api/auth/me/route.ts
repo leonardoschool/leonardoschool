@@ -5,6 +5,7 @@ import { getAdminAuth } from '@/lib/firebase/admin';
 import { prisma } from '@/lib/prisma/client';
 import { generateMatricola } from '@/lib/utils/matricolaUtils';
 import { checkRateLimit, getClientIp, rateLimitExceededResponse } from '@/lib/middleware/rateLimit';
+import { logApp } from '@/lib/logging/appLog';
 
 export async function POST(request: NextRequest) {
   try {
@@ -249,6 +250,14 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (error) {
     console.error('Errore nel recupero utente:', error);
+    await logApp({
+      source: 'AUTH',
+      level: 'ERROR',
+      message: 'Errore nella sincronizzazione utente (/api/auth/me)',
+      error,
+      path: 'POST /api/auth/me',
+      statusCode: 500,
+    });
     const message = error instanceof Error ? error.message : 'Errore nel recupero dati utente';
     return NextResponse.json(
       { error: message },
