@@ -16,7 +16,19 @@ import {
   Award,
   X,
   Hash,
+  Phone,
+  MapPin,
+  ShieldCheck,
+  CreditCard,
 } from 'lucide-react';
+
+// Parent/guardian relationship labels (Italian)
+const relationshipLabels: Record<string, string> = {
+  PADRE: 'Padre',
+  MADRE: 'Madre',
+  TUTORE_LEGALE: 'Tutore legale',
+  ALTRO: 'Altro',
+};
 import { useRouter } from 'next/navigation';
 
 // Helper to format date
@@ -131,6 +143,89 @@ export function StudentDetailModal({ isOpen, onClose, studentId }: StudentDetail
                     )}
                   </div>
                 </div>
+
+                {/* Sensitive anagraphic data — shown whenever the caller has 'students.viewSensitive'
+                    (server-provided flag), with placeholders when the fields are simply empty, so
+                    "no permission" and "no data on file" are never confused. */}
+                {student.canViewSensitive && (
+                  <div>
+                    <h4 className={`text-lg font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
+                      <ShieldCheck className="w-5 h-5" />
+                      Dati Anagrafici Sensibili
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className={`p-4 rounded-lg ${colors.background.secondary}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Calendar className={`w-4 h-4 ${colors.text.muted}`} />
+                          <span className={`text-sm ${colors.text.muted}`}>Data di Nascita</span>
+                        </div>
+                        <p className={`font-medium ${colors.text.primary}`}>
+                          {student.dateOfBirth ? formatDate(student.dateOfBirth) : 'Non specificata'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {!student.parentGuardian && (
+                      <p className={`mt-4 text-sm ${colors.text.muted}`}>
+                        Nessun dato del genitore/tutore registrato per questo studente.
+                      </p>
+                    )}
+
+                    {student.parentGuardian && (
+                      <div className={`mt-4 p-4 rounded-lg ${colors.background.secondary}`}>
+                        <div className="flex items-center gap-2 mb-3">
+                          <UserCheck className={`w-4 h-4 ${colors.text.muted}`} />
+                          <span className={`text-sm font-medium ${colors.text.primary}`}>
+                            Genitore / Tutore
+                            <span className={`ml-2 text-xs font-normal ${colors.text.muted}`}>
+                              {relationshipLabels[student.parentGuardian.relationship] ?? student.parentGuardian.relationship}
+                            </span>
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <span className={`block text-xs ${colors.text.muted} mb-0.5`}>Nome completo</span>
+                            <span className={`font-medium ${colors.text.primary}`}>
+                              {student.parentGuardian.firstName} {student.parentGuardian.lastName}
+                            </span>
+                          </div>
+                          <div>
+                            <span className={`text-xs ${colors.text.muted} mb-0.5 flex items-center gap-1`}>
+                              <CreditCard className="w-3 h-3" /> Codice fiscale
+                            </span>
+                            <span className={`font-medium font-mono ${colors.text.primary}`}>{student.parentGuardian.fiscalCode}</span>
+                          </div>
+                          <div>
+                            <span className={`text-xs ${colors.text.muted} mb-0.5 flex items-center gap-1`}>
+                              <Phone className="w-3 h-3" /> Telefono
+                            </span>
+                            <span className={`font-medium ${colors.text.primary}`}>{student.parentGuardian.phone}</span>
+                          </div>
+                          {student.parentGuardian.email && (
+                            <div>
+                              <span className={`text-xs ${colors.text.muted} mb-0.5 flex items-center gap-1`}>
+                                <Mail className="w-3 h-3" /> Email
+                              </span>
+                              <span className={`font-medium ${colors.text.primary}`}>{student.parentGuardian.email}</span>
+                            </div>
+                          )}
+                          {(student.parentGuardian.address || student.parentGuardian.city) && (
+                            <div className="md:col-span-2">
+                              <span className={`text-xs ${colors.text.muted} mb-0.5 flex items-center gap-1`}>
+                                <MapPin className="w-3 h-3" /> Indirizzo
+                              </span>
+                              <span className={`font-medium ${colors.text.primary}`}>
+                                {[student.parentGuardian.address, student.parentGuardian.postalCode, student.parentGuardian.city, student.parentGuardian.province]
+                                  .filter(Boolean)
+                                  .join(', ')}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Groups Section */}
                 {student.groups && student.groups.length > 0 && (

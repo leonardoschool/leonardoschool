@@ -10,7 +10,7 @@
  */
 
 import { z } from 'zod';
-import { router, protectedProcedure } from '../init';
+import { router, protectedProcedure, assertCapability, hasCapability } from '../init';
 import { TRPCError } from '@trpc/server';
 import { notifications } from '@/lib/notifications/notificationHelpers';
 import { notifyNewMessage } from '@/server/services/fcmService';
@@ -48,6 +48,7 @@ export const messagesRouter = router({
    * Based on role permissions
    */
   getContactableUsers: protectedProcedure.query(async ({ ctx }) => {
+    assertCapability(ctx, 'messages.use');
     const currentUser = ctx.user;
     
     // Define which roles the current user can contact
@@ -233,6 +234,7 @@ export const messagesRouter = router({
    * - Student: not allowed to message groups (empty array)
    */
   getContactableGroups: protectedProcedure.query(async ({ ctx }) => {
+    assertCapability(ctx, 'messages.use');
     const currentUser = ctx.user;
     
     // Students cannot message groups
@@ -369,6 +371,7 @@ export const messagesRouter = router({
   createConversation: protectedProcedure
     .input(createConversationSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'messages.use');
       const currentUser = ctx.user;
       
       // Get recipient user
@@ -510,6 +513,7 @@ export const messagesRouter = router({
   sendMessage: protectedProcedure
     .input(sendMessageSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'messages.use');
       const currentUser = ctx.user;
       
       // Verify user is participant in conversation
@@ -607,6 +611,7 @@ export const messagesRouter = router({
   getConversations: protectedProcedure
     .input(getConversationsSchema)
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'messages.use');
       const currentUser = ctx.user;
       const skip = (input.page - 1) * input.pageSize;
       
@@ -728,6 +733,7 @@ export const messagesRouter = router({
   getMessages: protectedProcedure
     .input(getMessagesSchema)
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'messages.use');
       const currentUser = ctx.user;
       
       // Verify user is participant
@@ -865,6 +871,7 @@ export const messagesRouter = router({
   markAsRead: protectedProcedure
     .input(z.object({ conversationId: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'messages.use');
       const currentUser = ctx.user;
       
       const participation = await ctx.prisma.conversationParticipant.findFirst({
@@ -904,6 +911,7 @@ export const messagesRouter = router({
   toggleArchive: protectedProcedure
     .input(z.object({ conversationId: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'messages.use');
       const currentUser = ctx.user;
       
       const participation = await ctx.prisma.conversationParticipant.findFirst({
@@ -935,6 +943,11 @@ export const messagesRouter = router({
    * Get unread messages count
    */
   getUnreadCount: protectedProcedure.query(async ({ ctx }) => {
+    // Polled by the app header: degrade to 0 instead of throwing when messaging is revoked,
+    // so the header never spams FORBIDDEN errors.
+    if (!hasCapability(ctx, 'messages.use')) {
+      return { unreadCount: 0 };
+    }
     const currentUser = ctx.user;
     
     // Get user's participations

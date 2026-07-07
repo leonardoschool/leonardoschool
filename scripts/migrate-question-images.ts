@@ -108,7 +108,8 @@ async function main() {
 
   const questions = LIMIT > 0 ? allNeedsMigration.slice(0, LIMIT) : allNeedsMigration;
 
-  console.log(`📚 Domande da migrare: ${questions.length}${LIMIT ? ` (limit ${LIMIT})` : ''}\n`);
+  const limitNote = LIMIT ? ` (limit ${LIMIT})` : '';
+  console.log(`📚 Domande da migrare: ${questions.length}${limitNote}\n`);
 
   let migrated = 0, fileMissing = 0, errors = 0;
 

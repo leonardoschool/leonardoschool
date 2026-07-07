@@ -1,6 +1,6 @@
 /**
  * Anti-Cheat Hook for Simulation Execution
- * 
+ *
  * Implements various anti-cheat measures:
  * - Tab/window blur detection
  * - Visibility change detection
@@ -10,18 +10,24 @@
  * - Right-click blocking
  * - Keyboard shortcut blocking
  * - Event logging
+ *
+ * Touch devices (phones/tablets) fire many of these signals for benign
+ * gestures (virtual keyboard, pinch-zoom, long-press, iOS Safari quirks),
+ * so detection is capability-aware: desktop-only heuristics are disabled
+ * on coarse-pointer devices and events are deduplicated to avoid inflating
+ * the violation count.
  */
 
 import { useEffect, useCallback, useRef, useState, useMemo } from 'react';
 
 export interface AntiCheatEvent {
-  type: 
-    | 'tab_blur' 
-    | 'visibility_hidden' 
-    | 'fullscreen_exit' 
-    | 'copy_attempt' 
-    | 'paste_attempt' 
-    | 'right_click' 
+  type:
+    | 'tab_blur'
+    | 'visibility_hidden'
+    | 'fullscreen_exit'
+    | 'copy_attempt'
+    | 'paste_attempt'
+    | 'right_click'
     | 'keyboard_shortcut'
     | 'page_reload_attempt'
     | 'devtools_open';
@@ -61,9 +67,43 @@ const defaultConfig: AntiCheatConfig = {
   maxViolations: 5,
 };
 
+// The same physical action must not be counted twice: a real tab switch fires
+// both `blur` and `visibilitychange`, and size-based checks run on an interval.
+const EVENT_DEDUP_MS = 5000;
+const DEDUP_BUCKET: Partial<Record<AntiCheatEvent['type'], string>> = {
+  tab_blur: 'focus_loss',
+  visibility_hidden: 'focus_loss',
+};
+
+type WebkitDocument = Document & {
+  webkitFullscreenElement?: Element | null;
+  webkitFullscreenEnabled?: boolean;
+  webkitExitFullscreen?: () => Promise<void>;
+};
+
+// "Touch-only" and not just "touch-capable": a touchscreen laptop (Surface,
+// 2-in-1) still has a mouse/trackpad and must keep desktop-strength detection.
+// Only devices with no fine pointer at all (phones/tablets) get the relaxed rules.
+function getIsTouchOnlyDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  return navigator.maxTouchPoints > 0 && !window.matchMedia?.('(any-pointer: fine)').matches;
+}
+
+function getFullscreenElement(): Element | null {
+  if (typeof document === 'undefined') return null;
+  return document.fullscreenElement ?? (document as WebkitDocument).webkitFullscreenElement ?? null;
+}
+
+// iPhone Safari has no Fullscreen API for non-video elements: enforcing or
+// logging fullscreen there would block the exam or produce phantom events.
+function getIsFullscreenSupported(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.fullscreenEnabled || (document as WebkitDocument).webkitFullscreenEnabled === true;
+}
+
 export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
   const mergedConfig = useMemo(() => ({ ...defaultConfig, ...config }), [config]);
-  
+
   const [state, setState] = useState<AntiCheatState>({
     isFullscreen: false,
     violationCount: 0,
@@ -72,12 +112,28 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
     lastViolation: null,
   });
 
+  // Fullscreen can only be meaningfully enforced on desktop: on touch devices
+  // the virtual keyboard kicks the browser out of fullscreen on its own.
+  // Computed after mount to stay SSR-safe.
+  const [canEnforceFullscreen, setCanEnforceFullscreen] = useState(false);
+  useEffect(() => {
+    setCanEnforceFullscreen(getIsFullscreenSupported() && !getIsTouchOnlyDevice());
+  }, []);
+
   const eventsRef = useRef<AntiCheatEvent[]>([]);
   const violationCountRef = useRef(0);
+  const lastEventAtRef = useRef<Map<string, number>>(new Map());
+  const maxViolationsNotifiedRef = useRef(false);
 
   // Log event
   const logEvent = useCallback((type: AntiCheatEvent['type'], details?: string) => {
     if (!mergedConfig.enabled) return;
+
+    const bucket = DEDUP_BUCKET[type] ?? type;
+    const now = Date.now();
+    const lastAt = lastEventAtRef.current.get(bucket);
+    if (lastAt !== undefined && now - lastAt < EVENT_DEDUP_MS) return;
+    lastEventAtRef.current.set(bucket, now);
 
     const event: AntiCheatEvent = {
       type,
@@ -98,18 +154,20 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
     // Call violation callback
     mergedConfig.onViolation?.(event);
 
-    // Check max violations
+    // Check max violations (fire once, or auto-submit would retrigger on every event)
     if (
       mergedConfig.maxViolations &&
-      violationCountRef.current >= mergedConfig.maxViolations
+      violationCountRef.current >= mergedConfig.maxViolations &&
+      !maxViolationsNotifiedRef.current
     ) {
+      maxViolationsNotifiedRef.current = true;
       mergedConfig.onMaxViolationsReached?.();
     }
   }, [mergedConfig]);
 
   // Request fullscreen
   const requestFullscreen = useCallback(async () => {
-    if (!mergedConfig.forceFullscreen) return;
+    if (!mergedConfig.forceFullscreen || !getIsFullscreenSupported()) return;
 
     try {
       const elem = document.documentElement;
@@ -131,8 +189,8 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
     try {
       if (document.exitFullscreen) {
         await document.exitFullscreen();
-      } else if ((document as Document & { webkitExitFullscreen?: () => Promise<void> }).webkitExitFullscreen) {
-        await (document as Document & { webkitExitFullscreen: () => Promise<void> }).webkitExitFullscreen();
+      } else if ((document as WebkitDocument).webkitExitFullscreen) {
+        await (document as WebkitDocument).webkitExitFullscreen?.();
       } else if ((document as Document & { msExitFullscreen?: () => Promise<void> }).msExitFullscreen) {
         await (document as Document & { msExitFullscreen: () => Promise<void> }).msExitFullscreen();
       }
@@ -146,6 +204,10 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
   useEffect(() => {
     if (!mergedConfig.enabled) return;
 
+    const isTouch = getIsTouchOnlyDevice();
+    const enforceFullscreen =
+      mergedConfig.forceFullscreen && getIsFullscreenSupported() && !isTouch;
+
     // Visibility change handler
     const handleVisibilityChange = () => {
       if (document.hidden && mergedConfig.blockTabSwitch) {
@@ -156,9 +218,11 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
       }
     };
 
-    // Window blur handler
+    // Window blur handler. On touch devices `blur` fires for benign in-page
+    // actions (virtual keyboard, address bar tap, notification banner), so
+    // only `visibilitychange` — a real app/tab switch — counts there.
     const handleBlur = () => {
-      if (mergedConfig.blockTabSwitch) {
+      if (mergedConfig.blockTabSwitch && !isTouch) {
         logEvent('tab_blur', 'La finestra del browser ha perso il focus');
         setState(prev => ({ ...prev, isBlurred: true }));
       }
@@ -169,18 +233,23 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
       setState(prev => ({ ...prev, isBlurred: false }));
     };
 
-    // Fullscreen change handler
+    // Fullscreen change handler. Log the exit only on a fullscreen→windowed
+    // transition: WebKit fires `webkitfullscreenchange` on enter too, and
+    // checking only `document.fullscreenElement` there reported a phantom
+    // exit at the moment the student entered fullscreen.
+    let wasFullscreen = !!getFullscreenElement();
     const handleFullscreenChange = () => {
-      const isFullscreen = !!document.fullscreenElement;
+      const isFullscreen = !!getFullscreenElement();
       setState(prev => ({ ...prev, isFullscreen }));
-      
-      if (!isFullscreen && mergedConfig.forceFullscreen) {
+
+      if (wasFullscreen && !isFullscreen && enforceFullscreen) {
         logEvent('fullscreen_exit', 'Lo studente ha abbandonato la modalità schermo intero');
         // Re-request fullscreen after a short delay
         setTimeout(() => {
           requestFullscreen();
         }, 100);
       }
+      wasFullscreen = isFullscreen;
     };
 
     // Copy handler
@@ -199,10 +268,15 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
       }
     };
 
-    // Right-click handler
+    // Right-click handler. A long-press on touch devices fires `contextmenu`
+    // too: still block the menu, but don't count it as a right click.
     const handleContextMenu = (e: MouseEvent) => {
-      if (mergedConfig.blockRightClick) {
-        e.preventDefault();
+      if (!mergedConfig.blockRightClick) return;
+      e.preventDefault();
+
+      const pointerType = (e as Partial<PointerEvent>).pointerType;
+      const fromTouch = pointerType === 'touch' || pointerType === 'pen' || (pointerType === undefined && isTouch);
+      if (!fromTouch) {
         logEvent('right_click', 'Lo studente ha fatto click con il tasto destro del mouse');
       }
     };
@@ -235,7 +309,7 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
         const shiftMatch = shortcut.shift ? e.shiftKey : !shortcut.shift || !e.shiftKey;
         const altMatch = shortcut.alt ? e.altKey : true;
         const keyMatch = e.key.toLowerCase() === shortcut.key.toLowerCase();
-        
+
         return ctrlMatch && shiftMatch && altMatch && keyMatch;
       });
 
@@ -256,15 +330,21 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
       }
     };
 
-    // DevTools detection (basic)
+    // DevTools detection (basic). Only meaningful on desktop: on mobile the
+    // virtual keyboard and pinch-zoom shrink the inner viewport far past the
+    // threshold, producing an endless stream of false positives. Log only on
+    // the closed→open transition, not on every interval tick.
+    let devToolsOpen = false;
     const detectDevTools = () => {
       const threshold = 160;
       const widthThreshold = globalThis.outerWidth - globalThis.innerWidth > threshold;
       const heightThreshold = globalThis.outerHeight - globalThis.innerHeight > threshold;
-      
-      if (widthThreshold || heightThreshold) {
+      const open = widthThreshold || heightThreshold;
+
+      if (open && !devToolsOpen) {
         logEvent('devtools_open', 'Possibile apertura degli strumenti per sviluppatori (DevTools)');
       }
+      devToolsOpen = open;
     };
 
     // Add listeners
@@ -278,9 +358,9 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
     document.addEventListener('contextmenu', handleContextMenu);
     document.addEventListener('keydown', handleKeyDown);
     globalThis.addEventListener('beforeunload', handleBeforeUnload);
-    
-    // Check devtools periodically
-    const devToolsInterval = setInterval(detectDevTools, 1000);
+
+    // Check devtools periodically (desktop only)
+    const devToolsInterval = isTouch ? undefined : setInterval(detectDevTools, 1000);
 
     // Cleanup
     return () => {
@@ -294,7 +374,7 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
       document.removeEventListener('contextmenu', handleContextMenu);
       document.removeEventListener('keydown', handleKeyDown);
       globalThis.removeEventListener('beforeunload', handleBeforeUnload);
-      clearInterval(devToolsInterval);
+      if (devToolsInterval !== undefined) clearInterval(devToolsInterval);
     };
   }, [mergedConfig, logEvent, requestFullscreen]);
 
@@ -309,6 +389,8 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
   const reset = useCallback(() => {
     eventsRef.current = [];
     violationCountRef.current = 0;
+    lastEventAtRef.current.clear();
+    maxViolationsNotifiedRef.current = false;
     setState({
       isFullscreen: false,
       violationCount: 0,
@@ -320,6 +402,7 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
 
   return {
     ...state,
+    canEnforceFullscreen,
     requestFullscreen,
     exitFullscreen,
     getEventsForSync,

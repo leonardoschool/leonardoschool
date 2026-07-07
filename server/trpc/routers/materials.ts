@@ -1,5 +1,5 @@
 // Materials Router - Manage learning materials (PDF, Video, Links)
-import { router, protectedProcedure, studentProcedure, staffProcedure } from '../init';
+import { router, protectedProcedure, studentProcedure, staffProcedure, assertCapability } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import * as notificationService from '@/server/services/notificationService';
@@ -79,6 +79,7 @@ export const materialsRouter = router({
   // Get all categories including inactive (staff only)
   getAllCategories: staffProcedure
     .query(async ({ ctx }) => {
+      assertCapability(ctx, 'materials.view');
       return ctx.prisma.materialCategory.findMany({
         orderBy: { order: 'asc' },
         include: {
@@ -121,6 +122,7 @@ export const materialsRouter = router({
       studentIds: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manage');
       // Get max order if not provided
       const maxOrder = input.order ?? await ctx.prisma.materialCategory.count();
 
@@ -174,8 +176,9 @@ export const materialsRouter = router({
       studentIds: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manage');
       const { id, groupIds, studentIds, ...data } = input;
-      
+
       // Get old category state to compare for notifications
       const oldCategory = await ctx.prisma.materialCategory.findUnique({
         where: { id },
@@ -287,6 +290,7 @@ export const materialsRouter = router({
   deleteCategory: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manage');
       // First, delete all MaterialCategoryLink records for this category
       // This will unlink all materials from this category
       await ctx.prisma.materialCategoryLink.deleteMany({
@@ -316,6 +320,7 @@ export const materialsRouter = router({
 
   // Get all subjects including inactive (admin and collaborators)
   getAllSubjects: staffProcedure.query(async ({ ctx }) => {
+    assertCapability(ctx, 'materials.view');
     const userId = ctx.user.id;
     const userRole = ctx.user.role;
 
@@ -387,6 +392,7 @@ export const materialsRouter = router({
       order: z.number().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manage');
       return ctx.prisma.customSubject.create({
         data: {
           name: input.name,
@@ -412,6 +418,7 @@ export const materialsRouter = router({
       isActive: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manage');
       const userId = ctx.user.id;
       const userRole = ctx.user.role;
 
@@ -445,6 +452,7 @@ export const materialsRouter = router({
   deleteSubject: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manage');
       const userRole = ctx.user.role;
 
       // Only admins can delete subjects
@@ -519,6 +527,7 @@ export const materialsRouter = router({
       order: z.number().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manage');
       const userId = ctx.user.id;
       const userRole = ctx.user.role;
 
@@ -569,6 +578,7 @@ export const materialsRouter = router({
       isActive: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manage');
       const userId = ctx.user.id;
       const userRole = ctx.user.role;
 
@@ -615,6 +625,7 @@ export const materialsRouter = router({
   deleteTopic: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manage');
       const userId = ctx.user.id;
       const userRole = ctx.user.role;
 
@@ -660,6 +671,7 @@ export const materialsRouter = router({
       topicIds: z.array(z.string()),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manage');
       const userId = ctx.user.id;
       const userRole = ctx.user.role;
 
@@ -708,6 +720,7 @@ export const materialsRouter = router({
       subjectId: z.string().optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.view');
       return ctx.prisma.material.findMany({
         where: {
           type: input?.type,
@@ -782,6 +795,7 @@ export const materialsRouter = router({
   getById: staffProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.view');
       const material = await ctx.prisma.material.findUnique({
         where: { id: input.id },
         include: {
@@ -853,6 +867,11 @@ export const materialsRouter = router({
       studentIds: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manage');
+      // Creating a material already shared with an audience is an access grant → needs manageAccess.
+      if (input.visibility !== 'NONE' || input.groupIds?.length || input.studentIds?.length) {
+        assertCapability(ctx, 'materials.manageAccess');
+      }
       const { groupIds, studentIds, categoryIds, subjectId, topicId, ...materialData } = input;
 
       // Use nested writes to create material with all relations atomically
@@ -969,6 +988,11 @@ export const materialsRouter = router({
       })).min(1).max(20), // Max 20 files at once
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manage');
+      // Batch-creating materials already shared with an audience is an access grant → needs manageAccess.
+      if (input.visibility !== 'NONE' || input.groupIds?.length || input.studentIds?.length) {
+        assertCapability(ctx, 'materials.manageAccess');
+      }
       const { files, groupIds, studentIds, categoryId, subjectId, topicId, visibility, tags } = input;
 
       // Create all materials with nested writes (no interactive transaction needed)
@@ -1085,6 +1109,7 @@ export const materialsRouter = router({
       studentIds: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manage');
       const { id, groupIds, studentIds, subjectId, categoryIds, topicId, ...materialData } = input;
 
       // Get the current material to compare visibility changes
@@ -1103,6 +1128,16 @@ export const materialsRouter = router({
           code: 'NOT_FOUND',
           message: 'Materiale non trovato',
         });
+      }
+
+      // Changing who can access the material (visibility mode or recipient lists) requires the
+      // dedicated access capability — this is the real path the "Assegna destinatari" UI uses.
+      const touchesAccess =
+        groupIds !== undefined ||
+        studentIds !== undefined ||
+        (input.visibility !== undefined && input.visibility !== currentMaterial.visibility);
+      if (touchesAccess) {
+        assertCapability(ctx, 'materials.manageAccess');
       }
 
       const result = await ctx.prisma.$transaction(async () => {
@@ -1235,6 +1270,7 @@ export const materialsRouter = router({
   delete: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manage');
       // Material will cascade delete course/student access
       return ctx.prisma.material.delete({
         where: { id: input.id },
@@ -1274,6 +1310,7 @@ export const materialsRouter = router({
       studentIds: z.array(z.string()),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manageAccess');
       return ctx.prisma.materialStudentAccess.createMany({
         data: input.studentIds.map((studentId) => ({
           materialId: input.materialId,
@@ -1291,6 +1328,7 @@ export const materialsRouter = router({
       studentId: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manageAccess');
       return ctx.prisma.materialStudentAccess.delete({
         where: {
           materialId_studentId: {
@@ -1308,6 +1346,7 @@ export const materialsRouter = router({
       groupIds: z.array(z.string()),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manageAccess');
       return ctx.prisma.materialGroupAccess.createMany({
         data: input.groupIds.map((groupId) => ({
           materialId: input.materialId,
@@ -1324,6 +1363,7 @@ export const materialsRouter = router({
       groupId: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'materials.manageAccess');
       return ctx.prisma.materialGroupAccess.delete({
         where: {
           materialId_groupId: {
@@ -1345,6 +1385,7 @@ export const materialsRouter = router({
       type: z.enum(['PDF', 'VIDEO', 'LINK', 'DOCUMENT']).optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'student.viewMaterials');
       // First, get the student and their group memberships
       const student = await ctx.prisma.student.findUnique({
         where: { userId: ctx.user.id },
@@ -1460,6 +1501,7 @@ export const materialsRouter = router({
   getMaterial: studentProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'student.viewMaterials');
       const student = await ctx.prisma.student.findUnique({
         where: { userId: ctx.user.id },
         include: {
@@ -1539,6 +1581,7 @@ export const materialsRouter = router({
   // ==================== STATS ====================
 
   getStats: staffProcedure.query(async ({ ctx }) => {
+    assertCapability(ctx, 'materials.view');
     const [totalMaterials, totalByType, totalByVisibility, topViewed, topDownloaded] = await Promise.all([
       ctx.prisma.material.count({ where: { isActive: true } }),
       ctx.prisma.material.groupBy({ by: ['type'], _count: true, where: { isActive: true } }),

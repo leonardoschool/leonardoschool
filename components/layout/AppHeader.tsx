@@ -10,6 +10,7 @@ import { colors } from '@/lib/theme/colors';
 import { playNotificationSound } from '@/lib/utils/notificationSound';
 import { useFocusAwarePolling } from '@/lib/hooks/useWindowFocus';
 import { useFCMNotifications } from '@/lib/hooks/useFCMNotifications';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { NotificationPermissionBanner } from '@/components/ui/NotificationPermissionBanner';
 import {
   Bell,
@@ -66,6 +67,9 @@ export default function AppHeader() {
 
   // Get current user
   const { data: user } = trpc.auth.me.useQuery();
+
+  // Fine-grained capability checks for nav visibility (shares the auth.me query above)
+  const { can, canAny, isLoading: permissionsLoading } = usePermissions();
 
   // FCM push notifications - invalidates queries on new notifications
   // This reduces polling dependency significantly
@@ -156,11 +160,17 @@ export default function AppHeader() {
   );
   const studentCanNavigate = isStudent ? user?.isActive : true;
 
+  // Capability-based nav visibility. Items tagged with capabilities are hidden when the user
+  // (per the admin-configured matrix) lacks all of them; untagged items stay role-gated as
+  // before. While capabilities are still loading we show everything to avoid nav flicker.
+  const canSeeItem = (item: { capabilities?: string[] }) =>
+    !item.capabilities || permissionsLoading || canAny(item.capabilities);
+
   // Menu items
-  const navItems = getNavigationItems(isAdmin, isCollaborator, isStudent);
-  const gestioneItems = getGestioneItems(isAdmin);
-  const registroItems = getRegistroItems(isAdmin);
-  const didatticaItems = getDidatticaItems(isAdmin);
+  const navItems = getNavigationItems(isAdmin, isCollaborator, isStudent).filter(canSeeItem);
+  const gestioneItems = getGestioneItems(isAdmin).filter(canSeeItem);
+  const registroItems = getRegistroItems(isAdmin).filter(canSeeItem);
+  const didatticaItems = getDidatticaItems(isAdmin).filter(canSeeItem);
 
   // Check active sections
   const isGestioneActive = gestioneItems.some(item => pathname.startsWith(item.href));
@@ -281,42 +291,48 @@ export default function AppHeader() {
               </Link>
 
               {/* Gestione Dropdown */}
-              <NavDropdown
-                label="Gestione"
-                icon={ClipboardList}
-                items={gestioneItems}
-                isOpen={gestioneMenuOpen}
-                onClose={() => setGestioneMenuOpen(false)}
-                onToggle={() => setGestioneMenuOpen(!gestioneMenuOpen)}
-                isActive={isGestioneActive}
-                pathname={pathname}
-                totalBadgeCount={isAdmin ? totalGestionePending : 0}
-                getBadgeCount={getBadgeCountForHref}
-              />
+              {gestioneItems.length > 0 && (
+                <NavDropdown
+                  label="Gestione"
+                  icon={ClipboardList}
+                  items={gestioneItems}
+                  isOpen={gestioneMenuOpen}
+                  onClose={() => setGestioneMenuOpen(false)}
+                  onToggle={() => setGestioneMenuOpen(!gestioneMenuOpen)}
+                  isActive={isGestioneActive}
+                  pathname={pathname}
+                  totalBadgeCount={isAdmin ? totalGestionePending : 0}
+                  getBadgeCount={getBadgeCountForHref}
+                />
+              )}
 
               {/* Didattica Dropdown */}
-              <NavDropdown
-                label="Didattica"
-                icon={BookOpen}
-                items={didatticaItems}
-                isOpen={didatticaMenuOpen}
-                onClose={() => setDidatticaMenuOpen(false)}
-                onToggle={() => setDidatticaMenuOpen(!didatticaMenuOpen)}
-                isActive={isDidatticaActive}
-                pathname={pathname}
-              />
+              {didatticaItems.length > 0 && (
+                <NavDropdown
+                  label="Didattica"
+                  icon={BookOpen}
+                  items={didatticaItems}
+                  isOpen={didatticaMenuOpen}
+                  onClose={() => setDidatticaMenuOpen(false)}
+                  onToggle={() => setDidatticaMenuOpen(!didatticaMenuOpen)}
+                  isActive={isDidatticaActive}
+                  pathname={pathname}
+                />
+              )}
 
               {/* Registro Dropdown */}
-              <NavDropdown
-                label="Registro"
-                icon={ClipboardCheck}
-                items={registroItems}
-                isOpen={registroMenuOpen}
-                onClose={() => setRegistroMenuOpen(false)}
-                onToggle={() => setRegistroMenuOpen(!registroMenuOpen)}
-                isActive={isRegistroActive}
-                pathname={pathname}
-              />
+              {registroItems.length > 0 && (
+                <NavDropdown
+                  label="Registro"
+                  icon={ClipboardCheck}
+                  items={registroItems}
+                  isOpen={registroMenuOpen}
+                  onClose={() => setRegistroMenuOpen(false)}
+                  onToggle={() => setRegistroMenuOpen(!registroMenuOpen)}
+                  isActive={isRegistroActive}
+                  pathname={pathname}
+                />
+              )}
 
               {/* Other nav items */}
               {navItems.filter(item => item.href !== '/dashboard').map((item) => {
@@ -377,7 +393,7 @@ export default function AppHeader() {
             />
 
             {/* Messages Icon */}
-            {user && (
+            {user && (permissionsLoading || can('messages.use')) && (
               <Link
                 href="/messaggi"
                 prefetch={false}
@@ -657,6 +673,8 @@ function StaffMobileNav({
   isAdmin,
   onClose,
 }: StaffMobileNavProps) {
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canUseMessages = permissionsLoading || can('messages.use');
   return (
     <div className="space-y-3">
       {/* Dashboard Link */}
@@ -677,48 +695,54 @@ function StaffMobileNav({
       </Link>
 
       {/* Gestione Section */}
-      <MobileExpandableSection
-        title="Gestione"
-        icon={ClipboardList}
-        items={gestioneItems}
-        isActive={isGestioneActive}
-        isExpanded={expandedSection === 'gestione'}
-        onToggle={() => setExpandedSection(expandedSection === 'gestione' ? null : 'gestione')}
-        pathname={pathname}
-        onClose={onClose}
-        badgeCount={isAdmin ? totalGestionePending : undefined}
-        getBadgeCount={getBadgeCountForHref}
-        iconBgClass="bg-purple-100 dark:bg-purple-900/30"
-        iconColorClass="text-purple-600 dark:text-purple-400"
-      />
+      {gestioneItems.length > 0 && (
+        <MobileExpandableSection
+          title="Gestione"
+          icon={ClipboardList}
+          items={gestioneItems}
+          isActive={isGestioneActive}
+          isExpanded={expandedSection === 'gestione'}
+          onToggle={() => setExpandedSection(expandedSection === 'gestione' ? null : 'gestione')}
+          pathname={pathname}
+          onClose={onClose}
+          badgeCount={isAdmin ? totalGestionePending : undefined}
+          getBadgeCount={getBadgeCountForHref}
+          iconBgClass="bg-purple-100 dark:bg-purple-900/30"
+          iconColorClass="text-purple-600 dark:text-purple-400"
+        />
+      )}
 
       {/* Didattica Section */}
-      <MobileExpandableSection
-        title="Didattica"
-        icon={BookOpen}
-        items={didatticaItems}
-        isActive={isDidatticaActive}
-        isExpanded={expandedSection === 'didattica'}
-        onToggle={() => setExpandedSection(expandedSection === 'didattica' ? null : 'didattica')}
-        pathname={pathname}
-        onClose={onClose}
-        iconBgClass="bg-green-100 dark:bg-green-900/30"
-        iconColorClass="text-green-600 dark:text-green-400"
-      />
+      {didatticaItems.length > 0 && (
+        <MobileExpandableSection
+          title="Didattica"
+          icon={BookOpen}
+          items={didatticaItems}
+          isActive={isDidatticaActive}
+          isExpanded={expandedSection === 'didattica'}
+          onToggle={() => setExpandedSection(expandedSection === 'didattica' ? null : 'didattica')}
+          pathname={pathname}
+          onClose={onClose}
+          iconBgClass="bg-green-100 dark:bg-green-900/30"
+          iconColorClass="text-green-600 dark:text-green-400"
+        />
+      )}
 
       {/* Registro Section */}
-      <MobileExpandableSection
-        title="Registro"
-        icon={ClipboardCheck}
-        items={registroItems}
-        isActive={isRegistroActive}
-        isExpanded={expandedSection === 'registro'}
-        onToggle={() => setExpandedSection(expandedSection === 'registro' ? null : 'registro')}
-        pathname={pathname}
-        onClose={onClose}
-        iconBgClass="bg-amber-100 dark:bg-amber-900/30"
-        iconColorClass="text-amber-600 dark:text-amber-400"
-      />
+      {registroItems.length > 0 && (
+        <MobileExpandableSection
+          title="Registro"
+          icon={ClipboardCheck}
+          items={registroItems}
+          isActive={isRegistroActive}
+          isExpanded={expandedSection === 'registro'}
+          onToggle={() => setExpandedSection(expandedSection === 'registro' ? null : 'registro')}
+          pathname={pathname}
+          onClose={onClose}
+          iconBgClass="bg-amber-100 dark:bg-amber-900/30"
+          iconColorClass="text-amber-600 dark:text-amber-400"
+        />
+      )}
 
       {/* Direct Links */}
       <div className="space-y-3">
@@ -743,24 +767,26 @@ function StaffMobileNav({
         })}
         
         {/* Messages Link */}
-        <Link
-          href="/messaggi"
-          prefetch={false}
-          onClick={onClose}
-          className={`flex items-center gap-4 p-4 rounded-2xl transition-all relative ${
-            pathname === '/messaggi' ? `${colors.primary.gradient} text-white shadow-lg` : `${colors.background.card} ${colors.text.primary} hover:shadow-md`
-          }`}
-        >
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center relative ${pathname === '/messaggi' ? 'bg-white/20' : colors.background.secondary}`}>
-            <MessageSquare className="w-6 h-6" />
-            {unreadMessagesCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-red-500 text-white text-[11px] rounded-full flex items-center justify-center font-bold">
-                {unreadMessagesCount > 9 ? '9+' : unreadMessagesCount}
-              </span>
-            )}
-          </div>
-          <span className="font-semibold text-lg">Messaggi</span>
-        </Link>
+        {canUseMessages && (
+          <Link
+            href="/messaggi"
+            prefetch={false}
+            onClick={onClose}
+            className={`flex items-center gap-4 p-4 rounded-2xl transition-all relative ${
+              pathname === '/messaggi' ? `${colors.primary.gradient} text-white shadow-lg` : `${colors.background.card} ${colors.text.primary} hover:shadow-md`
+            }`}
+          >
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center relative ${pathname === '/messaggi' ? 'bg-white/20' : colors.background.secondary}`}>
+              <MessageSquare className="w-6 h-6" />
+              {unreadMessagesCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-red-500 text-white text-[11px] rounded-full flex items-center justify-center font-bold">
+                  {unreadMessagesCount > 9 ? '9+' : unreadMessagesCount}
+                </span>
+              )}
+            </div>
+            <span className="font-semibold text-lg">Messaggi</span>
+          </Link>
+        )}
       </div>
     </div>
   );
@@ -871,6 +897,8 @@ function StudentMobileNav({
   unreadCount,
   onClose,
 }: StudentMobileNavProps) {
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canUseMessages = permissionsLoading || can('messages.use');
   return (
     <div className="space-y-3">
       {/* Grid layout for student nav items */}
@@ -900,24 +928,26 @@ function StudentMobileNav({
       <div className={`rounded-2xl ${colors.background.card} p-4`}>
         <h3 className={`text-xs font-semibold uppercase tracking-wider ${colors.text.muted} mb-3`}>Comunicazione</h3>
         <div className="space-y-2">
-          <Link
-            href="/messaggi"
-            prefetch={false}
-            onClick={onClose}
-            className={`flex items-center justify-between p-3 rounded-xl transition-colors ${
-              pathname === '/messaggi' ? `${colors.primary.softBg} ${colors.primary.text}` : `${colors.background.secondary} ${colors.text.primary}`
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <MessageSquare className="w-5 h-5" />
-              <span className="font-medium">Messaggi</span>
-            </div>
-            {unreadMessagesCount > 0 && (
-              <span className="min-w-[24px] h-6 px-2 rounded-full text-xs font-bold flex items-center justify-center bg-red-500 text-white">
-                {unreadMessagesCount}
-              </span>
-            )}
-          </Link>
+          {canUseMessages && (
+            <Link
+              href="/messaggi"
+              prefetch={false}
+              onClick={onClose}
+              className={`flex items-center justify-between p-3 rounded-xl transition-colors ${
+                pathname === '/messaggi' ? `${colors.primary.softBg} ${colors.primary.text}` : `${colors.background.secondary} ${colors.text.primary}`
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <MessageSquare className="w-5 h-5" />
+                <span className="font-medium">Messaggi</span>
+              </div>
+              {unreadMessagesCount > 0 && (
+                <span className="min-w-[24px] h-6 px-2 rounded-full text-xs font-bold flex items-center justify-center bg-red-500 text-white">
+                  {unreadMessagesCount}
+                </span>
+              )}
+            </Link>
+          )}
           <Link
             href="/notifiche"
             prefetch={false}

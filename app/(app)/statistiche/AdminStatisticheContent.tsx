@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { colors } from '@/lib/theme/colors';
 import { trpc } from '@/lib/trpc/client';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { PageLoader } from '@/components/ui/loaders';
 import AdminSimulationResultsTab from './AdminSimulationResultsTab';
 import { getCollaboratorDetailLabel } from '@/lib/utils/collaboratorDisplay';
@@ -61,7 +62,7 @@ type AdminPlatformStats = {
     lastMonth: number;
     growthPercent: number;
     byMonth: Array<{ month: string; revenue: number; contracts: number }>;
-  };
+  } | null;
   simulations: {
     total: number;
     totalResults: number;
@@ -140,6 +141,8 @@ type TabType = 'overview' | 'students' | 'simulations' | 'collaborators';
  */
 export default function AdminStatisticheContent() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const { can } = usePermissions();
+  const canViewFinancial = can('stats.viewFinancial');
 
   // Fetch comprehensive platform statistics
   const { data, isLoading, error } = trpc.users.getAdminPlatformStats.useQuery();
@@ -163,7 +166,10 @@ export default function AdminStatisticheContent() {
     { id: 'overview' as const, label: 'Panoramica', icon: BarChart3 },
     { id: 'students' as const, label: 'Studenti', icon: GraduationCap },
     { id: 'simulations' as const, label: 'Simulazioni svolte', icon: ClipboardList },
-    { id: 'collaborators' as const, label: 'Collaboratori', icon: Briefcase },
+    // Collaborator activity is part of the reserved (financial) surface.
+    ...(canViewFinancial
+      ? [{ id: 'collaborators' as const, label: 'Collaboratori', icon: Briefcase }]
+      : []),
   ];
 
   return (
@@ -205,7 +211,7 @@ export default function AdminStatisticheContent() {
         </div>
 
         {/* Tab Content */}
-        {activeTab === 'overview' && <OverviewTab data={data as unknown as AdminPlatformStats} />}
+        {activeTab === 'overview' && <OverviewTab data={data as unknown as AdminPlatformStats} canViewFinancial={canViewFinancial} />}
         {activeTab === 'students' && <StudentsTab data={data as unknown as AdminPlatformStats} />}
         {activeTab === 'simulations' && <AdminSimulationResultsTab />}
         {activeTab === 'collaborators' && <CollaboratorsTab data={data as unknown as AdminPlatformStats} />}
@@ -215,8 +221,9 @@ export default function AdminStatisticheContent() {
 }
 
 // ============ OVERVIEW TAB ============
-function OverviewTab({ data }: { data: AdminPlatformStats }) {
+function OverviewTab({ data, canViewFinancial }: { data: AdminPlatformStats; canViewFinancial: boolean }) {
   const { overview, revenue, simulations, questions, charts } = data;
+  const showFinancial = canViewFinancial && revenue !== null;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -230,14 +237,16 @@ function OverviewTab({ data }: { data: AdminPlatformStats }) {
           trend={overview.userGrowthPercent}
           color="blue"
         />
-        <StatCard
-          icon={Euro}
-          label="Ricavi Totali"
-          value={`€${revenue.total.toLocaleString('it-IT')}`}
-          subValue={`€${revenue.thisMonth.toLocaleString('it-IT')} questo mese`}
-          trend={revenue.growthPercent}
-          color="green"
-        />
+        {showFinancial && revenue && (
+          <StatCard
+            icon={Euro}
+            label="Ricavi Totali"
+            value={`€${revenue.total.toLocaleString('it-IT')}`}
+            subValue={`€${revenue.thisMonth.toLocaleString('it-IT')} questo mese`}
+            trend={revenue.growthPercent}
+            color="green"
+          />
+        )}
         <StatCard
           icon={ClipboardList}
           label="Simulazioni"
@@ -306,6 +315,7 @@ function OverviewTab({ data }: { data: AdminPlatformStats }) {
         </ChartCard>
 
         {/* Revenue Chart */}
+        {showFinancial && (
         <ChartCard title="Ricavi Mensili" icon={Euro}>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -340,6 +350,7 @@ function OverviewTab({ data }: { data: AdminPlatformStats }) {
             </ResponsiveContainer>
           </div>
         </ChartCard>
+        )}
       </div>
 
       {/* Activity & Subject Performance */}

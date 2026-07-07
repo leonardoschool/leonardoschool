@@ -45,6 +45,7 @@ function createMockUser(
     role,
     profileCompleted: true,
     isActive: true,
+    deactivatedAt: null,
     emailVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -76,6 +77,7 @@ function createMockContext(user: User | null = null): Context {
       startTime: Date.now(),
     },
     sessionInvalidated: false,
+    capabilities: new Set<string>(),
   };
 }
 

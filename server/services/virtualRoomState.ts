@@ -5,6 +5,7 @@ import {
   getScopedAssignments,
   isParticipantConnected,
   calculateTimeRemaining,
+  unionInvitedWithParticipants,
 } from '@/server/trpc/routers/virtualRoom.helpers';
 
 export interface SessionStateData {
@@ -112,8 +113,11 @@ export async function getSessionState(sessionId: string, participantIdForMessage
 
   if (!session) return null;
 
-  // Get list of all invited students
-  const invitedStudents = extractInvitedStudents(getScopedAssignments(session));
+  // Get list of all invited students (including manually inserted participants)
+  const invitedStudents = unionInvitedWithParticipants(
+    extractInvitedStudents(getScopedAssignments(session)),
+    session.participants
+  );
 
   // Calculate time remaining
   const timeRemaining = calculateTimeRemaining(session);

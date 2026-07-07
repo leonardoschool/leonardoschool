@@ -1,7 +1,7 @@
 /**
  * Question Tags Router - Manage question tag categories and tags
  */
-import { router, staffProcedure, adminProcedure } from '../init';
+import { router, staffProcedure, adminProcedure, assertCapability, hasCapability } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { revalidateTag } from 'next/cache';
@@ -105,6 +105,7 @@ export const questionTagsRouter = router({
   createCategory: staffProcedure
     .input(createTagCategorySchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'tags.manage');
       // Check if name already exists
       const existing = await ctx.prisma.questionTagCategory.findUnique({
         where: { name: input.name },
@@ -137,6 +138,7 @@ export const questionTagsRouter = router({
   updateCategory: staffProcedure
     .input(updateTagCategorySchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'tags.manage');
       const { id, ...data } = input;
 
       // Check if category exists
@@ -151,8 +153,8 @@ export const questionTagsRouter = router({
         });
       }
 
-      // Collaborators can only update their own categories
-      if (ctx.user.role === 'COLLABORATOR' && existing.createdBy !== ctx.user.id) {
+      // Collaborators can only update their own categories, unless 'manageAll' is granted
+      if (ctx.user.role === 'COLLABORATOR' && existing.createdBy !== ctx.user.id && !hasCapability(ctx, 'tags.manageAll')) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Puoi modificare solo le categorie che hai creato.',
@@ -188,6 +190,7 @@ export const questionTagsRouter = router({
   deleteCategory: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'tags.manage');
       const category = await ctx.prisma.questionTagCategory.findUnique({
         where: { id: input.id },
         include: { _count: { select: { tags: true } } },
@@ -201,7 +204,7 @@ export const questionTagsRouter = router({
       }
 
       // Collaborators can only delete their own categories
-      if (ctx.user.role === 'COLLABORATOR' && category.createdBy !== ctx.user.id) {
+      if (ctx.user.role === 'COLLABORATOR' && category.createdBy !== ctx.user.id && !hasCapability(ctx, 'tags.manageAll')) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Puoi eliminare solo le categorie che hai creato.',
@@ -318,6 +321,7 @@ export const questionTagsRouter = router({
   createTag: staffProcedure
     .input(createTagSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'tags.manage');
       // Check uniqueness within category
       const existing = await ctx.prisma.questionTag.findFirst({
         where: {
@@ -373,6 +377,7 @@ export const questionTagsRouter = router({
   updateTag: staffProcedure
     .input(updateTagSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'tags.manage');
       const { id, ...data } = input;
 
       const existing = await ctx.prisma.questionTag.findUnique({
@@ -387,7 +392,7 @@ export const questionTagsRouter = router({
       }
 
       // Collaborators can only update their own tags
-      if (ctx.user.role === 'COLLABORATOR' && existing.createdBy !== ctx.user.id) {
+      if (ctx.user.role === 'COLLABORATOR' && existing.createdBy !== ctx.user.id && !hasCapability(ctx, 'tags.manageAll')) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Puoi modificare solo i tag che hai creato.',
@@ -435,6 +440,7 @@ export const questionTagsRouter = router({
   deleteTag: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'tags.manage');
       const tag = await ctx.prisma.questionTag.findUnique({
         where: { id: input.id },
         include: { _count: { select: { questions: true } } },
@@ -448,7 +454,7 @@ export const questionTagsRouter = router({
       }
 
       // Collaborators can only delete their own tags
-      if (ctx.user.role === 'COLLABORATOR' && tag.createdBy !== ctx.user.id) {
+      if (ctx.user.role === 'COLLABORATOR' && tag.createdBy !== ctx.user.id && !hasCapability(ctx, 'tags.manageAll')) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Puoi eliminare solo i tag che hai creato.',
@@ -495,6 +501,8 @@ export const questionTagsRouter = router({
   assignTag: staffProcedure
     .input(assignTagSchema)
     .mutation(async ({ ctx, input }) => {
+      // Attaching tags to a question is part of question editing, not taxonomy management
+      assertCapability(ctx, 'questions.manage');
       // Check if question exists
       const question = await ctx.prisma.question.findUnique({
         where: { id: input.questionId },
@@ -553,6 +561,7 @@ export const questionTagsRouter = router({
   bulkAssignTags: staffProcedure
     .input(bulkAssignTagsSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.manage');
       const { questionId, tagIds } = input;
 
       // Check if question exists
@@ -608,6 +617,7 @@ export const questionTagsRouter = router({
   unassignTag: staffProcedure
     .input(unassignTagSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.manage');
       const result = await ctx.prisma.questionTagAssignment.deleteMany({
         where: {
           questionId: input.questionId,
@@ -624,6 +634,7 @@ export const questionTagsRouter = router({
   replaceQuestionTags: staffProcedure
     .input(replaceQuestionTagsSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.manage');
       const { questionId, tagIds } = input;
 
       // Check if question exists
@@ -681,7 +692,10 @@ export const questionTagsRouter = router({
   /**
    * Get tag statistics (admin only)
    */
-  getStats: adminProcedure
+  // Aggregate counts shown in the tags page header — readable by any staff, like the
+  // sibling read procedures getCategories/getTags (previously admin-only, which caused a
+  // spurious "Permesso negato" toast for collaborators on page load).
+  getStats: staffProcedure
     .query(async ({ ctx }) => {
       const [
         totalCategories,

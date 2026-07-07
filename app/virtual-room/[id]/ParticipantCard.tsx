@@ -9,6 +9,7 @@ import {
   WifiOff,
   Shield,
   Ban,
+  RotateCcw,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -37,6 +38,8 @@ export interface ParticipantCardProps {
   totalQuestions: number;
   onSendMessage: (participantId: string) => void;
   onKickParticipant: (participantId: string, studentName: string) => void;
+  /** When provided, shows the reset action on kicked/completed participants */
+  onResetParticipant?: (participantId: string, studentName: string) => void;
   sessionStatus: string;
 }
 
@@ -45,6 +48,7 @@ export function ParticipantCard({
   totalQuestions,
   onSendMessage,
   onKickParticipant,
+  onResetParticipant,
   sessionStatus,
 }: ParticipantCardProps) {
   const progressPercent =
@@ -75,6 +79,15 @@ export function ParticipantCard({
             <p className="mt-3 text-xs text-red-500/70 dark:text-red-400/70 italic">
               Motivo: {participant.kickedReason}
             </p>
+          )}
+          {onResetParticipant && (
+            <button
+              onClick={() => onResetParticipant(participant.id, participant.studentName)}
+              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 border border-amber-300 dark:border-amber-500/30 text-amber-700 dark:text-amber-300 text-sm font-medium transition-all"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Riammetti e ripristina tentativo
+            </button>
           )}
         </div>
       </div>
@@ -183,6 +196,16 @@ export function ParticipantCard({
                 </span>
               )}
             </button>
+
+            {isCompleted && onResetParticipant && (
+              <button
+                onClick={() => onResetParticipant(participant.id, participant.studentName)}
+                className="p-2 rounded-xl bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 border border-amber-300 dark:border-amber-500/30 hover:border-amber-400 dark:hover:border-amber-500/50 transition-all text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300"
+                title="Resetta tentativo (mantiene le risposte)"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            )}
 
             {!isCompleted && (
               <button

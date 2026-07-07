@@ -21,6 +21,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma/client';
 import { runCleanup, getDatabaseStats, type CleanupOptions } from '@/server/services/cleanupService';
+import { logApp } from '@/lib/logging/appLog';
 
 // Verify cron secret
 function verifyCronSecret(request: NextRequest): boolean {
@@ -77,10 +78,18 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('[Cron] Cleanup failed:', error);
+    await logApp({
+      source: 'CRON',
+      level: 'ERROR',
+      message: 'Errore fatale nel cron cleanup',
+      error,
+      path: 'POST /api/cron/cleanup',
+      statusCode: 500,
+    });
     return NextResponse.json(
-      { 
-        error: 'Cleanup failed', 
-        message: error instanceof Error ? error.message : 'Unknown error' 
+      {
+        error: 'Cleanup failed',
+        message: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     );

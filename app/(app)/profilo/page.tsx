@@ -709,26 +709,15 @@ function StudentSection({ profile, groups }: StudentSectionProps) {
 
 // Collaborator-specific section
 interface CollaboratorSectionProps {
-  readonly profile: { 
-    hireDate?: Date; 
+  readonly profile: {
+    hireDate?: Date;
     specialization?: string | null;
-    canManageQuestions?: boolean;
-    canManageMaterials?: boolean;
-    canViewStats?: boolean;
-    canViewStudents?: boolean;
   } | null | undefined;
 }
 
 function CollaboratorSection({ profile }: CollaboratorSectionProps) {
   if (!profile) return null;
-  
-  const permissions = [
-    { label: 'Gestione Domande', enabled: profile.canManageQuestions },
-    { label: 'Gestione Materiali', enabled: profile.canManageMaterials },
-    { label: 'Visualizza Statistiche', enabled: profile.canViewStats },
-    { label: 'Visualizza Studenti', enabled: profile.canViewStudents },
-  ].filter(p => p.enabled);
-  
+
   return (
     <div className={`${colors.background.card} rounded-xl shadow border ${colors.border.primary} p-4 sm:p-6`}>
       <h2 className={`text-base sm:text-lg font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
@@ -753,27 +742,6 @@ function CollaboratorSection({ profile }: CollaboratorSectionProps) {
             label="Specializzazione" 
             value={profile.specialization} 
           />
-        )}
-        {permissions.length > 0 && (
-          <div className="sm:col-span-2">
-            <div className="flex items-start gap-3">
-              <Shield className={`w-5 h-5 ${colors.icon.secondary} mt-0.5 flex-shrink-0`} />
-              <div className="min-w-0">
-                <p className={`text-sm ${colors.text.muted}`}>Permessi</p>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {permissions.map((perm) => (
-                    <span 
-                      key={perm.label}
-                      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${colors.status.success.bgLight} ${colors.status.success.text}`}
-                    >
-                      <CheckCircle className="w-3 h-3 mr-1" />
-                      {perm.label}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
         )}
       </div>
     </div>

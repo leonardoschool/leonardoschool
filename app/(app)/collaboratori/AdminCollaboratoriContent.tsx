@@ -362,29 +362,10 @@ export default function AdminCollaboratoriContent() {
                                   <option value="SECRETARY">Segreteria</option>
                                 </select>
                               </label>
-                              {[
-                                { key: 'canManageQuestions', label: 'Gestione Domande' },
-                                { key: 'canManageMaterials', label: 'Gestione Materiali' },
-                                { key: 'canViewStats', label: 'Visualizza Statistiche' },
-                                { key: 'canViewStudents', label: 'Visualizza Studenti' },
-                              ].map(({ key, label }) => (
-                                <label key={key} className="flex items-center justify-between">
-                                  <span className={`text-sm ${colors.text.secondary}`}>{label}</span>
-                                  <input
-                                    type="checkbox"
-                                    checked={collaborator?.[key as keyof typeof collaborator] as boolean ?? true}
-                                    onChange={(e) => {
-                                      if (collaborator) {
-                                        updatePermissionsMutation.mutate({
-                                          collaboratorId: collaborator.id,
-                                          [key]: e.target.checked,
-                                        });
-                                      }
-                                    }}
-                                    className="w-4 h-4 rounded border-gray-300 text-[#a8012b] focus:ring-[#a8012b]"
-                                  />
-                                </label>
-                              ))}
+                              <p className={`text-xs ${colors.text.muted} pt-1`}>
+                                Le abilitazioni dettagliate (per tutor e segreteria) si gestiscono
+                                dalla pagina <span className="font-medium">Permessi</span>.
+                              </p>
                             </div>
                           </div>
                         </div>

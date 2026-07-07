@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
-import { Spinner, PageLoader } from '@/components/ui/loaders';
+import { Spinner, PageLoader, ButtonLoader } from '@/components/ui/loaders';
 import { Portal } from '@/components/ui/Portal';
 import { UserInfoModal } from '@/components/ui/UserInfoModal';
 import {
@@ -19,10 +19,12 @@ import {
   Crown,
   UserPlus,
   Trash2,
+  Plus,
 } from 'lucide-react';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { useUserRole } from '@/lib/hooks/useUserRole';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 
 type GroupType = 'STUDENTS' | 'COLLABORATORS' | 'MIXED';
 
@@ -73,9 +75,29 @@ export default function CollaboratorGruppiContent() {
   const [search, setSearch] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<MyGroupData | null>(null);
   const [messageGroupId, setMessageGroupId] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const utils = trpc.useUtils();
+  const { showSuccess } = useToast();
+  const { handleMutationError } = useApiError();
+
+  // Group creation is a configurable capability; Segreteria/Tutor get it only when granted.
+  const { can } = usePermissions();
+  const canManageGroups = can('groups.manage');
+  // With this capability getMyGroups returns ALL active groups, not just the user's own.
+  const canManageAllMembers = can('groups.manageAllMembers');
 
   // Query
   const { data: groups, isLoading } = trpc.groups.getMyGroups.useQuery();
+
+  const createMutation = trpc.groups.create.useMutation({
+    onSuccess: () => {
+      utils.groups.getMyGroups.invalidate();
+      showSuccess('Gruppo creato', 'Il nuovo gruppo è stato creato. Ora puoi aggiungere i membri.');
+      setShowCreateModal(false);
+    },
+    onError: handleMutationError,
+  });
 
   // Filter groups by search
   const filteredGroups = (groups as MyGroupData[] | undefined)?.filter((group) => {
@@ -97,12 +119,23 @@ export default function CollaboratorGruppiContent() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className={`text-2xl font-bold ${colors.text.primary}`}>
-            I Miei Gruppi
+            {canManageAllMembers ? 'Gruppi' : 'I Miei Gruppi'}
           </h1>
           <p className={colors.text.muted}>
-            Gruppi in cui sei referente o partecipante
+            {canManageAllMembers
+              ? 'Tutti i gruppi (puoi gestirne i membri)'
+              : 'Gruppi in cui sei referente o partecipante'}
           </p>
         </div>
+        {canManageGroups && (
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className={`${colors.primary.gradient} text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:opacity-90 transition`}
+          >
+            <Plus className="w-5 h-5" />
+            Nuovo Gruppo
+          </button>
+        )}
       </div>
 
       {/* Stats */}
@@ -261,7 +294,158 @@ export default function CollaboratorGruppiContent() {
           onClose={() => setMessageGroupId(null)}
         />
       )}
+
+      {/* Create Group Modal — only with the groups.manage capability */}
+      {showCreateModal && canManageGroups && (
+        <SimpleCreateGroupModal
+          onClose={() => setShowCreateModal(false)}
+          onSubmit={(data) => createMutation.mutate(data)}
+          isLoading={createMutation.isPending}
+        />
+      )}
     </div>
+  );
+}
+
+// ==================== SIMPLE CREATE GROUP MODAL (collaborators with groups.manage) ====================
+// Basic fields only (name, description, type, color). References/members are added afterwards via
+// the group management UI — the admin form's reference pickers rely on admin-only queries, so they
+// are intentionally omitted here. The backend auto-links the creating collaborator as referent.
+interface SimpleCreateGroupData {
+  name: string;
+  description?: string;
+  color?: string;
+  type: GroupType;
+}
+
+interface SimpleCreateGroupModalProps {
+  onClose: () => void;
+  onSubmit: (data: SimpleCreateGroupData) => void;
+  isLoading: boolean;
+}
+
+function SimpleCreateGroupModal({ onClose, onSubmit, isLoading }: SimpleCreateGroupModalProps) {
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    color: '#6366f1',
+    type: 'MIXED' as GroupType,
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit({
+      name: formData.name,
+      description: formData.description || undefined,
+      color: formData.color || undefined,
+      type: formData.type,
+    });
+  };
+
+  return (
+    <Portal>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className={`${colors.background.card} rounded-xl w-full max-w-lg shadow-xl`}>
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <h2 className={`text-xl font-semibold ${colors.text.primary}`}>Nuovo Gruppo</h2>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <div>
+              <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+                Nome del gruppo
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+                minLength={2}
+                maxLength={100}
+                placeholder="Es: Classe A - Biologia"
+                className={`w-full px-4 py-2.5 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-red-500/20 focus:border-red-500`}
+              />
+            </div>
+
+            <div>
+              <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>
+                Descrizione
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Descrizione opzionale..."
+                rows={3}
+                maxLength={500}
+                className={`w-full px-4 py-2.5 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} resize-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500`}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>Tipo</label>
+                <select
+                  value={formData.type}
+                  onChange={(e) => setFormData({ ...formData, type: e.target.value as GroupType })}
+                  className={`w-full px-4 py-2.5 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-red-500/20 focus:border-red-500`}
+                >
+                  {(Object.keys(groupTypeLabels) as GroupType[]).map((t) => (
+                    <option key={t} value={t}>{groupTypeLabels[t]}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium ${colors.text.secondary} mb-1`}>Colore</label>
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <input
+                      type="color"
+                      value={formData.color}
+                      onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                      className="w-10 h-10 cursor-pointer opacity-0 absolute inset-0"
+                    />
+                    <div
+                      className="w-10 h-10 rounded-lg border-2 border-gray-300 dark:border-gray-600"
+                      style={{ backgroundColor: formData.color }}
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    value={formData.color}
+                    onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                    className={`flex-1 px-3 py-2 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} text-sm`}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className={`px-4 py-2 rounded-lg border ${colors.border.primary} ${colors.text.secondary} hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors`}
+              >
+                Annulla
+              </button>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className={`${colors.primary.gradient} text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:opacity-90 transition disabled:opacity-60`}
+              >
+                <ButtonLoader loading={isLoading} loadingText="Creazione...">Crea gruppo</ButtonLoader>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </Portal>
   );
 }
 
@@ -275,7 +459,11 @@ function GroupDetailsModal({ group, onClose }: GroupDetailsModalProps) {
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
   const utils = trpc.useUtils();
-  
+  const { can } = usePermissions();
+  // Member management needs the 'groups.manageMembers' flag, plus being the group's referent
+  // (or the cross-group 'groups.manageAllMembers' opt-in).
+  const canManageMembers = (group.isReferent || can('groups.manageAllMembers')) && can('groups.manageMembers');
+
   const [selectedUserInfo, setSelectedUserInfo] = useState<{
     id: string;
     type: 'STUDENT' | 'COLLABORATOR';
@@ -286,12 +474,12 @@ function GroupDetailsModal({ group, onClose }: GroupDetailsModalProps) {
   // Load students or collaborators based on group type
   const { data: students } = trpc.students.getListForCollaborator.useQuery(
     undefined,
-    { enabled: group.isReferent && showAddMember && (group.type === 'STUDENTS' || group.type === 'MIXED') }
+    { enabled: canManageMembers && showAddMember && (group.type === 'STUDENTS' || group.type === 'MIXED') }
   );
 
   const { data: collaboratorsList } = trpc.collaborators.getListForCalendar.useQuery(
     undefined,
-    { enabled: group.isReferent && showAddMember && (group.type === 'COLLABORATORS' || group.type === 'MIXED') }
+    { enabled: canManageMembers && showAddMember && (group.type === 'COLLABORATORS' || group.type === 'MIXED') }
   );
 
   const addMemberMutation = trpc.groups.addMember.useMutation({
@@ -393,7 +581,7 @@ function GroupDetailsModal({ group, onClose }: GroupDetailsModalProps) {
               <h3 className={`font-medium ${colors.text.primary}`}>
                 Membri ({group.members.length})
               </h3>
-              {group.isReferent && (
+              {canManageMembers && (
                 <button
                   onClick={() => setShowAddMember(!showAddMember)}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${colors.primary.gradient} text-white`}
@@ -405,7 +593,7 @@ function GroupDetailsModal({ group, onClose }: GroupDetailsModalProps) {
             </div>
 
             {/* Add Member Section */}
-            {group.isReferent && showAddMember && (
+            {canManageMembers && showAddMember && (
               <div className={`mb-4 p-4 rounded-xl border ${colors.border.primary} ${colors.background.secondary}`}>
                 <h4 className={`text-sm font-medium ${colors.text.primary} mb-3`}>
                   {group.type === 'STUDENTS' && 'Aggiungi studente al gruppo'}
@@ -538,7 +726,7 @@ function GroupDetailsModal({ group, onClose }: GroupDetailsModalProps) {
                           >
                             <Eye className="w-4 h-4" />
                           </button>
-                          {group.isReferent && (
+                          {canManageMembers && (
                             <button
                               onClick={() => {
                                 if (confirm(`Rimuovere ${user?.name} dal gruppo?`)) {

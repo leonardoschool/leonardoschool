@@ -356,15 +356,13 @@ export const collaboratorsRouter = router({
     }),
 
   /**
-   * Update collaborator permissions (admin only)
+   * Update a collaborator's type and profile metadata (admin only).
+   * Fine-grained capabilities are managed per role/kind via the permissions matrix
+   * (see server/trpc/routers/permissions.ts), not per individual collaborator.
    */
   updatePermissions: adminProcedure
     .input(z.object({
       collaboratorId: z.string(),
-      canManageQuestions: z.boolean().optional(),
-      canManageMaterials: z.boolean().optional(),
-      canViewStats: z.boolean().optional(),
-      canViewStudents: z.boolean().optional(),
       kind: z.enum(['TUTOR', 'SECRETARY']).optional(),
       specialization: z.string().optional(),
       notes: z.string().optional(),

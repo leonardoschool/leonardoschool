@@ -5,7 +5,7 @@
 /* eslint-disable sonarjs/cognitive-complexity */
 
 import { z } from 'zod';
-import { router, protectedProcedure, adminProcedure, staffProcedure } from '../init';
+import { router, protectedProcedure, adminProcedure, staffProcedure, assertCapability, hasCapability } from '../init';
 import { TRPCError } from '@trpc/server';
 import {
   EventType,
@@ -45,6 +45,7 @@ export const calendarRouter = router({
       })
     )
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'calendar.view');
       const { startDate, endDate, type, tagId, groupId, createdById, includeInvitations, includeCancelled, onlyMyEvents, page, pageSize } = input;
 
       const where: Parameters<typeof ctx.prisma.calendarEvent.findMany>[0]['where'] = {};
@@ -116,8 +117,16 @@ export const calendarRouter = router({
         }
       }
 
+      // Collaborators granted cross-ownership see EVERY event — needed to manage others' events
+      // (events.manageAll) or record attendance on them (attendance.manageAll). Explicit filters
+      // (date/type/tag/creator) still apply. ADMIN already falls through to "no restriction" below.
+      const collaboratorSeesAllEvents = ctx.user?.role === 'COLLABORATOR' &&
+        (hasCapability(ctx, 'events.manageAll') || hasCapability(ctx, 'attendance.manageAll'));
+
       // Only my events (created by me or invited) - takes precedence over public filter
-      if (onlyMyEvents && ctx.user) {
+      if (collaboratorSeesAllEvents) {
+        // No visibility restriction: all events (subject to the explicit filters above).
+      } else if (onlyMyEvents && ctx.user) {
         type WhereCondition = Parameters<typeof ctx.prisma.calendarEvent.findMany>[0]['where'];
         const orConditions: WhereCondition[] = [
           { createdById: ctx.user.id },
@@ -214,6 +223,7 @@ export const calendarRouter = router({
   getEvent: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'calendar.view');
       const event = await ctx.prisma.calendarEvent.findUnique({
         where: { id: input.id },
         include: {
@@ -327,6 +337,7 @@ export const calendarRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'events.manage');
       const {
         inviteUserIds,
         inviteGroupIds,
@@ -447,6 +458,7 @@ export const calendarRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'events.manage');
       const { id, onlineLink, ...updateData } = input;
 
       // Check event exists
@@ -461,8 +473,8 @@ export const calendarRouter = router({
         });
       }
 
-      // Collaborators can only edit their own events
-      if (ctx.user.role === 'COLLABORATOR' && existing.createdById !== ctx.user.id) {
+      // Collaborators can only edit their own events (unless 'events.manageAll' is granted)
+      if (ctx.user.role === 'COLLABORATOR' && existing.createdById !== ctx.user.id && !hasCapability(ctx, 'events.manageAll')) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Puoi modificare solo i tuoi eventi',
@@ -545,6 +557,7 @@ export const calendarRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'events.manage');
       const existing = await ctx.prisma.calendarEvent.findUnique({
         where: { id: input.id },
       });
@@ -556,8 +569,8 @@ export const calendarRouter = router({
         });
       }
 
-      // Collaborators can only cancel their own events
-      if (ctx.user.role === 'COLLABORATOR' && existing.createdById !== ctx.user.id) {
+      // Collaborators can only cancel their own events (unless 'events.manageAll' is granted)
+      if (ctx.user.role === 'COLLABORATOR' && existing.createdById !== ctx.user.id && !hasCapability(ctx, 'events.manageAll')) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Puoi annullare solo i tuoi eventi',
@@ -665,6 +678,7 @@ export const calendarRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'events.manage');
       const { eventId, userIds, groupIds } = input;
 
       const event = await ctx.prisma.calendarEvent.findUnique({
@@ -678,8 +692,8 @@ export const calendarRouter = router({
         });
       }
 
-      // Collaborators can only manage their own events
-      if (ctx.user.role === 'COLLABORATOR' && event.createdById !== ctx.user.id) {
+      // Collaborators can only manage their own events (unless 'events.manageAll' is granted)
+      if (ctx.user.role === 'COLLABORATOR' && event.createdById !== ctx.user.id && !hasCapability(ctx, 'events.manageAll')) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Puoi gestire solo i tuoi eventi',
@@ -710,6 +724,7 @@ export const calendarRouter = router({
   removeInvitation: staffProcedure
     .input(z.object({ invitationId: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'events.manage');
       const invitation = await ctx.prisma.eventInvitation.findUnique({
         where: { id: input.invitationId },
         include: { event: true },
@@ -722,8 +737,8 @@ export const calendarRouter = router({
         });
       }
 
-      // Collaborators can only manage their own events
-      if (ctx.user.role === 'COLLABORATOR' && invitation.event.createdById !== ctx.user.id) {
+      // Collaborators can only manage their own events (unless 'events.manageAll' is granted)
+      if (ctx.user.role === 'COLLABORATOR' && invitation.event.createdById !== ctx.user.id && !hasCapability(ctx, 'events.manageAll')) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Puoi gestire solo i tuoi eventi',
@@ -779,6 +794,7 @@ export const calendarRouter = router({
   getEventAttendances: staffProcedure
     .input(z.object({ eventId: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'attendance.manage');
       const event = await ctx.prisma.calendarEvent.findUnique({
         where: { id: input.eventId },
         include: {
@@ -828,8 +844,8 @@ export const calendarRouter = router({
         });
       }
 
-      // Check if collaborator can access this event (must be creator)
-      if (ctx.user.role === 'COLLABORATOR' && event.createdById !== ctx.user.id) {
+      // Collaborators can record attendance only for their own events (unless 'attendance.manageAll' is granted)
+      if (ctx.user.role === 'COLLABORATOR' && event.createdById !== ctx.user.id && !hasCapability(ctx, 'attendance.manageAll')) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Non hai i permessi per gestire le presenze di questo evento',
@@ -907,6 +923,7 @@ export const calendarRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'attendance.manage');
       const { eventId, studentId, ...attendanceData } = input;
 
       // Check event exists
@@ -921,8 +938,8 @@ export const calendarRouter = router({
         });
       }
 
-      // Check if collaborator can access this event (must be creator)
-      if (ctx.user.role === 'COLLABORATOR' && event.createdById !== ctx.user.id) {
+      // Collaborators can record attendance only for their own events (unless 'attendance.manageAll' is granted)
+      if (ctx.user.role === 'COLLABORATOR' && event.createdById !== ctx.user.id && !hasCapability(ctx, 'attendance.manageAll')) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Non hai i permessi per gestire le presenze di questo evento',
@@ -975,6 +992,7 @@ export const calendarRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'attendance.manage');
       const { eventId, attendances } = input;
 
       // Check event exists
@@ -989,8 +1007,8 @@ export const calendarRouter = router({
         });
       }
 
-      // Check if collaborator can access this event (must be creator)
-      if (ctx.user.role === 'COLLABORATOR' && event.createdById !== ctx.user.id) {
+      // Collaborators can record attendance only for their own events (unless 'attendance.manageAll' is granted)
+      if (ctx.user.role === 'COLLABORATOR' && event.createdById !== ctx.user.id && !hasCapability(ctx, 'attendance.manageAll')) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Non hai i permessi per gestire le presenze di questo evento',
@@ -1112,6 +1130,7 @@ export const calendarRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'absences.requestOwn');
       // Validate dates
       if (input.endDate < input.startDate) {
         throw new TRPCError({
@@ -1236,6 +1255,7 @@ export const calendarRouter = router({
   cancelAbsenceRequest: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'absences.requestOwn');
       const existing = await ctx.prisma.staffAbsence.findUnique({
         where: { id: input.id },
         include: {
@@ -1340,7 +1360,10 @@ export const calendarRouter = router({
   // ==================== STATS ====================
 
   // Get calendar stats
-  getStats: staffProcedure.query(async ({ ctx }) => {
+  getStats: protectedProcedure.query(async ({ ctx }) => {
+    // Calendar stats power the cards in every calendar view, including the student one, so this
+    // is gated by 'calendar.view' (default ON for all roles) rather than being staff-only.
+    assertCapability(ctx, 'calendar.view');
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -1348,8 +1371,11 @@ export const calendarRouter = router({
     // For collaborators, only count events they can see (created by them or invited to)
     // For admins, count all events
     let eventFilter: Parameters<typeof ctx.prisma.calendarEvent.count>[0]['where'] = { isCancelled: false };
-    
-    if (ctx.user.role === 'COLLABORATOR') {
+
+    // Collaborators granted cross-ownership count ALL events (like admins).
+    const collaboratorSeesAllEvents = hasCapability(ctx, 'events.manageAll') || hasCapability(ctx, 'attendance.manageAll');
+
+    if (ctx.user.role === 'COLLABORATOR' && !collaboratorSeesAllEvents) {
       // Get collaborator's groups
       const collaborator = await ctx.prisma.collaborator.findUnique({
         where: { userId: ctx.user.id },
@@ -1372,12 +1398,38 @@ export const calendarRouter = router({
           { isPublic: true },
           { createdById: ctx.user.id },
           { invitations: { some: { userId: ctx.user.id } } },
-          ...(collaboratorGroupIds.length > 0 
-            ? [{ invitations: { some: { groupId: { in: collaboratorGroupIds } } } }] 
+          ...(collaboratorGroupIds.length > 0
+            ? [{ invitations: { some: { groupId: { in: collaboratorGroupIds } } } }]
+            : []),
+        ],
+      };
+    } else if (ctx.user.role === 'STUDENT') {
+      // Students see: public events, events they're invited to directly, or events their groups are invited to
+      const student = await ctx.prisma.student.findUnique({
+        where: { userId: ctx.user.id },
+        select: { id: true },
+      });
+      let studentGroupIds: string[] = [];
+      if (student) {
+        const groupMembers = await ctx.prisma.groupMember.findMany({
+          where: { studentId: student.id },
+          select: { groupId: true },
+        });
+        studentGroupIds = groupMembers.map(gm => gm.groupId);
+      }
+      eventFilter = {
+        isCancelled: false,
+        OR: [
+          { isPublic: true },
+          { invitations: { some: { userId: ctx.user.id } } },
+          ...(studentGroupIds.length > 0
+            ? [{ invitations: { some: { groupId: { in: studentGroupIds } } } }]
             : []),
         ],
       };
     }
+
+    const isStudent = ctx.user.role === 'STUDENT';
 
     const [
       totalEvents,
@@ -1416,7 +1468,8 @@ export const calendarRouter = router({
       totalEvents,
       eventsThisMonth,
       upcomingEvents,
-      pendingAbsences,
+      // staffAbsence is a staff concept; never surface its pending count to students.
+      pendingAbsences: isStudent ? 0 : pendingAbsences,
       myEventsCount,
     };
   }),

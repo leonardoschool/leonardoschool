@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma/client';
+import { logApp } from '@/lib/logging/appLog';
 
 function verifyCronSecret(request: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET;
@@ -228,6 +229,14 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('[Cron] Close-assignments failed:', error);
+    await logApp({
+      source: 'CRON',
+      level: 'ERROR',
+      message: 'Errore fatale nel cron close-simulations',
+      error,
+      path: 'POST /api/cron/close-simulations',
+      statusCode: 500,
+    });
     return NextResponse.json(
       {
         error: 'Internal Server Error',

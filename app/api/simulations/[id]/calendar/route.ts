@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma/client';
 import { getAdminAuth } from '@/lib/firebase/admin';
 import { generateICalendar, EventEmailData } from '@/lib/email/eventEmails';
+import { logApp } from '@/lib/logging/appLog';
 
 export async function GET(
   request: NextRequest,
@@ -145,6 +146,14 @@ export async function GET(
     });
   } catch (error) {
     console.error('Error generating calendar file:', error);
+    await logApp({
+      source: 'SIMULATION',
+      level: 'ERROR',
+      message: 'Errore nella generazione del file calendario simulazione',
+      error,
+      path: 'GET /api/simulations/[id]/calendar',
+      statusCode: 500,
+    });
     return NextResponse.json(
       { error: 'Errore nella generazione del file calendario' },
       { status: 500 }

@@ -7,6 +7,7 @@ import { PageLoader } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import Link from 'next/link';
 import SelfPracticeModal from '@/components/student/SelfPracticeModal';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import {
   Filter,
   Clock,
@@ -95,6 +96,10 @@ const studentStatusLabels: Record<string, string> = {
 };
 
 export default function StudentSimulationsContent() {
+  // Hide self-practice entry points when the capability is revoked (backend enforces too)
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canSelfPractice = permissionsLoading || can('student.selfPractice');
+
   // Tab state
   const [activeTab, setActiveTab] = useState<'assigned' | 'self'>('assigned');
 
@@ -257,7 +262,7 @@ export default function StudentSimulationsContent() {
         </div>
         
         {/* Quiz Veloce button - solo nella tab autoesercitazioni */}
-        {activeTab === 'self' && (
+        {activeTab === 'self' && canSelfPractice && (
           <button
             onClick={() => setShowSelfPracticeModal(true)}
             className={`p-4 rounded-xl ${colors.primary.softBg} border border-red-200 dark:border-red-800 hover:shadow-md transition-shadow text-left w-full`}
@@ -405,13 +410,15 @@ export default function StudentSimulationsContent() {
               <p className={`text-sm ${colors.text.muted} mb-4`}>
                 Crea il tuo primo quiz veloce per iniziare a esercitarti
               </p>
-              <button
-                onClick={() => setShowSelfPracticeModal(true)}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.bg} text-white hover:opacity-90 transition-opacity`}
-              >
-                <Zap className="w-4 h-4" />
-                Crea Quiz Veloce
-              </button>
+              {canSelfPractice && (
+                <button
+                  onClick={() => setShowSelfPracticeModal(true)}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${colors.primary.bg} text-white hover:opacity-90 transition-opacity`}
+                >
+                  <Zap className="w-4 h-4" />
+                  Crea Quiz Veloce
+                </button>
+              )}
             </>
           )}
         </div>

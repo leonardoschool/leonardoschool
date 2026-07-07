@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma/client';
 import { getAdminAuth } from '@/lib/firebase/admin';
 import { User, Student, Admin, Collaborator } from '@prisma/client';
 import { initRequestContext, generateRequestId } from '@/lib/utils/requestContext';
+import { resolveCapabilitiesForUser } from '@/lib/permissions/resolve';
 
 export async function createContext(opts: FetchCreateContextFnOptions) {
   const { req } = opts;
@@ -76,6 +77,16 @@ export async function createContext(opts: FetchCreateContextFnOptions) {
     }
   }
 
+  // Resolve the user's capabilities once per request (merges code defaults with DB overrides).
+  // Attached to ctx so every procedure/check reads the same immutable set without re-querying.
+  // Deactivated (or not-yet-activated) non-admin accounts get NO capabilities: their Firebase
+  // token stays valid after an admin deactivates them, and the edge middleware only reads a
+  // client-writable cookie — this is the server-side enforcement that actually cuts access.
+  // Ungated self-service reads (profile, contract signing, auth.me) keep working so the
+  // onboarding/waiting-for-contract flows are unaffected.
+  const isDeactivated = user !== null && !user.isActive && user.role !== 'ADMIN';
+  const capabilities = isDeactivated ? new Set<string>() : await resolveCapabilitiesForUser(user);
+
   // Initialize request context for tracking across async operations
   const requestContext = initRequestContext({
     requestId,
@@ -94,6 +105,7 @@ export async function createContext(opts: FetchCreateContextFnOptions) {
     requestId,
     requestContext,
     sessionInvalidated,
+    capabilities,
   };
 }
 

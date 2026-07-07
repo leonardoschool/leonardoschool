@@ -21,16 +21,20 @@ import {
   Shield,
   Activity,
   Radio,
-  Ban
+  Ban,
+  UserPlus
 } from 'lucide-react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useVirtualRoomSSE, VirtualRoomData } from '@/lib/hooks/useVirtualRoomSSE';
 import { formatDistanceToNow } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { ParticipantCard } from './ParticipantCard';
+import { AddParticipantModal } from './AddParticipantModal';
+import { ResetAttemptModal } from '@/components/simulazioni/ResetAttemptModal';
 
 // eslint-disable-next-line sonarjs/cognitive-complexity -- Complex real-time component with SSE, polling, and multi-role logic
 export default function VirtualRoomPage() {
@@ -48,9 +52,13 @@ export default function VirtualRoomPage() {
   const [selectedParticipantId, setSelectedParticipantId] = useState<string | null>(null);
   const [messageText, setMessageText] = useState('');
   const [kickConfirm, setKickConfirm] = useState<{ id: string; name: string } | null>(null);
+  const [showAddStudent, setShowAddStudent] = useState(false);
+  const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
 
   const isStudent = user?.role === 'STUDENT';
   const isStaff = user?.role === 'ADMIN' || user?.role === 'COLLABORATOR';
+  const { can } = usePermissions();
+  const canManageAttempts = isStaff && can('simulations.manageAttempts');
 
   // Student states
   const [participantId, setParticipantId] = useState<string | null>(null);
@@ -272,6 +280,21 @@ export default function VirtualRoomPage() {
   // Handler for kick button
   const handleKickParticipant = useCallback((participantId: string, studentName: string) => {
     setKickConfirm({ id: participantId, name: studentName });
+  }, []);
+
+  // Reset participant mutation (resume attempt keeping saved answers)
+  const resetParticipant = trpc.virtualRoom.resetParticipant.useMutation({
+    onSuccess: (data) => {
+      showSuccess('Tentativo ripristinato', data.message);
+      setResetTarget(null);
+      sessionState.refetch();
+    },
+    onError: handleMutationError,
+  });
+
+  // Handler for reset button
+  const handleResetParticipant = useCallback((participantId: string, studentName: string) => {
+    setResetTarget({ id: participantId, name: studentName });
   }, []);
 
   // Play notification sound when new messages arrive (Staff only)
@@ -674,6 +697,12 @@ export default function VirtualRoomPage() {
   // Find not connected invited students (deduplicated)
   const connectedStudentIds = new Set(participants.map(p => p.studentId));
   const notConnectedStudentsRaw = invitedStudents.filter(s => !connectedStudentIds.has(s.id));
+
+  // Students already in the room or already invited can't be added manually
+  const excludedStudentIds = new Set<string>([
+    ...connectedStudentIds,
+    ...invitedStudents.map(s => s.id),
+  ]);
   // Deduplicate by student id
   const notConnectedStudents = Array.from(
     new Map(notConnectedStudentsRaw.map(s => [s.id, s])).values()
@@ -901,10 +930,21 @@ export default function VirtualRoomPage() {
 
         {/* Participants Grid */}
         <div>
-          <h2 className={`text-lg font-semibold ${colors.text.primary} mb-4 flex items-center gap-2`}>
-            <Users className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
-            Partecipanti ({participants.length})
-          </h2>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className={`text-lg font-semibold ${colors.text.primary} flex items-center gap-2`}>
+              <Users className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+              Partecipanti ({participants.length})
+            </h2>
+            {canManageAttempts && session.status !== 'COMPLETED' && (
+              <Button
+                onClick={() => setShowAddStudent(true)}
+                className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white border-0 px-4 py-2 text-sm rounded-xl"
+              >
+                <UserPlus className="w-4 h-4 mr-2" />
+                Aggiungi studente
+              </Button>
+            )}
+          </div>
           {participants.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {participants.map(participant => (
@@ -914,6 +954,7 @@ export default function VirtualRoomPage() {
                   totalQuestions={simulation.totalQuestions}
                   onSendMessage={setSelectedParticipantId}
                   onKickParticipant={handleKickParticipant}
+                  onResetParticipant={canManageAttempts ? handleResetParticipant : undefined}
                   sessionStatus={session.status}
                 />
               ))}
@@ -1229,6 +1270,31 @@ export default function VirtualRoomPage() {
           </div>
         </div>
       )}
+
+      {/* Add Student Modal */}
+      {sessionId && (
+        <AddParticipantModal
+          isOpen={showAddStudent}
+          sessionId={sessionId}
+          isCollaborator={user?.role === 'COLLABORATOR'}
+          excludedStudentIds={excludedStudentIds}
+          onClose={() => setShowAddStudent(false)}
+          onAdded={() => sessionState.refetch()}
+        />
+      )}
+
+      {/* Reset Attempt Modal */}
+      <ResetAttemptModal
+        isOpen={!!resetTarget}
+        studentName={resetTarget?.name ?? ''}
+        isPending={resetParticipant.isPending}
+        onConfirm={(resetTimer) => {
+          if (resetTarget) {
+            resetParticipant.mutate({ participantId: resetTarget.id, resetTimer });
+          }
+        }}
+        onClose={() => setResetTarget(null)}
+      />
     </div>
   );
 }

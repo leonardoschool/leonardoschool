@@ -7,8 +7,7 @@ import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { stripHtml } from '@/lib/utils/sanitizeHtml';
 import { PageLoader } from '@/components/ui/loaders';
-import { useAuth } from '@/lib/hooks/useAuth';
-import { isStaff } from '@/lib/permissions';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { TemplateStatistics } from '@/components/simulazioni';
 import {
   ArrowLeft,
@@ -30,13 +29,12 @@ type TabType = 'overview' | 'questions' | 'subjects' | 'students';
 export default function SimulationStatsPage({ params }: { readonly params: Promise<{ readonly id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const { user } = useAuth();
+  const { can, isLoading: permsLoading } = usePermissions();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [expandedQuestions, setExpandedQuestions] = useState<Set<string>>(new Set());
 
-  // Check authorization
-  const userRole = user?.role;
-  const hasAccess = userRole && isStaff(userRole);
+  // Access follows the 'simulations.viewStats' capability (ADMIN always passes).
+  const hasAccess = can('simulations.viewStats');
 
   // Fetch simulation with results
   const { data: simulation, isLoading } = trpc.simulations.getSimulation.useQuery(
@@ -59,6 +57,11 @@ export default function SimulationStatsPage({ params }: { readonly params: Promi
       return newSet;
     });
   };
+
+  // Wait for capabilities before deciding access, to avoid a false "Accesso negato" flash.
+  if (permsLoading) {
+    return <PageLoader />;
+  }
 
   // Authorization check
   if (!hasAccess) {

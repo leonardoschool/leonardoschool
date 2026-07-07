@@ -18,9 +18,22 @@ function isSessionInvalidatedError(error: unknown): boolean {
   );
 }
 
+function isPermissionDeniedError(error: unknown): boolean {
+  return (
+    error instanceof TRPCClientError &&
+    (error.data as { httpStatus?: number } | undefined)?.httpStatus === 403
+  );
+}
+
 function dispatchSessionInvalidated() {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('session-invalidated'));
+  }
+}
+
+function dispatchPermissionDenied() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('permission-denied'));
   }
 }
 
@@ -46,6 +59,7 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
     queryCache: new QueryCache({
       onError: (error) => {
         if (isSessionInvalidatedError(error)) dispatchSessionInvalidated();
+        else if (isPermissionDeniedError(error)) dispatchPermissionDenied();
       },
     }),
     mutationCache: new MutationCache({

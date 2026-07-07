@@ -10,8 +10,7 @@ import { useToast } from '@/components/ui/Toast';
 import { PageLoader, Spinner } from '@/components/ui/loaders';
 import Checkbox from '@/components/ui/Checkbox';
 import NumericInput from '@/components/ui/NumericInput';
-import { useAuth } from '@/lib/hooks/useAuth';
-import { isStaff } from '@/lib/permissions';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { LocationType, SimulationType } from '@/lib/validations/simulationValidation';
 import {
   ArrowLeft,
@@ -55,13 +54,13 @@ const locationOptions: Array<{ value: LocationType; label: string }> = [
 export default function EditSimulationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const { user } = useAuth();
+  const { can, isLoading: permsLoading } = usePermissions();
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
   const utils = trpc.useUtils();
 
-  const userRole = user?.role;
-  const hasAccess = userRole && isStaff(userRole);
+  // Editing requires the 'simulations.manage' capability (ownership/manageAll enforced on save).
+  const hasAccess = can('simulations.manage');
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -237,6 +236,8 @@ export default function EditSimulationPage({ params }: { params: Promise<{ id: s
       setIsSaving(false);
     }
   };
+
+  if (permsLoading) return <PageLoader />;
 
   if (!hasAccess) {
     return (

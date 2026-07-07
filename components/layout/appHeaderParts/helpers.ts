@@ -9,12 +9,13 @@ import {
   FileSignature,
   Briefcase,
   Mail,
-  MailCheck,
+  FileWarning,
   GraduationCap,
   ClipboardCheck,
   UserMinus,
   BookOpen,
   Tag,
+  ShieldCheck,
 } from 'lucide-react';
 import type { NavItem } from './types';
 
@@ -74,16 +75,17 @@ export function getNavigationItems(isAdmin: boolean, isCollaborator: boolean, is
 
   const collaboratorNavItems: NavItem[] = [
     { href: '/dashboard', label: 'Dashboard', icon: Home },
-    { href: '/calendario', label: 'Calendario', icon: Calendar },
+    { href: '/calendario', label: 'Calendario', icon: Calendar, capabilities: ['calendar.view'] },
+    { href: '/statistiche', label: 'Statistiche', icon: BarChart3, capabilities: ['stats.viewPlatform'] },
   ];
 
   const studentNavItems: NavItem[] = [
     { href: '/dashboard', label: 'Dashboard', icon: Home },
-    { href: '/calendario', label: 'Calendario', icon: Calendar },
-    { href: '/simulazioni', label: 'Simulazioni', icon: ClipboardList },
-    { href: '/materiali', label: 'Materiale Didattico', icon: FolderOpen },
-    { href: '/statistiche', label: 'Statistiche', icon: BarChart3 },
-    { href: '/gruppo', label: 'Il Mio Gruppo', icon: UsersRound },
+    { href: '/calendario', label: 'Calendario', icon: Calendar, capabilities: ['calendar.view'] },
+    { href: '/simulazioni', label: 'Simulazioni', icon: ClipboardList, capabilities: ['student.takeSimulations'] },
+    { href: '/materiali', label: 'Materiale Didattico', icon: FolderOpen, capabilities: ['student.viewMaterials'] },
+    { href: '/statistiche', label: 'Statistiche', icon: BarChart3, capabilities: ['student.viewOwnStats'] },
+    { href: '/gruppo', label: 'Il Mio Gruppo', icon: UsersRound, capabilities: ['student.viewGroup'] },
   ];
 
   if (isAdmin) return adminNavItems;
@@ -136,12 +138,13 @@ export function getGestioneItems(isAdmin: boolean): NavItem[] {
     { href: '/contratti', label: 'Contratti', icon: FileSignature },
     { href: '/candidature', label: 'Candidature', icon: Briefcase },
     { href: '/richieste', label: 'Richieste', icon: Mail },
-    { href: '/log-email', label: 'Log Email', icon: MailCheck },
+    { href: '/log-errori', label: 'Log Errori', icon: FileWarning },
+    { href: '/permessi', label: 'Permessi', icon: ShieldCheck },
   ];
 
   const collaboratorItems: NavItem[] = [
-    { href: '/studenti', label: 'Studenti', icon: GraduationCap },
-    { href: '/gruppi', label: 'Gruppi', icon: UsersRound },
+    { href: '/studenti', label: 'Studenti', icon: GraduationCap, capabilities: ['students.view'] },
+    { href: '/gruppi', label: 'Gruppi', icon: UsersRound, capabilities: ['groups.view'] },
   ];
 
   return isAdmin ? adminItems : collaboratorItems;
@@ -154,8 +157,8 @@ export function getRegistroItems(isAdmin: boolean): NavItem[] {
   ];
 
   const collaboratorItems: NavItem[] = [
-    { href: '/presenze', label: 'Registro Elettronico', icon: ClipboardCheck },
-    { href: '/le-mie-assenze', label: 'Le Mie Assenze', icon: UserMinus },
+    { href: '/presenze', label: 'Registro Elettronico', icon: ClipboardCheck, capabilities: ['attendance.manage'] },
+    { href: '/le-mie-assenze', label: 'Le Mie Assenze', icon: UserMinus, capabilities: ['absences.requestOwn'] },
   ];
 
   return isAdmin ? adminItems : collaboratorItems;
@@ -170,10 +173,10 @@ export function getDidatticaItems(isAdmin: boolean): NavItem[] {
   ];
 
   const collaboratorItems: NavItem[] = [
-    { href: '/domande', label: 'Domande', icon: BookOpen },
-    { href: '/tags', label: 'Tag', icon: Tag },
-    { href: '/materiali', label: 'Materiali', icon: FolderOpen },
-    { href: '/simulazioni', label: 'Simulazioni', icon: ClipboardList },
+    { href: '/domande', label: 'Domande', icon: BookOpen, capabilities: ['questions.view'] },
+    { href: '/tags', label: 'Tag', icon: Tag, capabilities: ['tags.manage'] },
+    { href: '/materiali', label: 'Materiali', icon: FolderOpen, capabilities: ['materials.view'] },
+    { href: '/simulazioni', label: 'Simulazioni', icon: ClipboardList, capabilities: ['simulations.view'] },
   ];
 
   return isAdmin ? adminItems : collaboratorItems;

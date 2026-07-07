@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { adminProcedure, protectedProcedure, router, staffProcedure } from '../init';
+import { adminProcedure, protectedProcedure, router, staffProcedure, assertCapability, hasCapability } from '../init';
 import { notifications } from '@/lib/notifications/notificationHelpers';
 import {
   uniqueReferenceIds,
@@ -28,6 +28,7 @@ export const groupsRouter = router({
       })
     )
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.view');
       const { page, pageSize, type, search, includeInactive, onlyMyGroups } = input;
 
       const where: Record<string, unknown> = {};
@@ -103,6 +104,7 @@ export const groupsRouter = router({
       }).optional()
     )
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.view');
       const andConditions = [
         ...(input?.search ? [{
           OR: [
@@ -196,6 +198,7 @@ export const groupsRouter = router({
   getById: staffProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.view');
       const group = await ctx.prisma.group.findUnique({
         where: { id: input.id },
         include: {
@@ -365,7 +368,7 @@ export const groupsRouter = router({
     }),
 
   // Create a new group
-  create: adminProcedure
+  create: staffProcedure
     .input(
       z.object({
         name: z.string().min(2, 'Nome troppo corto').max(100),
@@ -380,6 +383,7 @@ export const groupsRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.manage');
       const legacyReference = parseLegacyReference(input.referenceCollaboratorId);
       const referenceStudentIds = uniqueReferenceIds([...(input.referenceStudentIds ?? []), input.referenceStudentId]);
       const referenceCollaboratorIds = uniqueReferenceIds([
@@ -387,6 +391,19 @@ export const groupsRouter = router({
         ...legacyReference.collaboratorIds,
       ]);
       const referenceAdminIds = uniqueReferenceIds([...(input.referenceAdminIds ?? []), ...legacyReference.adminIds]);
+
+      // A collaborator creating a group (e.g. via the simplified collaborator modal, which sends no
+      // references) must become a referent, otherwise the group would not surface in their
+      // "I Miei Gruppi" (getMyGroups filters by referent/member). Admin-created groups are unaffected.
+      if (ctx.user.role === 'COLLABORATOR') {
+        const self = await ctx.prisma.collaborator.findUnique({
+          where: { userId: ctx.user.id },
+          select: { id: true },
+        });
+        if (self && !referenceCollaboratorIds.includes(self.id)) {
+          referenceCollaboratorIds.push(self.id);
+        }
+      }
 
       await validateReferenceIds(ctx.prisma, referenceStudentIds, referenceCollaboratorIds, referenceAdminIds);
 
@@ -439,7 +456,7 @@ export const groupsRouter = router({
     }),
 
   // Update a group
-  update: adminProcedure
+  update: staffProcedure
     .input(
       z.object({
         id: z.string(),
@@ -456,6 +473,7 @@ export const groupsRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.manage');
       const {
         id,
         referenceCollaboratorId: rawCollaboratorId,
@@ -574,9 +592,10 @@ export const groupsRouter = router({
     }),
 
   // Delete a group (hard delete - removes group and all members)
-  delete: adminProcedure
+  delete: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.manage');
       const group = await ctx.prisma.group.findUnique({
         where: { id: input.id },
       });
@@ -612,6 +631,7 @@ export const groupsRouter = router({
       )
     )
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.manageMembers');
       // Check group exists and is active
       const group = await ctx.prisma.group.findUnique({
         where: { id: input.groupId },
@@ -625,12 +645,12 @@ export const groupsRouter = router({
         });
       }
 
-      // If collaborator, check if they are the referent
-      if (ctx.user?.role === 'COLLABORATOR') {
+      // If collaborator, check if they are the referent (unless 'manageAllMembers' is granted)
+      if (ctx.user?.role === 'COLLABORATOR' && !hasCapability(ctx, 'groups.manageAllMembers')) {
         const collaborator = await ctx.prisma.collaborator.findUnique({
           where: { userId: ctx.user.id },
         });
-        
+
         const isReferenceCollaborator = collaborator && (
           group.referenceCollaboratorId === collaborator.id
           || group.referenceCollaborators.some((reference) => reference.collaboratorId === collaborator.id)
@@ -809,25 +829,21 @@ export const groupsRouter = router({
 
       // Send notifications to newly added students
       if (newStudentIds.length > 0) {
-        // Get student user IDs for notifications
         const students = await ctx.prisma.student.findMany({
           where: { id: { in: newStudentIds } },
           select: { userId: true },
         });
-        
-        // Create notifications for each new student member
-        const notificationsToCreate = students.map((student) => ({
-          userId: student.userId,
-          type: 'GENERAL' as const,
-          title: 'Aggiunto a un gruppo',
-          message: `Sei stato aggiunto al gruppo "${group.name}".`,
-          data: { groupId: group.id, groupName: group.name },
-        }));
 
-        if (notificationsToCreate.length > 0) {
-          await ctx.prisma.notification.createMany({
-            data: notificationsToCreate,
-          });
+        for (const student of students) {
+          try {
+            await notifications.groupMemberAdded(ctx.prisma, {
+              recipientUserId: student.userId,
+              groupId: group.id,
+              groupName: group.name,
+            });
+          } catch (error) {
+            console.error('[Groups] Failed to send notification:', error);
+          }
         }
       }
 
@@ -837,19 +853,17 @@ export const groupsRouter = router({
           where: { id: { in: newCollaboratorIds } },
           select: { userId: true },
         });
-        
-        const notificationsToCreate = collaborators.map((collab) => ({
-          userId: collab.userId,
-          type: 'GENERAL' as const,
-          title: 'Aggiunto a un gruppo',
-          message: `Sei stato aggiunto al gruppo "${group.name}".`,
-          data: { groupId: group.id, groupName: group.name },
-        }));
 
-        if (notificationsToCreate.length > 0) {
-          await ctx.prisma.notification.createMany({
-            data: notificationsToCreate,
-          });
+        for (const collab of collaborators) {
+          try {
+            await notifications.groupMemberAdded(ctx.prisma, {
+              recipientUserId: collab.userId,
+              groupId: group.id,
+              groupName: group.name,
+            });
+          } catch (error) {
+            console.error('[Groups] Failed to send notification:', error);
+          }
         }
       }
 
@@ -859,10 +873,105 @@ export const groupsRouter = router({
       };
     }),
 
+  // Set the complete set of groups for a single user (diff add/remove).
+  // Powers the inline group editor on the users page.
+  setUserGroups: adminProcedure
+    .input(
+      z.object({
+        studentId: z.string().optional(),
+        collaboratorId: z.string().optional(),
+        groupIds: z.array(z.string()),
+      }).refine(
+        (data) => (data.studentId && !data.collaboratorId) || (!data.studentId && data.collaboratorId),
+        { message: 'Specificare esattamente uno tra studentId e collaboratorId' }
+      )
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { studentId, collaboratorId, groupIds } = input;
+      const isStudent = Boolean(studentId);
+
+      const currentMembers = await ctx.prisma.groupMember.findMany({
+        where: isStudent ? { studentId } : { collaboratorId },
+        select: { id: true, groupId: true },
+      });
+
+      const currentGroupIds = new Set(currentMembers.map((m) => m.groupId));
+      const desiredGroupIds = new Set(groupIds);
+      const toAddIds = groupIds.filter((id) => !currentGroupIds.has(id));
+      const toRemove = currentMembers.filter((m) => !desiredGroupIds.has(m.groupId));
+
+      // Validate type compatibility for the groups being added
+      let addedGroups: { id: string; name: string }[] = [];
+      if (toAddIds.length > 0) {
+        const groupsToAdd = await ctx.prisma.group.findMany({
+          where: { id: { in: toAddIds } },
+          select: { id: true, name: true, type: true },
+        });
+
+        if (groupsToAdd.length !== toAddIds.length) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Uno o più gruppi non sono stati trovati' });
+        }
+
+        const incompatible = groupsToAdd.find((g) =>
+          (isStudent && g.type === 'COLLABORATORS') || (!isStudent && g.type === 'STUDENTS')
+        );
+        if (incompatible) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: isStudent
+              ? `Il gruppo "${incompatible.name}" accetta solo collaboratori`
+              : `Il gruppo "${incompatible.name}" accetta solo studenti`,
+          });
+        }
+
+        addedGroups = groupsToAdd.map((g) => ({ id: g.id, name: g.name }));
+      }
+
+      await ctx.prisma.$transaction([
+        ...(toRemove.length > 0
+          ? [ctx.prisma.groupMember.deleteMany({ where: { id: { in: toRemove.map((m) => m.id) } } })]
+          : []),
+        ...(toAddIds.length > 0
+          ? [ctx.prisma.groupMember.createMany({
+              data: toAddIds.map((groupId) => ({
+                groupId,
+                studentId: studentId ?? null,
+                collaboratorId: collaboratorId ?? null,
+              })),
+              skipDuplicates: true,
+            })]
+          : []),
+      ]);
+
+      // Notify the user for each newly added group
+      if (addedGroups.length > 0) {
+        const target = isStudent
+          ? await ctx.prisma.student.findUnique({ where: { id: studentId }, select: { userId: true } })
+          : await ctx.prisma.collaborator.findUnique({ where: { id: collaboratorId }, select: { userId: true } });
+
+        if (target?.userId) {
+          for (const g of addedGroups) {
+            try {
+              await notifications.groupMemberAdded(ctx.prisma, {
+                recipientUserId: target.userId,
+                groupId: g.id,
+                groupName: g.name,
+              });
+            } catch (error) {
+              console.error('[Groups] Failed to send notification:', error);
+            }
+          }
+        }
+      }
+
+      return { added: toAddIds.length, removed: toRemove.length };
+    }),
+
   // Remove a member from a group
   removeMember: staffProcedure
     .input(z.object({ memberId: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.manageMembers');
       const member = await ctx.prisma.groupMember.findUnique({
         where: { id: input.memberId },
         include: { group: { include: { referenceCollaborators: { select: { collaboratorId: true } } } } },
@@ -875,12 +984,12 @@ export const groupsRouter = router({
         });
       }
 
-      // If collaborator, check if they are the referent
-      if (ctx.user?.role === 'COLLABORATOR') {
+      // If collaborator, check if they are the referent (unless 'manageAllMembers' is granted)
+      if (ctx.user?.role === 'COLLABORATOR' && !hasCapability(ctx, 'groups.manageAllMembers')) {
         const collaborator = await ctx.prisma.collaborator.findUnique({
           where: { userId: ctx.user.id },
         });
-        
+
         const isReferenceCollaborator = collaborator && (
           member.group.referenceCollaboratorId === collaborator.id
           || member.group.referenceCollaborators.some((reference) => reference.collaboratorId === collaborator.id)
@@ -905,6 +1014,7 @@ export const groupsRouter = router({
   getMembers: staffProcedure
     .input(z.object({ groupId: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.view');
       const members = await ctx.prisma.groupMember.findMany({
         where: { groupId: input.groupId },
         include: {
@@ -934,6 +1044,7 @@ export const groupsRouter = router({
       })
     )
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'groups.view');
       // First get the student/collaborator id from user id
       let entityId: string | null = null;
 
@@ -1091,6 +1202,7 @@ export const groupsRouter = router({
     }),
 
   getStats: staffProcedure.query(async ({ ctx }) => {
+    assertCapability(ctx, 'groups.view');
     const [total, byType, activeGroups] = await Promise.all([
       ctx.prisma.group.count(),
       ctx.prisma.group.groupBy({ by: ['type'], _count: true, where: { isActive: true } }),
@@ -1126,22 +1238,22 @@ export const groupsRouter = router({
       return [];
     }
 
-    // Get groups where this user is the reference (as collaborator or admin)
-    // OR where they are a member
+    // With 'groups.manageAllMembers' the list shows EVERY active group (so members can be managed
+    // across all of them); otherwise it stays scoped to groups the user references or belongs to.
+    const canManageAll = hasCapability(ctx, 'groups.manageAllMembers');
+    const selfScopedOr = [
+      // Referent as collaborator
+      ...(collaborator ? [{ referenceCollaboratorId: collaborator.id }] : []),
+      ...(collaborator ? [{ referenceCollaborators: { some: { collaboratorId: collaborator.id } } }] : []),
+      // Referent as admin
+      ...(admin ? [{ referenceAdminId: admin.id }] : []),
+      ...(admin ? [{ referenceAdmins: { some: { adminId: admin.id } } }] : []),
+      // Member as collaborator
+      ...(collaborator ? [{ members: { some: { collaboratorId: collaborator.id } } }] : []),
+    ];
+
     const groups = await ctx.prisma.group.findMany({
-      where: {
-        isActive: true,
-        OR: [
-          // Referent as collaborator
-          ...(collaborator ? [{ referenceCollaboratorId: collaborator.id }] : []),
-          ...(collaborator ? [{ referenceCollaborators: { some: { collaboratorId: collaborator.id } } }] : []),
-          // Referent as admin
-          ...(admin ? [{ referenceAdminId: admin.id }] : []),
-          ...(admin ? [{ referenceAdmins: { some: { adminId: admin.id } } }] : []),
-          // Member as collaborator
-          ...(collaborator ? [{ members: { some: { collaboratorId: collaborator.id } } }] : []),
-        ],
-      },
+      where: canManageAll ? { isActive: true } : { isActive: true, OR: selfScopedOr },
       orderBy: { name: 'asc' },
       include: {
         _count: {

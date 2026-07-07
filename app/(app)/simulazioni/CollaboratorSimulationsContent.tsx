@@ -108,6 +108,9 @@ export default function CollaboratorSimulationsContent() {
     menuRef,
     assignmentMenuRef,
     pendingReviewsCount,
+    canCorrectOpenAnswers,
+    canManage,
+    canViewStats,
     groupsData,
     simulationsData,
     isLoading,
@@ -150,33 +153,39 @@ export default function CollaboratorSimulationsContent() {
           </p>
         </div>
         <div className="flex gap-3">
-          {/* Open Answers Review Button with Badge */}
-          <Link
-            href="/simulazioni/risposte-aperte"
-            className={`relative inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all border ${colors.border.light} ${colors.text.primary} hover:${colors.background.hover}`}
-          >
-            <BookOpen className="w-4 h-4" />
-            <span className="hidden sm:inline">Risposte Aperte</span>
-            {pendingReviewsCount > 0 && (
-              <span className="absolute -top-2 -right-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-500 rounded-full min-w-[20px]">
-                {pendingReviewsCount > 99 ? '99+' : pendingReviewsCount}
-              </span>
-            )}
-          </Link>
-          <Link
-            href="/simulazioni/nuova?mode=template"
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border ${colors.border.light} ${colors.text.primary} hover:${colors.background.hover} transition-colors`}
-          >
-            <FileText className="w-4 h-4" />
-            Nuovo Template
-          </Link>
-          <Link
-            href="/simulazioni/nuova"
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white ${colors.primary.bg} hover:opacity-90 transition-opacity`}
-          >
-            <Plus className="w-4 h-4" />
-            Nuova Simulazione
-          </Link>
+          {/* Open Answers Review Button with Badge — only for roles that can correct */}
+          {canCorrectOpenAnswers && (
+            <Link
+              href="/simulazioni/risposte-aperte"
+              className={`relative inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all border ${colors.border.light} ${colors.text.primary} hover:${colors.background.hover}`}
+            >
+              <BookOpen className="w-4 h-4" />
+              <span className="hidden sm:inline">Risposte Aperte</span>
+              {pendingReviewsCount > 0 && (
+                <span className="absolute -top-2 -right-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-500 rounded-full min-w-[20px]">
+                  {pendingReviewsCount > 99 ? '99+' : pendingReviewsCount}
+                </span>
+              )}
+            </Link>
+          )}
+          {canManage && (
+            <Link
+              href="/simulazioni/nuova?mode=template"
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border ${colors.border.light} ${colors.text.primary} hover:${colors.background.hover} transition-colors`}
+            >
+              <FileText className="w-4 h-4" />
+              Nuovo Template
+            </Link>
+          )}
+          {canManage && (
+            <Link
+              href="/simulazioni/nuova"
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white ${colors.primary.bg} hover:opacity-90 transition-opacity`}
+            >
+              <Plus className="w-4 h-4" />
+              Nuova Simulazione
+            </Link>
+          )}
         </div>
       </div>
 
@@ -788,22 +797,26 @@ export default function CollaboratorSimulationsContent() {
               <p className={`px-2 py-1 text-xs font-semibold uppercase tracking-wider ${colors.text.muted}`}>
                 Navigazione
               </p>
-              <Link
-                href={`/simulazioni/${openMenuId}/modifica`}
-                className={`flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm sm:text-sm rounded-lg ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors touch-manipulation`}
-                onClick={() => setOpenMenuId(null)}
-              >
-                <Edit2 className="w-5 h-5 sm:w-4 sm:h-4" />
-                Modifica
-              </Link>
-              <Link
-                href={`/simulazioni/${openMenuId}/statistiche`}
-                className={`flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm sm:text-sm rounded-lg ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors touch-manipulation`}
-                onClick={() => setOpenMenuId(null)}
-              >
-                <BarChart3 className="w-5 h-5 sm:w-4 sm:h-4" />
-                Statistiche
-              </Link>
+              {openMenuId && canModifySimulation(openMenuId) && (
+                <Link
+                  href={`/simulazioni/${openMenuId}/modifica`}
+                  className={`flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm sm:text-sm rounded-lg ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors touch-manipulation`}
+                  onClick={() => setOpenMenuId(null)}
+                >
+                  <Edit2 className="w-5 h-5 sm:w-4 sm:h-4" />
+                  Modifica
+                </Link>
+              )}
+              {canViewStats && (
+                <Link
+                  href={`/simulazioni/${openMenuId}/statistiche`}
+                  className={`flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm sm:text-sm rounded-lg ${colors.text.primary} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors touch-manipulation`}
+                  onClick={() => setOpenMenuId(null)}
+                >
+                  <BarChart3 className="w-5 h-5 sm:w-4 sm:h-4" />
+                  Statistiche
+                </Link>
+              )}
             </div>
             
             <hr className={`my-1 ${colors.border.light}`} />

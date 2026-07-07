@@ -537,19 +537,7 @@ describe('Collaborators Router', () => {
         expect(true).toBe(true);
       });
 
-      it('should accept optional canManageQuestions', () => {
-        expect(true).toBe(true);
-      });
-
-      it('should accept optional canManageMaterials', () => {
-        expect(true).toBe(true);
-      });
-
-      it('should accept optional canViewStats', () => {
-        expect(true).toBe(true);
-      });
-
-      it('should accept optional canViewStudents', () => {
+      it('should accept optional kind', () => {
         expect(true).toBe(true);
       });
 
@@ -563,12 +551,11 @@ describe('Collaborators Router', () => {
     });
 
     describe('success scenarios', () => {
-      it('should update permissions', async () => {
+      it('should update collaborator kind', async () => {
         const collaborator = createMockCollaborator(faker.string.uuid());
         mockPrisma.collaborator.update.mockResolvedValue({
           ...collaborator,
-          canManageQuestions: false,
-          canManageMaterials: false,
+          kind: 'SECRETARY',
         });
 
         expect(mockPrisma.collaborator.update).toBeDefined();

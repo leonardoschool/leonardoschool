@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { isStaff } from '@/lib/permissions';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { PageLoader } from '@/components/ui/loaders';
 import PresenzePageContent from '@/components/presenze/PresenzePageContent';
 
@@ -15,6 +16,7 @@ export default function PresenzePage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const userRole = user?.role;
+  const { can, isLoading: permsLoading } = usePermissions();
 
   useEffect(() => {
     if (!loading && !isStaff(userRole)) {
@@ -22,7 +24,7 @@ export default function PresenzePage() {
     }
   }, [loading, userRole, router]);
 
-  if (loading) {
+  if (loading || permsLoading) {
     return <PageLoader />;
   }
 
@@ -30,8 +32,8 @@ export default function PresenzePage() {
     return <PageLoader />;
   }
 
-  // Admin sees all events, collaborators only see their own
-  const onlyMyEvents = userRole === 'COLLABORATOR';
+  // Admin sees all events; collaborators only their own — unless granted 'attendance.manageAll'.
+  const onlyMyEvents = userRole === 'COLLABORATOR' && !can('attendance.manageAll');
 
   return <PresenzePageContent onlyMyEvents={onlyMyEvents} />;
 }

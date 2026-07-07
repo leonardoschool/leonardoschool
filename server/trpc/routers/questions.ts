@@ -1,5 +1,5 @@
 // Questions Router - Manage quiz questions
-import { router, adminProcedure, staffProcedure, protectedProcedure, studentProcedure } from '../init';
+import { router, adminProcedure, staffProcedure, protectedProcedure, studentProcedure, assertCapability, hasCapability } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import type { Prisma, PrismaClient } from '@prisma/client';
@@ -22,6 +22,7 @@ import {
 } from '@/lib/validations/simulationValidation';
 import * as notificationService from '@/server/services/notificationService';
 import { getAdminStorage } from '@/lib/firebase/admin';
+import { normalizeQuestionText } from '@/lib/utils/questionText';
 
 // ============ Helper Functions ============
 
@@ -797,6 +798,7 @@ export const questionsRouter = router({
   getQuestions: staffProcedure
     .input(questionFilterSchema)
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.view');
       const { page, pageSize, sortBy, sortOrder } = input;
 
       // Build where clause using helpers
@@ -927,6 +929,7 @@ export const questionsRouter = router({
 
   // Get distinct year and source values for filter dropdowns
   getDistinctFilters: staffProcedure.query(async ({ ctx }) => {
+    assertCapability(ctx, 'questions.view');
     const [rawYears, rawSources] = await Promise.all([
       ctx.prisma.question.findMany({
         where: { year: { not: null } },
@@ -966,6 +969,7 @@ export const questionsRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.manage');
       const where: Record<string, unknown> = {
         status: 'PUBLISHED',
       };
@@ -1023,6 +1027,7 @@ export const questionsRouter = router({
   getQuestion: staffProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.view');
       const question = await ctx.prisma.question.findUnique({
         where: { id: input.id },
         include: {
@@ -1066,10 +1071,12 @@ export const questionsRouter = router({
         });
       }
 
-      // Collaborator can only see their own questions or published ones
-      if (ctx.user.role === 'COLLABORATOR' && 
-          question.createdById !== ctx.user.id && 
-          question.status !== 'PUBLISHED') {
+      // Collaborator can only see their own questions or published ones —
+      // unless granted the cross-ownership 'manageAll' capability (needed to edit others' drafts).
+      if (ctx.user.role === 'COLLABORATOR' &&
+          question.createdById !== ctx.user.id &&
+          question.status !== 'PUBLISHED' &&
+          !hasCapability(ctx, 'questions.manageAll')) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Non hai i permessi per visualizzare questa domanda.',
@@ -1085,6 +1092,7 @@ export const questionsRouter = router({
       questionIds: z.array(z.string()).min(1).max(100),
     }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.view');
       const questions = await ctx.prisma.question.findMany({
         where: {
           id: { in: input.questionIds },
@@ -1110,6 +1118,11 @@ export const questionsRouter = router({
   createQuestion: staffProcedure
     .input(createQuestionSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.manage');
+      // Publishing on create bypasses publishQuestion; enforce the dedicated capability here too.
+      if (input.status === 'PUBLISHED' && !hasCapability(ctx, 'questions.publish')) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi per pubblicare le domande.' });
+      }
       const { answers, keywords, ...questionData } = input;
 
       // Validate answers
@@ -1221,6 +1234,7 @@ export const questionsRouter = router({
   updateQuestion: staffProcedure
     .input(updateQuestionSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.manage');
       const { id, answers, keywords, changeReason, ...questionData } = input;
 
       // Get current question
@@ -1236,12 +1250,17 @@ export const questionsRouter = router({
         });
       }
 
-      // Check permission for collaborators
-      if (ctx.user.role === 'COLLABORATOR' && currentQuestion.createdById !== ctx.user.id) {
+      // Check permission for collaborators (own questions, unless 'manageAll' is granted)
+      if (ctx.user.role === 'COLLABORATOR' && currentQuestion.createdById !== ctx.user.id && !hasCapability(ctx, 'questions.manageAll')) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Puoi modificare solo le domande che hai creato.',
         });
+      }
+
+      // Transitioning a question to PUBLISHED bypasses publishQuestion; enforce the dedicated capability.
+      if (questionData.status === 'PUBLISHED' && currentQuestion.status !== 'PUBLISHED' && !hasCapability(ctx, 'questions.publish')) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi per pubblicare le domande.' });
       }
 
       // Validate answers if provided
@@ -1373,6 +1392,7 @@ export const questionsRouter = router({
   deleteQuestion: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.manage');
       const question = await ctx.prisma.question.findUnique({
         where: { id: input.id },
         include: {
@@ -1387,8 +1407,8 @@ export const questionsRouter = router({
         });
       }
 
-      // Check permission for collaborators
-      if (ctx.user.role === 'COLLABORATOR' && question.createdById !== ctx.user.id) {
+      // Check permission for collaborators (own questions, unless 'manageAll' is granted)
+      if (ctx.user.role === 'COLLABORATOR' && question.createdById !== ctx.user.id && !hasCapability(ctx, 'questions.manageAll')) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Puoi eliminare solo le domande che hai creato.',
@@ -1417,6 +1437,7 @@ export const questionsRouter = router({
       archive: z.boolean(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.manage');
       const question = await ctx.prisma.question.findUnique({
         where: { id: input.id },
       });
@@ -1428,7 +1449,7 @@ export const questionsRouter = router({
         });
       }
 
-      if (ctx.user.role === 'COLLABORATOR' && question.createdById !== ctx.user.id) {
+      if (ctx.user.role === 'COLLABORATOR' && question.createdById !== ctx.user.id && !hasCapability(ctx, 'questions.manageAll')) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Puoi archiviare solo le domande che hai creato.',
@@ -1452,6 +1473,7 @@ export const questionsRouter = router({
       publish: z.boolean(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.publish');
       const question = await ctx.prisma.question.findUnique({
         where: { id: input.id },
         include: { answers: true, keywords: true },
@@ -1461,14 +1483,6 @@ export const questionsRouter = router({
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Domanda non trovata.',
-        });
-      }
-
-      // Only admin can publish/unpublish
-      if (ctx.user.role !== 'ADMIN') {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Solo gli amministratori possono pubblicare domande.',
         });
       }
 
@@ -1509,6 +1523,7 @@ export const questionsRouter = router({
   duplicateQuestion: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.manage');
       const original = await ctx.prisma.question.findUnique({
         where: { id: input.id },
         include: { answers: true, keywords: true },
@@ -1584,12 +1599,17 @@ export const questionsRouter = router({
   // ==================== BULK OPERATIONS ====================
 
   // Bulk update status
-  bulkUpdateStatus: adminProcedure
+  bulkUpdateStatus: staffProcedure
     .input(z.object({
       ids: z.array(z.string()),
       status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.bulkOps');
+      // Bulk-publishing bypasses publishQuestion; enforce the dedicated capability.
+      if (input.status === 'PUBLISHED' && !hasCapability(ctx, 'questions.publish')) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Non hai i permessi per pubblicare le domande.' });
+      }
       const updateData: Record<string, unknown> = {
         status: input.status,
         updatedById: ctx.user.id,
@@ -1610,13 +1630,14 @@ export const questionsRouter = router({
     }),
 
   // Bulk add/remove/replace tags on questions
-  bulkAddTags: adminProcedure
+  bulkAddTags: staffProcedure
     .input(z.object({
       ids: z.array(z.string()),
       tagIds: z.array(z.string()),
       mode: z.enum(['add', 'remove', 'replace']).default('add'),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.bulkOps');
       // Verify tags exist
       const tags = await ctx.prisma.questionTag.findMany({
         where: { id: { in: input.tagIds } },
@@ -1675,12 +1696,13 @@ export const questionsRouter = router({
     }),
 
   // Bulk update subject
-  bulkUpdateSubject: adminProcedure
+  bulkUpdateSubject: staffProcedure
     .input(z.object({
       ids: z.array(z.string()),
       subjectId: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.bulkOps');
       // Verify subject exists
       const subject = await ctx.prisma.customSubject.findUnique({
         where: { id: input.subjectId },
@@ -1718,12 +1740,13 @@ export const questionsRouter = router({
     }),
 
   // Bulk update language
-  bulkUpdateLanguage: adminProcedure
+  bulkUpdateLanguage: staffProcedure
     .input(z.object({
       ids: z.array(z.string()),
       language: z.enum(['IT', 'EN']),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.bulkOps');
       const questionsToUpdate = await ctx.prisma.question.findMany({
         where: { id: { in: input.ids } },
         select: { subjectId: true },
@@ -1746,9 +1769,10 @@ export const questionsRouter = router({
     }),
 
   // Bulk delete
-  bulkDelete: adminProcedure
+  bulkDelete: staffProcedure
     .input(z.object({ ids: z.array(z.string()) }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.bulkOps');
       // Check if any question is used in simulations
       const questionsInUse = await ctx.prisma.simulationQuestion.findMany({
         where: { questionId: { in: input.ids } },
@@ -1855,6 +1879,7 @@ export const questionsRouter = router({
       difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']).optional(),
     }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.view');
       const where: Record<string, unknown> = {};
       
       if (input.ids && input.ids.length > 0) {
@@ -1960,13 +1985,14 @@ export const questionsRouter = router({
     }),
 
   // Import questions from data
-  importQuestions: adminProcedure
+  importQuestions: staffProcedure
     .input(z.object({
       questions: z.array(importQuestionRowSchema),
       defaultSubjectId: z.string().optional(),
       skipDuplicates: z.boolean().default(true),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.import');
       const results = {
         imported: 0,
         skipped: 0,
@@ -2049,6 +2075,26 @@ export const questionsRouter = router({
       return results;
     }),
 
+  // Returns, among the supplied normalized texts, those that already exist in
+  // the DB. Used by the PDF importer to mark duplicates before saving.
+  // A mutation (not a query) so the potentially large text list travels in the
+  // POST body instead of an over-length GET query string.
+  checkExistingTexts: staffProcedure
+    .input(z.object({ texts: z.array(z.string()).max(2000) }))
+    .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.import');
+      const wanted = new Set(input.texts.map(normalizeQuestionText).filter(Boolean));
+      if (wanted.size === 0) return { existing: [] as string[] };
+
+      const all = await ctx.prisma.question.findMany({ select: { text: true } });
+      const existing = new Set<string>();
+      for (const { text } of all) {
+        const norm = normalizeQuestionText(text);
+        if (wanted.has(norm)) existing.add(norm);
+      }
+      return { existing: [...existing] };
+    }),
+
   // ==================== KEYWORD SUGGESTIONS ====================
 
   // Get AI-suggested keywords based on question text
@@ -2057,7 +2103,8 @@ export const questionsRouter = router({
       questionText: z.string().min(10),
       currentKeywords: z.array(z.string()).optional(),
     }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.manage');
       const { questionText, currentKeywords = [] } = input;
       
       // Simple keyword extraction logic
@@ -2193,6 +2240,7 @@ export const questionsRouter = router({
       notes: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'student.favorites');
       const student = await ctx.prisma.student.findFirst({
         where: { userId: ctx.user.id },
       });
@@ -2237,6 +2285,7 @@ export const questionsRouter = router({
       pageSize: z.number().min(1).max(50).default(20),
     }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'student.favorites');
       const student = await ctx.prisma.student.findFirst({
         where: { userId: ctx.user.id },
       });
@@ -2282,6 +2331,7 @@ export const questionsRouter = router({
   submitFeedback: studentProcedure
     .input(createQuestionFeedbackSchema)
     .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'student.submitQuestionFeedback');
       const student = await ctx.prisma.student.findFirst({
         where: { userId: ctx.user.id },
       });
@@ -2340,6 +2390,7 @@ export const questionsRouter = router({
       questionId: z.string().optional(),
     }))
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.reviewFeedback');
       const where: Prisma.QuestionFeedbackWhereInput = {};
       if (input.status) {
         where.status = input.status;
@@ -2348,7 +2399,9 @@ export const questionsRouter = router({
         where.questionId = input.questionId;
       }
 
-      if (ctx.user.role === 'COLLABORATOR') {
+      // Collaborators normally see only their own subjects' feedbacks (TUTOR); 'reviewAllFeedback'
+      // opts out of that narrowing so a secretary — or a tutor across subjects — sees all of them.
+      if (ctx.user.role === 'COLLABORATOR' && !hasCapability(ctx, 'questions.reviewAllFeedback')) {
         const collaborator = await ctx.prisma.collaborator.findUnique({
           where: { userId: ctx.user.id },
           select: {
@@ -2397,7 +2450,8 @@ export const questionsRouter = router({
   updateFeedback: staffProcedure
     .input(updateQuestionFeedbackSchema)
     .mutation(async ({ ctx, input }) => {
-      if (ctx.user.role === 'COLLABORATOR') {
+      assertCapability(ctx, 'questions.reviewFeedback');
+      if (ctx.user.role === 'COLLABORATOR' && !hasCapability(ctx, 'questions.reviewAllFeedback')) {
         const feedback = await ctx.prisma.questionFeedback.findUnique({
           where: { id: input.id },
           select: {
@@ -2446,6 +2500,7 @@ export const questionsRouter = router({
 
   // Get question statistics
   getQuestionStats: staffProcedure.query(async ({ ctx }) => {
+    assertCapability(ctx, 'questions.view');
     const [
       totalQuestions,
       publishedQuestions,
@@ -2508,6 +2563,7 @@ export const questionsRouter = router({
 
   // Get available tags (legacy - returns tags from legacyTags field)
   getAvailableTags: staffProcedure.query(async ({ ctx }) => {
+    assertCapability(ctx, 'questions.view');
     const questions = await ctx.prisma.question.findMany({
       where: { legacyTags: { isEmpty: false } },
       select: { legacyTags: true },

@@ -53,6 +53,7 @@ function createMockUser(overrides: Partial<User> = {}): User {
     role: 'ADMIN' as UserRole,
     isActive: true,
     profileCompleted: true,
+    deactivatedAt: null,
     emailVerified: true,
     lastLoginAt: new Date(),
     activeSessionToken: null,

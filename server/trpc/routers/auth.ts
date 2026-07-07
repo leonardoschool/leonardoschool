@@ -150,6 +150,9 @@ export const authRouter = router({
       profileCompleted: user.profileCompleted,
       createdAt: user.createdAt?.toISOString(),
       lastLoginAt: user.lastLoginAt?.toISOString(),
+      // Fine-grained capabilities the frontend uses to show/hide actions. Already resolved
+      // in the tRPC context (role + collaborator kind, merged with DB overrides).
+      capabilities: Array.from(ctx.capabilities),
       student: user.student ? {
         id: user.student.id,
         userId: user.student.userId,

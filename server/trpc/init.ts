@@ -3,6 +3,8 @@ import { initTRPC, TRPCError } from '@trpc/server';
 import { Context } from './context';
 import { transformer } from '@/lib/trpc/transformer';
 import { runWithContext } from '@/lib/utils/requestContext';
+import { isValidCapability } from '@/lib/permissions/capabilities';
+import { logApp } from '@/lib/logging/appLog';
 
 // Raw exceptions (Prisma, DB drivers, unexpected throws) must never reach the client: they leak
 // internals and read as jargon. We detect them and replace the message with a readable Italian one,
@@ -48,11 +50,53 @@ const withRequestContext = t.middleware(({ ctx, next }) => {
   return runWithContext(ctx.requestContext, () => next());
 });
 
+// tRPC error codes that represent *expected* client-side outcomes (bad input, missing auth,
+// insufficient permissions, not found…). These are not platform faults, so logging them would
+// only add noise. Everything else — most importantly INTERNAL_SERVER_ERROR, which tRPC assigns
+// to any non-TRPCError throw (Prisma failures, unexpected exceptions) — is a genuine error worth
+// persisting for diagnosis.
+const EXPECTED_ERROR_CODES = new Set([
+  'UNAUTHORIZED',
+  'FORBIDDEN',
+  'BAD_REQUEST',
+  'NOT_FOUND',
+  'CONFLICT',
+  'TOO_MANY_REQUESTS',
+  'PARSE_ERROR',
+]);
+
+// Centralized error logging: catches any error bubbling out of a procedure and persists the
+// unexpected ones to the application log. Applied to every procedure below, so simulations,
+// login, questions, contracts — every API endpoint — is covered without per-router wiring.
+const withErrorLogging = t.middleware(async ({ next, path, type }) => {
+  const result = await next();
+  if (!result.ok) {
+    // tRPC's discriminated union doesn't narrow cleanly through the generic here, so read
+    // the error off the failed result explicitly.
+    const error = (result as { error: TRPCError }).error;
+    if (!EXPECTED_ERROR_CODES.has(error.code)) {
+      // Await so the write completes before the serverless function may terminate.
+      await logApp({
+        source: 'TRPC',
+        level: 'ERROR',
+        message: error.message,
+        // `cause` holds the original throw (e.g. the Prisma error) when tRPC wrapped it.
+        error: error.cause ?? error,
+        path: `${type} ${path}`,
+      });
+    }
+  }
+  return result;
+});
+
 // Export reusable router and procedure helpers
 export const router = t.router;
 
+// Base procedure shared by all: request-context tracking + centralized error logging.
+const baseProcedure = t.procedure.use(withRequestContext).use(withErrorLogging);
+
 // All procedures now include request context tracking
-export const publicProcedure = t.procedure.use(withRequestContext);
+export const publicProcedure = baseProcedure;
 
 // Auth middleware
 const isAuthed = t.middleware(({ ctx, next }) => {
@@ -134,9 +178,42 @@ const isStudent = t.middleware(({ ctx, next }) => {
   });
 });
 
-// All protected procedures include request context tracking + auth
-export const protectedProcedure = t.procedure.use(withRequestContext).use(isAuthed);
-export const adminProcedure = t.procedure.use(withRequestContext).use(isAdmin);
-export const collaboratorProcedure = t.procedure.use(withRequestContext).use(isCollaborator);
-export const staffProcedure = t.procedure.use(withRequestContext).use(isStaff); // Admin OR Collaborator
-export const studentProcedure = t.procedure.use(withRequestContext).use(isStudent);
+// All protected procedures include request context tracking + error logging + auth
+export const protectedProcedure = baseProcedure.use(isAuthed);
+export const adminProcedure = baseProcedure.use(isAdmin);
+export const collaboratorProcedure = baseProcedure.use(isCollaborator);
+export const staffProcedure = baseProcedure.use(isStaff); // Admin OR Collaborator
+export const studentProcedure = baseProcedure.use(isStudent);
+
+// ==================== Capabilities ====================
+// Fine-grained, admin-configurable permissions layered on top of the role wrappers above.
+// ADMIN always passes (fixed super-user) so it can never be locked out.
+
+// Fail fast on typo'd capability keys during development, before they cause a silent
+// (and dangerous) fail-open/fail-closed at runtime.
+function assertKnownCapability(capability: string): void {
+  if (process.env.NODE_ENV !== 'production' && !isValidCapability(capability)) {
+    throw new Error(`Unknown capability "${capability}" — not in the catalog (lib/permissions/capabilities.ts)`);
+  }
+}
+
+/** Whether the current request's user holds a capability. Admin bypasses the matrix. */
+export function hasCapability(ctx: Context, capability: string): boolean {
+  assertKnownCapability(capability);
+  return ctx.user?.role === 'ADMIN' || ctx.capabilities.has(capability);
+}
+
+/** Throw FORBIDDEN unless the current user holds the capability. Use inside procedures. */
+export function assertCapability(ctx: Context, capability: string): void {
+  if (!hasCapability(ctx, capability)) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Non hai i permessi necessari per eseguire questa azione.',
+    });
+  }
+}
+
+// NOTE: there is deliberately no capability-only procedure wrapper. A capability check without
+// a role wrapper would let a matrix toggle grant an endpoint across roles (e.g. ticking a staff
+// capability for STUDENT would open a staff endpoint to students). Always pair a role procedure
+// (staffProcedure/studentProcedure/...) with assertCapability() inside the handler.

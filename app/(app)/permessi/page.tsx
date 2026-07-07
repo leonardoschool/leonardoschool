@@ -7,15 +7,14 @@ import { isAdmin } from '@/lib/permissions';
 import { PageLoader } from '@/components/ui/loaders';
 import dynamic from 'next/dynamic';
 
-const LogEmailContent = dynamic(
-  () => import('./LogEmailContent'),
-  { loading: () => <PageLoader /> }
-);
+const AdminPermessiContent = dynamic(() => import('./AdminPermessiContent'), {
+  loading: () => <PageLoader />,
+});
 
 /**
- * Pagina Log Email (Admin only) — storico invii email
+ * Pagina Permessi (Admin only) — matrice delle abilitazioni per ruolo/tipo.
  */
-export default function LogEmailPage() {
+export default function PermessiPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const userRole = user?.role;
@@ -30,5 +29,5 @@ export default function LogEmailPage() {
     return <PageLoader />;
   }
 
-  return <LogEmailContent />;
+  return <AdminPermessiContent />;
 }

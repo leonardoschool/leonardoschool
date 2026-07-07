@@ -352,6 +352,7 @@ export const submitSimulationSchema = z.object({
   answers: z.array(simulationAnswerSchema),
   totalTimeSpent: z.number().int().min(0), // Total seconds
   isPartial: z.boolean().default(false), // Partial save vs final submission
+  resetToken: z.number().nullable().optional(), // From startAttempt: guards against stale tabs after a staff reset
 });
 
 export type SubmitSimulationInput = z.infer<typeof submitSimulationSchema>;

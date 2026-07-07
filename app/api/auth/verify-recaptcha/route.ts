@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logApp } from '@/lib/logging/appLog';
 
 const RECAPTCHA_SECRET_KEY = process.env.RECAPTCHA_SECRET_KEY;
 
@@ -142,6 +143,14 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('reCAPTCHA verification error:', error);
+    await logApp({
+      source: 'API',
+      level: 'ERROR',
+      message: 'Errore durante la verifica reCAPTCHA',
+      error,
+      path: 'POST /api/auth/verify-recaptcha',
+      statusCode: 500,
+    });
     return NextResponse.json(
       { success: false, error: 'Errore durante la verifica', code: 'SERVER_ERROR' },
       { status: 500 }

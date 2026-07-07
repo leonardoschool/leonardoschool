@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma/client';
 import { logger } from '@/lib/utils/logger';
+import { logApp } from '@/lib/logging/appLog';
 
 // Verify cron secret to prevent unauthorized access
 const verifyCronSecret = (request: NextRequest): boolean => {
@@ -118,6 +119,14 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     logger.error('[CheckExpiredContracts] Fatal error:', error);
+    await logApp({
+      source: 'CRON',
+      level: 'ERROR',
+      message: 'Errore fatale nel cron check-expired-contracts',
+      error,
+      path: 'GET /api/cron/check-expired-contracts',
+      statusCode: 500,
+    });
     return NextResponse.json(
       { error: 'Internal server error', details: String(error) },
       { status: 500 }

@@ -5,6 +5,7 @@ import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { PageLoader } from '@/components/ui/loaders';
 import { useApiError } from '@/lib/hooks/useApiError';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useToast } from '@/components/ui/Toast';
 import { useState } from 'react';
 import Link from 'next/link';
@@ -47,6 +48,8 @@ export default function DettaglioDomandaPage() {
   const editHref = `/domande/${questionId}/modifica?returnTo=${encodeURIComponent(returnTo)}`;
   const { handleMutationError } = useApiError();
   const { showSuccess } = useToast();
+  const { can } = usePermissions();
+  const canPublish = can('questions.publish');
   const utils = trpc.useUtils();
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -215,7 +218,7 @@ export default function DettaglioDomandaPage() {
                     <Copy className="w-4 h-4" />
                     Duplica
                   </button>
-                  {question.status !== 'PUBLISHED' && (
+                  {canPublish && question.status !== 'PUBLISHED' && (
                     <button
                       onClick={() => {
                         publishMutation.mutate({ id: questionId, publish: true });
@@ -227,7 +230,7 @@ export default function DettaglioDomandaPage() {
                       Pubblica
                     </button>
                   )}
-                  {question.status === 'PUBLISHED' && (
+                  {canPublish && question.status === 'PUBLISHED' && (
                     <button
                       onClick={() => {
                         publishMutation.mutate({ id: questionId, publish: false });

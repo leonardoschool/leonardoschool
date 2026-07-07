@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma/client';
 import { cookies } from 'next/headers';
 import { sanitizeText } from '@/lib/utils/escapeHtml';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
+import { logApp } from '@/lib/logging/appLog';
 
 export async function GET(
   request: NextRequest,
@@ -417,6 +418,14 @@ export async function GET(
     });
   } catch (error) {
     console.error('Error viewing contract:', error);
+    await logApp({
+      source: 'API',
+      level: 'ERROR',
+      message: 'Errore nella visualizzazione del contratto',
+      error,
+      path: 'GET /api/contracts/[contractId]/view',
+      statusCode: 500,
+    });
     return NextResponse.json(
       { error: 'Errore interno del server' },
       { status: 500 }

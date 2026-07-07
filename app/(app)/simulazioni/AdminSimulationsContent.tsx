@@ -13,6 +13,7 @@ import ConfirmModal from '@/components/ui/ConfirmModal';
 import { Portal } from '@/components/ui/Portal';
 import { StudentDetailModal } from '@/components/ui/StudentDetailModal';
 import { useFocusAwarePolling } from '@/lib/hooks/useWindowFocus';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import Link from 'next/link';
 import {
   Plus,
@@ -107,10 +108,14 @@ export default function AdminSimulationsContent() {
   // Focus-aware polling - 120 seconds for pending reviews badge, disabled when tab not visible
   const pollingInterval = useFocusAwarePolling(120000, true);
 
+  // Only reviewers (Tutor/Admin) can access open-answer correction; Segreteria lacks it.
+  const { can } = usePermissions();
+  const canCorrectOpenAnswers = can('simulations.correctOpenAnswers');
+
   // Fetch pending open answers count for badge
   const { data: pendingReviewsData } = trpc.simulations.getResultsWithPendingReviews.useQuery(
     { limit: 1, offset: 0 },
-    { refetchInterval: pollingInterval }
+    { refetchInterval: pollingInterval, enabled: canCorrectOpenAnswers }
   );
   const pendingReviewsCount = pendingReviewsData?.total ?? 0;
 
@@ -515,19 +520,21 @@ export default function AdminSimulationsContent() {
           </p>
         </div>
         <div className="flex gap-3">
-          {/* Open Answers Review Button with Badge */}
-          <Link
-            href="/simulazioni/risposte-aperte"
-            className={`relative inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all border ${colors.border.light} ${colors.text.primary} hover:${colors.background.hover}`}
-          >
-            <BookOpen className="w-4 h-4" />
-            <span className="hidden sm:inline">Risposte Aperte</span>
-            {pendingReviewsCount > 0 && (
-              <span className="absolute -top-2 -right-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-500 rounded-full min-w-[20px]">
-                {pendingReviewsCount > 99 ? '99+' : pendingReviewsCount}
-              </span>
-            )}
-          </Link>
+          {/* Open Answers Review Button with Badge — only for roles that can correct */}
+          {canCorrectOpenAnswers && (
+            <Link
+              href="/simulazioni/risposte-aperte"
+              className={`relative inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all border ${colors.border.light} ${colors.text.primary} hover:${colors.background.hover}`}
+            >
+              <BookOpen className="w-4 h-4" />
+              <span className="hidden sm:inline">Risposte Aperte</span>
+              {pendingReviewsCount > 0 && (
+                <span className="absolute -top-2 -right-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-500 rounded-full min-w-[20px]">
+                  {pendingReviewsCount > 99 ? '99+' : pendingReviewsCount}
+                </span>
+              )}
+            </Link>
+          )}
           <Link
             href="/simulazioni/nuova?mode=template"
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border ${colors.border.light} ${colors.text.primary} hover:${colors.background.hover} transition-colors`}

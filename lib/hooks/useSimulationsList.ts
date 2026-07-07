@@ -6,6 +6,7 @@ import { trpc } from '@/lib/trpc/client';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { useFocusAwarePolling } from '@/lib/hooks/useWindowFocus';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { SimulationType, SimulationStatus } from '@/lib/validations/simulationValidation';
 
 type TabType = 'simulations' | 'assignments' | 'templates';
@@ -49,6 +50,16 @@ export function useSimulationsList() {
   const { showSuccess } = useToast();
   const pollingInterval = useFocusAwarePolling(120000, true);
 
+  // Only reviewers (Tutor/Admin) can access open-answer correction; Segreteria lacks it.
+  const { can } = usePermissions();
+  const canCorrectOpenAnswers = can('simulations.correctOpenAnswers');
+  // Manage assignments created by others (not just own) — opt-in capability, off by default.
+  const canManageAllAssignments = can('simulations.manageAllAssignments');
+  // Create/edit simulations; 'manageAll' unlocks editing others' simulations; viewStats gates the stats link.
+  const canManage = can('simulations.manage');
+  const canManageAllSimulations = can('simulations.manageAll');
+  const canViewStats = can('simulations.viewStats');
+
   // Filter state
   const [search, setSearch] = useState('');
   const [type, setType] = useState<SimulationType | ''>('');
@@ -82,7 +93,7 @@ export function useSimulationsList() {
   // Queries
   const { data: pendingReviewsData } = trpc.simulations.getResultsWithPendingReviews.useQuery(
     { limit: 1, offset: 0 },
-    { refetchInterval: pollingInterval }
+    { refetchInterval: pollingInterval, enabled: canCorrectOpenAnswers }
   );
 
   const { data: currentUser } = trpc.users.me.useQuery();
@@ -233,11 +244,11 @@ export function useSimulationsList() {
   }, [assignmentsData]);
 
   // Helpers
-  const canTakeAction = (createdById: string) => currentUser?.id === createdById;
+  const canTakeAction = (createdById: string) => canManageAllAssignments || currentUser?.id === createdById;
 
   const canModifySimulation = (simulationId: string) => {
     const sim = simulations.find(s => s.id === simulationId);
-    return sim?.createdById === currentUser?.id;
+    return canManage && (sim?.createdById === currentUser?.id || canManageAllSimulations);
   };
 
   const formatDuration = (minutes: number) => {
@@ -336,6 +347,9 @@ export function useSimulationsList() {
     assignmentMenuRef,
     // Queries
     pendingReviewsCount,
+    canCorrectOpenAnswers,
+    canManage,
+    canViewStats,
     groupsData,
     simulationsData,
     isLoading,

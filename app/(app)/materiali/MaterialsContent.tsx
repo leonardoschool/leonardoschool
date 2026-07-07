@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { useApiError } from '@/lib/hooks/useApiError';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useToast } from '@/components/ui/Toast';
 import { Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
@@ -220,6 +221,12 @@ interface AdminMaterialsContentProps {
 }
 
 export default function AdminMaterialsContent({ role }: AdminMaterialsContentProps) {
+  // Capability gating: 'materials.manage' controls create/edit/delete; 'materials.manageAccess'
+  // controls assigning recipients. ADMIN always passes both.
+  const { can } = usePermissions();
+  const canManage = can('materials.manage');
+  const canManageAccess = can('materials.manageAccess');
+
   // Active tab: 'subjects', 'materials', or 'categories'
   const [activeTab, setActiveTab] = useState<'subjects' | 'materials' | 'categories'>('subjects');
   
@@ -890,6 +897,7 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
               return (
             <div className="space-y-6">
               {/* Add Subject Button */}
+              {canManage && (
               <button
                 onClick={handleCreateSubject}
                 className="px-4 py-2.5 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl text-gray-500 dark:text-gray-400 hover:border-[#a8012b] hover:text-[#a8012b] dark:hover:text-[#d1163b] hover:bg-red-50 dark:hover:bg-red-950/30 transition-all flex items-center gap-2"
@@ -897,6 +905,7 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
                 <Plus className="w-5 h-5" />
                 Nuova Materia
               </button>
+              )}
 
 
 
@@ -959,7 +968,7 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
                             {subject._count?.materials || 0} materiali
                           </span>
                           {/* Topics button - visible if user can edit this subject */}
-                          {subject.canEdit && (
+                          {canManage && subject.canEdit && (
                             <button
                               onClick={() => setTopicsModal({
                                 isOpen: true,
@@ -974,7 +983,7 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
                             </button>
                           )}
                           {/* Edit button - visible if user can edit this subject */}
-                          {subject.canEdit && (
+                          {canManage && subject.canEdit && (
                             <button
                               onClick={() => handleEditSubject(subject)}
                               className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
@@ -984,7 +993,7 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
                             </button>
                           )}
                           {/* Delete button - visible only for admins */}
-                          {subject.canDelete && (
+                          {canManage && subject.canDelete && (
                             <button
                               onClick={() => setDeleteConfirm({
                                 type: 'subject',
@@ -1028,7 +1037,7 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
               return (
             <div className="space-y-6">
               {/* Add Material Button - Unified */}
-              {!showMultiUpload && (
+              {canManage && !showMultiUpload && (
                 <button
                   onClick={() => setShowMultiUpload(true)}
                   className="px-4 py-2.5 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl text-gray-500 dark:text-gray-400 hover:border-[#a8012b] hover:text-[#a8012b] dark:hover:text-[#d1163b] hover:bg-red-50 dark:hover:bg-red-950/30 transition-all flex items-center gap-2"
@@ -1673,6 +1682,7 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
 
                           {/* Actions */}
                           <div className="flex items-center gap-2 flex-shrink-0">
+                            {canManageAccess && (
                             <button
                               onClick={() => openAssignModal(material.id, material)}
                               className="p-2.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
@@ -1680,6 +1690,7 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
                             >
                               <Users className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                             </button>
+                            )}
                             {(material.fileUrl || material.externalUrl) && (
                               <a
                                 href={material.fileUrl || material.externalUrl}
@@ -1691,6 +1702,7 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
                                 <ExternalLink className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                               </a>
                             )}
+                            {canManage && (
                             <button
                               onClick={() => handleEditMaterial(material)}
                               className="p-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
@@ -1698,6 +1710,8 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
                             >
                               <Edit2 className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                             </button>
+                            )}
+                            {canManage && (
                             <button
                               onClick={() => setDeleteConfirm({
                                 type: 'material',
@@ -1709,6 +1723,7 @@ export default function AdminMaterialsContent({ role }: AdminMaterialsContentPro
                             >
                               <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
                             </button>
+                            )}
                           </div>
                         </div>
 

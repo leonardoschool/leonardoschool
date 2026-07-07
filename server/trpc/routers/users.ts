@@ -2,7 +2,8 @@
 // Users Router - Handles user management for admin
 // Note: 'any' types are used for Prisma dynamic queries and include patterns
 // that cannot be strictly typed without significant complexity
-import { router, adminProcedure, protectedProcedure, staffProcedure } from '../init';
+import { router, adminProcedure, protectedProcedure, staffProcedure, assertCapability, hasCapability } from '../init';
+import type { Context } from '../context';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { revalidateTag } from 'next/cache';
@@ -75,6 +76,61 @@ function buildAdminSimulationResultsWhere(input: AdminSimulationResultsInput): P
 
   return where;
 }
+
+/**
+ * Student set a collaborator is allowed to see in platform stats when they LACK
+ * `stats.viewAllStudents`: only students belonging to their own groups (as group referent
+ * or as a member of the group). Returns de-duplicated student ids + underlying user ids.
+ * An empty scope must yield empty results (callers apply `{ in: [] }`), never a fall-through
+ * to "all students".
+ */
+type StudentScope = { studentIds: string[]; studentUserIds: string[] };
+
+async function getCollaboratorStudentScope(
+  prisma: Context['prisma'],
+  userId: string
+): Promise<StudentScope> {
+  const collab = await prisma.collaborator.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+  if (!collab) return { studentIds: [], studentUserIds: [] };
+
+  const groups = await prisma.group.findMany({
+    where: {
+      OR: [
+        { referenceCollaboratorId: collab.id },
+        { referenceCollaborators: { some: { collaboratorId: collab.id } } },
+        { members: { some: { collaboratorId: collab.id } } },
+      ],
+    },
+    select: { id: true },
+  });
+  const groupIds = groups.map((g) => g.id);
+  if (groupIds.length === 0) return { studentIds: [], studentUserIds: [] };
+
+  const members = await prisma.groupMember.findMany({
+    where: { groupId: { in: groupIds }, studentId: { not: null } },
+    select: { studentId: true, student: { select: { userId: true } } },
+  });
+
+  const studentIds = [
+    ...new Set(members.map((m) => m.studentId).filter((id): id is string => id !== null)),
+  ];
+  const studentUserIds = [
+    ...new Set(members.map((m) => m.student?.userId).filter((id): id is string => Boolean(id))),
+  ];
+  return { studentIds, studentUserIds };
+}
+
+/** Shape of the financial/revenue block; `null` when the caller lacks `stats.viewFinancial`. */
+type PlatformRevenue = {
+  total: number;
+  thisMonth: number;
+  lastMonth: number;
+  growthPercent: number;
+  byMonth: Array<{ month: string; revenue: number; contracts: number }>;
+};
 
 function getAdminSimulationResultsOrderBy(
   sortBy: AdminSimulationResultsInput['sortBy'],
@@ -182,8 +238,9 @@ export const usersRouter = router({
         // Questi sono utenti che erano attivi e sono stati disattivati
         where.isActive = false;
         where.profileCompleted = true;
-        // Must have a cancelled/expired contract (or be admin) but still inactive = manually deactivated
         where.OR = [
+          // Disattivazione manuale esplicita: riconosciuta anche senza contratto.
+          { deactivatedAt: { not: null } },
           { role: 'ADMIN' }, // Admin without contracts
           {
             role: { in: ['STUDENT', 'COLLABORATOR'] },
@@ -234,6 +291,7 @@ export const usersRouter = router({
         // Profilo completato, ma senza contratto assegnato
         where.profileCompleted = true;
         where.isActive = false;
+        where.deactivatedAt = null; // esclude chi è stato disattivato manualmente
         where.role = { in: ['STUDENT', 'COLLABORATOR'] };
         // Filter users without any contracts
         where.AND = [
@@ -254,6 +312,7 @@ export const usersRouter = router({
         // Contratto assegnato ma non firmato (status PENDING)
         where.profileCompleted = true;
         where.isActive = false;
+        where.deactivatedAt = null; // esclude chi è stato disattivato manualmente
         where.role = { in: ['STUDENT', 'COLLABORATOR'] };
         where.OR = [
           {
@@ -275,6 +334,7 @@ export const usersRouter = router({
         // Profilo completato, contratto firmato, ma non attivo
         where.profileCompleted = true;
         where.isActive = false;
+        where.deactivatedAt = null; // esclude chi è stato disattivato manualmente
         where.role = { in: ['STUDENT', 'COLLABORATOR'] };
         // Has at least one signed contract
         where.OR = [
@@ -442,10 +502,6 @@ export const usersRouter = router({
                 city: true,
                 province: true,
                 postalCode: true,
-                canManageQuestions: true,
-                canManageMaterials: true,
-                canViewStats: true,
-                canViewStudents: true,
                 subjects: {
                   include: {
                     subject: {
@@ -619,6 +675,11 @@ export const usersRouter = router({
     let inactiveCount = 0;
 
     for (const user of usersWithProfile) {
+      // La disattivazione manuale ha precedenza su ogni stato "in attesa".
+      if ((user as any).deactivatedAt) {
+        inactiveCount++;
+        continue;
+      }
       const contracts = (user as any).student?.contracts || (user as any).collaborator?.contracts || [];
       if (contracts.length === 0) {
         pendingContract++;
@@ -889,9 +950,15 @@ export const usersRouter = router({
         });
       }
 
+      const willBeActive = !user.isActive;
       const updated = await ctx.prisma.user.update({
         where: { id: input.userId },
-        data: { isActive: !user.isActive },
+        // La disattivazione manuale ha precedenza su ogni stato "in attesa": tracciamo il
+        // momento della disattivazione così il filtro "Disattivati" la riconosce anche senza contratto.
+        data: {
+          isActive: willBeActive,
+          deactivatedAt: willBeActive ? null : new Date(),
+        },
       });
       revalidateTag(CACHE_TAGS.USERS, {});
       revalidateTag(CACHE_TAGS.STATS, {});
@@ -1304,6 +1371,7 @@ export const usersRouter = router({
   getAdminSimulationResults: staffProcedure
     .input(adminSimulationResultsInputSchema)
     .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'stats.viewPlatform');
       const {
         page = 1,
         pageSize = 20,
@@ -1321,6 +1389,14 @@ export const usersRouter = router({
         dateTo: input?.dateTo,
       };
       const where = buildAdminSimulationResultsWhere(normalizedInput);
+
+      // Collaborators without `stats.viewAllStudents` only see results of their own groups' students.
+      const seesAllStudents =
+        ctx.user.role !== 'COLLABORATOR' || hasCapability(ctx, 'stats.viewAllStudents');
+      if (!seesAllStudents) {
+        const scope = await getCollaboratorStudentScope(ctx.prisma, ctx.user.id);
+        where.studentId = { in: scope.studentIds };
+      }
 
       const [results, total] = await Promise.all([
         ctx.prisma.simulationResult.findMany({
@@ -1369,6 +1445,23 @@ export const usersRouter = router({
    * Returns detailed analytics for the entire platform
    */
   getAdminPlatformStats: staffProcedure.query(async ({ ctx }) => {
+    assertCapability(ctx, 'stats.viewPlatform');
+    // Revenue + collaborator-activity stats are hidden from collaborators without this flag.
+    const canViewFinancial = hasCapability(ctx, 'stats.viewFinancial');
+    // A collaborator without `stats.viewAllStudents` only sees students of their own groups.
+    const seesAllStudents =
+      ctx.user.role !== 'COLLABORATOR' || hasCapability(ctx, 'stats.viewAllStudents');
+    const scope: StudentScope | null = seesAllStudents
+      ? null
+      : await getCollaboratorStudentScope(ctx.prisma, ctx.user.id);
+
+    // Reusable scope fragments — empty object when unscoped (i.e. no extra filtering).
+    const scopedUserWhere: Prisma.UserWhereInput = scope ? { id: { in: scope.studentUserIds } } : {};
+    const scopedResultWhere: Prisma.SimulationResultWhereInput = scope
+      ? { studentId: { in: scope.studentIds } }
+      : {};
+    const scopedStudentWhere: Prisma.StudentWhereInput = scope ? { id: { in: scope.studentIds } } : {};
+
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -1384,7 +1477,7 @@ export const usersRouter = router({
       newUsersLastMonth,
     ] = await Promise.all([
       ctx.prisma.user.count(),
-      ctx.prisma.user.count({ where: { role: 'STUDENT' } }),
+      ctx.prisma.user.count({ where: { role: 'STUDENT', ...scopedUserWhere } }),
       ctx.prisma.user.count({ where: { role: 'COLLABORATOR' } }),
       ctx.prisma.user.count({ where: { role: 'ADMIN' } }),
       ctx.prisma.user.count({ where: { isActive: true } }),
@@ -1398,9 +1491,10 @@ export const usersRouter = router({
         const monthStart = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
         const monthEnd = new Date(now.getFullYear(), now.getMonth() - 10 + i, 0);
         const count = await ctx.prisma.user.count({
-          where: { 
+          where: {
             createdAt: { gte: monthStart, lte: monthEnd },
             role: 'STUDENT',
+            ...scopedUserWhere,
           },
         });
         // Format: "Dic '25" - clearer that 25 is year, not day
@@ -1414,41 +1508,57 @@ export const usersRouter = router({
     );
 
     // ============ REVENUE STATS ============
-    // Use the agreed amount frozen on each contract (priceSnapshot, admin override),
-    // falling back to the template price only for older contracts without a snapshot.
-    const signedContracts = await ctx.prisma.contract.findMany({
-      where: { status: 'SIGNED' },
-      include: { template: { select: { price: true, name: true } } },
-    });
+    // Financial data is skipped entirely (queries not even run) for callers without
+    // `stats.viewFinancial`; the return shape stays stable with `revenue: null` + empty chart.
+    let revenue: PlatformRevenue | null = null;
+    let revenueByMonth: Array<{ month: string; revenue: number; contracts: number }> = [];
+    if (canViewFinancial) {
+      // Use the agreed amount frozen on each contract (priceSnapshot, admin override),
+      // falling back to the template price only for older contracts without a snapshot.
+      const signedContracts = await ctx.prisma.contract.findMany({
+        where: { status: 'SIGNED' },
+        include: { template: { select: { price: true, name: true } } },
+      });
 
-    const totalRevenue = signedContracts.reduce((sum, c) => sum + (c.priceSnapshot ?? c.template.price ?? 0), 0);
-    
-    // Monthly revenue (last 12 months)
-    const revenueByMonth = await Promise.all(
-      Array.from({ length: 12 }, async (_, i) => {
-        const monthStart = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
-        const monthEnd = new Date(now.getFullYear(), now.getMonth() - 10 + i, 0);
-        const contracts = await ctx.prisma.contract.findMany({
-          where: { 
-            status: 'SIGNED',
-            signedAt: { gte: monthStart, lte: monthEnd },
-          },
-          include: { template: { select: { price: true } } },
-        });
-        const revenue = contracts.reduce((sum, c) => sum + (c.priceSnapshot ?? c.template.price ?? 0), 0);
-        // Format: "Dic '25" - clearer that 25 is year, not day
-        const monthName = monthStart.toLocaleDateString('it-IT', { month: 'short' });
-        const year = monthStart.getFullYear().toString().slice(-2);
-        return {
-          month: `${monthName.charAt(0).toUpperCase()}${monthName.slice(1)} '${year}`,
-          revenue,
-          contracts: contracts.length,
-        };
-      })
-    );
+      const totalRevenue = signedContracts.reduce((sum, c) => sum + (c.priceSnapshot ?? c.template.price ?? 0), 0);
 
-    const thisMonthRevenue = revenueByMonth[11]?.revenue || 0;
-    const lastMonthRevenue = revenueByMonth[10]?.revenue || 0;
+      // Monthly revenue (last 12 months)
+      revenueByMonth = await Promise.all(
+        Array.from({ length: 12 }, async (_, i) => {
+          const monthStart = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
+          const monthEnd = new Date(now.getFullYear(), now.getMonth() - 10 + i, 0);
+          const contracts = await ctx.prisma.contract.findMany({
+            where: {
+              status: 'SIGNED',
+              signedAt: { gte: monthStart, lte: monthEnd },
+            },
+            include: { template: { select: { price: true } } },
+          });
+          const monthRevenue = contracts.reduce((sum, c) => sum + (c.priceSnapshot ?? c.template.price ?? 0), 0);
+          // Format: "Dic '25" - clearer that 25 is year, not day
+          const monthName = monthStart.toLocaleDateString('it-IT', { month: 'short' });
+          const year = monthStart.getFullYear().toString().slice(-2);
+          return {
+            month: `${monthName.charAt(0).toUpperCase()}${monthName.slice(1)} '${year}`,
+            revenue: monthRevenue,
+            contracts: contracts.length,
+          };
+        })
+      );
+
+      const thisMonthRevenue = revenueByMonth[11]?.revenue || 0;
+      const lastMonthRevenue = revenueByMonth[10]?.revenue || 0;
+
+      revenue = {
+        total: totalRevenue,
+        thisMonth: thisMonthRevenue,
+        lastMonth: lastMonthRevenue,
+        growthPercent: lastMonthRevenue > 0
+          ? Math.round(((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
+          : thisMonthRevenue > 0 ? 100 : 0,
+        byMonth: revenueByMonth,
+      };
+    }
 
     // ============ SIMULATION & PERFORMANCE STATS ============
     const [
@@ -1458,19 +1568,19 @@ export const usersRouter = router({
       avgScoreResult,
     ] = await Promise.all([
       ctx.prisma.simulation.count({ where: { status: 'PUBLISHED' } }),
-      ctx.prisma.simulationResult.count(),
-      ctx.prisma.simulationResult.count({ 
-        where: { completedAt: { gte: startOfMonth } } 
+      ctx.prisma.simulationResult.count({ where: { ...scopedResultWhere } }),
+      ctx.prisma.simulationResult.count({
+        where: { completedAt: { gte: startOfMonth }, ...scopedResultWhere },
       }),
       ctx.prisma.simulationResult.aggregate({
         _avg: { percentageScore: true },
-        where: { completedAt: { not: null } },
+        where: { completedAt: { not: null }, ...scopedResultWhere },
       }),
     ]);
 
     // Performance by subject (from subjectScores JSON field)
     const allResults = await ctx.prisma.simulationResult.findMany({
-      where: { completedAt: { not: null } },
+      where: { completedAt: { not: null }, ...scopedResultWhere },
       select: { subjectScores: true },
       take: 1000, // Limit for performance
       orderBy: { completedAt: 'desc' },
@@ -1515,52 +1625,59 @@ export const usersRouter = router({
     ]);
 
     // ============ COLLABORATOR STATS ============
-    const collaboratorStats = await ctx.prisma.collaborator.findMany({
-      include: {
-        user: { select: { id: true, name: true, email: true, isActive: true } },
-        groupMemberships: { include: { group: { select: { name: true } } } },
-        subjects: {
-          include: {
-            subject: {
-              select: {
-                id: true,
-                name: true,
-                code: true,
-                color: true,
+    // Collaborator activity is part of the reserved (financial) surface — skip the queries
+    // entirely for callers without `stats.viewFinancial`; the return stays `collaborators: []`.
+    const collaboratorActivity = !canViewFinancial
+      ? []
+      : await (async () => {
+          const collaboratorStats = await ctx.prisma.collaborator.findMany({
+            include: {
+              user: { select: { id: true, name: true, email: true, isActive: true } },
+              groupMemberships: { include: { group: { select: { name: true } } } },
+              subjects: {
+                include: {
+                  subject: {
+                    select: {
+                      id: true,
+                      name: true,
+                      code: true,
+                      color: true,
+                    },
+                  },
+                },
+                orderBy: { isPrimary: 'desc' },
               },
             },
-          },
-          orderBy: { isPrimary: 'desc' },
-        },
-      },
-    });
+          });
 
-    const collaboratorActivity = await Promise.all(
-      collaboratorStats.map(async (collab) => {
-        const [questionsCreated, materialsCreated, simulationsCreated] = await Promise.all([
-          ctx.prisma.question.count({ where: { createdById: collab.user.id } }),
-          ctx.prisma.material.count({ where: { createdBy: collab.user.id } }),
-          ctx.prisma.simulation.count({ where: { createdById: collab.user.id, creatorRole: { not: 'STUDENT' } } }),
-        ]);
-        return {
-          id: collab.id,
-          userId: collab.user.id,
-          name: collab.user.name,
-          email: collab.user.email,
-          kind: collab.kind,
-          subjects: collab.subjects,
-          isActive: collab.user.isActive,
-          groups: collab.groupMemberships.map(gm => gm.group.name),
-          questionsCreated,
-          materialsCreated,
-          simulationsCreated,
-          totalActivity: questionsCreated + materialsCreated + simulationsCreated,
-        };
-      })
-    );
+          return Promise.all(
+            collaboratorStats.map(async (collab) => {
+              const [questionsCreated, materialsCreated, simulationsCreated] = await Promise.all([
+                ctx.prisma.question.count({ where: { createdById: collab.user.id } }),
+                ctx.prisma.material.count({ where: { createdBy: collab.user.id } }),
+                ctx.prisma.simulation.count({ where: { createdById: collab.user.id, creatorRole: { not: 'STUDENT' } } }),
+              ]);
+              return {
+                id: collab.id,
+                userId: collab.user.id,
+                name: collab.user.name,
+                email: collab.user.email,
+                kind: collab.kind,
+                subjects: collab.subjects,
+                isActive: collab.user.isActive,
+                groups: collab.groupMemberships.map(gm => gm.group.name),
+                questionsCreated,
+                materialsCreated,
+                simulationsCreated,
+                totalActivity: questionsCreated + materialsCreated + simulationsCreated,
+              };
+            })
+          );
+        })();
 
     // ============ STUDENT PERFORMANCE OVERVIEW ============
     const studentPerformance = await ctx.prisma.student.findMany({
+      where: { ...scopedStudentWhere },
       include: {
         user: { select: { name: true, email: true, isActive: true, createdAt: true } },
         simulationResults: {
@@ -1610,7 +1727,7 @@ export const usersRouter = router({
     }).sort((a, b) => b.avgScore - a.avgScore);
 
     const recentSimulationResults = await ctx.prisma.simulationResult.findMany({
-      where: { completedAt: { not: null } },
+      where: { completedAt: { not: null }, ...scopedResultWhere },
       orderBy: { completedAt: 'desc' },
       take: 30,
       include: {
@@ -1630,7 +1747,7 @@ export const usersRouter = router({
         const monthEnd = new Date(now.getFullYear(), now.getMonth() - 4 + i, 0);
         const [simulations, questions, materials] = await Promise.all([
           ctx.prisma.simulationResult.count({
-            where: { completedAt: { gte: monthStart, lte: monthEnd } },
+            where: { completedAt: { gte: monthStart, lte: monthEnd }, ...scopedResultWhere },
           }),
           ctx.prisma.question.count({
             where: { createdAt: { gte: monthStart, lte: monthEnd } },
@@ -1663,16 +1780,8 @@ export const usersRouter = router({
           ? Math.round(((newUsersThisMonth - newUsersLastMonth) / newUsersLastMonth) * 100) 
           : newUsersThisMonth > 0 ? 100 : 0,
       },
-      // Revenue
-      revenue: {
-        total: totalRevenue,
-        thisMonth: thisMonthRevenue,
-        lastMonth: lastMonthRevenue,
-        growthPercent: lastMonthRevenue > 0 
-          ? Math.round(((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100) 
-          : thisMonthRevenue > 0 ? 100 : 0,
-        byMonth: revenueByMonth,
-      },
+      // Revenue — null when the caller lacks `stats.viewFinancial`.
+      revenue,
       // Simulations
       simulations: {
         total: totalSimulations,

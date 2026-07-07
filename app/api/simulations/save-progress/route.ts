@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma/client';
 import { getAdminAuth } from '@/lib/firebase/admin';
 import { Prisma } from '@prisma/client';
 import { sanitizeStudentAnswerText } from '@/lib/utils/studentOpenAnswer';
+import { logApp } from '@/lib/logging/appLog';
 
 /**
  * API endpoint for saving simulation progress via sendBeacon
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { resultId, answers, timeSpent, sectionTimes, currentSectionIndex, currentQuestionIndex } = body;
+    const { resultId, answers, timeSpent, sectionTimes, currentSectionIndex, currentQuestionIndex, resetToken } = body;
 
     if (!resultId || !Array.isArray(answers)) {
       return NextResponse.json({ error: 'Dati mancanti' }, { status: 400 });
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
     // Verify result belongs to student
     const result = await prisma.simulationResult.findUnique({
       where: { id: resultId },
-      select: { studentId: true, completedAt: true },
+      select: { studentId: true, completedAt: true, resetAt: true },
     });
 
     if (!result) {
@@ -75,6 +76,12 @@ export async function POST(request: NextRequest) {
 
     if (result.completedAt) {
       return NextResponse.json({ error: 'Tentativo già completato' }, { status: 400 });
+    }
+
+    // A tab opened before a staff reset carries a stale (or missing) token:
+    // reject its writes so they can't overwrite the reset state
+    if (result.resetAt && resetToken !== result.resetAt.getTime()) {
+      return NextResponse.json({ error: 'Tentativo ripristinato dallo staff' }, { status: 409 });
     }
 
     // Prepare answers with section progress metadata
@@ -97,6 +104,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('[SaveProgress API] Error:', error);
+    await logApp({
+      source: 'SIMULATION',
+      level: 'ERROR',
+      message: 'Errore nel salvataggio progresso simulazione',
+      error,
+      path: 'POST /api/simulations/save-progress',
+      statusCode: 500,
+    });
     return NextResponse.json({ error: 'Errore interno' }, { status: 500 });
   }
 }
