@@ -22,6 +22,7 @@ import {
 } from '@/lib/validations/simulationValidation';
 import * as notificationService from '@/server/services/notificationService';
 import { getAdminStorage } from '@/lib/firebase/admin';
+import { normalizeQuestionText } from '@/lib/utils/questionText';
 
 // ============ Helper Functions ============
 
@@ -2072,6 +2073,26 @@ export const questionsRouter = router({
       }
 
       return results;
+    }),
+
+  // Returns, among the supplied normalized texts, those that already exist in
+  // the DB. Used by the PDF importer to mark duplicates before saving.
+  // A mutation (not a query) so the potentially large text list travels in the
+  // POST body instead of an over-length GET query string.
+  checkExistingTexts: staffProcedure
+    .input(z.object({ texts: z.array(z.string()).max(2000) }))
+    .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.import');
+      const wanted = new Set(input.texts.map(normalizeQuestionText).filter(Boolean));
+      if (wanted.size === 0) return { existing: [] as string[] };
+
+      const all = await ctx.prisma.question.findMany({ select: { text: true } });
+      const existing = new Set<string>();
+      for (const { text } of all) {
+        const norm = normalizeQuestionText(text);
+        if (wanted.has(norm)) existing.add(norm);
+      }
+      return { existing: [...existing] };
     }),
 
   // ==================== KEYWORD SUGGESTIONS ====================

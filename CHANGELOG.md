@@ -8,7 +8,20 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
-## [1.10.0] - 2026-07-07
+## [1.12.0] - 2026-07-07
+
+### Added
+- **Import domande da PDF.** Nella pagina *Importa Domande* (`/domande/importa`) c'è ora uno switch **File CSV / File PDF**. Caricando un PDF di un compito (struttura tipo IMAT: domanda numerata + risposte A–E) il sistema **estrae automaticamente** le domande e le mostra in un elenco editabile. Per ogni domanda si scelgono **materia, argomento, tag e difficoltà**; la **risposta corretta è preselezionata sulla A** ma è modificabile. Si può **salvare tutto come bozza** oppure **pubblicare** (la pubblicazione richiede materia e argomento su ogni domanda; quelle incomplete vengono salvate come bozza).
+- **Rilevamento duplicati in fase di import.** Prima del salvataggio ogni domanda estratta viene confrontata (corrispondenza esatta del testo, normalizzato) con quelle già presenti in database: i duplicati sono marcati **"Già presente"** ed esclusi dall'importazione.
+- **Segnalazione domande da rivedere + ritaglio immagine.** Le domande che contengono tabelle, grafici o figure (che l'estrazione testo rende male) vengono marcate **"Da rivedere"**; per queste il sistema **ritaglia la relativa porzione di pagina dal PDF** e la allega come immagine alla domanda, così tabelle/figure non vanno perse. Il ritaglio è **ingrandibile con un clic**. Testo e risposte restano comunque modificabili a mano.
+- **Campi domanda completi in fase di import.** Ogni domanda estratta espone gli stessi campi della creazione manuale: **tipo** (singola/multipla/aperta), **lingua**, **difficoltà**, risposte con **aggiungi/rimuovi** e selezione della/e corretta/e, **Mescola l'ordine delle risposte** (attivo di default), e in *Opzioni avanzate* immagine (URL), descrizione, anno, fonte e spiegazioni (corretta/errata/generale). Anno e fonte sono precompilati dal nome del file.
+- **Vista Tabella con assegnazione multipla.** Oltre alla vista a schede, una **vista tabella** con selezione multipla (checkbox + "seleziona tutte") e una barra **"Assegna a N selezionate"** per impostare in blocco materia, argomento, tag, difficoltà, tipo, lingua e mescola. **Filtri rapidi** un clic: Tutte / Da rivedere / Duplicati.
+
+## [1.11.0] - 2026-07-07
+
+### Added
+- **Assegnazione dei gruppi direttamente dalla pagina Utenti.** Nella colonna **"Gruppi"** ogni studente/collaboratore ha ora un menu a tendina inline: cliccando sui badge si apre un elenco con checkbox (e ricerca oltre i 6 gruppi) per **aggiungere o rimuovere** i gruppi al volo, con salvataggio immediato e notifica all'utente per ogni nuovo gruppo. I gruppi proposti sono filtrati per compatibilità di tipo (uno studente non può entrare in un gruppo solo-collaboratori e viceversa). Questo rende più rapido gestire i ragazzi in prova/senza contratto senza passare dalla pagina *Gruppi* (flusso che resta comunque disponibile).
+- **Assegnazione massiva a un gruppo.** Nuove checkbox di selezione riga (desktop e mobile, con "seleziona tutti") sulla pagina Utenti: selezionando più utenti compare una barra d'azione per assegnarli **tutti insieme allo stesso gruppo** in un colpo solo. Studenti e collaboratori non compatibili con il tipo di gruppo scelto vengono automaticamente esclusi, e il riepilogo indica quanti sono stati aggiunti e quanti già presenti/non compatibili.
 
 ### Added
 - **Inserimento manuale di uno studente in una simulazione in corso.** Nella Virtual Room lo staff può aggiungere uno studente non assegnato tramite il nuovo pulsante **"Aggiungi studente"**, anche a sessione già avviata (ingresso in ritardo). Se lo studente non ha un'assegnazione valida ne viene creata una diretta al volo (con notifica), così la simulazione compare subito nella sua lista e può entrare nella stanza attiva; conteggi connessi/totali e monitoraggio live includono anche gli studenti inseriti manualmente. Per le simulazioni senza Virtual Room resta il flusso di assegnazione esistente (con finestra di accesso immediata).

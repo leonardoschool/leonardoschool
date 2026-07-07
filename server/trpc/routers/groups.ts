@@ -829,25 +829,21 @@ export const groupsRouter = router({
 
       // Send notifications to newly added students
       if (newStudentIds.length > 0) {
-        // Get student user IDs for notifications
         const students = await ctx.prisma.student.findMany({
           where: { id: { in: newStudentIds } },
           select: { userId: true },
         });
-        
-        // Create notifications for each new student member
-        const notificationsToCreate = students.map((student) => ({
-          userId: student.userId,
-          type: 'GENERAL' as const,
-          title: 'Aggiunto a un gruppo',
-          message: `Sei stato aggiunto al gruppo "${group.name}".`,
-          data: { groupId: group.id, groupName: group.name },
-        }));
 
-        if (notificationsToCreate.length > 0) {
-          await ctx.prisma.notification.createMany({
-            data: notificationsToCreate,
-          });
+        for (const student of students) {
+          try {
+            await notifications.groupMemberAdded(ctx.prisma, {
+              recipientUserId: student.userId,
+              groupId: group.id,
+              groupName: group.name,
+            });
+          } catch (error) {
+            console.error('[Groups] Failed to send notification:', error);
+          }
         }
       }
 
@@ -857,19 +853,17 @@ export const groupsRouter = router({
           where: { id: { in: newCollaboratorIds } },
           select: { userId: true },
         });
-        
-        const notificationsToCreate = collaborators.map((collab) => ({
-          userId: collab.userId,
-          type: 'GENERAL' as const,
-          title: 'Aggiunto a un gruppo',
-          message: `Sei stato aggiunto al gruppo "${group.name}".`,
-          data: { groupId: group.id, groupName: group.name },
-        }));
 
-        if (notificationsToCreate.length > 0) {
-          await ctx.prisma.notification.createMany({
-            data: notificationsToCreate,
-          });
+        for (const collab of collaborators) {
+          try {
+            await notifications.groupMemberAdded(ctx.prisma, {
+              recipientUserId: collab.userId,
+              groupId: group.id,
+              groupName: group.name,
+            });
+          } catch (error) {
+            console.error('[Groups] Failed to send notification:', error);
+          }
         }
       }
 
@@ -877,6 +871,100 @@ export const groupsRouter = router({
         added: membersToCreate.length,
         skipped: studentIds.length + collaboratorIds.length - membersToCreate.length,
       };
+    }),
+
+  // Set the complete set of groups for a single user (diff add/remove).
+  // Powers the inline group editor on the users page.
+  setUserGroups: adminProcedure
+    .input(
+      z.object({
+        studentId: z.string().optional(),
+        collaboratorId: z.string().optional(),
+        groupIds: z.array(z.string()),
+      }).refine(
+        (data) => (data.studentId && !data.collaboratorId) || (!data.studentId && data.collaboratorId),
+        { message: 'Specificare esattamente uno tra studentId e collaboratorId' }
+      )
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { studentId, collaboratorId, groupIds } = input;
+      const isStudent = Boolean(studentId);
+
+      const currentMembers = await ctx.prisma.groupMember.findMany({
+        where: isStudent ? { studentId } : { collaboratorId },
+        select: { id: true, groupId: true },
+      });
+
+      const currentGroupIds = new Set(currentMembers.map((m) => m.groupId));
+      const desiredGroupIds = new Set(groupIds);
+      const toAddIds = groupIds.filter((id) => !currentGroupIds.has(id));
+      const toRemove = currentMembers.filter((m) => !desiredGroupIds.has(m.groupId));
+
+      // Validate type compatibility for the groups being added
+      let addedGroups: { id: string; name: string }[] = [];
+      if (toAddIds.length > 0) {
+        const groupsToAdd = await ctx.prisma.group.findMany({
+          where: { id: { in: toAddIds } },
+          select: { id: true, name: true, type: true },
+        });
+
+        if (groupsToAdd.length !== toAddIds.length) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Uno o più gruppi non sono stati trovati' });
+        }
+
+        const incompatible = groupsToAdd.find((g) =>
+          (isStudent && g.type === 'COLLABORATORS') || (!isStudent && g.type === 'STUDENTS')
+        );
+        if (incompatible) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: isStudent
+              ? `Il gruppo "${incompatible.name}" accetta solo collaboratori`
+              : `Il gruppo "${incompatible.name}" accetta solo studenti`,
+          });
+        }
+
+        addedGroups = groupsToAdd.map((g) => ({ id: g.id, name: g.name }));
+      }
+
+      await ctx.prisma.$transaction([
+        ...(toRemove.length > 0
+          ? [ctx.prisma.groupMember.deleteMany({ where: { id: { in: toRemove.map((m) => m.id) } } })]
+          : []),
+        ...(toAddIds.length > 0
+          ? [ctx.prisma.groupMember.createMany({
+              data: toAddIds.map((groupId) => ({
+                groupId,
+                studentId: studentId ?? null,
+                collaboratorId: collaboratorId ?? null,
+              })),
+              skipDuplicates: true,
+            })]
+          : []),
+      ]);
+
+      // Notify the user for each newly added group
+      if (addedGroups.length > 0) {
+        const target = isStudent
+          ? await ctx.prisma.student.findUnique({ where: { id: studentId }, select: { userId: true } })
+          : await ctx.prisma.collaborator.findUnique({ where: { id: collaboratorId }, select: { userId: true } });
+
+        if (target?.userId) {
+          for (const g of addedGroups) {
+            try {
+              await notifications.groupMemberAdded(ctx.prisma, {
+                recipientUserId: target.userId,
+                groupId: g.id,
+                groupName: g.name,
+              });
+            } catch (error) {
+              console.error('[Groups] Failed to send notification:', error);
+            }
+          }
+        }
+      }
+
+      return { added: toAddIds.length, removed: toRemove.length };
     }),
 
   // Remove a member from a group

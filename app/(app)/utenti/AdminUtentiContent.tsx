@@ -2,7 +2,7 @@
 // Note: 'any' types used for complex tRPC query results with nested includes
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { trpc } from '@/lib/trpc/client';
@@ -53,11 +53,15 @@ import {
   MapPin,
   XCircle,
   Download,
+  CheckSquare,
+  Square,
+  Users2,
 } from 'lucide-react';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import CustomSelect from '@/components/ui/CustomSelect';
 import AdminEditUserModal from '@/components/admin/users/AdminEditUserModal';
+import UserGroupsCell from './UserGroupsCell';
 
 type RoleFilter = 'ALL' | 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
 type StatusFilter = 'all' | 'active' | 'inactive' | 'pending_profile' | 'pending_contract' | 'pending_sign' | 'pending_activation' | 'no_signed_contract';
@@ -1359,12 +1363,16 @@ export default function AdminUtentiContent() {
     user: null,
   });
 
+  // Bulk group assignment
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
+  const [bulkGroupId, setBulkGroupId] = useState('');
+
   const utils = trpc.useUtils();
 
   // Get current user to hide self
   const { data: currentUser } = trpc.auth.me.useQuery();
   const { handleMutationError } = useApiError();
-  const { showSuccess } = useToast();
+  const { showSuccess, showInfo } = useToast();
 
   // Fetch users
   const { data: usersData, isLoading, refetch } = trpc.users.getAll.useQuery({
@@ -1392,8 +1400,8 @@ export default function AdminUtentiContent() {
   // Fetch contract templates
   const { data: templates } = trpc.contracts.getTemplates.useQuery();
 
-  // Fetch groups for user creation modal
-  const { data: groupsData } = trpc.groups.getAll.useQuery({ onlyMyGroups: false }, { enabled: createUserModal.isOpen });
+  // Fetch groups — used by the create-user modal, the inline group editor and the bulk-assign bar
+  const { data: groupsData } = trpc.groups.getAll.useQuery({ onlyMyGroups: false });
 
   // Mutations
   const toggleActiveMutation = trpc.users.toggleActive.useMutation({
@@ -1441,6 +1449,22 @@ export default function AdminUtentiContent() {
       utils.users.getStats.invalidate();
       setCreateUserModal({ isOpen: false, name: '', email: '', role: 'STUDENT', collaboratorKind: 'TUTOR', groupId: '' });
       showSuccess('Utente creato', 'L\'account è stato creato e l\'email di benvenuto è stata inviata.');
+    },
+    onError: handleMutationError,
+  });
+
+  const assignGroupBulkMutation = trpc.groups.addMembers.useMutation({
+    onSuccess: (res) => {
+      utils.users.getAll.invalidate();
+      setSelectedUserIds(new Set());
+      setBulkGroupId('');
+      const addedLabel = res.added === 1 ? '1 utente aggiunto' : `${res.added} utenti aggiunti`;
+      showSuccess(
+        'Utenti assegnati',
+        res.skipped > 0
+          ? `${addedLabel} al gruppo. ${res.skipped} già presenti o non compatibili.`
+          : `${addedLabel} al gruppo.`
+      );
     },
     onError: handleMutationError,
   });
@@ -1752,6 +1776,56 @@ export default function AdminUtentiContent() {
   // Show all users including current user
   const filteredUsers = usersData?.users || [];
 
+  // --- Bulk selection helpers (only students/collaborators can be grouped) ---
+  const selectableUsers = useMemo(
+    () => filteredUsers.filter((u: any) =>
+      (u.role === 'STUDENT' && u.student?.id) || (u.role === 'COLLABORATOR' && u.collaborator?.id)
+    ),
+    [filteredUsers]
+  );
+
+  const allSelected = selectableUsers.length > 0 && selectableUsers.every((u: any) => selectedUserIds.has(u.id));
+
+  const toggleSelectAll = () => {
+    setSelectedUserIds(allSelected ? new Set() : new Set(selectableUsers.map((u: any) => u.id)));
+  };
+
+  const toggleSelectUser = (userId: string) => {
+    setSelectedUserIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId); else next.add(userId);
+      return next;
+    });
+  };
+
+  // Reset the selection whenever the visible page/filters change
+  useEffect(() => {
+    setSelectedUserIds(new Set());
+  }, [page, role, status, search]);
+
+  const handleBulkAssign = () => {
+    if (!bulkGroupId) return;
+    const group = groupsData?.find((g) => g.id === bulkGroupId);
+    if (!group) return;
+
+    const selected = filteredUsers.filter((u: any) => selectedUserIds.has(u.id));
+    const acceptsStudents = group.type !== 'COLLABORATORS';
+    const acceptsCollabs = group.type !== 'STUDENTS';
+    const studentIds = acceptsStudents
+      ? selected.filter((u: any) => u.role === 'STUDENT' && u.student?.id).map((u: any) => u.student.id)
+      : [];
+    const collaboratorIds = acceptsCollabs
+      ? selected.filter((u: any) => u.role === 'COLLABORATOR' && u.collaborator?.id).map((u: any) => u.collaborator.id)
+      : [];
+
+    if (studentIds.length === 0 && collaboratorIds.length === 0) {
+      showInfo('Nessun utente compatibile', 'Gli utenti selezionati non possono essere aggiunti a questo gruppo.');
+      return;
+    }
+
+    assignGroupBulkMutation.mutate({ groupId: bulkGroupId, studentIds, collaboratorIds });
+  };
+
   const modalConfig = getModalConfig();
 
   return (
@@ -1919,6 +1993,46 @@ export default function AdminUtentiContent() {
 
       {/* Users Table */}
       <div className={`${colors.background.card} rounded-xl shadow-sm overflow-visible`}>
+        {/* Bulk group-assignment bar */}
+        {selectedUserIds.size > 0 && (
+          <div className={`flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3 border-b ${colors.border.primary} ${colors.background.secondary} rounded-t-xl`}>
+            <div className="flex items-center gap-2">
+              <Users2 className={`w-4 h-4 flex-shrink-0 ${colors.text.secondary}`} />
+              <span className={`text-sm font-medium ${colors.text.primary}`}>
+                {selectedUserIds.size} {selectedUserIds.size === 1 ? 'selezionato' : 'selezionati'}
+              </span>
+              <button
+                onClick={() => setSelectedUserIds(new Set())}
+                className={`text-xs ${colors.text.muted} hover:${colors.text.secondary} underline`}
+              >
+                Deseleziona
+              </button>
+            </div>
+            <div className="flex items-center gap-2 sm:ml-auto w-full sm:w-auto">
+              <div className="min-w-[180px] flex-1 sm:flex-none">
+                <CustomSelect
+                  value={bulkGroupId}
+                  onChange={setBulkGroupId}
+                  searchable
+                  size="sm"
+                  placeholder="Seleziona gruppo..."
+                  options={(groupsData || []).map((g) => ({ value: g.id, label: g.name }))}
+                />
+              </div>
+              <button
+                onClick={handleBulkAssign}
+                disabled={!bulkGroupId || assignGroupBulkMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors whitespace-nowrap"
+              >
+                {assignGroupBulkMutation.isPending ? (
+                  <><Spinner size="sm" /> Assegnazione...</>
+                ) : (
+                  <><Plus className="w-4 h-4" /> Assegna al gruppo</>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
         {isLoading ? (
           <div className="p-12 text-center">
             <Spinner size="lg" />
@@ -1958,6 +2072,18 @@ export default function AdminUtentiContent() {
                   <div key={user.id} className="p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
+                        {isStudentOrCollab && targetId && (
+                          <button
+                            type="button"
+                            onClick={() => toggleSelectUser(user.id)}
+                            aria-label={selectedUserIds.has(user.id) ? 'Deseleziona utente' : 'Seleziona utente'}
+                            className="flex-shrink-0 transition-opacity hover:opacity-80"
+                          >
+                            {selectedUserIds.has(user.id)
+                              ? <CheckSquare className={`w-5 h-5 ${colors.primary.text}`} />
+                              : <Square className={`w-5 h-5 ${colors.text.muted}`} />}
+                          </button>
+                        )}
                         <div className={`w-12 h-12 rounded-full ${roleBadge.bg} flex items-center justify-center text-lg font-semibold ${roleBadge.color} flex-shrink-0`}>
                           {user.name.charAt(0).toUpperCase()}
                         </div>
@@ -2193,6 +2319,19 @@ export default function AdminUtentiContent() {
               <table className="w-full min-w-[900px]">
                 <thead className={`${colors.background.secondary} border-b ${colors.border.primary}`}>
                   <tr>
+                    <th className="w-10 px-4 py-4">
+                      <button
+                        type="button"
+                        onClick={toggleSelectAll}
+                        disabled={selectableUsers.length === 0}
+                        aria-label={allSelected ? 'Deseleziona tutti' : 'Seleziona tutti'}
+                        className="disabled:opacity-40 transition-opacity"
+                      >
+                        {allSelected
+                          ? <CheckSquare className={`w-4 h-4 ${colors.primary.text}`} />
+                          : <Square className={`w-4 h-4 ${colors.text.muted}`} />}
+                      </button>
+                    </th>
                     <th className={`text-left px-4 py-4 font-semibold text-sm ${colors.text.primary}`}>Utente</th>
                     <th className={`text-left px-4 py-4 font-semibold text-sm ${colors.text.primary}`}>Gruppi</th>
                     <th className={`text-left px-4 py-4 font-semibold text-sm ${colors.text.primary}`} style={{ overflow: 'visible' }}>Ruolo</th>
@@ -2224,7 +2363,21 @@ export default function AdminUtentiContent() {
                     const contractId = lastContract?.id;
 
                     return (
-                      <tr key={user.id} className={`border-b ${colors.border.primary} hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors`}>
+                      <tr key={user.id} className={`border-b ${colors.border.primary} hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${selectedUserIds.has(user.id) ? colors.background.secondary : ''}`}>
+                        <td className="w-10 px-4 py-3">
+                          {isStudentOrCollab && targetId && (
+                            <button
+                              type="button"
+                              onClick={() => toggleSelectUser(user.id)}
+                              aria-label={selectedUserIds.has(user.id) ? 'Deseleziona utente' : 'Seleziona utente'}
+                              className="transition-opacity hover:opacity-80"
+                            >
+                              {selectedUserIds.has(user.id)
+                                ? <CheckSquare className={`w-4 h-4 ${colors.primary.text}`} />
+                                : <Square className={`w-4 h-4 ${colors.text.muted}`} />}
+                            </button>
+                          )}
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             <div className={`w-10 h-10 rounded-full ${roleBadge.bg} flex items-center justify-center text-lg font-semibold ${roleBadge.color} flex-shrink-0`}>
@@ -2283,51 +2436,17 @@ export default function AdminUtentiContent() {
                               <span className="truncate max-w-[160px]">{user.email}</span>
                             </div>
                           ) : (
-                            <div className="flex flex-wrap gap-1 max-w-[180px]">
-                              {(() => {
-                                const groups = user.role === 'STUDENT' 
-                                  ? user.student?.groupMemberships?.map((g: any) => g.group) || []
-                                  : user.collaborator?.groupMemberships?.map((g: any) => g.group) || [];
-                                
-                                if (groups.length === 0) {
-                                  return (
-                                    <span className={`text-xs ${colors.text.muted} italic`}>
-                                      Nessun gruppo
-                                    </span>
-                                  );
-                                }
-                                
-                                const sortedGroups = [...groups].sort((a: any, b: any) => a.name.localeCompare(b.name));
-                                const displayGroups = sortedGroups.slice(0, 3);
-                                const remaining = sortedGroups.length - 3;
-                                
-                                return (
-                                  <>
-                                    {displayGroups.map((group: any) => (
-                                      <span
-                                        key={group.id}
-                                        className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-                                        style={{
-                                          backgroundColor: (group.color || '#6b7280') + '20',
-                                          color: group.color || '#6b7280',
-                                        }}
-                                        title={group.name}
-                                      >
-                                        {group.name.length > 12 ? group.name.substring(0, 10) + '...' : group.name}
-                                      </span>
-                                    ))}
-                                    {remaining > 0 && (
-                                      <span 
-                                        className={`text-[10px] px-1.5 py-0.5 rounded-full ${colors.background.secondary} ${colors.text.muted}`}
-                                        title={sortedGroups.slice(3).map((g: any) => g.name).join(', ')}
-                                      >
-                                        +{remaining}
-                                      </span>
-                                    )}
-                                  </>
-                                );
-                              })()}
-                            </div>
+                            <UserGroupsCell
+                              role={user.role}
+                              targetId={targetId}
+                              currentGroups={
+                                (user.role === 'STUDENT'
+                                  ? user.student?.groupMemberships?.map((g: any) => g.group)
+                                  : user.collaborator?.groupMemberships?.map((g: any) => g.group)) || []
+                              }
+                              allGroups={(groupsData || []) as any}
+                              onSaved={() => utils.users.getAll.invalidate()}
+                            />
                           )}
                         </td>
                         <td className="px-4 py-3 overflow-visible">

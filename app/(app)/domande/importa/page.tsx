@@ -24,6 +24,8 @@ import {
   questionTypeLabels,
   difficultyLabels,
 } from '@/lib/validations/questionValidation';
+import { FileText, FileSpreadsheet } from 'lucide-react';
+import PdfImportPanel from '@/components/admin/pdf-import/PdfImportPanel';
 
 interface ImportRow {
   text: string;
@@ -81,6 +83,7 @@ export default function ImportaDomandePage() {
   const [isValidating, setIsValidating] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [importMode, setImportMode] = useState<'DRAFT' | 'PUBLISHED'>('DRAFT');
+  const [source, setSource] = useState<'CSV' | 'PDF'>('CSV');
 
   const importMutation = trpc.questions.importQuestions.useMutation({
     onSuccess: (result) => {
@@ -394,12 +397,38 @@ export default function ImportaDomandePage() {
             Importa Domande
           </h1>
           <p className={colors.text.muted}>
-            Importa domande in blocco da un file CSV
+            Importa domande in blocco da un file CSV o da un PDF
           </p>
         </div>
       </div>
 
+      {/* Source switch */}
+      <div className={`inline-flex rounded-xl border ${colors.border.primary} p-1 ${colors.background.secondary}`}>
+        {([
+          { key: 'CSV', label: 'File CSV', icon: FileSpreadsheet },
+          { key: 'PDF', label: 'File PDF', icon: FileText },
+        ] as const).map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setSource(key)}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              source === key
+                ? `${colors.primary.bg} text-white`
+                : `${colors.text.secondary} hover:${colors.background.tertiary}`
+            }`}
+          >
+            <Icon className="w-4 h-4" />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {source === 'PDF' && <PdfImportPanel />}
+
       {/* Help Section */}
+      {source === 'CSV' && (
+      <>
       <div className={`${colors.background.card} rounded-xl p-6 ${colors.effects.shadow.sm}`}>
         <button
           onClick={() => setShowHelp(!showHelp)}
@@ -647,6 +676,8 @@ export default function ImportaDomandePage() {
             </button>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );
