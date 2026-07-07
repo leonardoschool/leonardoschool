@@ -111,7 +111,8 @@ export async function loadPdf(file: File): Promise<LoadedPdf> {
     extractItems,
     cropRegion,
     destroy: () => {
-      void loadingTask.destroy();
+      // Fire-and-forget: teardown failures are irrelevant, we just don't want an unhandled rejection.
+      loadingTask.destroy().catch(() => {});
     },
   };
 }

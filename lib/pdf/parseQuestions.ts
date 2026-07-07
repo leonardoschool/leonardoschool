@@ -204,12 +204,15 @@ export function parseQuestions(
   };
 
   for (const line of lines) {
-    const questionMatch = line.text.match(/^(\d+)\s+(.*)$/);
+    // `\S.*` (not `.*`) keeps the separator `\s+` and the captured rest as disjoint classes,
+    // so there's no overlapping backtracking (sonarjs/slow-regex). The rest is optional to
+    // still match a bare number line.
+    const questionMatch = line.text.match(/^(\d+)\s+(\S.*)?$/);
     if (questionMatch && Number(questionMatch[1]) === expectedNumber) {
       finalize(line.y, line.page);
       current = {
         number: expectedNumber,
-        text: questionMatch[2],
+        text: questionMatch[2] ?? '',
         answers: [],
         correctLetter: 'A',
         suspicious: false,
@@ -223,10 +226,10 @@ export function parseQuestions(
 
     if (!current) continue;
 
-    const answerMatch = line.text.match(/^([A-E])\s+(.*)$/);
+    const answerMatch = line.text.match(/^([A-E])\s+(\S.*)?$/);
     const expectedLetter = ANSWER_LETTERS[expectedLetterIdx];
     if (answerMatch && answerMatch[1] === expectedLetter) {
-      current.answers.push({ label: expectedLetter, text: answerMatch[2] });
+      current.answers.push({ label: expectedLetter, text: answerMatch[2] ?? '' });
       expectedLetterIdx += 1;
       continue;
     }

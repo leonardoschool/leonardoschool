@@ -70,21 +70,21 @@ const EXPECTED_ERROR_CODES = new Set([
 // login, questions, contracts — every API endpoint — is covered without per-router wiring.
 const withErrorLogging = t.middleware(async ({ next, path, type }) => {
   const result = await next();
-  if (result.ok) return result;
-
-  // tRPC's discriminated union doesn't narrow cleanly through the generic here, so read
-  // the error off the failed result explicitly.
-  const error = (result as { error: TRPCError }).error;
-  if (!EXPECTED_ERROR_CODES.has(error.code)) {
-    // Await so the write completes before the serverless function may terminate.
-    await logApp({
-      source: 'TRPC',
-      level: 'ERROR',
-      message: error.message,
-      // `cause` holds the original throw (e.g. the Prisma error) when tRPC wrapped it.
-      error: error.cause ?? error,
-      path: `${type} ${path}`,
-    });
+  if (!result.ok) {
+    // tRPC's discriminated union doesn't narrow cleanly through the generic here, so read
+    // the error off the failed result explicitly.
+    const error = (result as { error: TRPCError }).error;
+    if (!EXPECTED_ERROR_CODES.has(error.code)) {
+      // Await so the write completes before the serverless function may terminate.
+      await logApp({
+        source: 'TRPC',
+        level: 'ERROR',
+        message: error.message,
+        // `cause` holds the original throw (e.g. the Prisma error) when tRPC wrapped it.
+        error: error.cause ?? error,
+        path: `${type} ${path}`,
+      });
+    }
   }
   return result;
 });
