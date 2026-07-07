@@ -559,49 +559,55 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     return () => clearInterval(interval);
   }, [hasStarted, startAttemptMutation.data?.resultId, saveProgress]);
 
+  // Update the answer for the current question, creating its entry if missing.
+  // A restored/partial `answers` array (resume) may lack a slot for questions
+  // not yet answered — a plain `.map` would silently drop the change, so we
+  // upsert to guarantee the selection is always captured (counted + submitted).
+  const upsertCurrentAnswer = useCallback(
+    (mutate: (current: Answer) => Answer) => {
+      if (!simulation) return;
+      const currentQuestion = simulation.questions[currentQuestionIndex];
+      if (!currentQuestion) return;
+
+      setAnswers((prev) => {
+        const existing = prev.find((a) => a.questionId === currentQuestion.questionId);
+        if (existing) {
+          return prev.map((a) =>
+            a.questionId === currentQuestion.questionId ? mutate(a) : a
+          );
+        }
+        const base: Answer = {
+          questionId: currentQuestion.questionId,
+          answerId: null,
+          answerText: null,
+          timeSpent: 0,
+          flagged: false,
+        };
+        return [...prev, mutate(base)];
+      });
+    },
+    [simulation, currentQuestionIndex]
+  );
+
   // Handle answer selection
   const handleAnswerSelect = (answerId: string) => {
-    if (!simulation) return;
-    const currentQuestion = simulation.questions[currentQuestionIndex];
-    if (!currentQuestion) return;
-
-    setAnswers((prev) =>
-      prev.map((a) =>
-        a.questionId === currentQuestion.questionId
-          ? { ...a, answerId: a.answerId === answerId ? null : answerId }
-          : a
-      )
-    );
+    upsertCurrentAnswer((a) => ({
+      ...a,
+      answerId: a.answerId === answerId ? null : answerId,
+    }));
   };
 
   // Handle open text answer change
   const handleOpenTextChange = (text: string) => {
-    if (!simulation) return;
-    const currentQuestion = simulation.questions[currentQuestionIndex];
-    if (!currentQuestion) return;
     const sanitizedText = sanitizeStudentOpenAnswerInput(text);
-
-    setAnswers((prev) =>
-      prev.map((a) =>
-        a.questionId === currentQuestion.questionId
-          ? { ...a, answerText: sanitizedText.trim().length > 0 ? sanitizedText : null }
-          : a
-      )
-    );
+    upsertCurrentAnswer((a) => ({
+      ...a,
+      answerText: sanitizedText.trim().length > 0 ? sanitizedText : null,
+    }));
   };
 
   const handleToggleFlag = () => {
-    if (!simulation) return;
-    const currentQuestion = simulation.questions[currentQuestionIndex];
-    if (!currentQuestion) return;
-
-    setAnswers((prev) =>
-      prev.map((a) =>
-        a.questionId === currentQuestion.questionId
-          ? { ...a, flagged: !a.flagged }
-          : a
-      )
-    );
+    upsertCurrentAnswer((a) => ({ ...a, flagged: !a.flagged }));
   };
 
   // Navigate questions

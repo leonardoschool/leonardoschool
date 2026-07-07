@@ -8,7 +8,10 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
-## [1.13.0] - 2026-07-07
+## [1.13.1] - 2026-07-07
+
+### Fixed
+- **Ultima risposta non conteggiata alla consegna.** In tutte le simulazioni (per materia, complete, personalizzate, TOLC/sezioni, Virtual Room), quando lo studente **riprendeva un tentativo salvato** e poi rispondeva a una domanda mai risposta prima (tipicamente l'ultima, dove *Successiva* è disattivato), la selezione veniva **silenziosamente ignorata**: non risultava tra le risposte conteggiate né veniva inviata con *Consegna*. La causa era che le risposte non ancora date non avevano una "casella" nell'elenco ripristinato, e il click non ne creava una. Ora la selezione di risposta, il testo aperto e il contrassegno **creano la casella se mancante**, garantendo che ogni risposta venga sempre registrata, conteggiata e consegnata.
 
 ### Added
 - **Log Errori centralizzato.** Nuova pagina admin **`/log-errori`** (menu *Gestione → Log Errori*) che raccoglie **ogni errore applicativo** della piattaforma: procedure API (tRPC), login/sincronizzazione utente, simulazioni, invii email, cron. Per ogni evento sono registrati livello (Errore/Warning/Info), sorgente, percorso, messaggio, **stack trace** e metadati, oltre a utente, IP e request-id quando disponibili. La pagina offre **filtri** per livello e sorgente, ricerca su messaggio/percorso/utente, contatori sintetici, dettaglio espandibile con stack, e un'azione per **eliminare i log più vecchi di 30 giorni**. Sostituisce i log runtime di Vercel (retention breve senza piano Pro) con uno storico affidabile e consultabile.

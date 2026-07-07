@@ -439,11 +439,32 @@ export default function SimulationExecutionScreen() {
     return colors.primary.main;
   };
 
+  // Update the answer for a question, creating its entry if missing. A restored
+  // partial `answers` array (resume) may lack a slot for questions not yet
+  // answered, so a plain map/index would silently drop the change — upsert
+  // guarantees the selection is always captured (counted + submitted).
+  const upsertAnswerForQuestion = (questionId: string, mutate: (current: Answer) => Answer) => {
+    setAnswers((prev) => {
+      const existing = prev.find((a) => a.questionId === questionId);
+      if (existing) {
+        return prev.map((a) => (a.questionId === questionId ? mutate(a) : a));
+      }
+      const base: Answer = {
+        questionId,
+        selectedOptionId: null,
+        answerText: null,
+        isMarked: false,
+        timeSpent: 0,
+      };
+      return [...prev, mutate(base)];
+    });
+  };
+
   // Selezione risposta
   const selectAnswer = (optionId: string) => {
-    setAnswers((prev) =>
-      prev.map((a, i) => (i === currentQuestionIndex ? { ...a, selectedOptionId: optionId } : a))
-    );
+    const currentQ = simulation?.questions[currentQuestionIndex];
+    if (!currentQ) return;
+    upsertAnswerForQuestion(currentQ.id, (a) => ({ ...a, selectedOptionId: optionId }));
   };
 
   // Navigazione domande
@@ -755,18 +776,15 @@ export default function SimulationExecutionScreen() {
           onAnswerSelect={(answerId: string) => {
             const currentQ = simulation.questions[currentQuestionIndex];
             if (!currentQ) return;
-            setAnswers(prev => prev.map(a => 
-              a.questionId === currentQ.id 
-                ? { ...a, selectedOptionId: a.selectedOptionId === answerId ? null : answerId }
-                : a
-            ));
+            upsertAnswerForQuestion(currentQ.id, (a) => ({
+              ...a,
+              selectedOptionId: a.selectedOptionId === answerId ? null : answerId,
+            }));
           }}
           onOpenTextChange={(text: string) => {
             const currentQ = simulation.questions[currentQuestionIndex];
             if (!currentQ) return;
-            setAnswers(prev => prev.map(a => 
-              a.questionId === currentQ.id ? { ...a, answerText: text } : a
-            ));
+            upsertAnswerForQuestion(currentQ.id, (a) => ({ ...a, answerText: text }));
           }}
           onGoToQuestion={goToQuestion}
           onGoNext={goNext}
