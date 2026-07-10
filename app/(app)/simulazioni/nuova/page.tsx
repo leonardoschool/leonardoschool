@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { stripHtml } from '@/lib/utils/sanitizeHtml';
-import { normalizeImageSrc } from '@/lib/utils/imageUrl';
+import { normalizeImageSrc, questionImageSource } from '@/lib/utils/imageUrl';
 import { renderLatexImagesForPrint } from '@/lib/utils/latex';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
@@ -3777,7 +3777,7 @@ export default function NewSimulationPage() {
                           text: q.text,
                           type: q.type,
                           difficulty: q.difficulty,
-                          imageUrl: q.imageUrl,
+                          imageUrl: questionImageSource(q),
                           subject: q.subject,
                           topic: q.topic,
                           answers: q.answers.map(a => ({
@@ -3785,7 +3785,7 @@ export default function NewSimulationPage() {
                             text: a.text,
                             isCorrect: a.isCorrect,
                             order: a.order,
-                            imageUrl: a.imageUrl,
+                            imageUrl: questionImageSource(a),
                           })),
                         }));
                         
@@ -3837,15 +3837,15 @@ export default function NewSimulationPage() {
                           textLatex: q.textLatex,
                           type: q.type,
                           difficulty: q.difficulty,
-                          imageUrl: q.imageUrl,
+                          imageUrl: questionImageSource(q),
                           subject: q.subject ? { name: q.subject.name, color: q.subject.color } : null,
                           topic: q.topic ? { name: q.topic.name } : null,
-                          answers: q.answers.map((a: { id: string; text: string; isCorrect: boolean; order: number; imageUrl?: string | null }) => ({
+                          answers: q.answers.map((a: { id: string; text: string; isCorrect: boolean; order: number; imageUrl?: string | null; imageStoragePath?: string | null }) => ({
                             id: a.id,
                             text: a.text,
                             isCorrect: a.isCorrect,
                             order: a.order,
-                            imageUrl: a.imageUrl,
+                            imageUrl: questionImageSource(a),
                           })),
                         }));
                         setPreviewQuestionsData(previewData);

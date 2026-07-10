@@ -1325,6 +1325,10 @@ export const questionsRouter = router({
           where: { id },
           data: {
             ...restData,
+            // The editor manages the picture via imageUrl only, and every view falls back
+            // to imageStoragePath: clear the legacy field whenever imageUrl is (re)set,
+            // otherwise a removed image would resurrect through the fallback.
+            ...(restData.imageUrl !== undefined ? { imageStoragePath: null } : {}),
             // Handle subject/topic relations using helper
             subject: buildRelationUpdate(subjectId),
             topic: buildRelationUpdate(topicId),
@@ -2214,6 +2218,7 @@ export const questionsRouter = router({
               text: true,
               textLatex: true,
               imageUrl: true,
+              imageStoragePath: true,
               imageAlt: true,
               order: true,
               label: true,
@@ -2425,7 +2430,7 @@ export const questionsRouter = router({
         orderBy: { createdAt: 'desc' },
         include: {
           question: {
-            select: { id: true, text: true, type: true },
+            select: { id: true, text: true, type: true, imageUrl: true, imageStoragePath: true, imageAlt: true },
           },
           student: {
             include: {
@@ -2690,6 +2695,7 @@ export const questionsRouter = router({
           text: true,
           textLatex: true,
           imageUrl: true,
+          imageStoragePath: true,
           imageAlt: true,
           difficulty: true,
           generalExplanation: true,
@@ -2705,6 +2711,8 @@ export const questionsRouter = router({
               id: true,
               text: true,
               imageUrl: true,
+              imageStoragePath: true,
+              imageAlt: true,
               isCorrect: true,
               order: true,
             },

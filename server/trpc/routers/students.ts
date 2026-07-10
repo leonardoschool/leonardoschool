@@ -2,6 +2,7 @@
 import { router, protectedProcedure, adminProcedure, staffProcedure, assertCapability, hasCapability } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import { questionImageSource } from '@/lib/utils/imageUrl';
 import * as notificationService from '../../services/notificationService';
 
 // Lista delle province italiane valide
@@ -1687,6 +1688,7 @@ export const studentsRouter = router({
                     text: true,
                     textLatex: true,
                     imageUrl: true,
+                    imageStoragePath: true,
                     imageAlt: true,
                     generalExplanation: true,
                     correctExplanation: true,
@@ -1709,6 +1711,9 @@ export const studentsRouter = router({
                       select: {
                         id: true,
                         text: true,
+                        imageUrl: true,
+                        imageStoragePath: true,
+                        imageAlt: true,
                         isCorrect: true,
                         order: true,
                       },
@@ -1742,7 +1747,9 @@ export const studentsRouter = router({
           questionImageUrl: string | null;
           questionImageAlt: string | null;
           selectedAnswerText: string | null;
+          selectedAnswerImageUrl: string | null;
           correctAnswerText: string;
+          correctAnswerImageUrl: string | null;
           explanation: string | null;
           topicName: string | null;
         }>>();
@@ -1805,10 +1812,12 @@ export const studentsRouter = router({
               wrongList.push({
                 questionId: answer.questionId,
                 questionText: question.text,
-                questionImageUrl: question.imageUrl || null,
+                questionImageUrl: questionImageSource(question),
                 questionImageAlt: question.imageAlt || null,
                 selectedAnswerText: selectedAnswer?.text || null,
+                selectedAnswerImageUrl: questionImageSource(selectedAnswer),
                 correctAnswerText: correctAnswer?.text || 'N/A',
+                correctAnswerImageUrl: questionImageSource(correctAnswer),
                 explanation: question.generalExplanation || question.correctExplanation || null,
                 topicName: question.topic?.name || null,
               });

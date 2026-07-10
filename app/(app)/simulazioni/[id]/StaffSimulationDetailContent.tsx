@@ -9,7 +9,7 @@ import { PageLoader, Spinner } from '@/components/ui/loaders';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import QuestionImage from '@/components/ui/QuestionImage';
-import { normalizeImageSrc } from '@/lib/utils/imageUrl';
+import { normalizeImageSrc, questionImageSource } from '@/lib/utils/imageUrl';
 import { renderLatexImagesForPrint } from '@/lib/utils/latex';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -234,13 +234,13 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
       if (choiceQuestions.length > 0) {
         if (showTypeHeaders) html += `<div class="question-type-header">DOMANDE A RISPOSTA MULTIPLA</div>`;
         for (const sq of choiceQuestions) {
-          const imageHtml = renderImage(sq.question.imageUrl);
+          const imageHtml = renderImage(questionImageSource(sq.question));
           const answersHtml = sq.question.answers 
             ? `<div class="answers">
                 ${[...sq.question.answers]
                   .sort((firstAnswer, secondAnswer) => (firstAnswer.order ?? 0) - (secondAnswer.order ?? 0))
                   .map((answer, ansIndex) => `
-                    <div class="answer"><span class="answer-letter">${String.fromCharCode(65 + ansIndex)})</span><div class="answer-content">${removeLatexImageReferences(answer.text)}${renderImage(answer.imageUrl, 'answer-image')}</div></div>
+                    <div class="answer"><span class="answer-letter">${String.fromCharCode(65 + ansIndex)})</span><div class="answer-content">${removeLatexImageReferences(answer.text)}${renderImage(questionImageSource(answer), 'answer-image')}</div></div>
                   `).join('')}
               </div>`
             : '';
@@ -259,7 +259,7 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
       if (openText.length > 0) {
         if (showTypeHeaders) html += `<div class="question-type-header">DOMANDE A RISPOSTA CON MODALITÀ A COMPLETAMENTO</div>`;
         for (const sq of openText) {
-          const imageHtml = renderImage(sq.question.imageUrl);
+          const imageHtml = renderImage(questionImageSource(sq.question));
           html += `
             <div class="question">
               <div class="question-text"><strong>${questionNumber}.</strong> ${removeLatexImageReferences(sq.question.text)}</div>
@@ -690,10 +690,10 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
               )}
             </div>
             {/* Question image (only when expanded, to keep the list compact) */}
-            {isExpanded && sq.question.imageUrl && (
+            {isExpanded && questionImageSource(sq.question) && (
               <div className="mt-2">
                 <QuestionImage
-                  src={sq.question.imageUrl}
+                  src={questionImageSource(sq.question)}
                   alt={sq.question.imageAlt || 'Immagine domanda'}
                   width={400}
                   height={260}
@@ -717,10 +717,10 @@ export default function StaffSimulationDetailContent({ id, role }: StaffSimulati
                     <div className="space-y-1">
                       {correctAnswers.map((a) => (
                         <div key={a.id}>
-                          {a.imageUrl && (
+                          {questionImageSource(a) && (
                             <div className="mb-1">
                               <QuestionImage
-                                src={a.imageUrl}
+                                src={questionImageSource(a)}
                                 alt="Immagine risposta"
                                 width={160}
                                 height={100}

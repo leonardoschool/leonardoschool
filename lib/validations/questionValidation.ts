@@ -32,11 +32,25 @@ export type QuestionFeedbackStatus = z.infer<typeof QuestionFeedbackStatusEnum>;
 
 // ==================== ANSWER SCHEMAS ====================
 
+// Question/answer images may be a full URL (uploads, external links) OR a
+// Firebase Storage relative path (legacy imports, e.g. "__uploads/xxx.webp").
+// A plain .url() would reject the legacy paths and block staff from saving
+// fixes to those questions, so accept anything without a dangerous scheme.
+export const questionImageRefSchema = z
+  .string()
+  .trim()
+  // Generous cap: inline data:image/ URLs run to hundreds of KB and were valid before
+  .max(500_000)
+  .refine(
+    (v) => v === '' || /^(https?:|data:image\/|blob:)/i.test(v) || !/^[a-z][a-z0-9+.-]*:/i.test(v),
+    'URL immagine non valido'
+  );
+
 export const questionAnswerSchema = z.object({
   id: z.string().optional(), // Optional for new answers
   text: z.string().min(1, 'Il testo della risposta è obbligatorio'),
   textLatex: z.string().optional().nullable(),
-  imageUrl: z.string().url().optional().nullable(),
+  imageUrl: questionImageRefSchema.optional().nullable(),
   imageAlt: z.string().optional().nullable(),
   isCorrect: z.boolean().default(false),
   explanation: z.string().optional().nullable(),
@@ -73,7 +87,7 @@ const questionBaseSchema = z.object({
   text: z.string().min(1, 'Il testo della domanda è obbligatorio'),
   textLatex: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
-  imageUrl: z.string().url().optional().nullable(),
+  imageUrl: questionImageRefSchema.optional().nullable(),
   imageAlt: z.string().optional().nullable(),
   
   // Categorization

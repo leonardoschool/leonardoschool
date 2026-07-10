@@ -10,6 +10,8 @@ import { useToast } from '@/components/ui/Toast';
 import { PageLoader, Spinner } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import QuestionImage from '@/components/ui/QuestionImage';
+import { questionImageSource } from '@/lib/utils/imageUrl';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { isStaff } from '@/lib/permissions';
 import {
@@ -38,9 +40,12 @@ interface SelectedQuestion {
     text: string;
     type: string;
     difficulty: string;
+    imageUrl?: string | null;
+    imageStoragePath?: string | null;
+    imageAlt?: string | null;
     subject?: { id?: string; name: string; color: string } | null;
     topic?: { name: string } | null;
-    answers?: { id: string; text: string; isCorrect: boolean; order: number }[];
+    answers?: { id: string; text: string; isCorrect: boolean; order: number; imageUrl?: string | null; imageStoragePath?: string | null; imageAlt?: string | null }[];
     keywords?: { keyword: string }[];
   };
 }
@@ -151,9 +156,26 @@ const TYPE_LABELS: Record<string, string> = {
   OPEN_TEXT: 'Aperta',
 };
 
+function renderQuestionImagePreview(question?: SelectedQuestion['question']) {
+  const src = questionImageSource(question);
+  if (!src) return null;
+  return (
+    <div className="mt-2">
+      <QuestionImage
+        src={src}
+        alt={question?.imageAlt || 'Immagine domanda'}
+        width={240}
+        height={160}
+        className="rounded-lg"
+        style={{ maxHeight: '160px', objectFit: 'contain' }}
+      />
+    </div>
+  );
+}
+
 function renderAnswerPreview(
   type: string,
-  answers?: { id: string; text: string; isCorrect: boolean; order: number }[],
+  answers?: { id: string; text: string; isCorrect: boolean; order: number; imageUrl?: string | null; imageStoragePath?: string | null; imageAlt?: string | null }[],
   keywords?: { keyword: string }[]
 ) {
   const isChoiceType = type === 'SINGLE_CHOICE' || type === 'MULTIPLE_CHOICE';
@@ -167,7 +189,19 @@ function renderAnswerPreview(
         </p>
         <div className="space-y-0.5">
           {correctAnswers.map((a) => (
-            <RichTextRenderer key={a.id} text={a.text} className="text-xs text-green-700 dark:text-green-300" />
+            <div key={a.id}>
+              {questionImageSource(a) && (
+                <QuestionImage
+                  src={questionImageSource(a)}
+                  alt={a.imageAlt || 'Immagine risposta'}
+                  width={160}
+                  height={100}
+                  className="rounded mb-1"
+                  style={{ maxHeight: '100px', objectFit: 'contain' }}
+                />
+              )}
+              <RichTextRenderer text={a.text} className="text-xs text-green-700 dark:text-green-300" />
+            </div>
           ))}
         </div>
       </div>
@@ -789,6 +823,7 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                                       size="sm"
                                     />
                                   </div>
+                                  {isExpanded && renderQuestionImagePreview(sq.question)}
                                   {isExpanded && qType && renderAnswerPreview(qType, sq.question?.answers, sq.question?.keywords)}
                                 </div>
                                 {hasPreview && (
@@ -897,7 +932,8 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                                     size="sm"
                                   />
                                 </div>
-                                {isExpanded && qType && renderAnswerPreview(qType, sq.question?.answers, sq.question?.keywords)}
+                                {isExpanded && renderQuestionImagePreview(sq.question)}
+                                  {isExpanded && qType && renderAnswerPreview(qType, sq.question?.answers, sq.question?.keywords)}
                               </div>
                               {hasPreview && (
                                 <button
@@ -984,7 +1020,8 @@ export default function ManageQuestionsPage({ params }: { params: Promise<{ id: 
                             <span className={`text-xs ${colors.text.muted}`}>• {sq.question.topic.name}</span>
                           )}
                         </div>
-                        {isExpanded && qType && renderAnswerPreview(qType, sq.question?.answers, sq.question?.keywords)}
+                        {isExpanded && renderQuestionImagePreview(sq.question)}
+                                  {isExpanded && qType && renderAnswerPreview(qType, sq.question?.answers, sq.question?.keywords)}
                       </div>
                       {hasPreview && (
                         <button

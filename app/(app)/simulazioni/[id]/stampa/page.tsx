@@ -4,7 +4,7 @@ import { use, useEffect, useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { PageLoader } from '@/components/ui/loaders';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
-import { normalizeImageSrc } from '@/lib/utils/imageUrl';
+import { normalizeImageSrc, questionImageSource } from '@/lib/utils/imageUrl';
 import { Printer, ArrowLeft, Download } from 'lucide-react';
 import Link from 'next/link';
 import { colors } from '@/lib/theme/colors';
@@ -345,11 +345,11 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
                       </div>
 
                       {/* Image if present */}
-                      {normalizeImageSrc(sq.question.imageUrl) && (
+                      {normalizeImageSrc(questionImageSource(sq.question)) && (
                         <div className="my-2 text-center">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={normalizeImageSrc(sq.question.imageUrl) ?? undefined}
+                            src={normalizeImageSrc(questionImageSource(sq.question)) ?? undefined}
                             alt={`Immagine domanda ${index + 1}`}
                             className="max-w-md max-h-48 mx-auto"
                           />
@@ -367,11 +367,11 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
                                   {String.fromCodePoint(65 + ansIndex)})
                                 </span>
                                 <div className="flex-1">
-                                  {normalizeImageSrc(answer.imageUrl) && (
+                                  {normalizeImageSrc(questionImageSource(answer)) && (
                                     <div className="my-1">
                                       {/* eslint-disable-next-line @next/next/no-img-element */}
                                       <img
-                                        src={normalizeImageSrc(answer.imageUrl) ?? undefined}
+                                        src={normalizeImageSrc(questionImageSource(answer)) ?? undefined}
                                         alt={`Opzione ${String.fromCodePoint(65 + ansIndex)}`}
                                         className="max-w-[8rem] max-h-24"
                                       />
@@ -409,11 +409,11 @@ export default function SimulationPrintPage({ params }: PrintPageProps) {
                       </div>
 
                       {/* Image if present */}
-                      {normalizeImageSrc(sq.question.imageUrl) && (
+                      {normalizeImageSrc(questionImageSource(sq.question)) && (
                         <div className="my-2 text-center">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={normalizeImageSrc(sq.question.imageUrl) ?? undefined}
+                            src={normalizeImageSrc(questionImageSource(sq.question)) ?? undefined}
                             alt={`Immagine domanda ${mcQuestions.length + index + 1}`}
                             className="max-w-md max-h-48 mx-auto"
                           />

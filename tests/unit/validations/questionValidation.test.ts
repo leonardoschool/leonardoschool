@@ -143,10 +143,18 @@ describe('questionAnswerSchema', () => {
     expect(() => questionAnswerSchema.parse({ text: '' })).toThrow();
   });
 
-  it('should reject invalid image URL', () => {
-    expect(() => questionAnswerSchema.parse({ 
-      text: 'Valid text', 
-      imageUrl: 'not-a-url' 
+  it('should accept a Firebase storage relative path as image reference', () => {
+    const result = questionAnswerSchema.parse({
+      text: 'Valid text',
+      imageUrl: '__uploads/abc123/image.webp',
+    });
+    expect(result.imageUrl).toBe('__uploads/abc123/image.webp');
+  });
+
+  it('should reject image references with dangerous schemes', () => {
+    expect(() => questionAnswerSchema.parse({
+      text: 'Valid text',
+      imageUrl: 'javascript:alert(1)',
     })).toThrow();
   });
 
@@ -286,10 +294,14 @@ describe('createQuestionSchema', () => {
     expect(() => createQuestionSchema.parse({ text: '' })).toThrow();
   });
 
-  it('should reject invalid URLs', () => {
-    expect(() => createQuestionSchema.parse({ 
+  it('should accept storage relative paths and reject dangerous schemes', () => {
+    expect(() => createQuestionSchema.parse({
       text: 'Valid question',
-      imageUrl: 'not-a-url'
+      imageUrl: '__uploads/abc123/image.webp',
+    })).not.toThrow();
+    expect(() => createQuestionSchema.parse({
+      text: 'Valid question',
+      imageUrl: 'javascript:alert(1)',
     })).toThrow();
   });
 

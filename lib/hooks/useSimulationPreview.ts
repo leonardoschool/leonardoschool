@@ -9,6 +9,8 @@ export interface PreviewQuestion {
   type: string;
   difficulty: string;
   imageUrl?: string | null;
+  imageStoragePath?: string | null;
+  imageAlt?: string | null;
   subject?: { name: string; color?: string | null } | null;
   topic?: { name?: string | null } | null;
   answers: Array<{
@@ -17,6 +19,8 @@ export interface PreviewQuestion {
     isCorrect: boolean;
     order: number;
     imageUrl?: string | null;
+    imageStoragePath?: string | null;
+    imageAlt?: string | null;
   }>;
 }
 

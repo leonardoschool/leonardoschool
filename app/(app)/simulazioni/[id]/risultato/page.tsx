@@ -13,6 +13,7 @@ import { auth } from '@/lib/firebase/config';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import QuestionImage from '@/components/ui/QuestionImage';
+import { questionImageSource } from '@/lib/utils/imageUrl';
 import SimulationResultBreakdown from './SimulationResultBreakdown';
 import CustomSelect from '@/components/ui/CustomSelect';
 import type { SelectOption } from '@/components/ui/CustomSelect';
@@ -611,7 +612,7 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                 subject: string;
                 subjectColor?: string | null;
                 section?: string | null;
-                answers: { id: string; text: string; textLatex?: string | null; imageUrl?: string | null; isCorrect: boolean }[];
+                answers: { id: string; text: string; textLatex?: string | null; imageUrl?: string | null; imageStoragePath?: string | null; imageAlt?: string | null; isCorrect: boolean }[];
                 explanation?: string;
               };
               selectedAnswerId: string | null;
@@ -780,7 +781,7 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                       ) : (
                         /* Multiple choice answers */
                         <div className="space-y-2">
-                          {answer.question.answers.map((a: { id: string; text: string; textLatex?: string | null; imageUrl?: string | null; isCorrect: boolean }, i: number) => {
+                          {answer.question.answers.map((a: { id: string; text: string; textLatex?: string | null; imageUrl?: string | null; imageStoragePath?: string | null; imageAlt?: string | null; isCorrect: boolean }, i: number) => {
                           const label = String.fromCodePoint(65 + i);
                           const isSelected = answer.selectedAnswerId === a.id;
                           const isCorrectAnswer = a.isCorrect;
@@ -798,11 +799,11 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                                 {label}
                               </span>
                               <div className="flex-1">
-                                {a.imageUrl && (
+                                {questionImageSource(a) && (
                                   <div className="mb-2">
                                     <QuestionImage
-                                      src={a.imageUrl}
-                                      alt={`Opzione ${label}`}
+                                      src={questionImageSource(a)}
+                                      alt={a.imageAlt || `Opzione ${label}`}
                                       width={200}
                                       height={120}
                                       className="rounded-lg"

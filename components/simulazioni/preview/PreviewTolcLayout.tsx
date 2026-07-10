@@ -2,7 +2,7 @@
 
 import QuestionImage from '@/components/ui/QuestionImage';
 import { colors } from '@/lib/theme/colors';
-import { normalizeImageSrc } from '@/lib/utils/imageUrl';
+import { normalizeImageSrc, questionImageSource } from '@/lib/utils/imageUrl';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import {
@@ -54,7 +54,7 @@ export default function PreviewTolcLayout({
   formatTime,
   sectionDuration,
 }: PreviewTolcLayoutProps) {
-  const currentQuestionImageSrc = normalizeImageSrc(currentQuestion?.imageUrl);
+  const currentQuestionImageSrc = normalizeImageSrc(questionImageSource(currentQuestion));
 
   return (
     <div className="h-full flex flex-col bg-gray-100 dark:bg-gray-900">
@@ -196,7 +196,7 @@ export default function PreviewTolcLayout({
                     {currentQuestion.answers?.sort((a, b) => a.order - b.order).map((answer, idx) => {
                       const isSelected = selectedAnswer === answer.id;
                       const letter = ANSWER_LETTERS[idx] || String(idx + 1);
-                      const answerImageSrc = normalizeImageSrc(answer.imageUrl);
+                      const answerImageSrc = normalizeImageSrc(questionImageSource(answer));
                       return (
                         <button
                           key={answer.id}

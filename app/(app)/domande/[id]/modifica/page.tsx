@@ -55,6 +55,7 @@ export default function ModificaDomandaPage() {
     textLatex: question.textLatex,
     description: question.description,
     imageUrl: question.imageUrl,
+    imageStoragePath: question.imageStoragePath,
     language: question.language as 'IT' | 'EN',
     subjectId: question.subjectId,
     topicId: question.topicId,
@@ -80,7 +81,8 @@ export default function ModificaDomandaPage() {
       order: a.order,
       label: a.label,
       explanation: a.explanation ?? undefined,
-      imageUrl: a.imageUrl ?? undefined,
+      // Legacy answers may only carry a storage path — keep it so the image survives edits
+      imageUrl: a.imageUrl ?? a.imageStoragePath ?? undefined,
     })) as QuestionAnswerInput[],
     keywords: question.keywords.map((k) => ({
       keyword: k.keyword,

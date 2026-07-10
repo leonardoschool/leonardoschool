@@ -25,6 +25,7 @@ export interface QuestionFormInitialData {
   textLatex?: string | null;
   description?: string | null;
   imageUrl?: string | null;
+  imageStoragePath?: string | null;
   language?: QuestionLanguage | null;
   subjectId?: string | null;
   topicId?: string | null;
@@ -86,7 +87,9 @@ export function useQuestionForm({ questionId, basePath = '/domande', returnTo, i
   const [text, setText] = useState(initialData?.text ?? '');
   const [textLatex, setTextLatex] = useState(initialData?.textLatex ?? '');
   const [description, setDescription] = useState(initialData?.description ?? '');
-  const [imageUrl, setImageUrl] = useState(initialData?.imageUrl ?? '');
+  // Fall back to the Firebase storage path so legacy questions whose image was never
+  // copied into imageUrl still show (and re-save) their picture in the editor.
+  const [imageUrl, setImageUrl] = useState(initialData?.imageUrl ?? initialData?.imageStoragePath ?? '');
   const [language, setLanguage] = useState<QuestionLanguage>(initialData?.language ?? 'IT');
   const [subjectId, setSubjectId] = useState(initialData?.subjectId ?? '');
   const [topicId, setTopicId] = useState(initialData?.topicId ?? '');

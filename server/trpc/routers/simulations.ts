@@ -2,6 +2,7 @@
 import { router, staffProcedure, studentProcedure, protectedProcedure, adminProcedure, assertCapability, hasCapability } from '../init';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import { questionImageSource } from '@/lib/utils/imageUrl';
 import { subjectForUser, subjectHasCapability } from '@/lib/permissions/resolve';
 import {
   createSimulationWithQuestionsSchema,
@@ -3774,6 +3775,7 @@ export const simulationsRouter = router({
                       text: true,
                       textLatex: true,
                       imageUrl: true,
+                      imageStoragePath: true,
                       imageAlt: true,
                       order: true,
                       label: true,
@@ -4574,6 +4576,8 @@ export const simulationsRouter = router({
               text: true,
               textLatex: true,
               imageUrl: true,
+              imageStoragePath: true,
+              imageAlt: true,
               isCorrect: result.simulation.showCorrectAnswers,
             },
           },
@@ -4615,7 +4619,7 @@ export const simulationsRouter = router({
             id: question?.id || '',
             text: question?.text || '',
             textLatex: question?.textLatex || null,
-            imageUrl: question?.imageUrl || null,
+            imageUrl: questionImageSource(question),
             imageAlt: question?.imageAlt || null,
             subject: question?.subject?.name || 'UNKNOWN',
             subjectColor: question?.subject?.color || null,
@@ -6736,6 +6740,7 @@ export const simulationsRouter = router({
                   text: true,
                   textLatex: true,
                   imageUrl: true,
+                  imageStoragePath: true,
                   imageAlt: true,
                   points: true,
                   keywords: true,
@@ -6781,7 +6786,7 @@ export const simulationsRouter = router({
           question: {
             text: oa.question.text,
             textLatex: oa.question.textLatex,
-            imageUrl: oa.question.imageUrl,
+            imageUrl: questionImageSource(oa.question),
             imageAlt: oa.question.imageAlt,
             points: oa.question.points,
             keywords: oa.question.keywords,

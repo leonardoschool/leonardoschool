@@ -3,6 +3,7 @@
 import { useRef, type RefObject } from 'react';
 import { colors } from '@/lib/theme/colors';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import QuestionImage from '@/components/ui/QuestionImage';
 import Checkbox from '@/components/ui/Checkbox';
 import { Plus, Trash2, Check, AlertCircle } from 'lucide-react';
 import type { QuestionType, QuestionAnswerInput } from '@/lib/validations/questionValidation';
@@ -153,6 +154,29 @@ export default function AnswerEditor({
                 </button>
               </div>
             </div>
+
+            {answer.imageUrl && (
+              <div className={`mt-2 pt-2 border-t ${colors.border.light}`}>
+                <p className={`text-xs ${colors.text.muted} mb-1`}>Immagine risposta:</p>
+                <div className="flex items-start gap-3">
+                  <QuestionImage
+                    src={answer.imageUrl}
+                    alt={answer.imageAlt || `Immagine risposta ${answer.label}`}
+                    width={160}
+                    height={100}
+                    className="rounded-lg"
+                    style={{ maxHeight: '100px', objectFit: 'contain' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onUpdate(index, 'imageUrl', null)}
+                    className="text-xs text-red-500 hover:underline"
+                  >
+                    Rimuovi immagine
+                  </button>
+                </div>
+              </div>
+            )}
 
             {(answer.text.includes('$') || answer.text.includes('<') || answer.explanation?.includes('$') || answer.explanation?.includes('<')) && (
               <div className={`mt-2 pt-2 border-t ${colors.border.light}`}>

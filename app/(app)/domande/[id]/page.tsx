@@ -36,7 +36,8 @@ import {
   openValidationTypeLabels,
 } from '@/lib/validations/questionValidation';
 import ConfirmModal from '@/components/ui/ConfirmModal';
-import { normalizeImageSrc } from '@/lib/utils/imageUrl';
+import { normalizeImageSrc, questionImageSource } from '@/lib/utils/imageUrl';
+import QuestionImage from '@/components/ui/QuestionImage';
 
 export default function DettaglioDomandaPage() {
   const params = useParams();
@@ -295,10 +296,10 @@ export default function DettaglioDomandaPage() {
                 </div>
               </div>
             )}
-            {normalizeImageSrc(question.imageUrl) && (
+            {normalizeImageSrc(questionImageSource(question)) && (
               <div className="mt-4 relative">
                 <Image
-                  src={normalizeImageSrc(question.imageUrl)!}
+                  src={normalizeImageSrc(questionImageSource(question))!}
                   alt="Immagine domanda"
                   width={800}
                   height={600}
@@ -333,6 +334,18 @@ export default function DettaglioDomandaPage() {
                       {answer.label}
                     </span>
                     <div className="flex-1">
+                      {questionImageSource(answer) && (
+                        <div className="mb-2">
+                          <QuestionImage
+                            src={questionImageSource(answer)}
+                            alt={answer.imageAlt || `Opzione ${answer.label}`}
+                            width={200}
+                            height={120}
+                            className="rounded-lg"
+                            style={{ maxHeight: '120px', objectFit: 'contain' }}
+                          />
+                        </div>
+                      )}
                       <div className={`${colors.text.primary}`}>
                         <RichTextRenderer text={answer.text} />
                       </div>

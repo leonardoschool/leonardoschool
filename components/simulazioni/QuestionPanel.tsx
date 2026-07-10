@@ -13,11 +13,13 @@ import { TextareaWithSymbols } from '@/components/ui/SymbolKeyboard';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import QuestionImage from '@/components/ui/QuestionImage';
+import { questionImageSource } from '@/lib/utils/imageUrl';
 
 interface Answer {
   id: string;
   text: string;
   imageUrl?: string | null;
+  imageStoragePath?: string | null;
 }
 
 interface Question {
@@ -27,6 +29,7 @@ interface Question {
     textLatex?: string | null;
     type: string;
     imageUrl?: string | null;
+    imageStoragePath?: string | null;
     imageAlt?: string | null;
     answers: Answer[];
   };
@@ -42,7 +45,7 @@ interface AnswerState {
 interface QuestionPanelProps {
   readonly currentQuestionIndex: number;
   readonly totalQuestions: number;
-  readonly question: Question | { questionId?: string; question?: { text?: string; textLatex?: string | null; type?: string; imageUrl?: string | null; imageAlt?: string | null; answers?: Answer[] } };
+  readonly question: Question | { questionId?: string; question?: { text?: string; textLatex?: string | null; type?: string; imageUrl?: string | null; imageStoragePath?: string | null; imageAlt?: string | null; answers?: Answer[] } };
   readonly answer: AnswerState | undefined;
   readonly onAnswerSelect: (answerId: string) => void;
   readonly onOpenTextChange: (text: string) => void;
@@ -111,10 +114,10 @@ export default function QuestionPanel({
             text={question.question.text}
             className={`prose prose-sm max-w-none ${colors.text.primary}`}
           />
-          {question.question.imageUrl && (
+          {questionImageSource(question.question) && (
             <div className="mt-4 flex justify-center">
               <QuestionImage
-                src={question.question.imageUrl}
+                src={questionImageSource(question.question)}
                 alt={question.question.imageAlt || 'Immagine domanda'}
                 width={600}
                 height={400}
@@ -237,10 +240,10 @@ function MultipleChoiceAnswers({
               {label}
             </span>
             <div className="flex-1">
-              {answerOption.imageUrl && (
+              {questionImageSource(answerOption) && (
                 <div className="mb-2">
                   <QuestionImage
-                    src={answerOption.imageUrl}
+                    src={questionImageSource(answerOption)}
                     alt={`Opzione ${label}`}
                     width={200}
                     height={120}

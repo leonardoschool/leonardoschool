@@ -483,6 +483,18 @@ export default function StudentSimulationsPage({ params }: { readonly params: Pr
                                                     <p className="text-xs font-medium text-red-700 dark:text-red-400 mb-1">
                                                       Tua risposta (Errata)
                                                     </p>
+                                                    {question.selectedAnswerImageUrl && (
+                                                      <div className="mb-2">
+                                                        <QuestionImage
+                                                          src={question.selectedAnswerImageUrl}
+                                                          alt="Immagine risposta selezionata"
+                                                          width={200}
+                                                          height={120}
+                                                          className="rounded-lg"
+                                                          style={{ maxHeight: '120px', objectFit: 'contain' }}
+                                                        />
+                                                      </div>
+                                                    )}
                                                     <RichTextRenderer
                                                       text={question.selectedAnswerText}
                                                       className="text-sm text-red-900 dark:text-red-300"
@@ -499,6 +511,18 @@ export default function StudentSimulationsPage({ params }: { readonly params: Pr
                                                   <p className="text-xs font-medium text-green-700 dark:text-green-400 mb-1">
                                                     Risposta Corretta
                                                   </p>
+                                                  {question.correctAnswerImageUrl && (
+                                                    <div className="mb-2">
+                                                      <QuestionImage
+                                                        src={question.correctAnswerImageUrl}
+                                                        alt="Immagine risposta corretta"
+                                                        width={200}
+                                                        height={120}
+                                                        className="rounded-lg"
+                                                        style={{ maxHeight: '120px', objectFit: 'contain' }}
+                                                      />
+                                                    </div>
+                                                  )}
                                                   <RichTextRenderer
                                                     text={question.correctAnswerText}
                                                     className="text-sm text-green-900 dark:text-green-300"

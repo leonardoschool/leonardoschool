@@ -8,6 +8,22 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
+## [1.13.2] - 2026-07-10
+
+### Fixed
+- **Immagini di domande e risposte visibili ovunque.** Le immagini salvate solo come *percorso storage Firebase* (`imageStoragePath`, tipico delle domande importate/migrate) erano **invisibili in tutta l'app**: nessuna query le restituiva e nessuna vista le leggeva — veniva usato solo `imageUrl`. Ora ogni superficie risolve l'immagine con fallback `imageUrl → imageStoragePath` tramite il nuovo helper `questionImageSource`: svolgimento simulazione (layout standard e TOLC), revisione risultato, modalità studio, correzione risposte aperte, dettaglio simulazione staff, stampa, anteprima simulazione, revisione simulazioni studente, dettaglio e modifica domanda.
+- **Campi immagine mancanti nelle API.** Diverse procedure tRPC omettevano i campi immagine nelle `select`: `getResultDetails` (immagini e alt delle risposte), `getStudentSimulations` (le risposte non avevano **nessun** campo immagine), `getByIds` (studio), `getSimulationForStudent`, `getQuestionForStudent`, `getOpenAnswersForResult`, `getPendingFeedbacks`. Ora tutte restituiscono `imageUrl`, `imageStoragePath` e `imageAlt` di domanda e risposte.
+- **Salvataggio bloccato per domande legacy.** La validazione richiedeva un URL assoluto per `imageUrl`, quindi le domande con percorsi relativi (es. `__uploads/…`) **non si potevano salvare** quando lo staff provava a correggerle. Ora sono accettati anche i percorsi storage (gli schemi pericolosi restano rifiutati).
+- **Immagini delle risposte errate nella revisione studente.** Nella pagina *Studenti → Simulazioni* la "tua risposta" e la "risposta corretta" mostravano solo il testo: ora includono anche l'immagine della risposta.
+
+### Infrastructure
+- **Riparazione dati immagini CINECA (produzione).** Le 262 risposte e 1 domanda importate da CINECA avevano `imageUrl` con un nome file "nudo" (es. `24e80a.png`) irrisolvibile: il file reale vive in Storage come `schools/leonardo/__uploads/<batch>/<id>/image.png` e il bucket rifiuta gli URL senza token (403). Il nuovo script `scripts/fix-answer-image-urls.ts` (dry-run di default, `--run` per applicare) localizza ogni file nello Storage e scrive una signed URL permanente in `imageUrl` — eseguito su produzione il 10/07/2026 con 263/263 riferimenti risolti.
+
+### Added
+- **Immagini nel contesto delle segnalazioni.** La pagina *Segnalazioni* ora renderizza il testo della domanda con formattazione/LaTeX e mostra l'immagine della domanda, così lo staff può verificare subito i report "manca l'immagine".
+- **Immagini nella gestione domande della simulazione.** Espandendo l'anteprima di una domanda in *Simulazioni → Domande* ora si vedono l'immagine della domanda e quelle delle risposte corrette.
+- **Immagini risposte nel dettaglio e nell'editor domanda.** Il dettaglio domanda mostra l'immagine di ogni risposta; l'editor risposte mostra l'immagine strutturata esistente con possibilità di rimuoverla.
+
 ## [1.13.1] - 2026-07-07
 
 ### Fixed

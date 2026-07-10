@@ -11,6 +11,9 @@ import { usePermissions } from '@/lib/hooks/usePermissions';
 import { isStaff } from '@/lib/permissions';
 import { PageLoader, ButtonLoader } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
+import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import QuestionImage from '@/components/ui/QuestionImage';
+import { questionImageSource } from '@/lib/utils/imageUrl';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -234,9 +237,25 @@ export default function FeedbacksPage() {
                     {/* Question Preview */}
                     <div className={`p-3 rounded-lg ${colors.background.secondary}`}>
                       <div className="flex items-start justify-between gap-2">
-                        <p className={`text-sm ${colors.text.primary} line-clamp-2`}>
-                          {feedback.question.text}
-                        </p>
+                        <div className="flex-1 min-w-0">
+                          {/* max-h guards the clamp: rich text may contain nested blocks that -webkit-line-clamp can't cut */}
+                          <RichTextRenderer
+                            text={feedback.question.text}
+                            className={`text-sm ${colors.text.primary} line-clamp-2 max-h-12 overflow-hidden`}
+                          />
+                          {questionImageSource(feedback.question) && (
+                            <div className="mt-2">
+                              <QuestionImage
+                                src={questionImageSource(feedback.question)}
+                                alt={feedback.question.imageAlt || 'Immagine domanda'}
+                                width={240}
+                                height={160}
+                                className="rounded-lg"
+                                style={{ maxHeight: '160px', objectFit: 'contain' }}
+                              />
+                            </div>
+                          )}
+                        </div>
                         <Link
                           href={`/domande/${feedback.question.id}`}
                           className={`shrink-0 p-1.5 rounded-lg ${colors.background.tertiary} hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors`}

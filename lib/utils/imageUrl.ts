@@ -1,3 +1,15 @@
+/**
+ * Picks the usable image source of a question/answer: `imageUrl` when present,
+ * otherwise the Firebase `imageStoragePath` (resolved to a URL by normalizeImageSrc).
+ * Every rendering surface must go through this instead of reading `imageUrl` alone,
+ * otherwise images stored only as a storage path silently disappear.
+ */
+export function questionImageSource(
+  entity?: { imageUrl?: string | null; imageStoragePath?: string | null } | null
+): string | null {
+  return entity?.imageUrl?.trim() || entity?.imageStoragePath?.trim() || null;
+}
+
 export function normalizeImageSrc(src?: string | null): string | null {
   const trimmedSrc = src?.trim();
 
