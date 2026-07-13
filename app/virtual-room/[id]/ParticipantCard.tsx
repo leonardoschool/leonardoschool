@@ -56,7 +56,12 @@ export function ParticipantCard({
 
   const isCompleted = !!participant.completedAt;
   const isConnected = participant.isConnected;
-  const hasStarted = !!participant.startedAt;
+  // `startedAt` may be missing for participants who joined before the heartbeat
+  // started stamping it: any reported progress still means the test is running.
+  const hasStarted =
+    !!participant.startedAt ||
+    (participant.answeredCount ?? 0) > 0 ||
+    (participant.currentQuestionIndex ?? 0) > 0;
   const isReady = participant.isReady;
   const isKicked = participant.isKicked;
 

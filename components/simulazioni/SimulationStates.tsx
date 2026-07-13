@@ -104,20 +104,25 @@ interface AntiCheatWarningOverlayProps {
   readonly isFullscreen: boolean;
   readonly requireFullscreen: boolean;
   readonly onRequestFullscreen: () => void;
+  /** Clears a lingering blur state so the overlay can never dead-lock the exam */
+  readonly onDismissBlur?: () => void;
   readonly violationCount?: number;
 }
 
-export function AntiCheatWarningOverlay({ 
-  isBlurred, 
-  isFullscreen, 
+export function AntiCheatWarningOverlay({
+  isBlurred,
+  isFullscreen,
   requireFullscreen,
   onRequestFullscreen,
+  onDismissBlur,
   violationCount,
 }: AntiCheatWarningOverlayProps) {
   // Don't show if no issues
   if (!isBlurred && (!requireFullscreen || isFullscreen)) {
     return null;
   }
+
+  const needsFullscreen = requireFullscreen && !isFullscreen;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center">
@@ -127,11 +132,11 @@ export function AntiCheatWarningOverlay({
           {isBlurred ? 'Torna alla simulazione!' : 'Schermo intero richiesto'}
         </h2>
         <p className={`${colors.text.secondary} mb-6`}>
-          {isBlurred 
-            ? 'Hai lasciato la finestra della simulazione. Questo evento è stato registrato.' 
+          {isBlurred
+            ? 'Hai lasciato la finestra della simulazione. Questo evento è stato registrato.'
             : 'Questa simulazione richiede la modalità schermo intero. Clicca il pulsante per continuare.'}
         </p>
-        {requireFullscreen && !isFullscreen && (
+        {needsFullscreen && (
           <button
             onClick={onRequestFullscreen}
             className={`flex items-center justify-center gap-2 w-full px-6 py-3 rounded-lg text-white ${colors.primary.bg} hover:opacity-90`}
@@ -140,9 +145,17 @@ export function AntiCheatWarningOverlay({
             Attiva schermo intero
           </button>
         )}
-        {violationCount !== undefined && (
+        {isBlurred && !needsFullscreen && onDismissBlur && (
+          <button
+            onClick={onDismissBlur}
+            className={`flex items-center justify-center gap-2 w-full px-6 py-3 rounded-lg text-white ${colors.primary.bg} hover:opacity-90`}
+          >
+            Riprendi la simulazione
+          </button>
+        )}
+        {violationCount !== undefined && violationCount > 0 && (
           <p className={`mt-4 text-sm ${colors.text.muted}`}>
-            Violazioni: {violationCount}/10
+            Eventi registrati: {violationCount}
           </p>
         )}
       </div>

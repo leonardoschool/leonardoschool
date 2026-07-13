@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest';
 import {
   surnameSortKey,
   sortParticipantsBySurname,
+  shouldMarkParticipantStarted,
 } from '@/server/trpc/routers/virtualRoom.helpers';
 
 describe('surnameSortKey', () => {
@@ -99,5 +100,39 @@ describe('sortParticipantsBySurname', () => {
       make('2', 'Anna Bianchi', null),
     ]);
     expect(sorted.map((p) => p.name)).toEqual(['Anna Bianchi', 'Mario Rossi']);
+  });
+});
+
+describe('shouldMarkParticipantStarted', () => {
+  const base = { startedAt: null, sessionStatus: 'STARTED' as string };
+
+  it('stamps startedAt on the first progress heartbeat of a STARTED session', () => {
+    expect(
+      shouldMarkParticipantStarted({ ...base, currentQuestionIndex: 0, answeredCount: 0 })
+    ).toBe(true);
+    expect(shouldMarkParticipantStarted({ ...base, answeredCount: 3 })).toBe(true);
+  });
+
+  it('ignores waiting-room heartbeats (no progress fields)', () => {
+    expect(shouldMarkParticipantStarted({ ...base })).toBe(false);
+  });
+
+  it('never overwrites an existing startedAt', () => {
+    expect(
+      shouldMarkParticipantStarted({
+        startedAt: new Date('2026-01-01T10:00:00Z'),
+        sessionStatus: 'STARTED',
+        currentQuestionIndex: 5,
+        answeredCount: 5,
+      })
+    ).toBe(false);
+  });
+
+  it('does nothing while the session is not STARTED', () => {
+    for (const sessionStatus of ['WAITING', 'COMPLETED', 'CANCELLED']) {
+      expect(
+        shouldMarkParticipantStarted({ startedAt: null, sessionStatus, answeredCount: 1 })
+      ).toBe(false);
+    }
   });
 });

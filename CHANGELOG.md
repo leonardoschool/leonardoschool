@@ -8,6 +8,16 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
+## [1.14.8] - 2026-07-13
+
+### Changed
+- **Anti-cheat: mai più terminazione automatica della simulazione.** Al superamento di una soglia di violazioni (10) la simulazione dello studente veniva consegnata automaticamente ("Troppe violazioni rilevate. La simulazione verrà terminata."), espellendolo di fatto dal test — spesso per falsi allarmi da tablet/telefono. Il rilevamento è ora **solo informativo**: ogni evento resta registrato e visibile in tempo reale allo staff nella Virtual Room, e solo chi controlla la stanza decide se espellere (pulsante "Espelli studente"). Rimossi di conseguenza i contatori "X/10" nell'header e nell'overlay.
+
+### Fixed
+- **Virtual Room live: progresso visibile per tutti i partecipanti.** `startedAt` veniva impostato solo sui partecipanti connessi nell'istante esatto dell'"Avvia": chi si connetteva dopo (caso normale) restava per sempre "In attesa" senza barra di avanzamento, anche mentre rispondeva. Ora il primo heartbeat di progresso durante una sessione avviata marca l'inizio del test, così ogni studente passa a "In corso..." con la barra e la percentuale reali; la card mostra il progresso anche per sessioni avviate prima di questo fix se risultano risposte.
+- **Anti-cheat su tablet/telefono: eliminata un'altra classe di falsi allarmi.** I dispositivi touch con stilo o tastiera (es. tablet Samsung con S-Pen, iPad con Pencil/trackpad) venivano classificati come desktop perché espongono un puntatore "fine", subendo quindi i controlli desktop: violazioni a ogni apertura della tastiera virtuale, falsi "DevTools aperti" quando la tastiera restringe la finestra e il loop dello schermo intero forzato. La classificazione ora usa il **puntatore primario** (`pointer: coarse`), quindi tablet e telefoni ricevono sempre le regole touch; i portatili touchscreen (es. Surface) mantengono i controlli completi.
+- **L'avviso "Torna alla simulazione!" non può più bloccare il test.** Se il browser (in particolare Safari su iOS al rientro dall'app switcher) non notifica il ritorno alla pagina, l'overlay di avviso poteva restare visibile bloccando la simulazione. Aggiunto il pulsante "Riprendi la simulazione" per chiuderlo manualmente: l'evento resta comunque registrato per lo staff.
+
 ## [1.14.7] - 2026-07-13
 
 ### Fixed

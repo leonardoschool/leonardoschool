@@ -99,7 +99,7 @@ export default function SimulationHeader({
           <Shield className="w-4 h-4" />
         )}
         <span className="text-sm font-medium">
-          {hasViolations ? `${violationCount}/10` : 'Protetto'}
+          {hasViolations ? `${violationCount}` : 'Protetto'}
         </span>
       </div>
     );

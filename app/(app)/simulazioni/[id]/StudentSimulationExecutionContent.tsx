@@ -292,7 +292,9 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     return mapping[type] || 'OTHER';
   }, []);
 
-  // Anti-cheat configuration
+  // Anti-cheat configuration. Detection is report-only: violations are logged
+  // to the DB so staff sees them live in the Virtual Room, but the simulation
+  // is NEVER terminated automatically — only the room controller can kick.
   const antiCheatConfig = useMemo(() => ({
     enabled: hasStarted && (simulation?.enableAntiCheat ?? false),
     forceFullscreen: simulation?.forceFullscreen ?? false,
@@ -301,7 +303,6 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     blockRightClick: true,
     blockKeyboardShortcuts: true,
     blockReload: true,
-    maxViolations: 10,
     onViolation: (event: { type: string; timestamp: Date; details?: string }) => {
       console.warn('[AntiCheat] Violation:', event);
       // Log to database if in virtual room mode - use ref to get current participantId
@@ -315,11 +316,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
         });
       }
     },
-    onMaxViolationsReached: () => {
-      showError('Attenzione', 'Troppe violazioni rilevate. La simulazione verrà terminata.');
-      autoSubmitRef.current?.();
-    },
-  }), [hasStarted, simulation?.enableAntiCheat, simulation?.forceFullscreen, showError, isVirtualRoom, logCheatingEventMutate, mapEventType]);
+  }), [hasStarted, simulation?.enableAntiCheat, simulation?.forceFullscreen, isVirtualRoom, logCheatingEventMutate, mapEventType]);
 
   const antiCheat = useAntiCheat(antiCheatConfig);
 
@@ -936,6 +933,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
             isFullscreen={antiCheat.isFullscreen}
             requireFullscreen={simulation.forceFullscreen && antiCheat.canEnforceFullscreen}
             onRequestFullscreen={antiCheat.requestFullscreen}
+            onDismissBlur={antiCheat.acknowledgeBlur}
           />
         )}
 
@@ -1029,6 +1027,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
           isFullscreen={antiCheat.isFullscreen}
           requireFullscreen={simulation.forceFullscreen && antiCheat.canEnforceFullscreen}
           onRequestFullscreen={antiCheat.requestFullscreen}
+          onDismissBlur={antiCheat.acknowledgeBlur}
           violationCount={antiCheat.violationCount}
         />
       )}

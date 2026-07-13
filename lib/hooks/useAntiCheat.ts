@@ -44,8 +44,6 @@ export interface AntiCheatConfig {
   blockKeyboardShortcuts: boolean;
   blockReload: boolean;
   onViolation?: (event: AntiCheatEvent) => void;
-  maxViolations?: number;
-  onMaxViolationsReached?: () => void;
 }
 
 export interface AntiCheatState {
@@ -64,7 +62,6 @@ const defaultConfig: AntiCheatConfig = {
   blockRightClick: true,
   blockKeyboardShortcuts: true,
   blockReload: true,
-  maxViolations: 5,
 };
 
 // The same physical action must not be counted twice: a real tab switch fires
@@ -81,12 +78,17 @@ type WebkitDocument = Document & {
   webkitExitFullscreen?: () => Promise<void>;
 };
 
-// "Touch-only" and not just "touch-capable": a touchscreen laptop (Surface,
-// 2-in-1) still has a mouse/trackpad and must keep desktop-strength detection.
-// Only devices with no fine pointer at all (phones/tablets) get the relaxed rules.
+// Classify by PRIMARY pointer, not by "has any fine pointer": a Samsung tablet
+// with S-Pen or an iPad with Pencil/trackpad reports `any-pointer: fine` yet is
+// still a touch device (virtual keyboard, app switching, no reliable fullscreen),
+// so `(pointer: coarse)` is the signal that matters. A touchscreen laptop
+// (Surface, 2-in-1) keeps a fine primary pointer and desktop-strength detection.
 function getIsTouchOnlyDevice(): boolean {
   if (typeof window === 'undefined') return false;
-  return navigator.maxTouchPoints > 0 && !window.matchMedia?.('(any-pointer: fine)').matches;
+  const coarsePrimary = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+  const noFinePointer =
+    navigator.maxTouchPoints > 0 && !window.matchMedia?.('(any-pointer: fine)').matches;
+  return coarsePrimary || noFinePointer;
 }
 
 function getFullscreenElement(): Element | null {
@@ -123,7 +125,6 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
   const eventsRef = useRef<AntiCheatEvent[]>([]);
   const violationCountRef = useRef(0);
   const lastEventAtRef = useRef<Map<string, number>>(new Map());
-  const maxViolationsNotifiedRef = useRef(false);
 
   // Log event
   const logEvent = useCallback((type: AntiCheatEvent['type'], details?: string) => {
@@ -151,18 +152,9 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
       lastViolation: event,
     }));
 
-    // Call violation callback
+    // Call violation callback. Report-only by design: violations are surfaced
+    // to staff (Virtual Room) who decide whether to kick — never auto-terminate.
     mergedConfig.onViolation?.(event);
-
-    // Check max violations (fire once, or auto-submit would retrigger on every event)
-    if (
-      mergedConfig.maxViolations &&
-      violationCountRef.current >= mergedConfig.maxViolations &&
-      !maxViolationsNotifiedRef.current
-    ) {
-      maxViolationsNotifiedRef.current = true;
-      mergedConfig.onMaxViolationsReached?.();
-    }
   }, [mergedConfig]);
 
   // Request fullscreen
@@ -378,6 +370,14 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
     };
   }, [mergedConfig, logEvent, requestFullscreen]);
 
+  // Manually clear a lingering blur state. Some mobile browsers (iOS Safari
+  // returning from the app switcher) occasionally skip the `visibilitychange`
+  // → visible / `focus` events, which would leave the warning overlay stuck
+  // and block the exam. The event itself was already logged.
+  const acknowledgeBlur = useCallback(() => {
+    setState(prev => ({ ...prev, isBlurred: false }));
+  }, []);
+
   // Get events for server sync
   const getEventsForSync = useCallback(() => {
     const events = [...eventsRef.current];
@@ -390,7 +390,6 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
     eventsRef.current = [];
     violationCountRef.current = 0;
     lastEventAtRef.current.clear();
-    maxViolationsNotifiedRef.current = false;
     setState({
       isFullscreen: false,
       violationCount: 0,
@@ -405,6 +404,7 @@ export function useAntiCheat(config: Partial<AntiCheatConfig> = {}) {
     canEnforceFullscreen,
     requestFullscreen,
     exitFullscreen,
+    acknowledgeBlur,
     getEventsForSync,
     reset,
     config: mergedConfig,

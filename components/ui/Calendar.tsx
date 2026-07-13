@@ -196,6 +196,63 @@ const formatTime = (date: Date | string): string => {
   return d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 };
 
+interface DayEventLayout {
+  event: CalendarEvent;
+  column: number;
+  columnCount: number;
+}
+
+// Packs overlapping events into side-by-side columns (like Google Calendar's day view)
+// instead of stacking them full-width on top of each other.
+const layoutDayEvents = (events: CalendarEvent[]): DayEventLayout[] => {
+  const sorted = [...events].sort((a, b) => {
+    const aStart = new Date(a.startDate).getTime();
+    const bStart = new Date(b.startDate).getTime();
+    if (aStart !== bStart) return aStart - bStart;
+    return new Date(b.endDate).getTime() - new Date(a.endDate).getTime();
+  });
+
+  const result: DayEventLayout[] = [];
+  let cluster: DayEventLayout[] = [];
+  let columnEnds: number[] = [];
+  let clusterMaxEnd = -Infinity;
+
+  const flushCluster = () => {
+    if (cluster.length === 0) return;
+    const columnCount = columnEnds.length;
+    cluster.forEach((item) => {
+      item.columnCount = columnCount;
+    });
+    result.push(...cluster);
+    cluster = [];
+    columnEnds = [];
+    clusterMaxEnd = -Infinity;
+  };
+
+  sorted.forEach((event) => {
+    const start = new Date(event.startDate).getTime();
+    const end = new Date(event.endDate).getTime();
+
+    if (cluster.length > 0 && start >= clusterMaxEnd) {
+      flushCluster();
+    }
+
+    let column = columnEnds.findIndex((colEnd) => colEnd <= start);
+    if (column === -1) {
+      column = columnEnds.length;
+      columnEnds.push(end);
+    } else {
+      columnEnds[column] = end;
+    }
+
+    clusterMaxEnd = Math.max(clusterMaxEnd, end);
+    cluster.push({ event, column, columnCount: 1 });
+  });
+  flushCluster();
+
+  return result;
+};
+
 const WEEKDAYS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
 const MONTHS = [
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',

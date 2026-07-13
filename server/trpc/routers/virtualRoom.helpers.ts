@@ -198,6 +198,24 @@ export function isParticipantConnected(
   );
 }
 
+/**
+ * `startedAt` is only stamped by startSession on the participants connected at
+ * that exact moment, so late-joiners and reconnections would stay "In attesa"
+ * forever with no progress bar. A heartbeat carrying progress fields during a
+ * STARTED session means the student is actually taking the test: stamp it then.
+ * Waiting-room heartbeats carry no progress fields and never trigger this.
+ */
+export function shouldMarkParticipantStarted(params: {
+  startedAt: Date | null;
+  sessionStatus: string;
+  currentQuestionIndex?: number;
+  answeredCount?: number;
+}): boolean {
+  const isProgressHeartbeat =
+    params.currentQuestionIndex !== undefined || params.answeredCount !== undefined;
+  return !params.startedAt && params.sessionStatus === 'STARTED' && isProgressHeartbeat;
+}
+
 // ==================== TIME REMAINING ====================
 
 type SessionForTime = {

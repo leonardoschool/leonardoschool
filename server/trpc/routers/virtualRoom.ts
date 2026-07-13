@@ -14,6 +14,7 @@ import {
   calculateTimeRemaining,
   unionInvitedWithParticipants,
   sortParticipantsBySurname,
+  shouldMarkParticipantStarted,
 } from './virtualRoom.helpers';
 import { performAttemptReset } from './simulations.helpers';
 import { notifyNewAssignments } from '@/server/services/simulationNotificationService';
@@ -544,7 +545,12 @@ export const virtualRoomRouter = router({
       // First check if participant exists and isn't kicked
       const existing = await ctx.prisma.simulationSessionParticipant.findUnique({
         where: { id: input.participantId },
-        select: { isKicked: true, kickedReason: true },
+        select: {
+          isKicked: true,
+          kickedReason: true,
+          startedAt: true,
+          session: { select: { status: true } },
+        },
       });
 
       if (!existing) {
@@ -565,6 +571,13 @@ export const virtualRoomRouter = router({
         };
       }
 
+      const shouldMarkStarted = shouldMarkParticipantStarted({
+        startedAt: existing.startedAt,
+        sessionStatus: existing.session.status,
+        currentQuestionIndex: input.currentQuestionIndex,
+        answeredCount: input.answeredCount,
+      });
+
       const participant = await ctx.prisma.simulationSessionParticipant.update({
         where: { id: input.participantId },
         data: {
@@ -572,6 +585,7 @@ export const virtualRoomRouter = router({
           isConnected: true,
           ...(input.currentQuestionIndex !== undefined && { currentQuestionIndex: input.currentQuestionIndex }),
           ...(input.answeredCount !== undefined && { answeredCount: input.answeredCount }),
+          ...(shouldMarkStarted && { startedAt: new Date() }),
         },
         include: {
           session: {
