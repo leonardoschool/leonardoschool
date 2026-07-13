@@ -1,3 +1,5 @@
+import { splitPersonName } from '@/lib/utils/stringUtils';
+
 // ==================== TYPES ====================
 
 export type InvitedStudent = {
@@ -127,6 +129,49 @@ export function extractInvitedStudentIds(assignments: Assignment[]): Set<string>
     }
   }
   return ids;
+}
+
+// ==================== PARTICIPANT ORDERING ====================
+
+/**
+ * Builds a locale-aware sort key for ordering participants by surname (cognome).
+ * Prefers the structured `lastName`; when absent (rows predating the name split)
+ * it derives the surname via the shared `splitPersonName` (which handles
+ * nobiliary particles like "De Luca"), so the Virtual Room / attendance register
+ * order matches the Utenti page. Lowercased for case-insensitive comparison.
+ */
+export function surnameSortKey(name: string, lastName?: string | null): string {
+  const surname = lastName?.trim() || splitPersonName(name).surname;
+  return surname.toLocaleLowerCase('it');
+}
+
+type ParticipantForSort<T> = {
+  item: T;
+  name: string;
+  lastName?: string | null;
+  id: string;
+};
+
+/**
+ * Returns participants sorted alphabetically by surname. The order is fully
+ * deterministic (surname → full name → id tiebreakers) so the grid never
+ * reshuffles between real-time refreshes, even for identical surnames.
+ */
+export function sortParticipantsBySurname<T>(
+  participants: Array<ParticipantForSort<T>>
+): T[] {
+  return [...participants]
+    .sort((a, b) => {
+      const keyCompare = surnameSortKey(a.name, a.lastName).localeCompare(
+        surnameSortKey(b.name, b.lastName),
+        'it'
+      );
+      if (keyCompare !== 0) return keyCompare;
+      const nameCompare = a.name.localeCompare(b.name, 'it');
+      if (nameCompare !== 0) return nameCompare;
+      return a.id.localeCompare(b.id);
+    })
+    .map((p) => p.item);
 }
 
 // ==================== CONNECTION STATUS ====================

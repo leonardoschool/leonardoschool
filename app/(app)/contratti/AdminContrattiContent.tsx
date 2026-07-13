@@ -44,7 +44,7 @@ export default function AdminContrattiContent() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [previewContent, setPreviewContent] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState<SortOption>('date_desc');
+  const [sortBy, setSortBy] = useState<SortOption>('name_asc');
   const [assignmentsModal, setAssignmentsModal] = useState<{
     isOpen: boolean;
     templateId: string;
@@ -791,10 +791,10 @@ Email: {{EMAIL}}</p>
                   onChange={(val) => setSortBy(val as SortOption)}
                   size="sm"
                   options={[
-                    { value: 'date_desc', label: 'Più recenti' },
-                    { value: 'date_asc', label: 'Più vecchi' },
                     { value: 'name_asc', label: 'Nome A→Z' },
                     { value: 'name_desc', label: 'Nome Z→A' },
+                    { value: 'date_desc', label: 'Più recenti' },
+                    { value: 'date_asc', label: 'Più vecchi' },
                   ]}
                 />
               </div>

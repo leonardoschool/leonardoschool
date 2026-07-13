@@ -1,6 +1,6 @@
 {
   "name": "leonardoschool",
-  "version": "1.13.0",
+  "version": "1.14.7",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",

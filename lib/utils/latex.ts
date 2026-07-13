@@ -92,6 +92,17 @@ function startsWithMathCmd(slice: string): boolean {
   return m !== null && MATH_CMDS.has(m[1]);
 }
 
+/**
+ * True when `text` contains something RichTextRenderer would transform: HTML tags,
+ * `$...$` math, or LaTeX in backslash form (`\(`, `\[`, or a command like `\sqrt`).
+ * Used to decide whether to show a live preview — a check for `$`/`<` alone misses
+ * `\(...\)`-delimited formulas (the editor's default LaTeX delimiter).
+ */
+export function hasRenderableRichText(text?: string | null): boolean {
+  if (!text) return false;
+  return /[<$]/.test(text) || /\\[([a-zA-Z]/.test(text);
+}
+
 /** Returns true if `text` contains at least one known math command anywhere. */
 function containsMathCmd(text: string): boolean {
   let pos = 0;

@@ -3774,6 +3774,7 @@ export const simulationsRouter = router({
                       text: true,
                       textLatex: true,
                       imageUrl: true,
+                      imageStoragePath: true,
                       imageAlt: true,
                       order: true,
                       label: true,

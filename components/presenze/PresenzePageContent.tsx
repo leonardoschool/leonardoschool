@@ -8,6 +8,7 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import CustomSelect from '@/components/ui/CustomSelect';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { formatSurnameFirst } from '@/lib/utils/stringUtils';
 import {
   Users,
   Calendar,
@@ -586,7 +587,7 @@ export default function PresenzePageContent({ onlyMyEvents = false }: PresenzePa
                       >
                         {/* Student Info */}
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900 dark:text-white">{student.name}</p>
+                          <p className="font-medium text-gray-900 dark:text-white">{formatSurnameFirst(student.name, null, student.lastName)}</p>
                           <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{student.email}</p>
                         </div>
 

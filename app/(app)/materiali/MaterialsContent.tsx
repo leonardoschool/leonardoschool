@@ -99,7 +99,7 @@ const difficultyLabels: Record<DifficultyLevel, string> = {
   HARD: 'Difficile',
 };
 
-const difficultyColors: Record<DifficultyLevel, { bg: string; text: string }> = {
+const _difficultyColors: Record<DifficultyLevel, { bg: string; text: string }> = {
   EASY: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400' },
   MEDIUM: { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-700 dark:text-yellow-400' },
   HARD: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-400' },
@@ -2277,9 +2277,6 @@ function SubjectTopicsPreview({ subjectId, subjectColor }: SubjectTopicsPreviewP
               style={{ backgroundColor: subjectColor || '#6366f1' }}
             />
             <span className={`text-sm font-medium ${colors.text.primary}`}>{topic.name}</span>
-            <span className={`text-xs px-1.5 py-0.5 rounded ${difficultyColors[topic.difficulty as DifficultyLevel].bg} ${difficultyColors[topic.difficulty as DifficultyLevel].text}`}>
-              {difficultyLabels[topic.difficulty as DifficultyLevel]}
-            </span>
           </div>
         </div>
       ))}

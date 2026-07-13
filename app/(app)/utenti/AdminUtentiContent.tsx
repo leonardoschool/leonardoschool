@@ -14,6 +14,7 @@ import ContractContentEditor from '@/components/admin/contracts/ContractContentE
 import { uploadContractImages } from '@/lib/utils/contractImageUpload';
 import { getContractPlaceholders } from '@/lib/constants/contractPlaceholders';
 import { getCollaboratorDetailLabel } from '@/lib/utils/collaboratorDisplay';
+import { formatSurnameFirst } from '@/lib/utils/stringUtils';
 import {
   Users,
   Search,
@@ -22,6 +23,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
+  ChevronsUpDown,
   UserCheck,
   UserX,
   Trash2,
@@ -63,6 +66,8 @@ import CustomSelect from '@/components/ui/CustomSelect';
 import AdminEditUserModal from '@/components/admin/users/AdminEditUserModal';
 import UserGroupsCell from './UserGroupsCell';
 
+type SortField = 'role' | 'name' | 'createdAt';
+type SortOrder = 'asc' | 'desc';
 type RoleFilter = 'ALL' | 'ADMIN' | 'COLLABORATOR' | 'STUDENT';
 type StatusFilter = 'all' | 'active' | 'inactive' | 'pending_profile' | 'pending_contract' | 'pending_sign' | 'pending_activation' | 'no_signed_contract';
 type ConfirmModalType = 'delete' | 'toggleActive' | 'changeRole' | 'revokeContract' | 'revokeSignedContract';
@@ -111,8 +116,46 @@ const formatParentDate = (date: Date | string | null | undefined) => {
   }).format(new Date(date));
 };
 
+// Sortable table header cell — click to sort, click again to toggle direction
+function SortableHeader({
+  label,
+  field,
+  activeField,
+  order,
+  onSort,
+  className = '',
+}: {
+  label: string;
+  field: SortField;
+  activeField: SortField;
+  order: SortOrder;
+  onSort: (field: SortField) => void;
+  className?: string;
+}) {
+  const isActive = activeField === field;
+  return (
+    <th className={`text-left px-4 py-4 font-semibold text-sm ${colors.text.primary} ${className}`}>
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        aria-label={`Ordina per ${label}`}
+        className="group inline-flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+      >
+        <span>{label}</span>
+        {isActive ? (
+          order === 'asc'
+            ? <ChevronUp className={`w-3.5 h-3.5 ${colors.primary.text}`} />
+            : <ChevronDown className={`w-3.5 h-3.5 ${colors.primary.text}`} />
+        ) : (
+          <ChevronsUpDown className={`w-3.5 h-3.5 ${colors.text.muted} opacity-0 group-hover:opacity-100 transition-opacity`} />
+        )}
+      </button>
+    </th>
+  );
+}
+
 // Parent/Guardian Section Component for admin view
-function ParentGuardianSection({ 
+function ParentGuardianSection({
   student, 
   studentId,
   onDataUpdated 
@@ -1251,7 +1294,21 @@ export default function AdminUtentiContent() {
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<RoleFilter>('ALL');
   const [status, setStatus] = useState<StatusFilter>('all');
+  const [sortBy, setSortBy] = useState<SortField>('role');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [page, setPage] = useState(1);
+
+  // Toggle sort direction when re-clicking the active column, otherwise switch column
+  // to a sensible default direction (newest-first for dates, alphabetical otherwise).
+  const handleSort = (field: SortField) => {
+    if (sortBy === field) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(field);
+      setSortOrder(field === 'createdAt' ? 'desc' : 'asc');
+    }
+    setPage(1);
+  };
 
   // Initialize filters from URL params on mount
   useEffect(() => {
@@ -1387,6 +1444,8 @@ export default function AdminUtentiContent() {
       : status === 'pending_activation' ? 'PENDING_ACTIVATION'
       : status === 'no_signed_contract' ? 'NO_SIGNED_CONTRACT'
       : 'ALL',
+    sortBy,
+    sortOrder,
     page,
     limit: 15,
   });
@@ -1801,7 +1860,7 @@ export default function AdminUtentiContent() {
   // Reset the selection whenever the visible page/filters change
   useEffect(() => {
     setSelectedUserIds(new Set());
-  }, [page, role, status, search]);
+  }, [page, role, status, search, sortBy, sortOrder]);
 
   const handleBulkAssign = () => {
     if (!bulkGroupId) return;
@@ -2049,6 +2108,7 @@ export default function AdminUtentiContent() {
             <div className="block lg:hidden divide-y divide-gray-200 dark:divide-gray-700">
               {filteredUsers.map((user: any) => {
                 const roleBadge = getRoleBadge(user.role, user.collaborator?.kind, user.collaborator?.subjects);
+                const displayName = formatSurnameFirst(user.name, user.firstName, user.lastName);
                 const statusBadge = getStatusBadge(user);
                 const RoleIcon = roleBadge.icon;
                 
@@ -2085,10 +2145,10 @@ export default function AdminUtentiContent() {
                           </button>
                         )}
                         <div className={`w-12 h-12 rounded-full ${roleBadge.bg} flex items-center justify-center text-lg font-semibold ${roleBadge.color} flex-shrink-0`}>
-                          {user.name.charAt(0).toUpperCase()}
+                          {(displayName || user.name).charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className={`font-medium ${colors.text.primary} truncate`}>{user.name}</p>
+                          <p className={`font-medium ${colors.text.primary} truncate`}>{displayName}</p>
                           <p className={`text-sm ${colors.text.muted} truncate`}>{user.email}</p>
                         </div>
                       </div>
@@ -2332,10 +2392,10 @@ export default function AdminUtentiContent() {
                           : <Square className={`w-4 h-4 ${colors.text.muted}`} />}
                       </button>
                     </th>
-                    <th className={`text-left px-4 py-4 font-semibold text-sm ${colors.text.primary}`}>Utente</th>
+                    <SortableHeader label="Utente" field="name" activeField={sortBy} order={sortOrder} onSort={handleSort} />
                     <th className={`text-left px-4 py-4 font-semibold text-sm ${colors.text.primary}`}>Gruppi</th>
-                    <th className={`text-left px-4 py-4 font-semibold text-sm ${colors.text.primary}`} style={{ overflow: 'visible' }}>Ruolo</th>
-                    <th className={`text-left px-4 py-4 font-semibold text-sm whitespace-nowrap ${colors.text.primary}`}>Registrazione</th>
+                    <SortableHeader label="Ruolo" field="role" activeField={sortBy} order={sortOrder} onSort={handleSort} className="overflow-visible" />
+                    <SortableHeader label="Registrazione" field="createdAt" activeField={sortBy} order={sortOrder} onSort={handleSort} className="whitespace-nowrap" />
                     <th className={`text-left px-4 py-4 font-semibold text-sm ${colors.text.primary}`}>Stato</th>
                     <th className={`text-right px-4 py-4 font-semibold text-sm ${colors.text.primary}`}>Azioni</th>
                   </tr>
@@ -2343,6 +2403,7 @@ export default function AdminUtentiContent() {
                 <tbody className="overflow-visible">
                   {filteredUsers.map((user: any) => {
                     const roleBadge = getRoleBadge(user.role, user.collaborator?.kind, user.collaborator?.subjects);
+                    const displayName = formatSurnameFirst(user.name, user.firstName, user.lastName);
                     const statusBadge = getStatusBadge(user);
                     const RoleIcon = roleBadge.icon;
                     
@@ -2381,10 +2442,10 @@ export default function AdminUtentiContent() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             <div className={`w-10 h-10 rounded-full ${roleBadge.bg} flex items-center justify-center text-lg font-semibold ${roleBadge.color} flex-shrink-0`}>
-                              {user.name.charAt(0).toUpperCase()}
+                              {(displayName || user.name).charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              <p className={`font-medium ${colors.text.primary} truncate max-w-[140px]`}>{user.name}</p>
+                              <p className={`font-medium ${colors.text.primary} truncate max-w-[220px]`}>{displayName}</p>
                               {/* Show matricola for students, fiscal code for collaborators */}
                               {user.role === 'STUDENT' && user.student?.matricola && (
                                 <p className={`text-xs ${colors.text.muted} truncate max-w-[140px]`}>

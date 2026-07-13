@@ -36,7 +36,7 @@ import {
   openValidationTypeLabels,
 } from '@/lib/validations/questionValidation';
 import ConfirmModal from '@/components/ui/ConfirmModal';
-import { normalizeImageSrc } from '@/lib/utils/imageUrl';
+import { normalizeImageSrc, questionImageSource } from '@/lib/utils/imageUrl';
 
 export default function DettaglioDomandaPage() {
   const params = useParams();
@@ -314,7 +314,9 @@ export default function DettaglioDomandaPage() {
             <div className={`${colors.background.card} rounded-xl p-6 ${colors.effects.shadow.sm}`}>
               <h3 className={`font-semibold ${colors.text.primary} mb-4`}>Risposte</h3>
               <div className="space-y-3">
-                {question.answers.map((answer) => (
+                {question.answers.map((answer) => {
+                  const answerImgSrc = questionImageSource(answer);
+                  return (
                   <div
                     key={answer.id}
                     className={`flex items-start gap-3 p-4 rounded-lg border ${
@@ -333,6 +335,18 @@ export default function DettaglioDomandaPage() {
                       {answer.label}
                     </span>
                     <div className="flex-1">
+                      {answerImgSrc && (
+                        <div className="mb-2 relative">
+                          <Image
+                            src={answerImgSrc}
+                            alt={answer.imageAlt || `Opzione ${answer.label ?? ''}`}
+                            width={300}
+                            height={200}
+                            className="max-w-full h-auto rounded-lg object-contain"
+                            unoptimized
+                          />
+                        </div>
+                      )}
                       <div className={`${colors.text.primary}`}>
                         <RichTextRenderer text={answer.text} />
                       </div>
@@ -346,7 +360,8 @@ export default function DettaglioDomandaPage() {
                       <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

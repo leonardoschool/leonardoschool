@@ -12,7 +12,7 @@ import { Prisma } from '@prisma/client';
 import { generateMatricola } from '@/lib/utils/matricolaUtils';
 import { CACHE_TAGS } from '@/lib/cache/serverCache';
 import { sendWelcomeEmail } from '@/server/services/emailService';
-import { normalizeName } from '@/lib/utils/stringUtils';
+import { normalizeName, surnameSortKey } from '@/lib/utils/stringUtils';
 import { PROVINCE_ITALIANE } from '@/lib/validations/profileValidation';
 
 const adminSimulationResultsInputSchema = z.object({
@@ -143,6 +143,50 @@ function getAdminSimulationResultsOrderBy(
   return [{ completedAt: sortOrder }, { percentageScore: 'desc' }];
 }
 
+type UsersSortBy = 'role' | 'name' | 'createdAt';
+type UsersSortOrder = 'asc' | 'desc';
+
+// Role display priority for the default ordering: students first, then collaborators, then admins.
+const USER_ROLE_SORT_PRIORITY: Record<string, number> = { STUDENT: 0, COLLABORATOR: 1, ADMIN: 2 };
+
+type UserSortRow = { id: string; name: string; firstName: string | null; lastName: string | null; role: string; createdAt: Date };
+
+// Sorting happens in memory (not via Prisma orderBy) because the surname is derived from the
+// full `name` when the structured `lastName` is absent — which is the case for most rows, since
+// the auth/DB-sync paths only write `name`. `surnameSortKey` mirrors the Virtual Room / attendance
+// ordering (structured lastName preferred, else the last whitespace token of the name).
+function sortUsersBy(
+  rows: UserSortRow[],
+  sortBy: UsersSortBy,
+  sortOrder: UsersSortOrder
+): UserSortRow[] {
+  const dir = sortOrder === 'asc' ? 1 : -1;
+  // Surname A→Z, with the full name as a deterministic tiebreaker; direction-independent so it
+  // stays a stable secondary key regardless of the primary sort's direction.
+  const bySurname = (a: UserSortRow, b: UserSortRow) => {
+    const cmp = surnameSortKey(a.name, a.lastName, a.firstName).localeCompare(
+      surnameSortKey(b.name, b.lastName, b.firstName),
+      'it'
+    );
+    return cmp !== 0 ? cmp : a.name.localeCompare(b.name, 'it');
+  };
+
+  return [...rows].sort((a, b) => {
+    if (sortBy === 'createdAt') {
+      const primary = (a.createdAt.getTime() - b.createdAt.getTime()) * dir;
+      return primary !== 0 ? primary : bySurname(a, b);
+    }
+    if (sortBy === 'name') {
+      return bySurname(a, b) * dir;
+    }
+    // sortBy === 'role'
+    const priorityA = USER_ROLE_SORT_PRIORITY[a.role] ?? 99;
+    const priorityB = USER_ROLE_SORT_PRIORITY[b.role] ?? 99;
+    const primary = (priorityA - priorityB) * dir;
+    return primary !== 0 ? primary : bySurname(a, b);
+  });
+}
+
 export const usersRouter = router({
   /**
    * Get current user information
@@ -208,12 +252,15 @@ export const usersRouter = router({
         search: z.string().optional(),
         role: z.enum(['ALL', 'ADMIN', 'COLLABORATOR', 'STUDENT']).default('ALL'),
         status: z.enum(['ALL', 'ACTIVE', 'INACTIVE', 'PENDING_PROFILE', 'PENDING_CONTRACT', 'PENDING_SIGN', 'PENDING_ACTIVATION', 'NO_SIGNED_CONTRACT']).default('ALL'),
+        sortBy: z.enum(['role', 'name', 'createdAt']).default('role'),
+        sortOrder: z.enum(['asc', 'desc']).default('asc'),
         page: z.number().min(1).default(1),
         limit: z.number().min(1).max(100).default(20),
       }).optional()
     )
     .query(async ({ ctx, input }) => {
-      const { search, role, status, page, limit } = input || { page: 1, limit: 20, role: 'ALL', status: 'ALL' };
+      const { search, role, status, sortBy, sortOrder, page, limit } =
+        input || { page: 1, limit: 20, role: 'ALL', status: 'ALL', sortBy: 'role', sortOrder: 'asc' };
 
       const where: Prisma.UserWhereInput = {};
 
@@ -372,9 +419,18 @@ export const usersRouter = router({
         ];
       }
 
-      const [users, total] = await Promise.all([
-        ctx.prisma.user.findMany({
-          where,
+      // Fetch all matching rows lightweight, order them in memory by the derived surname
+      // (role / date), then page and load the heavy relations only for the current page.
+      const allMatching = await ctx.prisma.user.findMany({
+        where,
+        select: { id: true, name: true, firstName: true, lastName: true, role: true, createdAt: true },
+      });
+      const sortedIds = sortUsersBy(allMatching as UserSortRow[], sortBy, sortOrder).map((u) => u.id);
+      const total = sortedIds.length;
+      const pageIds = sortedIds.slice((page - 1) * limit, page * limit);
+
+      const pageUsers = pageIds.length === 0 ? [] : await ctx.prisma.user.findMany({
+          where: { id: { in: pageIds } },
           include: {
             student: {
               select: {
@@ -551,12 +607,13 @@ export const usersRouter = router({
               },
             },
           } as any,
-          orderBy: { createdAt: 'desc' },
-          skip: (page - 1) * limit,
-          take: limit,
-        }),
-        ctx.prisma.user.count({ where }),
-      ]);
+        });
+
+      // findMany with `id: { in }` doesn't preserve order — restore the in-memory sort.
+      const pageOrder = new Map(pageIds.map((id, index) => [id, index]));
+      const users = [...pageUsers].sort(
+        (a, b) => (pageOrder.get(a.id) ?? 0) - (pageOrder.get(b.id) ?? 0)
+      );
 
       // Enrich students with all accessible materials (including ALL_STUDENTS and GROUP_BASED)
       const enrichedUsers = await Promise.all(

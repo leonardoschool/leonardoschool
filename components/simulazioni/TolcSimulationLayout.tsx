@@ -5,7 +5,7 @@ import QuestionImage from '@/components/ui/QuestionImage';
 import { colors } from '@/lib/theme/colors';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { sanitizeStudentOpenAnswerInput } from '@/lib/utils/studentOpenAnswer';
-import { normalizeImageSrc } from '@/lib/utils/imageUrl';
+import { questionImageSource } from '@/lib/utils/imageUrl';
 import { TextareaWithSymbols } from '@/components/ui/SymbolKeyboard';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
@@ -124,7 +124,7 @@ export default function TolcSimulationLayout({
   const currentAnswer = currentQuestion
     ? answers.find((answer) => answer.questionId === currentQuestion.questionId)
     : undefined;
-  const currentQuestionImageSrc = normalizeImageSrc(currentQuestion?.question?.imageUrl);
+  const currentQuestionImageSrc = questionImageSource(currentQuestion?.question);
 
   const hasResponse = useCallback(
     (questionId: string) => {
@@ -414,10 +414,10 @@ export default function TolcSimulationLayout({
             ) : (
               /* Multiple choice answers */
               <div className="space-y-3">
-                {currentQuestion.question?.answers?.map((answer: { id: string; text: string; imageUrl?: string }, idx: number) => {
+                {currentQuestion.question?.answers?.map((answer: { id: string; text: string; imageUrl?: string | null; imageStoragePath?: string | null }, idx: number) => {
                   const isSelected = currentAnswer?.answerId === answer.id;
                   const letter = answerLetters[idx] || String(idx + 1);
-                  const answerImageSrc = normalizeImageSrc(answer.imageUrl);
+                  const answerImageSrc = questionImageSource(answer);
 
                   return (
                     <button

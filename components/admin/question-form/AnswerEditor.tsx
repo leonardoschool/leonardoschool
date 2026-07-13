@@ -3,6 +3,7 @@
 import { useRef, type RefObject } from 'react';
 import { colors } from '@/lib/theme/colors';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import { hasRenderableRichText } from '@/lib/utils/latex';
 import Checkbox from '@/components/ui/Checkbox';
 import { Plus, Trash2, Check, AlertCircle } from 'lucide-react';
 import type { QuestionType, QuestionAnswerInput } from '@/lib/validations/questionValidation';
@@ -154,13 +155,13 @@ export default function AnswerEditor({
               </div>
             </div>
 
-            {(answer.text.includes('$') || answer.text.includes('<') || answer.explanation?.includes('$') || answer.explanation?.includes('<')) && (
+            {(hasRenderableRichText(answer.text) || hasRenderableRichText(answer.explanation)) && (
               <div className={`mt-2 pt-2 border-t ${colors.border.light}`}>
                 <p className={`text-xs ${colors.text.muted} mb-1`}>Anteprima:</p>
                 <div className={`text-sm ${colors.text.primary}`}>
                   <RichTextRenderer text={answer.text} />
                 </div>
-                {answer.explanation && (answer.explanation.includes('$') || answer.explanation.includes('<')) && (
+                {answer.explanation && hasRenderableRichText(answer.explanation) && (
                   <div className={`text-xs ${colors.text.muted} mt-1`}>
                     <span className="italic">Spiegazione: </span>
                     <RichTextRenderer text={answer.explanation} className="inline" />

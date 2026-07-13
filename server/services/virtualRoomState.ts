@@ -6,6 +6,7 @@ import {
   isParticipantConnected,
   calculateTimeRemaining,
   unionInvitedWithParticipants,
+  sortParticipantsBySurname,
 } from '@/server/trpc/routers/virtualRoom.helpers';
 
 export interface SessionStateData {
@@ -122,9 +123,20 @@ export async function getSessionState(sessionId: string, participantIdForMessage
   // Calculate time remaining
   const timeRemaining = calculateTimeRemaining(session);
 
-  const participants = session.participants.map(p => {
+  // Sort by surname (cognome) so the participants grid keeps a stable
+  // alphabetical order and never reshuffles between real-time refreshes.
+  const orderedParticipants = sortParticipantsBySurname(
+    session.participants.map(p => ({
+      item: p,
+      name: p.student.user.name,
+      lastName: p.student.user.lastName,
+      id: p.id,
+    }))
+  );
+
+  const participants = orderedParticipants.map(p => {
     const isReallyConnected = isParticipantConnected(p);
-    
+
     return {
       id: p.id,
       studentId: p.studentId,

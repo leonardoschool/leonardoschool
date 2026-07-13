@@ -8,6 +8,59 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
+## [1.14.7] - 2026-07-13
+
+### Fixed
+- **Ordinamento per cognome coerente ovunque.** L'ordinamento per cognome della Virtual Room e del registro presenze ora ricava il cognome con la stessa logica della pagina Utenti (gestione delle particelle nobiliari, es. *De Luca*, *Della Valle*): prima uno studente "Matteo De Luca" senza cognome strutturato finiva sotto la **L** in questi elenchi ma sotto la **D** in Utenti. Corretto anche lo split del nome quando è composto solo da particella + cognome (es. *De Luca* senza nome proprio) e l'**iniziale dell'avatar** nella lista Utenti, che ora corrisponde al cognome mostrato.
+
+## [1.14.6] - 2026-07-13
+
+### Fixed
+- **Anteprima risposte/spiegazioni: ora appare anche con solo LaTeX.** Nell'editor delle domande l'anteprima formattata di una risposta (o di una spiegazione) compariva solo se il testo conteneva `$...$` o un tag HTML; una formula scritta con i delimitatori LaTeX `\(...\)` o `\[...\]` (es. `20\(\sqrt{\frac{2}{8-\pi}}\)`) non attivava l'anteprima. Ora il riconoscimento include anche le formule `\(...\)`/`\[...\]` e i comandi LaTeX con backslash, quindi l'anteprima appare in tutti i casi renderizzabili.
+
+## [1.14.5] - 2026-07-13
+
+### Changed
+- **Materiali: rimosso il badge di difficoltà dagli argomenti.** Nell'elenco degli argomenti per materia non viene più mostrata l'etichetta di difficoltà (es. "Medio") accanto al nome. Il campo non aveva alcun effetto funzionale (le simulazioni usano la difficoltà della singola **domanda**, non quella dell'argomento), quindi il badge risultava solo fuorviante.
+
+## [1.14.4] - 2026-07-13
+
+### Changed
+- **Registro presenze: nominativi come "Cognome Nome".** Nel registro presenze gli studenti erano già ordinati per cognome, ma il nome mostrato come "Nome Cognome" faceva sembrare l'elenco disordinato. Ora il nominativo è visualizzato con il **cognome prima del nome**, così l'ordine alfabetico per cognome è immediatamente leggibile (riconosce anche i cognomi composti, es. *De Luca*).
+
+## [1.14.3] - 2026-07-13
+
+### Fixed
+- **Gestione Utenti: l'ordinamento per cognome ora funziona davvero.** L'elenco veniva di fatto ordinato per **nome** (i campi strutturati `firstName`/`lastName` sono vuoti per la maggior parte degli utenti, quindi l'ordinamento a livello di database ricadeva sul nome completo). Ora il cognome viene ricavato dal nome completo e l'ordinamento — sia predefinito per ruolo sia cliccando su *Utente* — è realmente **alfabetico per cognome**, applicato all'intero elenco. Riconosce anche i **cognomi composti** con particelle (es. *De Luca*, *Di Maria* ordinati sotto la D/Di).
+
+### Changed
+- **Gestione Utenti: nome mostrato come "Cognome Nome".** Nella colonna *Utente* il nominativo è ora visualizzato con il **cognome prima del nome**, così il cognome resta leggibile anche quando la cella viene troncata (prima nomi lunghi come "Gianluca Francesco Paolo …" nascondevano il cognome).
+
+## [1.14.2] - 2026-07-13
+
+### Changed
+- **Template Contratti: ordinamento predefinito A→Z.** L'elenco dei template si apre ora ordinato **alfabeticamente per nome** (A→Z) invece che per "Più recenti". Le altre opzioni di ordinamento (Z→A, Più recenti, Più vecchi) restano disponibili dal menu.
+- **Registro presenze ordinato per cognome.** Nel registro presenze di un evento gli studenti sono ora elencati in ordine **alfabetico per cognome**, coerentemente con la Virtual Room e la pagina Utenti (prima seguivano l'ordine degli inviti/gruppi).
+
+## [1.14.1] - 2026-07-13
+
+### Fixed
+- **Immagini delle risposte a scelta multipla ora sempre visibili.** Le risposte con immagine salvata solo come percorso Firebase (`imageStoragePath`, senza `imageUrl`) non venivano mostrate durante la simulazione. Ora la query dello studente include `imageStoragePath` e i renderer (standard e TOLC) risolvono l'immagine con fallback `imageUrl → imageStoragePath`. Le immagini delle risposte compaiono inoltre nel **dettaglio domanda** (pagina admin), dove prima erano del tutto assenti.
+
+### Infrastructure
+- **Riparazione contenuti domande CINECA (dati di produzione, 13/07/2026).** Nuovo script `scripts/fix-cineca-question-content.ts` (diagnostica in dry-run + riparazione con `--run`). Eseguito su produzione: **376 domande a due figure** hanno recuperato la seconda immagine inline (tabella/figura) che veniva persa (caso *"parte mancante nella domanda"*), **405** riferimenti inline riscritti con URL firmati e **187** duplicati rimossi; **9** domande etichettate IT ma con testo inglese rietichettate come EN. Restano da sistemare a mano **2** file immagine assenti dallo Storage e **4** domande con opzioni placeholder senza figura.
+
+## [1.14.0] - 2026-07-13
+
+### Added
+- **Gestione Utenti: tabella ordinabile.** Le colonne **Utente**, **Ruolo** e **Registrazione** ora sono cliccabili per ordinare la tabella; un secondo click inverte la direzione (crescente/decrescente). L'ordinamento viene applicato all'intero elenco, non solo alla pagina visibile.
+- **Ordinamento predefinito per ruolo.** All'apertura la lista è ordinata per ruolo — prima gli **studenti**, poi i **collaboratori**, infine gli **admin** — e in ordine **alfabetico per cognome** all'interno di ciascun gruppo. Restano disponibili tutti i filtri esistenti (ricerca per nome/email, filtro per ruolo e per stato), combinabili con l'ordinamento.
+
+## [1.13.1] - 2026-07-13
+
+### Fixed
+- **Virtual Room: le card degli studenti non si spostano più.** Nel prospetto dei partecipanti le card cambiavano continuamente posizione a ogni aggiornamento in tempo reale, rendendo difficile leggere le segnalazioni. Ora i partecipanti sono ordinati **alfabeticamente per cognome** e mantengono un ordine **stabile** tra un aggiornamento e l'altro (a parità di cognome l'ordine resta comunque deterministico).
+
 ## [1.13.0] - 2026-07-07
 
 ### Added
