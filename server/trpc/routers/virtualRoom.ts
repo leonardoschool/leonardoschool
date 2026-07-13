@@ -13,6 +13,7 @@ import {
   isParticipantConnected,
   calculateTimeRemaining,
   unionInvitedWithParticipants,
+  sortParticipantsBySurname,
 } from './virtualRoom.helpers';
 import { performAttemptReset } from './simulations.helpers';
 import { notifyNewAssignments } from '@/server/services/simulationNotificationService';
@@ -368,9 +369,16 @@ export const virtualRoomRouter = router({
           durationMinutes: session.simulation.durationMinutes,
           totalQuestions: session.simulation.totalQuestions,
         },
-        participants: session.participants.map(p => {
+        participants: sortParticipantsBySurname(
+          session.participants.map(p => ({
+            item: p,
+            name: p.student.user.name,
+            lastName: p.student.user.lastName,
+            id: p.id,
+          }))
+        ).map(p => {
           const isReallyConnected = isParticipantConnected(p);
-          
+
           return {
             id: p.id,
             studentId: p.studentId,

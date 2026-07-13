@@ -23,6 +23,7 @@ import {
 } from '@/lib/email/eventEmails';
 import { notifications, createBulkNotifications } from '@/lib/notifications/notificationHelpers';
 import { resolveInvitees, buildEventEmailData } from './calendar.helpers';
+import { sortParticipantsBySurname } from './virtualRoom.helpers';
 
 // ==================== CALENDAR EVENTS ====================
 
@@ -804,6 +805,7 @@ export const calendarRouter = router({
                 select: {
                   id: true,
                   name: true,
+                  lastName: true,
                   email: true,
                   role: true,
                   student: {
@@ -824,7 +826,7 @@ export const calendarRouter = router({
                         select: {
                           id: true,
                           user: {
-                            select: { id: true, name: true, email: true },
+                            select: { id: true, name: true, lastName: true, email: true },
                           },
                         },
                       },
@@ -871,7 +873,7 @@ export const calendarRouter = router({
       });
 
       // Collect all invited students from different sources
-      const studentsMap = new Map<string, { id: string; name: string; email: string }>();
+      const studentsMap = new Map<string, { id: string; name: string; lastName: string | null; email: string }>();
 
       event.invitations.forEach((inv) => {
         // Direct user invitation (if student)
@@ -879,6 +881,7 @@ export const calendarRouter = router({
           studentsMap.set(inv.user.student.id, {
             id: inv.user.student.id,
             name: inv.user.name,
+            lastName: inv.user.lastName,
             email: inv.user.email,
           });
         }
@@ -890,6 +893,7 @@ export const calendarRouter = router({
               studentsMap.set(member.student.id, {
                 id: member.student.id,
                 name: member.student.user.name,
+                lastName: member.student.user.lastName,
                 email: member.student.user.email,
               });
             }
@@ -897,7 +901,10 @@ export const calendarRouter = router({
         }
       });
 
-      const invitedStudents = Array.from(studentsMap.values());
+      // Order the register alphabetically by surname (cognome), consistent with the Virtual Room
+      const invitedStudents = sortParticipantsBySurname(
+        Array.from(studentsMap.values()).map((s) => ({ item: s, name: s.name, lastName: s.lastName, id: s.id }))
+      );
 
       return {
         attendances,

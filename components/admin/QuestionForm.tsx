@@ -14,6 +14,7 @@ import TagSelector from '@/components/admin/TagSelector';
 import LaTeXEditor from '@/components/ui/LaTeXEditor';
 import SymbolKeyboard from '@/components/ui/SymbolKeyboard';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import { hasRenderableRichText } from '@/lib/utils/latex';
 import AnswerEditor from '@/components/admin/question-form/AnswerEditor';
 import HtmlShortcutMenu from '@/components/admin/question-form/HtmlShortcutMenu';
 import InsertImageButton from '@/components/admin/question-form/InsertImageButton';
@@ -333,7 +334,7 @@ export default function QuestionForm({ questionId, basePath = '/domande', return
                 placeholder={placeholder}
                 className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-[#a8012b]/20 focus:border-[#a8012b] transition-colors resize-y`}
               />
-              {value && (value.includes('$') || value.includes('<')) && (
+              {hasRenderableRichText(value) && (
                 <div className={`mt-2 p-2 rounded-lg ${colors.background.secondary} border ${colors.border.light}`}>
                   <p className={`text-xs ${colors.text.muted} mb-1`}>Anteprima:</p>
                   <div className={`text-sm ${colors.text.primary}`}><RichTextRenderer text={value} /></div>
@@ -488,7 +489,7 @@ export default function QuestionForm({ questionId, basePath = '/domande', return
                 placeholder="Mostrata sempre dopo la risposta... (supporta LaTeX/HTML)"
                 className={`w-full px-4 py-3 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-[#a8012b]/20 focus:border-[#a8012b] transition-colors resize-y`}
               />
-              {form.generalExplanation && (form.generalExplanation.includes('$') || form.generalExplanation.includes('<')) && (
+              {hasRenderableRichText(form.generalExplanation) && (
                 <div className={`mt-2 p-2 rounded-lg ${colors.background.secondary} border ${colors.border.light}`}>
                   <p className={`text-xs ${colors.text.muted} mb-1`}>Anteprima:</p>
                   <div className={`text-sm ${colors.text.primary}`}><RichTextRenderer text={form.generalExplanation} /></div>

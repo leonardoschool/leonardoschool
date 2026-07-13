@@ -45,7 +45,7 @@ interface AnswerState {
 interface QuestionPanelProps {
   readonly currentQuestionIndex: number;
   readonly totalQuestions: number;
-  readonly question: Question | { questionId?: string; question?: { text?: string; textLatex?: string | null; type?: string; imageUrl?: string | null; imageStoragePath?: string | null; imageAlt?: string | null; answers?: Answer[] } };
+  readonly question: Question | { questionId?: string; question?: { text?: string; textLatex?: string | null; type?: string; imageUrl?: string | null; imageAlt?: string | null; answers?: Answer[] } };
   readonly answer: AnswerState | undefined;
   readonly onAnswerSelect: (answerId: string) => void;
   readonly onOpenTextChange: (text: string) => void;
@@ -72,6 +72,7 @@ export default function QuestionPanel({
   canGoNext,
 }: QuestionPanelProps) {
   const isOpenText = question.question.type === 'OPEN_TEXT';
+  const questionImgSrc = questionImageSource(question.question);
   const { can, isLoading: permissionsLoading } = usePermissions();
   const canReportQuestion = permissionsLoading || can('student.submitQuestionFeedback');
 
@@ -114,10 +115,10 @@ export default function QuestionPanel({
             text={question.question.text}
             className={`prose prose-sm max-w-none ${colors.text.primary}`}
           />
-          {questionImageSource(question.question) && (
+          {questionImgSrc && (
             <div className="mt-4 flex justify-center">
               <QuestionImage
-                src={questionImageSource(question.question)}
+                src={questionImgSrc}
                 alt={question.question.imageAlt || 'Immagine domanda'}
                 width={600}
                 height={400}
@@ -219,6 +220,7 @@ function MultipleChoiceAnswers({
       {answers.map((answerOption, index) => {
         const isSelected = selectedAnswerId === answerOption.id;
         const label = String.fromCodePoint(65 + index); // A, B, C, D...
+        const answerImgSrc = questionImageSource(answerOption);
 
         return (
           <button
@@ -240,10 +242,10 @@ function MultipleChoiceAnswers({
               {label}
             </span>
             <div className="flex-1">
-              {questionImageSource(answerOption) && (
+              {answerImgSrc && (
                 <div className="mb-2">
                   <QuestionImage
-                    src={questionImageSource(answerOption)}
+                    src={answerImgSrc}
                     alt={`Opzione ${label}`}
                     width={200}
                     height={120}

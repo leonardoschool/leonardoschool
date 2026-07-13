@@ -1,13 +1,15 @@
 /**
- * Picks the usable image source of a question/answer: `imageUrl` when present,
- * otherwise the Firebase `imageStoragePath` (resolved to a URL by normalizeImageSrc).
- * Every rendering surface must go through this instead of reading `imageUrl` alone,
- * otherwise images stored only as a storage path silently disappear.
+ * Resolves the best usable image source for a question or answer entity.
+ * An image can live in `imageUrl` (canonical URL) OR `imageStoragePath`
+ * (Firebase relative path); some legacy/CINECA rows only have the latter.
+ * Prefers imageUrl, falls back to imageStoragePath, both run through
+ * normalizeImageSrc. Returns null when neither is usable.
  */
 export function questionImageSource(
   entity?: { imageUrl?: string | null; imageStoragePath?: string | null } | null
 ): string | null {
-  return entity?.imageUrl?.trim() || entity?.imageStoragePath?.trim() || null;
+  if (!entity) return null;
+  return normalizeImageSrc(entity.imageUrl) ?? normalizeImageSrc(entity.imageStoragePath);
 }
 
 export function normalizeImageSrc(src?: string | null): string | null {
