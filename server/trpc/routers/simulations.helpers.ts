@@ -234,3 +234,134 @@ export async function performAttemptReset(
     assignmentWindowClosed: isWindowClosed && !canExtend,
   };
 }
+
+// ==================== Assignment ↔ calendar-event date sync ====================
+// A simulation assignment and its calendar event are linked via
+// SimulationAssignment.calendarEventId. Moving one must move the other so every
+// invitee sees the new date. These helpers keep the two records in date-sync and
+// are shared by the simulations router (assignment → event) and the calendar
+// router (event → assignments).
+
+export interface AssignmentEventSchedule {
+  startDate: Date;
+  endDate: Date;
+  isAllDay: boolean;
+  description: string | null;
+}
+
+/**
+ * Description shown on the calendar event when the availability window spans more
+ * than one day (single-day windows carry no generated description).
+ */
+export function buildSimulationEventDescription(
+  startDate: Date,
+  endDate: Date,
+  isMultiDay: boolean
+): string | null {
+  if (!isMultiDay) {
+    return null;
+  }
+  const fmt = (d: Date) =>
+    d.toLocaleDateString('it-IT', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  return `Disponibile dal ${fmt(startDate)} al ${fmt(endDate)}`;
+}
+
+/**
+ * Derive the calendar-event schedule fields from an assignment's dates, applying
+ * the same defaults used when the event is first created (missing start → now,
+ * missing end → start + simulation duration). A window that crosses midnight
+ * becomes an all-day event with a "Disponibile dal … al …" description.
+ */
+export function computeAssignmentEventSchedule(
+  startDate: Date | null,
+  endDate: Date | null,
+  durationMinutes: number,
+  now: Date = new Date()
+): AssignmentEventSchedule {
+  const start = startDate ?? now;
+  const end = endDate ?? new Date(start.getTime() + durationMinutes * 60 * 1000);
+  const isMultiDay =
+    new Date(start).setHours(0, 0, 0, 0) !== new Date(end).setHours(0, 0, 0, 0);
+  return {
+    startDate: start,
+    endDate: end,
+    isAllDay: isMultiDay,
+    description: buildSimulationEventDescription(start, end, isMultiDay),
+  };
+}
+
+/**
+ * Push each assignment's schedule onto its linked calendar event. Assignments
+ * without a linked event are skipped. isAllDay is recomputed so a window that
+ * grows to span midnight becomes an all-day event (and shrinks back). The event
+ * `description` is deliberately left untouched — it isn't a date field, so
+ * overwriting it here would wipe any note staff added to the event.
+ * Returns how many events were updated.
+ */
+export async function syncCalendarEventsForAssignments(
+  prisma: PrismaClient,
+  assignmentIds: string[]
+): Promise<number> {
+  if (assignmentIds.length === 0) {
+    return 0;
+  }
+
+  const assignments = await prisma.simulationAssignment.findMany({
+    where: { id: { in: assignmentIds }, calendarEventId: { not: null } },
+    select: {
+      calendarEventId: true,
+      startDate: true,
+      endDate: true,
+      simulation: { select: { durationMinutes: true } },
+    },
+  });
+
+  let updated = 0;
+  await Promise.all(
+    assignments.map(async (a) => {
+      if (!a.calendarEventId) {
+        return;
+      }
+      const schedule = computeAssignmentEventSchedule(
+        a.startDate,
+        a.endDate,
+        a.simulation.durationMinutes
+      );
+      await prisma.calendarEvent.update({
+        where: { id: a.calendarEventId },
+        data: {
+          startDate: schedule.startDate,
+          endDate: schedule.endDate,
+          isAllDay: schedule.isAllDay,
+        },
+      });
+      updated++;
+    })
+  );
+
+  return updated;
+}
+
+/**
+ * Push a calendar event's new dates onto every assignment linked to it — used
+ * when staff move a SIMULATION event directly from the calendar. Returns how
+ * many assignments were updated.
+ */
+export async function syncAssignmentsForCalendarEvent(
+  prisma: PrismaClient,
+  eventId: string,
+  startDate: Date,
+  endDate: Date
+): Promise<number> {
+  const result = await prisma.simulationAssignment.updateMany({
+    where: { calendarEventId: eventId },
+    data: { startDate, endDate },
+  });
+  return result.count;
+}

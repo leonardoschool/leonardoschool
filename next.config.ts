@@ -45,6 +45,12 @@ const nextConfig: NextConfig = {
   // Prevent webpack from bundling server-only packages that use native Node.js modules
   serverExternalPackages: ['firebase-admin'],
 
+  // Dev-only: allow LAN devices (phones/tablets) reaching the dev server by IP to
+  // fetch /_next/* resources. Next.js blocks cross-origin dev-resource requests by
+  // default, which otherwise leaves the app stuck on its loading state on-device.
+  // The subnet wildcard covers a changing DHCP address; no effect on production.
+  allowedDevOrigins: ['192.168.1.3', '192.168.1.*'],
+
   // Inlined into the bundle so client components can render the current app version.
   env: {
     NEXT_PUBLIC_APP_VERSION: appVersion,

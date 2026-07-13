@@ -114,12 +114,23 @@ export function useVirtualRoomSSE({
     try {
       token = await firebaseAuth.getIdToken();
     } catch {
-      console.error('[SSE] Failed to get auth token');
-      return;
+      // Transient (e.g. token refresh network blip) — fall through to the retry.
     }
 
     if (!token) {
-      console.error('[SSE] No auth token available');
+      // The Firebase client session restores asynchronously (auth.currentUser is
+      // null until IndexedDB persistence loads) and lives per-origin, so on a
+      // fresh page/tab the token can be briefly unavailable. Don't give up
+      // permanently — retry with capped backoff so the live stream connects as
+      // soon as a token exists, instead of staying dead until a manual refresh.
+      const attempts = reconnectAttemptsRef.current;
+      const delay = Math.min(1000 * Math.pow(2, attempts), 10000);
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = setTimeout(() => {
+        reconnectAttemptsRef.current++;
+        connectRef.current?.();
+      }, delay);
+      console.warn(`[SSE] Auth token not ready, retrying in ${delay}ms`);
       return;
     }
 

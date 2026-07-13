@@ -747,53 +747,63 @@ export function Calendar({
               ))}
 
               {/* Render events */}
-              {getEventsForDay(selectedDate).filter((e) => !e.isAllDay).map((event) => {
-                const startHour = new Date(event.startDate).getHours();
-                const startMinute = new Date(event.startDate).getMinutes();
-                const endHour = new Date(event.endDate).getHours();
-                const endMinute = new Date(event.endDate).getMinutes();
-                const top = startHour * 64 + (startMinute / 60) * 64;
-                const height = ((endHour - startHour) * 60 + (endMinute - startMinute)) / 60 * 64;
+              {layoutDayEvents(getEventsForDay(selectedDate).filter((e) => !e.isAllDay)).map(
+                ({ event, column, columnCount }) => {
+                  const startHour = new Date(event.startDate).getHours();
+                  const startMinute = new Date(event.startDate).getMinutes();
+                  const endHour = new Date(event.endDate).getHours();
+                  const endMinute = new Date(event.endDate).getMinutes();
+                  const top = startHour * 64 + (startMinute / 60) * 64;
+                  const height = ((endHour - startHour) * 60 + (endMinute - startMinute)) / 60 * 64;
 
-                return (
-                  <div
-                    key={event.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEventClick?.(event);
-                    }}
-                    className={`
-                      absolute left-0 right-0 mx-2 px-3 py-2 rounded-lg cursor-pointer
-                      ${eventTypeColors[event.type].bg}
-                      ${eventTypeColors[event.type].text}
-                      ${eventTypeColors[event.type].border}
-                      border
-                      ${event.isMine ? 'ring-2 ring-amber-400' : ''}
-                    `}
-                    style={{ top: `${top}px`, height: `${Math.max(height, 32)}px` }}
-                    title={event.isMine ? `⭐ ${event.title} (Il tuo evento)` : event.title}
-                  >
-                    <div className="font-medium flex items-center gap-1">
-                      {event.isMine && <Star className="w-3 h-3 fill-amber-400 text-amber-400 flex-shrink-0" />}
-                      {event.title}
-                    </div>
-                    <div className="text-xs opacity-75 flex items-center gap-2 mt-1">
-                      <Clock className="w-3 h-3" />
-                      {formatTime(event.startDate)} - {formatTime(event.endDate)}
-                    </div>
-                    {event.locationDetails && (
-                      <div className="text-xs opacity-75 flex items-center gap-2 mt-1">
-                        {event.locationType === 'ONLINE' ? (
-                          <Video className="w-3 h-3" />
-                        ) : (
-                          <MapPin className="w-3 h-3" />
-                        )}
-                        {event.locationDetails}
+                  return (
+                    <div
+                      key={event.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEventClick?.(event);
+                      }}
+                      className={`
+                        absolute px-3 py-2 rounded-lg cursor-pointer overflow-hidden
+                        ${eventTypeColors[event.type].bg}
+                        ${eventTypeColors[event.type].text}
+                        ${eventTypeColors[event.type].border}
+                        border
+                        ${event.isMine ? 'ring-2 ring-amber-400' : ''}
+                      `}
+                      style={{
+                        top: `${top}px`,
+                        height: `${Math.max(height, 32)}px`,
+                        left: `calc(${(column / columnCount) * 100}% + 4px)`,
+                        width: `calc(${100 / columnCount}% - 8px)`,
+                        zIndex: 10 + column,
+                      }}
+                      title={event.isMine ? `⭐ ${event.title} (Il tuo evento)` : event.title}
+                    >
+                      <div className="font-medium flex items-center gap-1 min-w-0">
+                        {event.isMine && <Star className="w-3 h-3 fill-amber-400 text-amber-400 flex-shrink-0" />}
+                        <span className="truncate">{event.title}</span>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                      <div className="text-xs opacity-75 flex items-center gap-2 mt-1 min-w-0">
+                        <Clock className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">
+                          {formatTime(event.startDate)} - {formatTime(event.endDate)}
+                        </span>
+                      </div>
+                      {event.locationDetails && columnCount <= 2 && (
+                        <div className="text-xs opacity-75 flex items-center gap-2 mt-1 min-w-0">
+                          {event.locationType === 'ONLINE' ? (
+                            <Video className="w-3 h-3 flex-shrink-0" />
+                          ) : (
+                            <MapPin className="w-3 h-3 flex-shrink-0" />
+                          )}
+                          <span className="truncate">{event.locationDetails}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+              )}
 
               {/* All day events at top */}
               {getEventsForDay(selectedDate).filter((e) => e.isAllDay).length > 0 && (

@@ -1094,13 +1094,19 @@ model SimulationAssignment {
   locationType        String? // 'ONLINE', 'IN_PERSON', 'HYBRID'
   createCalendarEvent Boolean   @default(false) // Whether to create a calendar event for this assignment
 
+  // Linked calendar event: kept in date-sync with this assignment in both
+  // directions (moving the assignment moves the event for every invitee, and
+  // vice versa). Set when the assignment's calendar event is created.
+  calendarEventId String?
+
   // Relations
-  simulation Simulation          @relation(fields: [simulationId], references: [id], onDelete: Cascade)
-  student    Student?            @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  group      Group?              @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  assignedBy User?               @relation("AssignmentCreator", fields: [assignedById], references: [id], onDelete: SetNull)
-  results    SimulationResult[] // Results for this specific assignment
-  sessions   SimulationSession[] // Virtual Room sessions for this assignment
+  simulation    Simulation          @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  student       Student?            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  group         Group?              @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  assignedBy    User?               @relation("AssignmentCreator", fields: [assignedById], references: [id], onDelete: SetNull)
+  calendarEvent CalendarEvent?      @relation("AssignmentCalendarEvent", fields: [calendarEventId], references: [id], onDelete: SetNull)
+  results       SimulationResult[] // Results for this specific assignment
+  sessions      SimulationSession[] // Virtual Room sessions for this assignment
 
   // Note: Removed unique constraints to allow multiple assignments of the same simulation
   // to the same student/group with different dates/schedules
@@ -1112,6 +1118,7 @@ model SimulationAssignment {
   @@index([status])
   @@index([simulationId, studentId]) // Composite index for queries
   @@index([simulationId, groupId]) // Composite index for queries
+  @@index([calendarEventId])
   @@map("simulation_assignments")
 }
 
@@ -1459,6 +1466,7 @@ model CalendarEvent {
   invitations   EventInvitation[]
   attendances   Attendance[]
   simulation    Simulation?       @relation("SimulationCalendarEvent")
+  assignments   SimulationAssignment[] @relation("AssignmentCalendarEvent") // Assignments date-synced with this event
   staffAbsences StaffAbsence[] // Assenze correlate a questo evento
   tag           CalendarEventTag? @relation(fields: [tagId], references: [id], onDelete: SetNull)
 

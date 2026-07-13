@@ -24,6 +24,7 @@ import {
 import { notifications, createBulkNotifications } from '@/lib/notifications/notificationHelpers';
 import { resolveInvitees, buildEventEmailData } from './calendar.helpers';
 import { sortParticipantsBySurname } from './virtualRoom.helpers';
+import { syncAssignmentsForCalendarEvent } from './simulations.helpers';
 
 // ==================== CALENDAR EVENTS ====================
 
@@ -523,6 +524,17 @@ export const calendarRouter = router({
           },
         },
       });
+
+      // Moving a SIMULATION event moves its assignment(s) too, so the assignment
+      // list and each student's availability window stay in sync with the calendar.
+      if ((input.startDate || input.endDate) && event.type === 'SIMULATION') {
+        await syncAssignmentsForCalendarEvent(
+          ctx.prisma,
+          event.id,
+          event.startDate,
+          event.endDate
+        );
+      }
 
       // Send modification notifications to invited users
       if (event.invitations.length > 0) {

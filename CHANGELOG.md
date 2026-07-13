@@ -8,6 +8,30 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
+## [1.15.1] - 2026-07-13
+
+### Fixed
+- **Virtual Room live: la connessione in tempo reale non muore più se il token non è pronto.** Lo stream SSE dello staff (`useVirtualRoomSSE`) richiede il token Firebase lato client, che si ripristina in modo asincrono all'avvio pagina ed è legato all'origine. Se la Virtual Room veniva aperta prima che il token fosse disponibile, `connect` falliva con "No auth token available" e **si arrendeva definitivamente**, lasciando il monitoraggio fermo finché non si ricaricava a mano. Ora riprova con backoff finché il token è disponibile e si collega da solo. Probabile concausa dei problemi di "live rotto" segnalati.
+
+### Infrastructure
+- **Test da dispositivi in LAN (telefono/tablet).** Aggiunto `allowedDevOrigins` (`192.168.1.*`) in `next.config.ts`: Next.js 16 blocca di default le richieste cross-origin alle risorse `/_next/*`, il che lasciava l'app bloccata sui puntini di caricamento quando aperta via IP di rete dal telefono. Solo sviluppo, nessun effetto in produzione. Per esporre il dev server sulla LAN: `pnpm dev:lan` (o con HTTPS `pnpm next dev --turbopack --experimental-https -H 0.0.0.0`).
+
+## [1.15.0] - 2026-07-13
+
+### Added
+- **Spostare una simulazione dal calendario la sposta per tutti gli invitati.** Le date di una simulazione ora sono sincronizzate in entrambe le direzioni tra l'assegnazione e l'evento del calendario, collegati da una nuova relazione esplicita (`SimulationAssignment.calendarEventId`). Modificando le date dall'evento del calendario (staff → "Modifica") l'orario si aggiorna su tutte le assegnazioni collegate e quindi per ogni studente/gruppo invitato; viceversa, "Modifica date" nelle Assegnazioni ora sposta anche l'evento sul calendario di tutti gli invitati.
+
+### Fixed
+- **Le date modificate dall'assegnazione non aggiornavano più il calendario.** Prima "Modifica date" nelle Assegnazioni cambiava solo il record dell'assegnazione: l'evento del calendario restava alla vecchia data e gli invitati vedevano un orario sbagliato. Ora la modifica propaga sempre all'evento collegato.
+
+### Infrastructure
+- Migrazione additiva `assignment_calendar_event_link` (colonna FK `calendarEventId` + indice, nullable, backward-compatible). Nuovo script one-off `pnpm backfill:assignment-events` (con variante `:dry`) per collegare le assegnazioni esistenti al rispettivo evento riusando lo stesso match usato in cancellazione.
+
+## [1.14.9] - 2026-07-13
+
+### Fixed
+- **Calendario, vista Giorno: eventi sovrapposti ora leggibili.** Nella vista giornaliera, eventi con orari sovrapposti venivano disegnati tutti a piena larghezza uno sopra l'altro, rendendo titoli e orari illeggibili (testo accavallato). Ora gli eventi sovrapposti vengono affiancati in colonne (come nella vista Settimana di Google Calendar), ciascuno con la propria larghezza proporzionale al numero di eventi in conflitto.
+
 ## [1.14.8] - 2026-07-13
 
 ### Changed

@@ -24,7 +24,12 @@ import { stripHtml } from '@/lib/utils/sanitizeHtml';
 import { sanitizeStudentAnswerText } from '@/lib/utils/studentOpenAnswer';
 import { secureShuffleArray } from '@/lib/utils';
 import { orderPoolFreshFirst, buildStudentSeenRank, type SeenRank } from '@/lib/utils/questionRotation';
-import { parseSavedProgress, performAttemptReset } from './simulations.helpers';
+import {
+  parseSavedProgress,
+  performAttemptReset,
+  buildSimulationEventDescription,
+  syncCalendarEventsForAssignments,
+} from './simulations.helpers';
 
 const log = createLogger('Simulations');
 
@@ -111,6 +116,9 @@ interface CalendarEventData {
   isAllDay: boolean;
   isPublic: boolean;
   createdById: string;
+  // The assignment this event is created for, so we can link them (FK) for
+  // bidirectional date sync once the event id is known.
+  assignmentId: string;
   invitations: Array<{
     userId?: string;
     groupId?: string;
@@ -166,23 +174,6 @@ async function buildInvitationsForAssignment(
 }
 
 /**
- * Build event description for multi-day events
- */
-function buildEventDescription(startDate: Date, endDate: Date, isMultiDay: boolean): string | null {
-  if (!isMultiDay) {
-    return null;
-  }
-
-  const startDateFormatted = startDate.toLocaleDateString('it-IT', { 
-    day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' 
-  });
-  const endDateFormatted = endDate.toLocaleDateString('it-IT', { 
-    day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' 
-  });
-  return `Disponibile dal ${startDateFormatted} al ${endDateFormatted}`;
-}
-
-/**
  * Process a single assignment and return the event data if applicable
  */
 async function processAssignmentForCalendar(
@@ -219,13 +210,14 @@ async function processAssignmentForCalendar(
   return {
     // The event already carries type: 'SIMULATION', so no "TOLC:"/"Simulazione:" prefix — just the name.
     title: simulation.title,
-    description: buildEventDescription(startDate, endDate, isMultiDay),
+    description: buildSimulationEventDescription(startDate, endDate, isMultiDay),
     type: 'SIMULATION',
     startDate,
     endDate,
     isAllDay: isMultiDay,
     isPublic: false,
     createdById: assignerId,
+    assignmentId: assignment.id,
     invitations,
   };
 }
@@ -257,19 +249,24 @@ async function createCalendarEventsForAssignments(
     }
   }
 
-  // Batch create all events
+  // Batch create all events, linking each back to its assignment (FK) so the two
+  // stay in date-sync afterwards.
   if (eventsToCreate.length > 0) {
     await Promise.all(
-      eventsToCreate.map(eventData =>
-        prisma.calendarEvent.create({
+      eventsToCreate.map(async ({ assignmentId, invitations, ...eventData }) => {
+        const created = await prisma.calendarEvent.create({
           data: {
             ...eventData,
             invitations: {
-              create: eventData.invitations,
+              create: invitations,
             },
           },
-        })
-      )
+        });
+        await prisma.simulationAssignment.update({
+          where: { id: assignmentId },
+          data: { calendarEventId: created.id },
+        });
+      })
     );
     log.info(`Created ${eventsToCreate.length} calendar events for simulation assignments`);
   }
@@ -3565,7 +3562,11 @@ export const simulationsRouter = router({
         },
       });
 
-      return { success: true, updatedCount: result.count };
+      // Propagate the new schedule to each assignment's linked calendar event so
+      // every invitee sees the move. No-op for assignments without an event.
+      const eventsSynced = await syncCalendarEventsForAssignments(ctx.prisma, assignmentIds);
+
+      return { success: true, updatedCount: result.count, eventsSynced };
     }),
 
   // Remove assignment

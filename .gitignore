@@ -62,3 +62,5 @@ next-env.d.ts
 
 # CINECA content repair backups (contain question text)
 scripts/.backup-cineca-*.json
+
+certificates
