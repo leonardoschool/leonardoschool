@@ -49,7 +49,7 @@ const nextConfig: NextConfig = {
   // fetch /_next/* resources. Next.js blocks cross-origin dev-resource requests by
   // default, which otherwise leaves the app stuck on its loading state on-device.
   // The subnet wildcard covers a changing DHCP address; no effect on production.
-  allowedDevOrigins: ['192.168.1.3', '192.168.1.*'],
+  allowedDevOrigins: ['192.168.1.*'],
 
   // Inlined into the bundle so client components can render the current app version.
   env: {
