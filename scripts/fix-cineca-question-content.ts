@@ -122,30 +122,53 @@ function shortIdOf(ref: string): string {
   return base.replace(/\.[a-z0-9]+$/i, '');
 }
 
+/** Rimuove i tag HTML (classe negata a match singolo → complessità lineare). */
+function stripTags(s: string, replacement = ' '): string {
+  // eslint-disable-next-line sonarjs/slow-regex -- pattern lineare, nessun rischio ReDoS
+  return s.replace(/<[^>]+>/g, replacement);
+}
+
 /** Testo "pulito": via tag HTML, comandi LaTeX e includegraphics, per l'euristica lingua. */
 function plainText(text: string): string {
-  return text
-    .replace(INCLUDE_RE, ' ')
-    .replace(/<[^>]+>/g, ' ')
+  return stripTags(text.replace(INCLUDE_RE, ' '))
     .replace(/\\[a-zA-Z]+/g, ' ')
     .replace(/[{}$\\]/g, ' ')
     .toLowerCase();
 }
 
-const EN_RE = /\b(which|the|following|shown|answer|answers|cell|cells|question|these|does|not|correct|figure|table|amino|acid|water|below|above|line|encloses|structure|experiment|results|happen)\b/g;
-const IT_RE = /\b(quale|quali|seguent\w*|mostrat\w*|rispost\w*|cellul\w*|domanda|corrett\w*|figura|tabella|acqua|linea|struttura|esperiment\w*|risultat\w*|delle|degli|della|nella|sono|come|questo|questa)\b/g;
+// Parole indicative della lingua tenute in Set (invece di grandi alternanze regex,
+// che sforerebbero il limite di complessità di sonarjs — stesso approccio di MATH_CMDS in latex.ts).
+const EN_WORDS = new Set([
+  'which', 'the', 'following', 'shown', 'answer', 'answers', 'cell', 'cells',
+  'question', 'these', 'does', 'not', 'correct', 'figure', 'table', 'amino',
+  'acid', 'water', 'below', 'above', 'line', 'encloses', 'structure',
+  'experiment', 'results', 'happen',
+]);
+const IT_WORDS = new Set([
+  'domanda', 'figura', 'tabella', 'acqua', 'linea', 'struttura', 'delle',
+  'degli', 'della', 'nella', 'sono', 'come', 'questo', 'questa', 'quale', 'quali',
+]);
+const IT_PREFIXES = ['seguent', 'mostrat', 'rispost', 'cellul', 'corrett', 'esperiment', 'risultat'];
+
+function countLangHits(words: string[], exact: Set<string>, prefixes: readonly string[]): number {
+  let hits = 0;
+  for (const w of words) {
+    if (exact.has(w) || prefixes.some((p) => w.startsWith(p))) hits++;
+  }
+  return hits;
+}
 
 /** Euristica grezza: il testo sembra inglese? (per SOLO segnalare, non è infallibile) */
 function looksEnglish(text: string): boolean {
-  const p = plainText(text);
-  const en = (p.match(EN_RE) ?? []).length;
-  const it = (p.match(IT_RE) ?? []).length;
+  const words = plainText(text).split(/\s+/).filter(Boolean);
+  const en = countLangHits(words, EN_WORDS, []);
+  const it = countLangHits(words, IT_WORDS, IT_PREFIXES);
   return en >= 3 && en > it * 2;
 }
 
 /** Le risposte sono tutti placeholder tipo "row 1", "riga 2", "A", ""? */
 function isPlaceholderAnswerText(text: string): boolean {
-  const t = text.replace(/<[^>]+>/g, '').trim().toLowerCase();
+  const t = stripTags(text, '').trim().toLowerCase();
   return t === '' || /^(row|riga)\s*\d+$/.test(t) || /^[a-e]$/.test(t);
 }
 
