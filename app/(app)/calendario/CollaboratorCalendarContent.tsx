@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom';
 import { trpc } from '@/lib/trpc/client';
 import { colors } from '@/lib/theme/colors';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { useApiError } from '@/lib/hooks/useApiError';
 import { Calendar, CalendarEvent, CalendarView, EventDetail, eventTypeLabels } from '@/components/ui/Calendar';
 import { Spinner } from '@/components/ui/loaders';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -14,6 +16,7 @@ import DatePicker from '@/components/ui/DatePicker';
 import Checkbox from '@/components/ui/Checkbox';
 import { UserInfoModal } from '@/components/ui/UserInfoModal';
 import { GroupInfoModal } from '@/components/ui/GroupInfoModal';
+import SimulationAssignModal from '@/components/ui/SimulationAssignModal';
 import { useCalendarEvents } from '@/lib/hooks/useCalendarEvents';
 import { useCalendarFilters } from '@/lib/hooks/useCalendarFilters';
 import {
@@ -37,6 +40,20 @@ export default function CollaboratorCalendarContent() {
   const { can } = usePermissions();
   const canManageEvents = can('events.manage');
   const canManageAllEvents = can('events.manageAll');
+  const canAssignSimulations = can('simulations.assign');
+
+  const { user: currentUser } = useAuth();
+  const { handleMutationError } = useApiError();
+  const utils = trpc.useUtils();
+  // Source data for duplicating a SIMULATION event as a brand-new assignment (opens the assign modal).
+  const [simDuplicate, setSimDuplicate] = useState<{
+    simulationId: string;
+    simulationTitle: string;
+    isOfficial: boolean;
+    durationMinutes: number;
+    initialStudentIds: string[];
+    initialGroupIds: string[];
+  } | null>(null);
 
   const [view, setView] = useState<CalendarView>('month');
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -63,10 +80,34 @@ export default function CollaboratorCalendarContent() {
     isDeleting,
     openAddEvent,
     openEditEvent,
+    openDuplicateEvent,
     closeEventForm,
     handleSubmit,
     deleteEvent,
   } = useCalendarEvents({ selectedDate, view, filterType, filterTagId });
+
+  // Entry point for the "Duplica" action: SIMULATION events become a new assignment
+  // (new instance), everything else is a plain event copy via the pre-filled form.
+  const handleDuplicate = async (event: CalendarEvent) => {
+    if (event.type !== 'SIMULATION') {
+      openDuplicateEvent(event);
+      return;
+    }
+    try {
+      const source = await utils.calendar.getSimulationEventSource.fetch({ eventId: event.id });
+      setSelectedEvent(null);
+      setSimDuplicate({
+        simulationId: source.simulationId,
+        simulationTitle: source.title,
+        isOfficial: source.isOfficial,
+        durationMinutes: source.durationMinutes,
+        initialStudentIds: source.targets.filter((t) => t.studentId).map((t) => t.studentId!),
+        initialGroupIds: source.targets.filter((t) => t.groupId).map((t) => t.groupId!),
+      });
+    } catch (error) {
+      handleMutationError(error);
+    }
+  };
 
   const {
     inviteSearch,
@@ -240,8 +281,30 @@ export default function CollaboratorCalendarContent() {
           onClose={() => setSelectedEvent(null)}
           onEdit={canManageEvents && (selectedEvent.isMine || canManageAllEvents) ? () => openEditEvent(selectedEvent) : undefined}
           onDelete={canManageEvents && (selectedEvent.isMine || canManageAllEvents) ? () => setDeleteConfirm({ id: selectedEvent.id, title: selectedEvent.title }) : undefined}
+          onDuplicate={
+            selectedEvent.type === 'SIMULATION'
+              ? (canAssignSimulations ? () => handleDuplicate(selectedEvent) : undefined)
+              : (canManageEvents && (selectedEvent.isMine || canManageAllEvents) ? () => handleDuplicate(selectedEvent) : undefined)
+          }
           onUserClick={(userId, userType) => setSelectedUserInfo({ userId, userType })}
           onGroupClick={(groupId) => setSelectedGroupInfo(groupId)}
+        />
+      )}
+
+      {/* Duplicate a SIMULATION event: re-assign the same simulation on a new date */}
+      {simDuplicate && (
+        <SimulationAssignModal
+          isOpen={true}
+          onClose={() => setSimDuplicate(null)}
+          simulationId={simDuplicate.simulationId}
+          simulationTitle={simDuplicate.simulationTitle}
+          isOfficial={simDuplicate.isOfficial}
+          durationMinutes={simDuplicate.durationMinutes}
+          userRole={currentUser?.role === 'ADMIN' ? 'ADMIN' : 'COLLABORATOR'}
+          initialSelectedStudentIds={simDuplicate.initialStudentIds}
+          initialSelectedGroupIds={simDuplicate.initialGroupIds}
+          initialCreateCalendarEvent
+          onAssigned={() => utils.calendar.getEvents.invalidate()}
         />
       )}
 

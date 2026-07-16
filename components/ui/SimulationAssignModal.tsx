@@ -28,6 +28,14 @@ export interface SimulationAssignModalProps {
   durationMinutes: number;
   /** User role - determines which groups/students are visible */
   userRole: UserRole;
+  /** Pre-selected student ids (e.g. when duplicating an existing scheduled simulation) */
+  initialSelectedStudentIds?: string[];
+  /** Pre-selected group ids (e.g. when duplicating an existing scheduled simulation) */
+  initialSelectedGroupIds?: string[];
+  /** Default value for the "Evento programmato" checkbox */
+  initialCreateCalendarEvent?: boolean;
+  /** Called after a successful assignment, in addition to the internal simulations invalidation */
+  onAssigned?: () => void;
 }
 
 /**
@@ -54,20 +62,24 @@ export function SimulationAssignModal({
   isOfficial,
   durationMinutes,
   userRole,
+  initialSelectedStudentIds,
+  initialSelectedGroupIds,
+  initialCreateCalendarEvent,
+  onAssigned,
 }: SimulationAssignModalProps) {
   const { showSuccess } = useToast();
   const { handleMutationError } = useApiError();
   const utils = trpc.useUtils();
 
   // Form state
-  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
-  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>(initialSelectedGroupIds ?? []);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>(initialSelectedStudentIds ?? []);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [dateMode, setDateMode] = useState<DateMode>('single');
   const [locationType, setLocationType] = useState<LocationType>('ONLINE');
   const [locationDetails, setLocationDetails] = useState('');
-  const [createCalendarEvent, setCreateCalendarEvent] = useState(false);
+  const [createCalendarEvent, setCreateCalendarEvent] = useState(initialCreateCalendarEvent ?? false);
   
   // Search state
   const [groupSearch, setGroupSearch] = useState('');
@@ -245,6 +257,7 @@ export function SimulationAssignModal({
     onSuccess: () => {
       showSuccess('Simulazione assegnata', 'La simulazione è stata assegnata con successo.');
       utils.simulations.invalidate();
+      onAssigned?.();
       handleClose();
     },
     onError: handleMutationError,

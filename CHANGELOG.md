@@ -8,6 +8,19 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-07-16
+
+### Added
+- **Duplica un evento dal calendario.** Nel dettaglio di un evento è ora disponibile il pulsante "Duplica". Per gli eventi normali (lezione, riunione, esame, altro) apre il form "Nuovo Evento" già precompilato con titolo "Copia di …", invitati, etichetta, luogo e orario dell'originale: basta scegliere la nuova data e salvare (il registro presenze parte vuoto). Per gli eventi di tipo **Simulazione** apre invece la finestra di assegnazione con gli stessi destinatari già selezionati, così da creare una **nuova istanza** della simulazione su una nuova data, che rigenera automaticamente il proprio evento a calendario. Visibile ad admin e collaboratori secondo i rispettivi permessi (`events.manage`/`events.manageAll`; per le simulazioni `simulations.assign`).
+
+## [1.15.2] - 2026-07-16
+
+### Changed
+- **Aggiornate date e documenti del "Semestre Aperto" (Medicina/Odontoiatria/Veterinaria) al D.M. n. 941 del 10-07-2026 (ciclo 2026/2027).** Nuovo calendario appelli, graduatorie, immatricolazioni, scorrimenti e corsi affini; nuovi link ai documenti ufficiali (Decreto, Procedure di iscrizione, Esami di profitto, Graduatorie residenti/esteri, Corsi affini). Syllabus, Linee guida e Posti disponibili invariati. Aggiornati sia la homepage sia la pagina `/test`.
+
+### Infrastructure
+- Rimosso `lib/data/admissionTests.ts` (codice morto, non importato da alcun componente).
+
 ## [1.15.1] - 2026-07-13
 
 ### Fixed

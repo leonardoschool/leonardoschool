@@ -311,6 +311,87 @@ export const calendarRouter = router({
       return event;
     }),
 
+  // Resolve the simulation + original targets behind a SIMULATION calendar event,
+  // so the calendar "Duplica" action can re-assign the same simulation on a new date.
+  getSimulationEventSource: staffProcedure
+    .input(z.object({ eventId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      assertCapability(ctx, 'simulations.view');
+
+      const event = await ctx.prisma.calendarEvent.findUnique({
+        where: { id: input.eventId },
+        select: {
+          id: true,
+          assignments: {
+            select: { simulationId: true, studentId: true, groupId: true },
+          },
+          simulation: {
+            select: {
+              id: true,
+              title: true,
+              isOfficial: true,
+              durationMinutes: true,
+              assignments: { select: { studentId: true, groupId: true } },
+            },
+          },
+        },
+      });
+
+      if (!event) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Evento non trovato' });
+      }
+
+      // Dedupe targets by student/group so a shared event doesn't yield duplicate rows.
+      const buildTargets = (rows: Array<{ studentId: string | null; groupId: string | null }>) => {
+        const seen = new Set<string>();
+        const targets: Array<{ studentId?: string; groupId?: string }> = [];
+        for (const row of rows) {
+          if (!row.studentId && !row.groupId) continue;
+          const key = row.studentId ? `s:${row.studentId}` : `g:${row.groupId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          targets.push({ studentId: row.studentId ?? undefined, groupId: row.groupId ?? undefined });
+        }
+        return targets;
+      };
+
+      // Per-assignment event: derive simulation + targets from the linked assignments.
+      if (event.assignments.length > 0) {
+        const simulationId = event.assignments[0].simulationId;
+        const simulation = await ctx.prisma.simulation.findUnique({
+          where: { id: simulationId },
+          select: { id: true, title: true, isOfficial: true, durationMinutes: true },
+        });
+        if (!simulation) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
+        }
+        return {
+          simulationId: simulation.id,
+          title: simulation.title,
+          isOfficial: simulation.isOfficial,
+          durationMinutes: simulation.durationMinutes,
+          targets: buildTargets(event.assignments),
+        };
+      }
+
+      // Fallback: the simulation's own scheduled event → replicate its existing assignments.
+      if (event.simulation) {
+        const simulation = event.simulation;
+        return {
+          simulationId: simulation.id,
+          title: simulation.title,
+          isOfficial: simulation.isOfficial,
+          durationMinutes: simulation.durationMinutes,
+          targets: buildTargets(simulation.assignments),
+        };
+      }
+
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Questo evento non è collegato a una simulazione',
+      });
+    }),
+
   // Create event (staff only)
   createEvent: staffProcedure
     .input(

@@ -240,6 +240,34 @@ export function useCalendarEvents({ selectedDate, view, filterType, filterTagId 
     setShowEventForm(true);
   }
 
+  // Duplicate a plain event: pre-fill the create form with the source event's data
+  // (title prefixed "Copia di", invitations carried over). The user picks a new date and saves.
+  function openDuplicateEvent(event: CalendarEvent) {
+    const startDate = new Date(event.startDate);
+    const endDate = new Date(event.endDate);
+    const invitations = event.invitations ?? [];
+
+    setFormData({
+      title: `Copia di ${event.title}`,
+      description: event.description || '',
+      type: event.type,
+      startDateTime: formatDateTimeLocal(startDate),
+      endDateTime: formatDateTimeLocal(endDate),
+      isAllDay: event.isAllDay,
+      locationType: event.locationType,
+      locationDetails: event.locationDetails || '',
+      onlineLink: event.onlineLink || '',
+      isPublic: false,
+      inviteUserIds: invitations.filter((i) => i.user).map((i) => i.user!.id),
+      inviteGroupIds: invitations.filter((i) => i.group).map((i) => i.group!.id),
+      sendEmailInvites: false,
+      tagId: event.tag?.id ?? '',
+    });
+    setEditingEventId(null);
+    setSelectedEvent(null);
+    setShowEventForm(true);
+  }
+
   function closeEventForm() {
     setShowEventForm(false);
     setEditingEventId(null);
@@ -318,6 +346,7 @@ export function useCalendarEvents({ selectedDate, view, filterType, filterTagId 
     isDeleting: deleteEventMutation.isPending,
     openAddEvent,
     openEditEvent,
+    openDuplicateEvent,
     closeEventForm,
     handleSubmit,
     deleteEvent: (id: string) => deleteEventMutation.mutate({ id }),

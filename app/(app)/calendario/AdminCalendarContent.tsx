@@ -17,6 +17,7 @@ import Checkbox from '@/components/ui/Checkbox';
 import { UserInfoModal } from '@/components/ui/UserInfoModal';
 import { GroupInfoModal } from '@/components/ui/GroupInfoModal';
 import CalendarEventTagsManagerModal from '@/components/admin/CalendarEventTagsManagerModal';
+import SimulationAssignModal from '@/components/ui/SimulationAssignModal';
 import { exportCalendarToPdf } from '@/lib/utils/calendarPdfExport';
 import { getCollaboratorDetailLabel } from '@/lib/utils/collaboratorDisplay';
 import {
@@ -84,6 +85,15 @@ export default function AdminCalendarContent() {
   const [editingInvitations, setEditingInvitations] = useState<Array<{ id: string; userId?: string; groupId?: string }>>([]);
   const [formData, setFormData] = useState<EventFormData>(defaultFormData);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
+  // Source data for duplicating a SIMULATION event as a brand-new assignment (opens the assign modal).
+  const [simDuplicate, setSimDuplicate] = useState<{
+    simulationId: string;
+    simulationTitle: string;
+    isOfficial: boolean;
+    durationMinutes: number;
+    initialStudentIds: string[];
+    initialGroupIds: string[];
+  } | null>(null);
   const [filterType, setFilterType] = useState<string>('');
   const [filterTagId, setFilterTagId] = useState<string>('');
   const [filterGroupId, setFilterGroupId] = useState<string>('');
@@ -383,6 +393,57 @@ export default function AdminCalendarContent() {
     setEditingEventId(event.id);
     setSelectedEvent(null);
     setShowEventForm(true);
+  };
+
+  // Duplicate a plain event: pre-fill the create form with the source event's data
+  // (title prefixed "Copia di", invitations carried over). The user picks a new date and saves.
+  const openDuplicateEvent = (event: CalendarEvent) => {
+    const startDate = new Date(event.startDate);
+    const endDate = new Date(event.endDate);
+    const invitations = event.invitations ?? [];
+    setFormData({
+      title: `Copia di ${event.title}`,
+      description: event.description || '',
+      type: event.type,
+      tagId: event.tag?.id ?? '',
+      startDateTime: formatDateTimeLocal(startDate),
+      endDateTime: formatDateTimeLocal(endDate),
+      isAllDay: event.isAllDay,
+      locationType: event.locationType,
+      locationDetails: event.locationDetails || '',
+      onlineLink: event.onlineLink || '',
+      isPublic: false,
+      inviteUserIds: invitations.filter((i) => i.user).map((i) => i.user!.id),
+      inviteGroupIds: invitations.filter((i) => i.group).map((i) => i.group!.id),
+      sendEmailInvites: false,
+    });
+    setEditingInvitations([]);
+    setEditingEventId(null);
+    setSelectedEvent(null);
+    setShowEventForm(true);
+  };
+
+  // Entry point for the "Duplica" action: SIMULATION events become a new assignment
+  // (new instance), everything else is a plain event copy via the pre-filled form.
+  const handleDuplicate = async (event: CalendarEvent) => {
+    if (event.type !== 'SIMULATION') {
+      openDuplicateEvent(event);
+      return;
+    }
+    try {
+      const source = await utils.calendar.getSimulationEventSource.fetch({ eventId: event.id });
+      setSelectedEvent(null);
+      setSimDuplicate({
+        simulationId: source.simulationId,
+        simulationTitle: source.title,
+        isOfficial: source.isOfficial,
+        durationMinutes: source.durationMinutes,
+        initialStudentIds: source.targets.filter((t) => t.studentId).map((t) => t.studentId!),
+        initialGroupIds: source.targets.filter((t) => t.groupId).map((t) => t.groupId!),
+      });
+    } catch (error) {
+      handleMutationError(error);
+    }
   };
 
   const closeEventForm = () => {
@@ -729,8 +790,29 @@ export default function AdminCalendarContent() {
           onClose={() => setSelectedEvent(null)}
           onEdit={() => openEditEvent(selectedEvent)}
           onDelete={() => setDeleteConfirm({ id: selectedEvent.id, title: selectedEvent.title })}
+          onDuplicate={() => handleDuplicate(selectedEvent)}
           onUserClick={(userId, userType) => setSelectedUserInfo({ userId, userType })}
           onGroupClick={(groupId) => setSelectedGroupInfo(groupId)}
+        />
+      )}
+
+      {/* Duplicate a SIMULATION event: re-assign the same simulation on a new date */}
+      {simDuplicate && (
+        <SimulationAssignModal
+          isOpen={true}
+          onClose={() => setSimDuplicate(null)}
+          simulationId={simDuplicate.simulationId}
+          simulationTitle={simDuplicate.simulationTitle}
+          isOfficial={simDuplicate.isOfficial}
+          durationMinutes={simDuplicate.durationMinutes}
+          userRole={currentUser?.role === 'COLLABORATOR' ? 'COLLABORATOR' : 'ADMIN'}
+          initialSelectedStudentIds={simDuplicate.initialStudentIds}
+          initialSelectedGroupIds={simDuplicate.initialGroupIds}
+          initialCreateCalendarEvent
+          onAssigned={() => {
+            utils.calendar.getEvents.invalidate();
+            utils.calendar.getStats.invalidate();
+          }}
         />
       )}
 
