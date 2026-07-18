@@ -3,6 +3,7 @@
   "version": "1.17.0",
   "private": true,
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || exit 0",
     "dev": "next dev --turbopack",
     "dev:lan": "next dev --turbopack -H 0.0.0.0",
     "build": "prisma generate && tsx scripts/prisma-deploy.ts && next build",

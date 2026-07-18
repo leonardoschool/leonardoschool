@@ -46,8 +46,11 @@ describe('hasRenderableRichText', () => {
 });
 
 describe('normalizeStoredRichText — inline images', () => {
+  // Placeholder values only: never paste a real Firebase download token into a test — the
+  // repository is public and a token grants read access to that stored object.
+  const FAKE_TOKEN = '00000000-0000-4000-8000-000000000000';
   const firebaseUrl =
-    'https://firebasestorage.googleapis.com/v0/b/leonardo-school.appspot.com/o/questions%2Fimages%2Fnephron.png?alt=media&token=bd8bb88c-8772-4c35-a227-cf65a2caba46';
+    `https://firebasestorage.googleapis.com/v0/b/example-bucket.appspot.com/o/questions%2Fimages%2Fnephron.png?alt=media&token=${FAKE_TOKEN}`;
 
   it('turns an absolute \\includegraphics URL into an <img> with the URL intact', () => {
     const result = normalizeStoredRichText(
@@ -57,7 +60,7 @@ describe('normalizeStoredRichText — inline images', () => {
     expect(result).toContain('<img');
     // The signed-download token must survive: without it the bucket answers 403 and the
     // student sees a broken image instead of the figure.
-    expect(result).toContain('token=bd8bb88c-8772-4c35-a227-cf65a2caba46');
+    expect(result).toContain(`token=${FAKE_TOKEN}`);
     expect(result).not.toContain('\\includegraphics');
     expect(result).toContain('The diagram shows a nephron.');
     expect(result).toContain('Which region has no urea?');
