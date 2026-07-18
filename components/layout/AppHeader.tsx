@@ -40,6 +40,7 @@ import {
   getRegistroItems,
   getDidatticaItems,
   getGestioneBadgeCount,
+  getDidatticaBadgeCount,
 } from './appHeaderParts';
 import type { Theme, NotificationData } from './appHeaderParts';
 
@@ -129,6 +130,15 @@ export default function AppHeader() {
     undefined,
     { enabled: user?.role === 'ADMIN', refetchInterval: focusAwarePollingInterval }
   );
+  // Pending question reports — staff only. The procedure scopes the count to the subjects the
+  // user may actually review, so a tutor sees only their own.
+  const { data: pendingQuestionFeedback } = trpc.questions.getPendingFeedbackCount.useQuery(
+    undefined,
+    {
+      enabled: user?.role === 'ADMIN' || (user?.role as string) === 'COLLABORATOR',
+      refetchInterval: focusAwarePollingInterval,
+    }
+  );
   const { data: unreadMessagesData } = trpc.messages.getUnreadCount.useQuery(
     undefined,
     { enabled: !!user, refetchInterval: focusAwarePollingInterval }
@@ -151,6 +161,7 @@ export default function AppHeader() {
   const pendingContactRequestsCount = contactRequestsStats?.pending || 0;
   const pendingContractUsersCount = studentsPendingContract?.length || 0;
   const totalGestionePending = pendingApplicationsCount + pendingContactRequestsCount + pendingContractUsersCount;
+  const pendingQuestionFeedbackCount = pendingQuestionFeedback?.count || 0;
 
   // Navigation permissions
   const collaboratorCanNavigate = checkCollaboratorNavigation(
@@ -234,8 +245,11 @@ export default function AppHeader() {
     router.push(url);
   };
 
-  const getBadgeCountForHref = (href: string) => 
+  const getBadgeCountForHref = (href: string) =>
     getGestioneBadgeCount(href, isAdmin, pendingContractUsersCount, pendingApplicationsCount, pendingContactRequestsCount);
+
+  const getDidatticaBadgeCountForHref = (href: string) =>
+    getDidatticaBadgeCount(href, pendingQuestionFeedbackCount);
 
   const closeMobileMenu = () => {
     setMobileMenuOpen(false);
@@ -317,6 +331,8 @@ export default function AppHeader() {
                   onToggle={() => setDidatticaMenuOpen(!didatticaMenuOpen)}
                   isActive={isDidatticaActive}
                   pathname={pathname}
+                  totalBadgeCount={pendingQuestionFeedbackCount}
+                  getBadgeCount={getDidatticaBadgeCountForHref}
                 />
               )}
 
@@ -461,6 +477,8 @@ export default function AppHeader() {
           unreadCount={unreadCount}
           totalGestionePending={totalGestionePending}
           getBadgeCountForHref={getBadgeCountForHref}
+          pendingQuestionFeedbackCount={pendingQuestionFeedbackCount}
+          getDidatticaBadgeCountForHref={getDidatticaBadgeCountForHref}
           isGestioneActive={isGestioneActive}
           isDidatticaActive={isDidatticaActive}
           isRegistroActive={isRegistroActive}
@@ -498,6 +516,8 @@ interface MobileMenuProps {
   unreadCount: number;
   totalGestionePending: number;
   getBadgeCountForHref: (href: string) => number;
+  pendingQuestionFeedbackCount: number;
+  getDidatticaBadgeCountForHref: (href: string) => number;
   isGestioneActive: boolean;
   isDidatticaActive: boolean;
   isRegistroActive: boolean;
@@ -526,6 +546,8 @@ function MobileMenu({
   unreadCount,
   totalGestionePending,
   getBadgeCountForHref,
+  pendingQuestionFeedbackCount,
+  getDidatticaBadgeCountForHref,
   isGestioneActive,
   isDidatticaActive,
   isRegistroActive,
@@ -589,6 +611,8 @@ function MobileMenu({
             unreadMessagesCount={unreadMessagesCount}
             totalGestionePending={totalGestionePending}
             getBadgeCountForHref={getBadgeCountForHref}
+            pendingQuestionFeedbackCount={pendingQuestionFeedbackCount}
+            getDidatticaBadgeCountForHref={getDidatticaBadgeCountForHref}
             isGestioneActive={isGestioneActive}
             isDidatticaActive={isDidatticaActive}
             isRegistroActive={isRegistroActive}
@@ -649,6 +673,8 @@ interface StaffMobileNavProps {
   unreadMessagesCount: number;
   totalGestionePending: number;
   getBadgeCountForHref: (href: string) => number;
+  pendingQuestionFeedbackCount: number;
+  getDidatticaBadgeCountForHref: (href: string) => number;
   isGestioneActive: boolean;
   isDidatticaActive: boolean;
   isRegistroActive: boolean;
@@ -667,6 +693,8 @@ function StaffMobileNav({
   unreadMessagesCount,
   totalGestionePending,
   getBadgeCountForHref,
+  pendingQuestionFeedbackCount,
+  getDidatticaBadgeCountForHref,
   isGestioneActive,
   isDidatticaActive,
   isRegistroActive,
@@ -723,6 +751,8 @@ function StaffMobileNav({
           onToggle={() => setExpandedSection(expandedSection === 'didattica' ? null : 'didattica')}
           pathname={pathname}
           onClose={onClose}
+          badgeCount={pendingQuestionFeedbackCount || undefined}
+          getBadgeCount={getDidatticaBadgeCountForHref}
           iconBgClass="bg-green-100 dark:bg-green-900/30"
           iconColorClass="text-green-600 dark:text-green-400"
         />

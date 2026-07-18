@@ -182,6 +182,15 @@ export function getDidatticaItems(isAdmin: boolean): NavItem[] {
   return isAdmin ? adminItems : collaboratorItems;
 }
 
+// Pending question reports live under Didattica → Domande, so the badge sits on that item
+// (and is summed onto the dropdown) exactly like the Gestione counters.
+export function getDidatticaBadgeCount(
+  itemHref: string,
+  pendingQuestionFeedbackCount: number
+): number {
+  return itemHref === '/domande' ? pendingQuestionFeedbackCount : 0;
+}
+
 // Get badge count for gestione items (admin only)
 export function getGestioneBadgeCount(
   itemHref: string,

@@ -8,6 +8,16 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-07-18
+
+### Added
+- **Badge delle segnalazioni sulle domande nella navbar.** Il menu **Didattica** mostra ora il numero di segnalazioni in attesa, e il contatore compare anche sulla voce **Domande** del menu a tendina — esattamente come già avviene per *Gestione*. Vale su desktop e nel menu mobile. Il numero rispetta i permessi di chi guarda: un tutor vede solo le segnalazioni delle proprie materie, mentre chi ha `questions.reviewAllFeedback` le vede tutte, così il badge non annuncia mai segnalazioni che poi non si trovano in pagina. Nuova procedura leggera `questions.getPendingFeedbackCount`, che condivide con `getPendingFeedbacks` lo stesso helper di visibilità proprio per non poter divergere.
+
+### Security
+- **Rimosso un token Firebase Storage reale dai test.** Il test sulle immagini inline conteneva un download token autentico: il repository è pubblico, quindi era leggibile da chiunque dal momento del push (incidente GitGuardian sul commit `18e12dc`). Al test serviva solo verificare che il token sopravvivesse alla pipeline di rendering, quindi ora usa un UUID palesemente finto. Il token esposto dà accesso in sola lettura a una singola immagine — una figura tratta da una prova IMAT già pubblica — e non è una credenziale: non consente scrittura né accesso al resto dello Storage.
+- **Hook `pre-commit` contro i segreti.** Nuova cartella versionata `.githooks/`, attivata automaticamente da `pnpm install` (script `prepare` → `core.hooksPath`). Blocca token di download Firebase, API key Google, chiavi private, stringhe di connessione con password, token GitHub, JSON di service account e file `.env`. Usa `gitleaks` se installato, ma non lo richiede: i controlli integrati funzionano comunque. Aggirabile con `git commit --no-verify` per i falsi positivi.
+- Rese generiche le cifre di produzione citate nel changelog della 1.17.0: dimensioni esatte della banca dati e conteggi delle simulazioni non appartengono a un repository pubblico.
+
 ## [1.17.0] - 2026-07-18
 
 ### Added

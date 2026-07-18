@@ -791,6 +791,37 @@ function calculateGenerationStats(questions: SmartSelectedQuestion[]): {
   };
 }
 
+/**
+ * Narrows a question-feedback query to what the current user is allowed to review.
+ *
+ * Collaborators see only the feedback of their own subjects, unless they hold
+ * 'questions.reviewAllFeedback'. Shared by the list and the nav badge count: if the two
+ * computed visibility differently, the header would advertise reports the user cannot open.
+ */
+async function applyFeedbackVisibility(
+  prisma: PrismaClient,
+  where: Prisma.QuestionFeedbackWhereInput,
+  userId: string,
+  userRole: string,
+  canReviewAllFeedback: boolean
+): Promise<Prisma.QuestionFeedbackWhereInput> {
+  if (userRole !== 'COLLABORATOR' || canReviewAllFeedback) return where;
+
+  const collaborator = await prisma.collaborator.findUnique({
+    where: { userId },
+    select: {
+      kind: true,
+      subjects: { select: { subjectId: true } },
+    },
+  });
+
+  const subjectIds = collaborator?.kind === 'TUTOR'
+    ? collaborator.subjects.map((subject) => subject.subjectId)
+    : [];
+
+  return { ...where, question: { subjectId: { in: subjectIds } } };
+}
+
 export const questionsRouter = router({
   // ==================== QUESTION CRUD ====================
 
@@ -2387,6 +2418,23 @@ export const questionsRouter = router({
   // ==================== FEEDBACK MANAGEMENT (Admin) ====================
 
   // Get pending feedbacks
+  getPendingFeedbackCount: staffProcedure
+    .query(async ({ ctx }) => {
+      // Nav badge: same visibility rules as getPendingFeedbacks, so the number in the header
+      // always matches the rows the user actually finds on the segnalazioni page.
+      if (!hasCapability(ctx, 'questions.reviewFeedback')) return { count: 0 };
+
+      const where = await applyFeedbackVisibility(
+        ctx.prisma,
+        { status: 'PENDING' },
+        ctx.user.id,
+        ctx.user.role,
+        hasCapability(ctx, 'questions.reviewAllFeedback')
+      );
+
+      return { count: await ctx.prisma.questionFeedback.count({ where }) };
+    }),
+
   getPendingFeedbacks: staffProcedure
     .input(z.object({
       page: z.number().min(1).default(1),
@@ -2396,30 +2444,23 @@ export const questionsRouter = router({
     }))
     .query(async ({ ctx, input }) => {
       assertCapability(ctx, 'questions.reviewFeedback');
-      const where: Prisma.QuestionFeedbackWhereInput = {};
+      const filters: Prisma.QuestionFeedbackWhereInput = {};
       if (input.status) {
-        where.status = input.status;
+        filters.status = input.status;
       }
       if (input.questionId) {
-        where.questionId = input.questionId;
+        filters.questionId = input.questionId;
       }
 
       // Collaborators normally see only their own subjects' feedbacks (TUTOR); 'reviewAllFeedback'
       // opts out of that narrowing so a secretary — or a tutor across subjects — sees all of them.
-      if (ctx.user.role === 'COLLABORATOR' && !hasCapability(ctx, 'questions.reviewAllFeedback')) {
-        const collaborator = await ctx.prisma.collaborator.findUnique({
-          where: { userId: ctx.user.id },
-          select: {
-            kind: true,
-            subjects: { select: { subjectId: true } },
-          },
-        });
-        const subjectIds = collaborator?.kind === 'TUTOR'
-          ? collaborator.subjects.map((subject) => subject.subjectId)
-          : [];
-
-        where.question = { subjectId: { in: subjectIds } };
-      }
+      const where = await applyFeedbackVisibility(
+        ctx.prisma,
+        filters,
+        ctx.user.id,
+        ctx.user.role,
+        hasCapability(ctx, 'questions.reviewAllFeedback')
+      );
 
       const total = await ctx.prisma.questionFeedback.count({ where });
 
