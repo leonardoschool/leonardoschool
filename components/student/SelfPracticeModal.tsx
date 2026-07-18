@@ -67,10 +67,26 @@ function buildSubjectDistribution(subjectIds: string[], count: number): Record<s
 }
 
 const LANGUAGE_OPTIONS: Array<{ value: LanguageFilter; label: string }> = [
-  { value: 'BOTH', label: '🌐 Entrambe' },
   { value: 'IT', label: '🇮🇹 Solo italiano' },
   { value: 'EN', label: '🇬🇧 Solo inglese' },
+  { value: 'BOTH', label: '🌐 Entrambe' },
 ];
+
+const LANGUAGE_STORAGE_KEY = 'selfPractice.languageFilter';
+
+/**
+ * Last choice wins, defaulting to Italian.
+ *
+ * The old default was 'BOTH', which in a bank that is ~97% Italian produced quizzes with one
+ * or two English questions scattered among Italian ones — a mix nobody asks for, and which
+ * students reported as "ho selezionato italiano ma escono domande inglesi". Remembering the
+ * choice keeps the English-track (IMAT) students from re-picking it on every session.
+ */
+function readStoredLanguageFilter(): LanguageFilter {
+  if (typeof window === 'undefined') return 'IT';
+  const stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+  return stored === 'IT' || stored === 'EN' || stored === 'BOTH' ? stored : 'IT';
+}
 
 const EMPTY_SUBJECTS: SubjectItem[] = [];
 
@@ -227,7 +243,7 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
   // Distribuzione materie
   const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>([]);
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
-  const [languageFilter, setLanguageFilter] = useState<LanguageFilter>('BOTH');
+  const [languageFilter, setLanguageFilter] = useState<LanguageFilter>(readStoredLanguageFilter);
 
 
   const [correctPoints, setCorrectPoints] = useState<string>('1');
@@ -573,7 +589,14 @@ export default function SelfPracticeModal({ isOpen, onClose }: SelfPracticeModal
         )}
 
         {!isTemplateMode && (
-          <LanguageFilterSection show value={languageFilter} onChange={setLanguageFilter} />
+          <LanguageFilterSection
+            show
+            value={languageFilter}
+            onChange={(next) => {
+              setLanguageFilter(next);
+              window.localStorage.setItem(LANGUAGE_STORAGE_KEY, next);
+            }}
+          />
         )}
 
         {/* Materie */}

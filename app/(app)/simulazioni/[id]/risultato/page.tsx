@@ -12,6 +12,7 @@ import { sanitizeStudentOpenAnswerInput } from '@/lib/utils/studentOpenAnswer';
 import { auth } from '@/lib/firebase/config';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import ZoomableImageArea from '@/components/ui/ZoomableImageArea';
 import QuestionImage from '@/components/ui/QuestionImage';
 import { questionImageSource } from '@/lib/utils/imageUrl';
 import SimulationResultBreakdown from './SimulationResultBreakdown';
@@ -679,23 +680,25 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                     <div className="mt-4 pl-11 space-y-3">
                       {/* Full question */}
                       <div className={`p-3 rounded-lg ${colors.background.secondary} ${colors.text.primary} space-y-2`}>
-                        {/* Question text */}
-                        {answer.question.text && (
-                          <RichTextRenderer text={answer.question.text} />
-                        )}
-                        {/* Question image */}
-                        {answer.question.imageUrl && (
-                          <div className="mt-3 flex justify-center">
-                            <QuestionImage
-                              src={answer.question.imageUrl}
-                              alt={answer.question.imageAlt || 'Immagine domanda'}
-                              width={600}
-                              height={400}
-                              className="max-w-full h-auto rounded-lg"
-                              style={{ maxHeight: '300px', objectFit: 'contain' }}
-                            />
-                          </div>
-                        )}
+                        <ZoomableImageArea>
+                          {/* Question text */}
+                          {answer.question.text && (
+                            <RichTextRenderer text={answer.question.text} />
+                          )}
+                          {/* Question image */}
+                          {answer.question.imageUrl && (
+                            <div className="mt-3 flex justify-center">
+                              <QuestionImage
+                                src={answer.question.imageUrl}
+                                alt={answer.question.imageAlt || 'Immagine domanda'}
+                                width={600}
+                                height={400}
+                                className="max-w-full h-auto rounded-lg"
+                                style={{ maxHeight: '300px', objectFit: 'contain' }}
+                              />
+                            </div>
+                          )}
+                        </ZoomableImageArea>
                         {/* LaTeX formula if present */}
                         {answer.question.textLatex && (
                           <div className="mt-3">

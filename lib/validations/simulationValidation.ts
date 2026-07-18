@@ -245,6 +245,7 @@ export const createSimulationAutoSchema = simulationBaseSchema.extend({
   subjectDistribution: subjectDistributionSchema,
   difficultyDistribution: difficultyDistributionSchema.optional(),
   topicIds: z.array(z.string()).optional(),
+  language: SectionQuestionLanguageEnum.optional().nullable(),
   assignments: z.array(assignmentTargetSchema).optional().default([]),
 });
 
@@ -364,6 +365,7 @@ export const quickQuizConfigSchema = z.object({
   subjectIds: z.array(z.string()).min(1, 'Seleziona almeno una materia'),
   topicIds: z.array(z.string()).optional(),
   difficulty: z.enum(['EASY', 'MEDIUM', 'HARD', 'MIXED']).default('MIXED'),
+  language: SectionQuestionLanguageEnum.optional().nullable(),
   
   // Quiz settings
   questionCount: z.number().int().min(5).max(100).default(10),

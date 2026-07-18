@@ -8,8 +8,10 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { WebView } from 'react-native-webview';
+import { hasRenderableRichText } from '@shared/richText/latex';
 import { colors } from '../../lib/theme/colors';
 import { useTheme } from '../../contexts/ThemeContext';
+import { RichContentWebView } from './RichContentWebView';
 
 // ==================== TYPES ====================
 
@@ -198,8 +200,11 @@ export function SimpleLaTeXText({ latex, style }: Readonly<{ latex: string; styl
 // ==================== MIXED CONTENT RENDERER ====================
 
 /**
- * RichTextWithLaTeX - Renders text with inline LaTeX formulas
- * Detects LaTeX between $...$ or $$...$$ and renders them
+ * RichTextWithLaTeX - Renders question/answer content: HTML, LaTeX and inline images.
+ *
+ * Delegates to RichContentWebView, which runs the same `shared/richText` pipeline as the
+ * web app. It used to split on `$...$` and print everything else as plain text, which is
+ * why inline `\includegraphics{...}` images and HTML lists were invisible on the app.
  */
 interface RichTextWithLaTeXProps {
   content: string;
@@ -210,10 +215,13 @@ interface RichTextWithLaTeXProps {
 export function RichTextWithLaTeX({ content, style, fontSize = 16 }: Readonly<RichTextWithLaTeXProps>) {
   const { themed } = useTheme();
 
-  // Check if content contains LaTeX
-  const hasLaTeX = /\$\$?[^$]+\$\$?/.test(content);
+  if (!content?.trim()) {
+    return null;
+  }
 
-  if (!hasLaTeX) {
+  // Plain prose (no markup, math or image) stays a native <Text>: it avoids a WebView per
+  // question and keeps text selection and accessibility behaving natively.
+  if (!hasRenderableRichText(content)) {
     return (
       <Text style={[styles.richText, { color: themed(colors.text.primary), fontSize }, style]}>
         {content}
@@ -221,55 +229,7 @@ export function RichTextWithLaTeX({ content, style, fontSize = 16 }: Readonly<Ri
     );
   }
 
-  // Split content by LaTeX patterns
-  const parts = content.split(/(\$\$[^$]+\$\$|\$[^$]+\$)/g);
-
-  return (
-    <View style={[styles.richTextContainer, style]}>
-      {parts.map((part, index) => {
-        // Generate a stable key based on content and position
-        const stableKey = `${part.slice(0, 20).replaceAll(/\s/g, '_')}-${index}`;
-        
-        // Check if this part is display mode LaTeX ($$...$$)
-        if (part.startsWith('$$') && part.endsWith('$$')) {
-          const latex = part.slice(2, -2);
-          return (
-            <LaTeXRenderer
-              key={stableKey}
-              latex={latex}
-              displayMode={true}
-              fontSize={fontSize}
-            />
-          );
-        }
-        // Check if this part is inline LaTeX ($...$)
-        if (part.startsWith('$') && part.endsWith('$')) {
-          const latex = part.slice(1, -1);
-          return (
-            <LaTeXRenderer
-              key={stableKey}
-              latex={latex}
-              displayMode={false}
-              fontSize={fontSize}
-              minHeight={24}
-            />
-          );
-        }
-        // Regular text
-        if (part.trim()) {
-          return (
-            <Text
-              key={stableKey}
-              style={[styles.richText, { color: themed(colors.text.primary), fontSize }]}
-            >
-              {part}
-            </Text>
-          );
-        }
-        return null;
-      })}
-    </View>
-  );
+  return <RichContentWebView content={content} fontSize={fontSize} style={style} />;
 }
 
 // ==================== STYLES ====================

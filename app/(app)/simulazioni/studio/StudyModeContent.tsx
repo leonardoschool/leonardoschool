@@ -8,6 +8,7 @@ import { PageLoader } from '@/components/ui/loaders';
 import Button from '@/components/ui/Button';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import ZoomableImageArea from '@/components/ui/ZoomableImageArea';
 import QuestionImage from '@/components/ui/QuestionImage';
 import { questionImageSource } from '@/lib/utils/imageUrl';
 import {
@@ -126,19 +127,21 @@ export default function StudyModeContent({ questionIds }: StudyModeContentProps)
         {/* Question Text */}
         <div className="p-4 sm:p-6">
           <div className={`text-base sm:text-lg ${colors.text.primary} mb-6`}>
-            {renderQuestionText(question.text, question.textLatex)}
-            {questionImageSource(question) && (
-              <div className="mt-4 flex justify-center">
-                <QuestionImage
-                  src={questionImageSource(question)}
-                  alt={question.imageAlt || 'Immagine domanda'}
-                  width={600}
-                  height={400}
-                  className="max-w-full h-auto rounded-lg"
-                  style={{ maxHeight: '300px', objectFit: 'contain' }}
-                />
-              </div>
-            )}
+            <ZoomableImageArea>
+              {renderQuestionText(question.text, question.textLatex)}
+              {questionImageSource(question) && (
+                <div className="mt-4 flex justify-center">
+                  <QuestionImage
+                    src={questionImageSource(question)}
+                    alt={question.imageAlt || 'Immagine domanda'}
+                    width={600}
+                    height={400}
+                    className="max-w-full h-auto rounded-lg"
+                    style={{ maxHeight: '300px', objectFit: 'contain' }}
+                  />
+                </div>
+              )}
+            </ZoomableImageArea>
           </div>
 
           {/* Answers */}

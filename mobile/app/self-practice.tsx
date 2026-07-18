@@ -33,6 +33,8 @@ import { spacing, layout } from '../lib/theme/spacing';
 type SmartRandomPreset = 'PROPORTIONAL' | 'BALANCED' | 'SINGLE_SUBJECT';
 type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD';
 type QuizMode = 'quiz' | 'reading';
+// Mirrors the web SelfPracticeModal: 'BOTH' means "no filter", not a value sent to the API.
+type LanguageFilter = 'BOTH' | 'IT' | 'EN';
 
 interface Subject {
   id: string;
@@ -50,6 +52,7 @@ export default function SelfPracticeScreen() {
   const [preset, setPreset] = useState<SmartRandomPreset>('PROPORTIONAL');
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
   const [selectedDifficulties, setSelectedDifficulties] = useState<DifficultyLevel[]>(['EASY', 'MEDIUM', 'HARD']);
+  const [languageFilter, setLanguageFilter] = useState<LanguageFilter>('BOTH');
   const [showSubjects, setShowSubjects] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
@@ -82,6 +85,7 @@ export default function SelfPracticeScreen() {
         maximizeTopicCoverage: true,
         avoidRecentlyUsed: true,
         focusSubjectId: preset === 'SINGLE_SUBJECT' ? selectedSubjectId : undefined,
+        language: languageFilter === 'BOTH' ? undefined : languageFilter,
       });
 
       if (!result || result.questions.length === 0) {
@@ -433,6 +437,40 @@ export default function SelfPracticeScreen() {
             <Caption style={{ marginTop: 4, color: themedColors.textMuted }}>
               {selectedDifficulties.length === 3 ? 'Mix di tutte le difficoltà' : `Selezionate: ${selectedDifficulties.join(' + ')}`}
             </Caption>
+          </View>
+
+          {/* Lingua */}
+          <View style={styles.section}>
+            <Text variant="body" style={[styles.sectionTitle, { color: themedColors.text }]}>
+              Lingua
+            </Text>
+            <View style={styles.difficultyRow}>
+              {([
+                { value: 'BOTH' as LanguageFilter, emoji: '🌍', label: 'Tutte' },
+                { value: 'IT' as LanguageFilter, emoji: '🇮🇹', label: 'Italiano' },
+                { value: 'EN' as LanguageFilter, emoji: '🇬🇧', label: 'Inglese' },
+              ]).map((opt) => {
+                const isSelected = languageFilter === opt.value;
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[
+                      styles.difficultyCard,
+                      {
+                        backgroundColor: isSelected ? `${colors.primary.main}15` : themedColors.card,
+                        borderColor: isSelected ? colors.primary.main : themedColors.border,
+                      },
+                    ]}
+                    onPress={() => setLanguageFilter(opt.value)}
+                  >
+                    <Text style={{ fontSize: 18 }}>{opt.emoji}</Text>
+                    <Text variant="caption" style={{ color: isSelected ? colors.primary.main : themedColors.text, marginTop: 2 }}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
 
           {/* Start Button */}

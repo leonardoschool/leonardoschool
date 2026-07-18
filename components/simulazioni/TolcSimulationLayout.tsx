@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import QuestionImage from '@/components/ui/QuestionImage';
+import ZoomableImageArea, { ZoomHint } from '@/components/ui/ZoomableImageArea';
 import { colors } from '@/lib/theme/colors';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { sanitizeStudentOpenAnswerInput } from '@/lib/utils/studentOpenAnswer';
@@ -125,6 +126,10 @@ export default function TolcSimulationLayout({
     ? answers.find((answer) => answer.questionId === currentQuestion.questionId)
     : undefined;
   const currentQuestionImageSrc = questionImageSource(currentQuestion?.question);
+  // A figure reaches the student either as the imageUrl field or inline in the text, and the
+  // hint has to appear for both — inline ones are the ones students could not read on a phone.
+  const hasCurrentQuestionFigure =
+    Boolean(currentQuestionImageSrc) || Boolean(currentQuestion?.question?.text?.includes('\\includegraphics'));
 
   const hasResponse = useCallback(
     (questionId: string) => {
@@ -367,24 +372,27 @@ export default function TolcSimulationLayout({
 
             {/* Question Text */}
             <div className="mb-8">
-              {/* Question Image */}
-              {currentQuestionImageSrc && (
-                <div className="mb-4 flex justify-center">
-                  <QuestionImage
-                    src={currentQuestionImageSrc}
-                    alt="Immagine domanda"
-                    width={600}
-                    height={400}
-                    className="max-w-full h-auto rounded-lg"
-                    style={{ maxHeight: '300px', objectFit: 'contain' }}
-                  />
-                </div>
-              )}
+              <ZoomableImageArea>
+                {/* Question Image */}
+                {currentQuestionImageSrc && (
+                  <div className="mb-4 flex justify-center">
+                    <QuestionImage
+                      src={currentQuestionImageSrc}
+                      alt="Immagine domanda"
+                      width={600}
+                      height={400}
+                      className="max-w-full h-auto rounded-lg"
+                      style={{ maxHeight: '300px', objectFit: 'contain' }}
+                    />
+                  </div>
+                )}
 
-              <RichTextRenderer
-                text={currentQuestion.question?.text || ''}
-                className={`text-lg leading-relaxed prose dark:prose-invert max-w-none ${colors.text.primary}`}
-              />
+                <RichTextRenderer
+                  text={currentQuestion.question?.text || ''}
+                  className={`text-lg leading-relaxed prose dark:prose-invert max-w-none ${colors.text.primary}`}
+                />
+                {hasCurrentQuestionFigure && <ZoomHint />}
+              </ZoomableImageArea>
               {currentQuestion.question?.textLatex && (
                 <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                   <LaTeXRenderer 

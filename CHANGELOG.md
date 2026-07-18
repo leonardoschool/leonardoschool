@@ -8,6 +8,29 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-07-18
+
+### Added
+- **Le immagini delle domande si ingrandiscono con un tocco.** Durante lo svolgimento della simulazione (layout standard e TOLC), nella revisione del risultato e in modalità studio, toccare una figura la apre a schermo intero (chiusura con Esc, con la X o toccando fuori). Vale sia per le immagini del campo `imageUrl` sia per quelle **inline** nel testo (`\includegraphics`), che non erano raggiungibili da alcun controllo React perché iniettate come HTML grezzo. Prima non esisteva **alcun** modo di ingrandire una figura durante un test: su smartphone diagrammi come quello del nefrone risultavano illeggibili, ed è la spiegazione della segnalazione *"non reindirizza l'immagine"*. Verificato sui dati di produzione che l'immagine in questione **si carica correttamente** (HTTP 206, `image/png`) e che nessuno dei 25 URL inline campionati è rotto: non era un problema di caricamento. Le immagini sono ora raggiungibili anche da tastiera (Invio/Spazio).
+
+- **Filtro lingua** disponibile su `simulations.createAutomatic` e `simulations.generateQuickQuiz`.
+- **Selettore lingua nell'autoesercitazione dell'app mobile** (Tutte / Italiano / Inglese), allineato a quello della webapp.
+
+### Changed
+- **L'autoesercitazione parte da "Solo italiano" e ricorda l'ultima scelta.** Il filtro lingua era preimpostato su "🌐 Entrambe": in una banca dati che è al **96,8% italiana** (571 domande EN su 17.803) questo produce quiz con una o due domande inglesi sparse tra quelle italiane — un misto che nessuno chiede e che gli studenti segnalavano come *"anche se ho selezionato solo lingua italiana, inserisce anche lingua inglese"*. Verificato sui dati di produzione: **16 autoesercitazioni su 200 erano miste**, tutte con 1-3 domande EN, cioè la firma di un'estrazione senza filtro. Ora il valore predefinito è "Solo italiano" e la scelta viene ricordata, così gli studenti IMAT impostano "Solo inglese" una volta sola. Il filtro lato server era ed è corretto: non è mai stato lui a mescolare.
+
+### Fixed
+- **Filtro lingua: falle chiuse a monte.** Nessuna di queste era la causa della segnalazione (vedi sopra), ma erano tutte reali:
+  - `simulations.updateQuestions` riscriveva la configurazione delle sezioni con una whitelist che **perdeva silenziosamente** `language` (e con essa `subjectIds`, `topicIds`, `questionTypes`, `difficultyLevels`, `tagIds`). In produzione **tutte le 147 sezioni di simulazione avevano perso la chiave**; i 55 template erano invece intatti (109 sezioni, tutte con la lingua), ed è per questo che la generazione da template continuava a funzionare — legge il template, non la simulazione. Restava però una perdita di dati silenziosa pronta a mordere alla prima rigenerazione basata sulle sezioni salvate.
+  - `simulations.createAutomatic` e `simulations.generateQuickQuiz` non filtravano per lingua e non avevano nemmeno il campo nello schema di input (endpoint attualmente senza chiamanti dal frontend).
+  - L'autoesercitazione dell'app mobile non inviava mai la lingua, perché la schermata non aveva alcun selettore.
+- **Contenuti delle domande resi correttamente anche nell'app mobile.** Il renderer `RichTextWithLaTeX` stampava il contenuto come testo semplice: un'immagine inline `\includegraphics{…}` appariva come URL scritto per esteso e l'HTML (elenchi `<ol>/<li>`, tabelle, pedici/apici) come tag grezzi. Ora usa la stessa pipeline del web. L'app non è ancora in uso dagli studenti, quindi il fix è preventivo.
+
+### Infrastructure
+- **Nuovo modulo condiviso `shared/richText/`, unica fonte di verità per il rendering dei contenuti.** La pipeline (`normalizeStoredRichText`, `normalizeImageSrc`, `questionImageSource`) e l'allowlist di sanitizzazione vivono ora in un solo posto, importato **sia dalla webapp sia dall'app Expo** (Metro configurato con `watchFolders` + alias `@shared`). È la causa strutturale dei bug qui sopra: finché i due client avevano due renderer indipendenti, ogni correzione ne copriva solo uno. `lib/utils/latex.ts` e `lib/utils/imageUrl.ts` restano come re-export, quindi nessun import esistente cambia.
+- Estratto `sanitizeSectionsForQuestionUpdate` in `simulations.helpers.ts` (era logica inline nel router) e coperto da test.
+- **Test di regressione** su immagini inline (`\includegraphics` → `<img>` con token di download preservato), HTML delle domande, allowlist di sanitizzazione e conservazione dei filtri di sezione.
+
 ## [1.16.0] - 2026-07-16
 
 ### Added

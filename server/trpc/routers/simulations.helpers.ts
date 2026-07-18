@@ -365,3 +365,60 @@ export async function syncAssignmentsForCalendarEvent(
   });
   return result.count;
 }
+
+/**
+ * A section as accepted by `simulations.updateQuestions`. Every field is optional because
+ * the router's zod-inferred input type marks them so; the helper only passes them through.
+ */
+export interface UpdatableSection {
+  id?: string;
+  name?: string;
+  durationMinutes?: number;
+  questionIds?: string[];
+  subjectId?: string | null;
+  subjectIds?: string[];
+  subjectQuestionCounts?: Record<string, number>;
+  topicIds?: string[];
+  questionTypes?: string[];
+  questionTypeCounts?: Record<string, number>;
+  difficultyLevels?: string[];
+  tagIds?: string[];
+  language?: string | null;
+  order?: number;
+}
+
+/**
+ * Rebuilds the sections JSON when a simulation's questions are edited, dropping question
+ * ids that no longer exist.
+ *
+ * The generation filters (language, subjects, topics, types, difficulty, tags) are carried
+ * over deliberately: a later regeneration reads them back from this JSON, so omitting one
+ * silently disables that filter — this is how IT-only sections started serving EN questions.
+ */
+export function sanitizeSectionsForQuestionUpdate(
+  sections: UpdatableSection[] | undefined,
+  validQuestionIds: Set<string>
+) {
+  return sections?.map((section, index) => {
+    const sectionQuestionIds = (section.questionIds ?? []).filter((questionId) =>
+      validQuestionIds.has(questionId)
+    );
+    return {
+      id: section.id,
+      name: section.name,
+      durationMinutes: section.durationMinutes,
+      questionIds: sectionQuestionIds,
+      questionCount: sectionQuestionIds.length,
+      subjectId: section.subjectId ?? null,
+      subjectIds: section.subjectIds ?? [],
+      subjectQuestionCounts: section.subjectQuestionCounts ?? {},
+      topicIds: section.topicIds ?? [],
+      questionTypes: section.questionTypes ?? [],
+      questionTypeCounts: section.questionTypeCounts ?? {},
+      difficultyLevels: section.difficultyLevels ?? [],
+      tagIds: section.tagIds ?? [],
+      language: section.language ?? null,
+      order: section.order ?? index,
+    };
+  });
+}

@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import katex from 'katex';
 import DOMPurify from 'isomorphic-dompurify';
 import { normalizeStoredRichText, sanitizeLatexForKatex } from '@/lib/utils/latex';
+import { richTextSanitizeConfig } from '@/shared/richText/sanitize';
 
 interface RichTextRendererProps {
   text: string;
@@ -67,25 +68,7 @@ export default function RichTextRenderer({ text, className = '' }: RichTextRende
     processed = processed.replace(/\n/g, '<br>');
 
     // Sanitize HTML to prevent XSS while allowing safe tags
-    const sanitized = DOMPurify.sanitize(processed, {
-      ALLOWED_TAGS: [
-        'b', 'i', 'u', 'strong', 'em', 'sub', 'sup', 'br', 'span', 'p', 'div',
-        'ul', 'ol', 'li', 'h3', 'h4', 'blockquote', 'hr',
-        'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption', 'colgroup', 'col',
-        'img',
-        'math', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'msup',
-        'msub', 'mfrac', 'msqrt', 'mroot', 'munder', 'mover', 'munderover',
-        'mtable', 'mtr', 'mtd', 'annotation', 'svg', 'path', 'line', 'g',
-      ],
-      ALLOWED_ATTR: [
-        'class', 'style', 'href', 'xmlns', 'width', 'height', 'viewBox',
-        'd', 'fill', 'stroke', 'stroke-width', 'preserveAspectRatio',
-        'aria-hidden', 'focusable', 'role',
-        'border', 'cellpadding', 'cellspacing', 'colspan', 'rowspan',
-        'src', 'alt',
-      ],
-      ADD_TAGS: ['foreignObject'],
-    });
+    const sanitized = DOMPurify.sanitize(processed, richTextSanitizeConfig);
 
     return sanitized;
   }, [text]);

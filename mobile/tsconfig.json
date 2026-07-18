@@ -10,11 +10,12 @@
     "paths": {
       "@/*": ["./*"],
       "@app/*": ["./src/app/*"],
-      "@lib/*": ["./src/lib/*"]
-    },
-    "rootDir": "."
+      "@lib/*": ["./src/lib/*"],
+      "@shared/*": ["../shared/*"]
+    }
   },
   "include": [
+    "../shared/**/*.ts",
     "app/**/*.ts",
     "app/**/*.tsx",
     "components/**/*.ts",

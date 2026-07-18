@@ -13,6 +13,7 @@ import { TextareaWithSymbols } from '@/components/ui/SymbolKeyboard';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import QuestionImage from '@/components/ui/QuestionImage';
+import ZoomableImageArea, { ZoomHint } from '@/components/ui/ZoomableImageArea';
 import { questionImageSource } from '@/lib/utils/imageUrl';
 
 interface Answer {
@@ -73,6 +74,9 @@ export default function QuestionPanel({
 }: QuestionPanelProps) {
   const isOpenText = question.question.type === 'OPEN_TEXT';
   const questionImgSrc = questionImageSource(question.question);
+  // A figure reaches the student either as the imageUrl field or inline in the text, and the
+  // hint has to appear for both — inline ones are the ones students could not read on a phone.
+  const hasQuestionFigure = Boolean(questionImgSrc) || question.question.text?.includes('\\includegraphics');
   const { can, isLoading: permissionsLoading } = usePermissions();
   const canReportQuestion = permissionsLoading || can('student.submitQuestionFeedback');
 
@@ -111,22 +115,25 @@ export default function QuestionPanel({
 
         {/* Question text */}
         <div className={`p-6 rounded-xl ${colors.background.card} border ${colors.border.light} mb-6`}>
-          <RichTextRenderer
-            text={question.question.text}
-            className={`prose prose-sm max-w-none ${colors.text.primary}`}
-          />
-          {questionImgSrc && (
-            <div className="mt-4 flex justify-center">
-              <QuestionImage
-                src={questionImgSrc}
-                alt={question.question.imageAlt || 'Immagine domanda'}
-                width={600}
-                height={400}
-                className="max-w-full h-auto rounded-lg"
-                style={{ maxHeight: '300px', objectFit: 'contain' }}
-              />
-            </div>
-          )}
+          <ZoomableImageArea>
+            <RichTextRenderer
+              text={question.question.text}
+              className={`prose prose-sm max-w-none ${colors.text.primary}`}
+            />
+            {questionImgSrc && (
+              <div className="mt-4 flex justify-center">
+                <QuestionImage
+                  src={questionImgSrc}
+                  alt={question.question.imageAlt || 'Immagine domanda'}
+                  width={600}
+                  height={400}
+                  className="max-w-full h-auto rounded-lg"
+                  style={{ maxHeight: '300px', objectFit: 'contain' }}
+                />
+              </div>
+            )}
+            {hasQuestionFigure && <ZoomHint />}
+          </ZoomableImageArea>
           {question.question.textLatex && (
             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
               <LaTeXRenderer

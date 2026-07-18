@@ -15,7 +15,7 @@ import {
   quickQuizConfigSchema,
   bulkAssignmentSchema,
 } from '@/lib/validations/simulationValidation';
-import type { Prisma, PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient, QuestionLanguage } from '@prisma/client';
 import { notifySimulationCreated, notifyNewAssignments } from '@/server/services/simulationNotificationService';
 import * as notificationService from '@/server/services/notificationService';
 import { notifications } from '@/lib/notifications/notificationHelpers';
@@ -29,6 +29,7 @@ import {
   performAttemptReset,
   buildSimulationEventDescription,
   syncCalendarEventsForAssignments,
+  sanitizeSectionsForQuestionUpdate,
 } from './simulations.helpers';
 
 const log = createLogger('Simulations');
@@ -500,7 +501,8 @@ async function selectQuestionsAutomatically(
   prisma: PrismaClient,
   subjectDistribution: Record<string, number>,
   difficultyDistribution: { EASY?: number; MEDIUM?: number; HARD?: number } | null | undefined,
-  topicIds: string[] | null | undefined
+  topicIds: string[] | null | undefined,
+  language: QuestionLanguage | null | undefined
 ): Promise<Array<{ id: string; order: number }>> {
   const selectedQuestions: { id: string; order: number }[] = [];
   let currentOrder = 0;
@@ -515,6 +517,10 @@ async function selectQuestionsAutomatically(
 
     if (topicIds && topicIds.length > 0) {
       where.topicId = { in: topicIds };
+    }
+
+    if (language) {
+      where.language = language;
     }
 
     // Get questions for this subject
@@ -2482,7 +2488,7 @@ export const simulationsRouter = router({
     .input(createSimulationAutoSchema)
     .mutation(async ({ ctx, input }) => {
       assertCapability(ctx, 'simulations.manage');
-      const { subjectDistribution, difficultyDistribution, topicIds, assignments, ...simulationData } = input;
+      const { subjectDistribution, difficultyDistribution, topicIds, language, assignments, ...simulationData } = input;
 
       // Validate collaborator assignments
       if (ctx.user.role === 'COLLABORATOR' && ctx.user.collaborator?.id) {
@@ -2504,7 +2510,8 @@ export const simulationsRouter = router({
         ctx.prisma,
         subjectDistribution,
         difficultyDistribution,
-        topicIds
+        topicIds,
+        language
       );
 
       // Calculate maxScore if not provided
@@ -2776,18 +2783,7 @@ export const simulationsRouter = router({
       }
 
       const questionIdSet = new Set(questionIds);
-      const sanitizedSections = sections?.map((section, index) => {
-        const sectionQuestionIds = (section.questionIds || []).filter(questionId => questionIdSet.has(questionId));
-        return {
-          id: section.id,
-          name: section.name,
-          durationMinutes: section.durationMinutes,
-          questionIds: sectionQuestionIds,
-          questionCount: sectionQuestionIds.length,
-          subjectId: section.subjectId ?? null,
-          order: section.order ?? index,
-        };
-      });
+      const sanitizedSections = sanitizeSectionsForQuestionUpdate(sections, questionIdSet);
 
       await ctx.prisma.$transaction(async () => {
         if (mode === 'replace') {
@@ -4721,7 +4717,7 @@ export const simulationsRouter = router({
     .input(quickQuizConfigSchema)
     .mutation(async ({ ctx, input }) => {
       assertCapability(ctx, 'student.selfPractice');
-      const { subjectIds, topicIds, difficulty, questionCount, durationMinutes, correctPoints, wrongPoints, showResultsImmediately, showCorrectAnswers } = input;
+      const { subjectIds, topicIds, difficulty, language, questionCount, durationMinutes, correctPoints, wrongPoints, showResultsImmediately, showCorrectAnswers } = input;
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
 
       // Build question selection criteria
@@ -4736,6 +4732,10 @@ export const simulationsRouter = router({
 
       if (difficulty !== 'MIXED') {
         where.difficulty = difficulty;
+      }
+
+      if (language) {
+        where.language = language;
       }
 
       // Get questions
