@@ -6,6 +6,7 @@ import { trpc } from '@/lib/trpc/client';
 import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { firebaseStorage } from '@/lib/firebase/storage';
+import { insertAtCaret } from '@/lib/utils/textareaInsert';
 import {
   validateQuestionAnswers,
   validateQuestionKeywords,
@@ -229,14 +230,7 @@ export function useQuestionForm({ questionId, basePath = '/domande', returnTo, i
       setValue: (v: string) => void,
       symbol: string
     ) => {
-      const el = ref.current;
-      if (!el) { setValue(value + symbol); return; }
-      const start = el.selectionStart ?? value.length;
-      const end = el.selectionEnd ?? start;
-      const newValue = value.substring(0, start) + symbol + value.substring(end);
-      setValue(newValue);
-      const newPos = start + symbol.length;
-      setTimeout(() => { el.focus(); el.setSelectionRange(newPos, newPos); }, 0);
+      insertAtCaret(ref.current, value, setValue, symbol);
     },
     []
   );
