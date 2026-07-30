@@ -26,7 +26,6 @@ import { sanitizeStudentAnswerText } from '@/lib/utils/studentOpenAnswer';
 import { secureShuffleArray } from '@/lib/utils';
 import { orderPoolFreshFirst, buildStudentSeenRank, type SeenRank } from '@/lib/utils/questionRotation';
 import {
-  parseSavedProgress,
   persistProgress,
   type PersistProgressStatus,
   isUniqueConstraintError,

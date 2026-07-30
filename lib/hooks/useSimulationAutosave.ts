@@ -118,7 +118,7 @@ export function useSimulationAutosave(options: UseSimulationAutosaveOptions): Us
     inFlightRef.current = true;
     const revBeingSent = snapshot.rev;
 
-    void optionsRef.current
+    optionsRef.current
       .persistRemote(snapshot)
       .then(() => {
         failureCountRef.current = 0;

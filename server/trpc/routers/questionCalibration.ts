@@ -169,8 +169,7 @@ export const questionCalibrationRouter = router({
             if (input.direction === 'harder' && !isHarder) return false;
             if (input.direction === 'easier' && isHarder) return false;
           }
-          if (input.onlyContradictingHuman && row.question.difficultySource !== 'MANUAL') return false;
-          return true;
+          return !input.onlyContradictingHuman || row.question.difficultySource === 'MANUAL';
         })
         .sort((a, b) => proposalReviewWeight(b) - proposalReviewWeight(a));
 

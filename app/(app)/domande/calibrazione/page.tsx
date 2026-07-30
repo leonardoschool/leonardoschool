@@ -73,10 +73,10 @@ export default function CalibrazionePage() {
       ].filter(Boolean);
       showSuccess('Operazione completata', parts.join(' · ') || 'Nessuna modifica.');
       setSelectedIds(new Set());
-      void utils.questionCalibration.listProposals.invalidate();
-      void utils.questionCalibration.getOverview.invalidate();
-      void utils.questionCalibration.getPendingProposalCount.invalidate();
-      void utils.questions.getQuestions.invalidate();
+      utils.questionCalibration.listProposals.invalidate();
+      utils.questionCalibration.getOverview.invalidate();
+      utils.questionCalibration.getPendingProposalCount.invalidate();
+      utils.questions.getQuestions.invalidate();
     },
   });
 

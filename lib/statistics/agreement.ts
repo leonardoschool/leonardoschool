@@ -105,7 +105,9 @@ export function findOptimalCuts(
   const scores = samples.map((s) => s.score).sort((x, y) => x - y);
   const low = quantile(scores, 0.05);
   const high = quantile(scores, 0.95);
-  if (!(high > low)) return null;
+  // Written out rather than as `high > low`: a NaN slipping in must return null too,
+  // and a plain comparison would quietly let it through.
+  if (!Number.isFinite(high - low) || high <= low) return null;
 
   const candidates: number[] = [];
   for (let g = 0; g < gridSize; g++) {

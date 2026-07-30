@@ -499,7 +499,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
       if (sent) return;
     }
 
-    void fetch('/api/simulations/save-progress', {
+    fetch('/api/simulations/save-progress', {
       method: 'POST',
       credentials: 'same-origin',
       headers: {

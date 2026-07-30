@@ -74,9 +74,9 @@ export default function CalibrationHistoryTab({ canDecide, canRevertRun }: Props
   });
 
   const invalidate = () => {
-    void utils.questionCalibration.listHistory.invalidate();
-    void utils.questionCalibration.getOverview.invalidate();
-    void utils.questions.getQuestions.invalidate();
+    utils.questionCalibration.listHistory.invalidate();
+    utils.questionCalibration.getOverview.invalidate();
+    utils.questions.getQuestions.invalidate();
   };
 
   const revert = trpc.questionCalibration.revertChange.useMutation({

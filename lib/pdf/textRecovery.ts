@@ -45,8 +45,14 @@ const MIN_WORD_SCORE = 0.05;
  * Function words shared by the Italian and English exam papers this imports.
  * Their presence separates recovered prose from a coincidental all-caps font.
  */
-const FUNCTION_WORDS =
-  /\b(?:di|il|la|le|lo|un|una|che|non|per|con|del|della|dei|delle|come|nel|alla|sono|and|the|of|in|is|to|for|which|are)\b/gi;
+const FUNCTION_WORDS = new Set([
+  'di', 'il', 'la', 'le', 'lo', 'un', 'una', 'che', 'non', 'per', 'con', 'del',
+  'della', 'dei', 'delle', 'come', 'nel', 'alla', 'sono',
+  'and', 'the', 'of', 'in', 'is', 'to', 'for', 'which', 'are',
+]);
+
+/** Splits on anything that is not a letter, so punctuation never sticks to a word. */
+const WORD_SPLIT = /[^\p{L}]+/u;
 
 /** Decodes one string from standard-Macintosh glyph ids back to characters. */
 export function decodeMacGlyphOrder(str: string): string {
@@ -76,7 +82,11 @@ function countLetters(text: string): { upper: number; lower: number } {
 function wordScore(text: string): number {
   const words = text.split(/\s+/).filter(Boolean).length;
   if (words < 8) return 0;
-  return (text.match(FUNCTION_WORDS)?.length ?? 0) / words;
+  let hits = 0;
+  for (const token of text.split(WORD_SPLIT)) {
+    if (FUNCTION_WORDS.has(token.toLowerCase())) hits += 1;
+  }
+  return hits / words;
 }
 
 function looksAllCaps(text: string, minLetters: number): boolean {

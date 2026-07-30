@@ -18,9 +18,6 @@ import {
   XCircle,
   MinusCircle,
   BarChart3,
-  AlertTriangle,
-  ChevronDown,
-  ChevronUp,
   BookOpen,
   ShieldX,
 } from 'lucide-react';
