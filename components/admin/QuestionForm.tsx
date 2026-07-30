@@ -7,7 +7,7 @@ import CustomSelect from '@/components/ui/CustomSelect';
 import { Modal } from '@/components/ui/Modal';
 import { normalizeImageSrc } from '@/lib/utils/imageUrl';
 import {
-  Save, X, Eye, Info, Sparkles, ChevronDown, ChevronUp, AlertCircle,
+  Save, X, Eye, Sparkles, ChevronDown, ChevronUp, AlertCircle,
   ImageIcon, Upload, Link as LinkIcon, Copy, Check,
 } from 'lucide-react';
 import TagSelector from '@/components/admin/TagSelector';
@@ -16,6 +16,7 @@ import SymbolKeyboard from '@/components/ui/SymbolKeyboard';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import { hasRenderableRichText } from '@/lib/utils/latex';
 import AnswerEditor from '@/components/admin/question-form/AnswerEditor';
+import FormattingHelp from '@/components/admin/question-form/FormattingHelp';
 import HtmlShortcutMenu from '@/components/admin/question-form/HtmlShortcutMenu';
 import InsertImageButton from '@/components/admin/question-form/InsertImageButton';
 import KeywordManager from '@/components/admin/question-form/KeywordManager';
@@ -111,44 +112,8 @@ export default function QuestionForm({ questionId, basePath = '/domande', return
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className={`text-sm font-medium ${colors.text.primary}`}>Testo della domanda *</label>
-            <button
-              type="button"
-              onClick={() => form.setShowFormattingInfo(!form.showFormattingInfo)}
-              className={`inline-flex items-center gap-1 text-sm ${colors.text.muted} hover:${colors.primary.text} transition-colors`}
-            >
-              <Info className="w-4 h-4" />
-              Come formattare
-            </button>
+            <FormattingHelp />
           </div>
-
-          {form.showFormattingInfo && (
-            <div className={`mb-3 p-4 rounded-lg ${colors.background.secondary} border ${colors.border.primary}`}>
-              <h4 className={`font-medium ${colors.text.primary} mb-2`}>Formattazione del testo</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className={`font-medium ${colors.text.secondary} mb-1`}>LaTeX (formule matematiche)</p>
-                  <ul className={`${colors.text.muted} space-y-1`}>
-                    <li><code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">$formula$</code> - formula inline</li>
-                    <li><code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">$$formula$$</code> - formula centrata</li>
-                    <li><code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">\(formula\)</code> - formula inline</li>
-                    <li><code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">\[formula\]</code> - formula centrata</li>
-                  </ul>
-                </div>
-                <div>
-                  <p className={`font-medium ${colors.text.secondary} mb-1`}>HTML (formattazione testo)</p>
-                  <ul className={`${colors.text.muted} space-y-1`}>
-                    <li><code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">&lt;sub&gt;testo&lt;/sub&gt;</code> - pedice</li>
-                    <li><code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">&lt;sup&gt;testo&lt;/sup&gt;</code> - apice</li>
-                    <li><code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">&lt;b&gt;testo&lt;/b&gt;</code> - <b>grassetto</b></li>
-                    <li><code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">&lt;i&gt;testo&lt;/i&gt;</code> - <i>corsivo</i></li>
-                  </ul>
-                </div>
-              </div>
-              <button type="button" onClick={() => form.setShowFormattingInfo(false)} className={`mt-3 text-sm ${colors.primary.text} hover:underline`}>
-                Chiudi
-              </button>
-            </div>
-          )}
 
           <textarea
             ref={questionTextRef}

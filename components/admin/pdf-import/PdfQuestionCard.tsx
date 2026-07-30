@@ -17,6 +17,9 @@ import {
 } from '@/lib/validations/questionValidation';
 import { CheckCircle, AlertTriangle, Copy, XCircle, ZoomIn, X, ChevronDown, ChevronUp } from 'lucide-react';
 import type { PdfImportItem, PdfImportAnswer } from '@/lib/pdf/buildImportItems';
+import FormattingHelp from '@/components/admin/question-form/FormattingHelp';
+import ImageUrlField from '@/components/admin/question-form/ImageUrlField';
+import RichTextField from '@/components/admin/question-form/RichTextField';
 import PdfAnswerEditor from './PdfAnswerEditor';
 
 interface PdfQuestionCardProps {
@@ -153,12 +156,17 @@ export default function PdfQuestionCard({ item, subjectOptions, onPatch }: PdfQu
       )}
 
       {/* Question text */}
-      <textarea
+      <div className="flex items-center justify-between mb-1">
+        <span className={`text-xs font-medium ${colors.text.muted}`}>Testo della domanda</span>
+        {!disabled && <FormattingHelp />}
+      </div>
+      <RichTextField
         value={item.text}
-        onChange={(e) => patch({ text: e.target.value })}
+        onChange={(text) => patch({ text })}
         disabled={disabled}
-        rows={2}
-        className={`w-full px-3 py-2 rounded-lg border ${colors.border.primary} ${colors.background.input} ${colors.text.primary} focus:ring-2 focus:ring-[#a8012b]/20 focus:border-[#a8012b] transition-colors resize-y text-sm disabled:opacity-60`}
+        rows={3}
+        placeholder="Testo della domanda... (supporta LaTeX e HTML)"
+        showFormulaHelper
       />
 
       {/* Answers */}
@@ -215,11 +223,18 @@ export default function PdfQuestionCard({ item, subjectOptions, onPatch }: PdfQu
           </button>
           {showAdvanced && (
             <div className={`mt-3 space-y-3 p-3 rounded-lg border border-dashed ${colors.border.primary}`}>
-              <Field label="URL immagine (opzionale)">
-                <input type="url" value={item.imageUrl} onChange={(e) => patch({ imageUrl: e.target.value })} disabled={disabled} placeholder="https://..." className={inputClass} />
+              <Field label="Immagine della domanda (opzionale)">
+                <ImageUrlField value={item.imageUrl} onChange={(imageUrl) => patch({ imageUrl })} disabled={disabled} />
               </Field>
               <Field label="Descrizione / Contesto aggiuntivo">
-                <textarea value={item.description} onChange={(e) => patch({ description: e.target.value })} disabled={disabled} rows={2} placeholder="Informazioni mostrate prima della domanda..." className={`${inputClass} resize-y`} />
+                <RichTextField
+                  value={item.description}
+                  onChange={(description) => patch({ description })}
+                  disabled={disabled}
+                  rows={2}
+                  compact
+                  placeholder="Informazioni mostrate prima della domanda..."
+                />
               </Field>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Anno">
@@ -230,13 +245,34 @@ export default function PdfQuestionCard({ item, subjectOptions, onPatch }: PdfQu
                 </Field>
               </div>
               <Field label="Spiegazione risposta corretta">
-                <textarea value={item.correctExplanation} onChange={(e) => patch({ correctExplanation: e.target.value })} disabled={disabled} rows={2} placeholder="Mostrata quando lo studente risponde correttamente..." className={`${inputClass} resize-y`} />
+                <RichTextField
+                  value={item.correctExplanation}
+                  onChange={(correctExplanation) => patch({ correctExplanation })}
+                  disabled={disabled}
+                  rows={2}
+                  compact
+                  placeholder="Mostrata quando lo studente risponde correttamente..."
+                />
               </Field>
               <Field label="Spiegazione risposta errata">
-                <textarea value={item.wrongExplanation} onChange={(e) => patch({ wrongExplanation: e.target.value })} disabled={disabled} rows={2} placeholder="Mostrata quando lo studente sbaglia..." className={`${inputClass} resize-y`} />
+                <RichTextField
+                  value={item.wrongExplanation}
+                  onChange={(wrongExplanation) => patch({ wrongExplanation })}
+                  disabled={disabled}
+                  rows={2}
+                  compact
+                  placeholder="Mostrata quando lo studente sbaglia..."
+                />
               </Field>
               <Field label="Spiegazione generale">
-                <textarea value={item.generalExplanation} onChange={(e) => patch({ generalExplanation: e.target.value })} disabled={disabled} rows={2} placeholder="Mostrata sempre dopo la risposta..." className={`${inputClass} resize-y`} />
+                <RichTextField
+                  value={item.generalExplanation}
+                  onChange={(generalExplanation) => patch({ generalExplanation })}
+                  disabled={disabled}
+                  rows={2}
+                  compact
+                  placeholder="Mostrata sempre dopo la risposta..."
+                />
               </Field>
             </div>
           )}
