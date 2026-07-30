@@ -13,6 +13,8 @@ export { default as SimulationStartScreen } from './SimulationStartScreen';
 export { default as SimulationPreviewModal } from './SimulationPreviewModal';
 export { default as FillSectionModal } from './FillSectionModal';
 export type { PickedQuestion } from './FillSectionModal';
+export { default as OpenAnswerSolution } from './OpenAnswerSolution';
+export { default as ProposeAlternativeAnswerModal } from './ProposeAlternativeAnswerModal';
 export {
   SimulationLoadingState,
   SimulationKickedState,
@@ -25,6 +27,7 @@ export {
 // Execution components
 export { default as FeedbackModal } from './FeedbackModal';
 export { default as SimulationHeader } from './SimulationHeader';
+export { default as OfflineSaveBadge } from './OfflineSaveBadge';
 export { default as QuestionPanel } from './QuestionPanel';
 export { default as NavigationSidebar } from './NavigationSidebar';
 export {

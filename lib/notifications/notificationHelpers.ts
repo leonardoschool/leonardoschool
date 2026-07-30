@@ -918,6 +918,7 @@ export const notifications = {
       ERROR_IN_ANSWER: 'Errore nelle risposte',
       UNCLEAR: 'Domanda poco chiara',
       SUGGESTION: 'Suggerimento',
+      ALTERNATIVE_ANSWER: 'Risposta alternativa proposta',
       OTHER: 'Altro',
     };
     const feedbackLabel = typeLabels[params.feedbackType] || params.feedbackType;
@@ -990,6 +991,47 @@ export const notifications = {
     }
 
     return Promise.all(notificationsToSend);
+  },
+
+  /**
+   * Notifica l'esito di una proposta di risposta alternativa agli studenti che l'hanno inviata.
+   * Chi ha ricevuto anche il ricalcolo del punteggio lo legge nel messaggio.
+   */
+  async alternativeAnswerReviewed(
+    prisma: PrismaClient,
+    params: {
+      questionId: string;
+      questionTitle: string;
+      keyword: string;
+      approved: boolean;
+      recipientUserIds: string[];
+      rescoredUserIds?: string[];
+    }
+  ) {
+    const recipients = Array.from(new Set(params.recipientUserIds));
+    if (recipients.length === 0) return [];
+
+    const rescored = new Set(params.rescoredUserIds ?? []);
+
+    return Promise.all(recipients.map((userId) => {
+      let message: string;
+      if (!params.approved) {
+        message = `La risposta "${params.keyword}" che avevi proposto per la domanda "${params.questionTitle}" non è stata accettata.`;
+      } else if (rescored.has(userId)) {
+        message = `La risposta "${params.keyword}" che avevi proposto è stata accettata: ora è fra le soluzioni valide della domanda "${params.questionTitle}" e il tuo punteggio è stato aggiornato.`;
+      } else {
+        message = `La risposta "${params.keyword}" che avevi proposto è stata accettata: ora è fra le soluzioni valide della domanda "${params.questionTitle}".`;
+      }
+
+      return createNotification(prisma, {
+        userId,
+        type: 'QUESTION_FEEDBACK',
+        title: params.approved ? 'Risposta alternativa accettata' : 'Risposta alternativa non accettata',
+        message,
+        linkType: 'question',
+        linkEntityId: params.questionId,
+      });
+    }));
   },
 
   /**

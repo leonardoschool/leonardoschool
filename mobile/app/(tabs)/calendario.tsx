@@ -78,9 +78,15 @@ export default function CalendarioScreen() {
     {
       startDate: dateRangeStart,
       endDate: dateRangeEnd,
-      onlyMyEvents: true,
+      // A collaborator must see the events of the classes they follow, whoever created
+      // them: `onlyMyEvents` bypasses that role rule on the server, so it is kept only
+      // for the roles whose calendar really is personal.
+      onlyMyEvents: user?.role !== 'COLLABORATOR',
       includeInvitations: true,
       includeCancelled: false,
+      // The whole range is rendered at once: with the default page size the tail of
+      // this ~3-month window was silently dropped.
+      pageSize: 500,
     },
     { enabled: !!user?.isActive }
   );

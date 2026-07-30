@@ -14,6 +14,7 @@ import { simulationsRouter } from './simulations';
 import { simulationTemplatesRouter } from './simulationTemplates';
 import { notificationsRouter } from './notifications';
 import { questionTagsRouter } from './questionTags';
+import { questionCalibrationRouter } from './questionCalibration';
 import { calendarRouter } from './calendar';
 import { messagesRouter } from './messages';
 import { virtualRoomRouter } from './virtualRoom';
@@ -36,6 +37,7 @@ export const appRouter = router({
   simulationTemplates: simulationTemplatesRouter,
   notifications: notificationsRouter,
   questionTags: questionTagsRouter,
+  questionCalibration: questionCalibrationRouter,
   calendar: calendarRouter,
   messages: messagesRouter,
   virtualRoom: virtualRoomRouter,

@@ -15,9 +15,10 @@ import {
   quickQuizConfigSchema,
   bulkAssignmentSchema,
 } from '@/lib/validations/simulationValidation';
-import type { Prisma, PrismaClient, QuestionLanguage } from '@prisma/client';
+import type { Prisma, PrismaClient, QuestionLanguage, QuestionType } from '@prisma/client';
 import { notifySimulationCreated, notifyNewAssignments } from '@/server/services/simulationNotificationService';
 import * as notificationService from '@/server/services/notificationService';
+import { applyOpenAnswerVerdict } from '@/server/services/openAnswerGrading';
 import { notifications } from '@/lib/notifications/notificationHelpers';
 import { createLogger } from '@/lib/utils/logger';
 import { stripHtml } from '@/lib/utils/sanitizeHtml';
@@ -25,14 +26,38 @@ import { sanitizeStudentAnswerText } from '@/lib/utils/studentOpenAnswer';
 import { secureShuffleArray } from '@/lib/utils';
 import { orderPoolFreshFirst, buildStudentSeenRank, type SeenRank } from '@/lib/utils/questionRotation';
 import {
-  parseSavedProgress,
+  persistProgress,
+  type PersistProgressStatus,
+  isUniqueConstraintError,
+  buildResumeAttemptPayload,
   performAttemptReset,
   buildSimulationEventDescription,
   syncCalendarEventsForAssignments,
   sanitizeSectionsForQuestionUpdate,
+  dedupeAssignmentTargets,
+  classifyAnswerOutcome,
+  matchOpenAnswerKeywords,
+  buildTextAnswerDistribution,
+  parseResultAnswers,
+  type StoredAnswer,
 } from './simulations.helpers';
 
 const log = createLogger('Simulations');
+
+// Maps a failed persistProgress outcome onto a tRPC error (the beacon route
+// maps the same outcomes onto HTTP status codes). Successful outcomes are
+// absent from the map, so a lookup on them yields undefined.
+const SAVE_PROGRESS_ERRORS: Partial<
+  Record<PersistProgressStatus, { code: TRPCError['code']; message: string }>
+> = {
+  not_found: { code: 'NOT_FOUND', message: 'Tentativo non trovato' },
+  forbidden: { code: 'FORBIDDEN', message: 'Non autorizzato' },
+  completed: { code: 'BAD_REQUEST', message: 'Tentativo già completato' },
+  reset: {
+    code: 'CONFLICT',
+    message: 'Il tentativo è stato ripristinato dallo staff. Ricarica la pagina per riprendere la simulazione.',
+  },
+};
 
 function jsonOrUndefined(value: Prisma.JsonValue | null): Prisma.InputJsonValue | undefined {
   return value === null ? undefined : value as Prisma.InputJsonValue;
@@ -255,6 +280,16 @@ async function createCalendarEventsForAssignments(
   if (eventsToCreate.length > 0) {
     await Promise.all(
       eventsToCreate.map(async ({ assignmentId, invitations, ...eventData }) => {
+        // Never create a second event for an assignment that already has one
+        const linked = await prisma.simulationAssignment.findUnique({
+          where: { id: assignmentId },
+          select: { calendarEventId: true },
+        });
+        if (linked?.calendarEventId) {
+          log.warn(`Assignment ${assignmentId} already has calendar event ${linked.calendarEventId}, skipping`);
+          return;
+        }
+
         const created = await prisma.calendarEvent.create({
           data: {
             ...eventData,
@@ -671,6 +706,7 @@ interface SimulationQuestionForEval {
   question: {
     points: number;
     negativePoints: number;
+    difficulty: string;
     answers: Array<{ id: string; isCorrect: boolean }>;
   };
 }
@@ -681,6 +717,8 @@ interface EvaluatedAnswer {
   isCorrect: boolean;
   earnedPoints: number;
   timeSpent: number;
+  /** Difficulty frozen at grading time — see the note on `StoredAnswer`. */
+  difficulty: string;
 }
 
 interface EvaluationResult {
@@ -734,36 +772,11 @@ function evaluatePaperBasedAnswers(
       isCorrect,
       earnedPoints,
       timeSpent: 0,
+      difficulty: sq.question.difficulty,
     });
   }
 
   return { correctCount, wrongCount, blankCount, totalScore, evaluatedAnswers };
-}
-
-/**
- * Calculate delta counts for self-correction
- */
-function calculateSelfCorrectionDeltas(
-  isCorrect: boolean,
-  previousState: boolean | null
-): { correctDelta: number; wrongDelta: number; pendingDelta: number } {
-  const wasCorrect = previousState === true;
-  const wasWrong = previousState === false;
-  const wasPending = previousState === null;
-
-  if (isCorrect) {
-    return {
-      correctDelta: wasCorrect ? 0 : 1,
-      wrongDelta: wasWrong ? -1 : 0,
-      pendingDelta: wasPending ? -1 : 0,
-    };
-  } else {
-    return {
-      correctDelta: wasCorrect ? -1 : 0,
-      wrongDelta: wasWrong ? 0 : 1,
-      pendingDelta: wasPending ? -1 : 0,
-    };
-  }
 }
 
 /**
@@ -883,6 +896,7 @@ interface SimulationQuestionWithDetails {
     points: number;
     negativePoints: number;
     openValidationType: string | null;
+    difficulty: string;
     subject: { name: string } | null;
     answers: Array<{ id: string; isCorrect: boolean }>;
     keywords: Array<{ keyword: string; weight: number; isRequired: boolean }>;
@@ -896,14 +910,7 @@ interface ScoringConfig {
   blankPoints: number;
 }
 
-interface EvaluatedAnswerResult {
-  questionId: string;
-  answerId: string | null;
-  answerText: string | null;
-  isCorrect: boolean | null;
-  earnedPoints: number;
-  timeSpent: number;
-}
+type EvaluatedAnswerResult = StoredAnswer;
 
 interface ScoringResult {
   correctCount: number;
@@ -914,14 +921,7 @@ interface ScoringResult {
   evaluatedAnswers: EvaluatedAnswerResult[];
 }
 
-type ResultAnswerDetails = {
-  questionId: string;
-  answerId: string | null;
-  answerText: string | null;
-  isCorrect: boolean | null;
-  earnedPoints: number;
-  timeSpent: number;
-};
+type ResultAnswerDetails = StoredAnswer;
 
 type ResultQuestionForBreakdown = {
   id: string;
@@ -942,29 +942,6 @@ type ResultBreakdownAccumulator = {
   blankAnswers: number;
   score: number;
 };
-
-function parseResultAnswers(value: Prisma.JsonValue): ResultAnswerDetails[] {
-  const rawAnswers = Array.isArray(value)
-    ? value
-    : value && typeof value === 'object' && 'items' in value && Array.isArray((value as { items?: unknown }).items)
-      ? (value as { items: unknown[] }).items
-      : [];
-
-  return rawAnswers.flatMap((rawAnswer) => {
-    if (!rawAnswer || typeof rawAnswer !== 'object' || Array.isArray(rawAnswer)) return [];
-    const answer = rawAnswer as Record<string, unknown>;
-    if (typeof answer.questionId !== 'string') return [];
-
-    return [{
-      questionId: answer.questionId,
-      answerId: typeof answer.answerId === 'string' ? answer.answerId : null,
-      answerText: typeof answer.answerText === 'string' ? answer.answerText : null,
-      isCorrect: typeof answer.isCorrect === 'boolean' ? answer.isCorrect : null,
-      earnedPoints: typeof answer.earnedPoints === 'number' ? answer.earnedPoints : 0,
-      timeSpent: typeof answer.timeSpent === 'number' ? answer.timeSpent : 0,
-    }];
-  });
-}
 
 function parseSimulationSections(sectionsValue: Prisma.JsonValue | null): SimulationSectionForBreakdown[] {
   if (!Array.isArray(sectionsValue)) return [];
@@ -1162,6 +1139,10 @@ function calculateSubmissionScores(
       isCorrect: evaluation.isCorrect,
       earnedPoints: evaluation.earnedPoints,
       timeSpent: studentAnswer?.timeSpent ?? 0,
+      // Frozen here, not read live later: once the calibration starts relabelling
+      // questions, a student's past "% correct on hard questions" would otherwise
+      // shift under them for a test they sat months ago.
+      difficulty: sq.question.difficulty,
     });
   }
 
@@ -1183,17 +1164,10 @@ function autoScoreOpenAnswer(
     return { autoScore: null, keywordsMatched: [], keywordsMissed: [] };
   }
 
-  const answerLower = answerText.toLowerCase();
-  const keywordsMatched: string[] = [];
-  const keywordsMissed: string[] = [];
-
-  for (const kw of keywords) {
-    if (answerLower.includes(kw.keyword.toLowerCase())) {
-      keywordsMatched.push(kw.keyword);
-    } else {
-      keywordsMissed.push(kw.keyword);
-    }
-  }
+  const { matched: keywordsMatched, missed: keywordsMissed } = matchOpenAnswerKeywords(
+    answerText,
+    keywords.map(kw => kw.keyword)
+  );
 
   // OR logic: at least one keyword matched → full score; none matched → zero
   const autoScore = keywordsMatched.length > 0 ? 1.0 : 0.0;
@@ -1261,8 +1235,19 @@ async function getOrCreateSimulationResult(
   simulationId: string,
   studentId: string,
   totalQuestions: number,
-  isRepeatable: boolean
+  isRepeatable: boolean,
+  preferredResultId?: string
 ): Promise<{ id: string; resetAt: Date | null }> {
+  // The client names the attempt it has been autosaving into. Honouring it keeps
+  // the submit on the same row when a student has several assignments for this
+  // simulation, where a plain lookup could pick a different in-progress attempt.
+  if (preferredResultId) {
+    const preferred = await prisma.simulationResult.findFirst({
+      where: { id: preferredResultId, simulationId, studentId, completedAt: null },
+    });
+    if (preferred) return preferred;
+  }
+
   // Try to find existing in-progress result
   const existingResult = await prisma.simulationResult.findFirst({
     where: { simulationId, studentId, completedAt: null },
@@ -3212,20 +3197,45 @@ export const simulationsRouter = router({
         await validateCollaboratorAssignments(ctx.prisma, ctx.user.collaborator.id, targets);
       }
 
+      // Collapse targets repeated inside the same request (same recipient + same window)
+      const uniqueTargets = dedupeAssignmentTargets(targets);
+
       // Check for overlapping assignments BEFORE creating new ones
-      for (const target of targets) {
+      for (const target of uniqueTargets) {
         await checkOverlappingAssignments(ctx.prisma, target);
       }
 
       // Create assignments and auto-publish simulation
-      const created = await ctx.prisma.$transaction(async () => {
+      let skipped = 0;
+      const created = await ctx.prisma.$transaction(async (tx) => {
+        // Serialize concurrent "Assegna" requests for this simulation, so the
+        // duplicate check below can't be bypassed by two requests racing (a double
+        // click used to create two assignments → two calendar events).
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`simulation-assign:${simulationId}`})::bigint)`;
+
         const results = [];
-        for (const target of targets) {
+        for (const target of uniqueTargets) {
           const startDate = target.startDate ? new Date(target.startDate) : null;
           const endDate = target.endDate ? new Date(target.endDate) : null;
 
+          // Same recipient + same window already assigned → nothing to add
+          const duplicate = await tx.simulationAssignment.findFirst({
+            where: {
+              simulationId,
+              studentId: target.studentId ?? null,
+              groupId: target.groupId ?? null,
+              startDate,
+              endDate,
+            },
+            select: { id: true },
+          });
+          if (duplicate) {
+            skipped++;
+            continue;
+          }
+
           // Create the assignment
-          const assignment = await ctx.prisma.simulationAssignment.create({
+          const assignment = await tx.simulationAssignment.create({
             data: {
               simulationId,
               studentId: target.studentId,
@@ -3239,13 +3249,13 @@ export const simulationsRouter = router({
               createCalendarEvent: target.createCalendarEvent ?? false,
             },
           });
-          
+
           results.push(assignment);
         }
 
         // Auto-publish simulation when assignments are created
         if (results.length > 0 && simulation.status === 'DRAFT') {
-          await ctx.prisma.simulation.update({
+          await tx.simulation.update({
             where: { id: simulationId },
             data: { status: 'PUBLISHED' },
           });
@@ -3253,6 +3263,10 @@ export const simulationsRouter = router({
 
         return results;
       });
+
+      if (skipped > 0) {
+        log.info(`Skipped ${skipped} duplicate assignment target(s) for simulation ${simulationId}`);
+      }
 
       // Send notifications for newly added assignments ONLY (not all assignments)
       if (created.length > 0) {
@@ -3287,8 +3301,9 @@ export const simulationsRouter = router({
         }
       }
 
-      return { 
+      return {
         created: created.length,
+        skipped,
       };
     }),
 
@@ -4059,21 +4074,7 @@ export const simulationsRouter = router({
 
       // Return existing in-progress attempt (if still valid)
       if (inProgressAttempt) {
-        // Parse saved answers using helper
-        const savedProgress = parseSavedProgress(inProgressAttempt.answers);
-
-        return {
-          resultId: inProgressAttempt.id,
-          resumed: true,
-          // Echoed back by saveProgress/submit: writes from a tab opened before
-          // a staff reset carry a stale token and are rejected
-          resetToken: inProgressAttempt.resetAt?.getTime() ?? null,
-          savedTimeSpent: inProgressAttempt.durationSeconds || 0,
-          savedAnswers: savedProgress.savedAnswers,
-          savedSectionTimes: savedProgress.savedSectionTimes,
-          savedCurrentSectionIndex: savedProgress.savedCurrentSectionIndex,
-          savedCurrentQuestionIndex: savedProgress.savedCurrentQuestionIndex,
-        };
+        return buildResumeAttemptPayload(inProgressAttempt);
       }
 
       // Check if can start new attempt
@@ -4086,17 +4087,40 @@ export const simulationsRouter = router({
       }
 
       // Create new attempt with assignmentId
-      const result = await ctx.prisma.simulationResult.create({
-        data: {
-          simulation: { connect: { id: input.simulationId } },
-          student: { connect: { id: studentId } },
-          ...(assignmentId && { assignment: { connect: { id: assignmentId } } }),
-          totalQuestions: simulation.totalQuestions,
-          answers: [],
-        },
-      });
+      try {
+        const result = await ctx.prisma.simulationResult.create({
+          data: {
+            simulation: { connect: { id: input.simulationId } },
+            student: { connect: { id: studentId } },
+            ...(assignmentId && { assignment: { connect: { id: assignmentId } } }),
+            totalQuestions: simulation.totalQuestions,
+            answers: [],
+          },
+        });
 
-      return { resultId: result.id, resumed: false, resetToken: null };
+        return { resultId: result.id, resumed: false, resetToken: null };
+      } catch (error) {
+        // The check above is a read followed by a write: two starts fired close
+        // together (double click on "Inizia", a remount, a retried request) both
+        // find no attempt in progress and race to create one. The loser violates
+        // @@unique([simulationId, studentId, assignmentId]) — but the attempt it
+        // wanted now exists, so resume that instead of failing the student.
+        if (!isUniqueConstraintError(error)) throw error;
+
+        const existing = await ctx.prisma.simulationResult.findFirst({
+          where: { simulationId: input.simulationId, studentId, assignmentId },
+          orderBy: { startedAt: 'desc' },
+        });
+
+        if (!existing || existing.completedAt) {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'Impossibile avviare la simulazione. Ricarica la pagina e riprova.',
+          });
+        }
+
+        return buildResumeAttemptPayload(existing);
+      }
     }),
 
   // Save progress (partial save)
@@ -4117,57 +4141,29 @@ export const simulationsRouter = router({
       currentQuestionIndex: z.number().int().min(0).optional(),
       // Reset token from startAttempt (guards against stale tabs after a staff reset)
       resetToken: z.number().nullable().optional(),
+      // Monotonic client revision; optional so older clients (mobile) keep working
+      rev: z.number().int().min(0).nullable().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       assertCapability(ctx, 'student.takeSimulations');
-      const { resultId, answers, timeSpent, sectionTimes, currentSectionIndex, currentQuestionIndex } = input;
-      const sanitizedAnswers = answers.map(answer => ({
-        ...answer,
-        answerText: sanitizeStudentAnswerText(answer.answerText),
-      }));
       const student = await getStudentFromUser(ctx.prisma, ctx.user.id);
 
-      const result = await ctx.prisma.simulationResult.findUnique({
-        where: { id: resultId },
-        select: { studentId: true, completedAt: true, resetAt: true },
+      const outcome = await persistProgress(ctx.prisma, {
+        resultId: input.resultId,
+        studentId: student.id,
+        answers: input.answers,
+        timeSpent: input.timeSpent,
+        sectionTimes: input.sectionTimes,
+        currentSectionIndex: input.currentSectionIndex,
+        currentQuestionIndex: input.currentQuestionIndex,
+        resetToken: input.resetToken,
+        rev: input.rev,
       });
 
-      if (!result) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Tentativo non trovato' });
+      const failure = SAVE_PROGRESS_ERRORS[outcome];
+      if (failure) {
+        throw new TRPCError(failure);
       }
-
-      if (result.studentId !== student.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Non autorizzato' });
-      }
-
-      if (result.completedAt) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Tentativo già completato' });
-      }
-
-      // A tab opened before a staff reset carries a stale (or missing) token:
-      // reject its autosaves so they can't overwrite the reset state
-      if (result.resetAt && input.resetToken !== result.resetAt.getTime()) {
-        throw new TRPCError({
-          code: 'CONFLICT',
-          message: 'Il tentativo è stato ripristinato dallo staff. Ricarica la pagina per riprendere la simulazione.',
-        });
-      }
-
-      // Prepare answers with section progress metadata
-      const answersWithMeta = {
-        items: sanitizedAnswers,
-        sectionTimes: sectionTimes || {},
-        currentSectionIndex: currentSectionIndex ?? 0,
-        currentQuestionIndex: currentQuestionIndex ?? 0,
-      };
-
-      await ctx.prisma.simulationResult.update({
-        where: { id: resultId },
-        data: {
-          answers: answersWithMeta as unknown as Prisma.JsonArray,
-          durationSeconds: timeSpent,
-        },
-      });
 
       return { success: true };
     }),
@@ -4213,7 +4209,8 @@ export const simulationsRouter = router({
         simulationId,
         studentId,
         simulation.totalQuestions,
-        simulation.isRepeatable
+        simulation.isRepeatable,
+        input.resultId
       );
 
       // A tab opened before a staff reset carries a stale (or missing) token:
@@ -4396,58 +4393,27 @@ export const simulationsRouter = router({
       }
 
       const answer = currentAnswers[answerIndex];
-      
+
       // Only allow correcting answers that are pending (isCorrect === null) or already corrected
       // and have text (open questions with answers)
       if (!answer.answerText || answer.answerText.trim().length === 0) {
-        throw new TRPCError({ 
-          code: 'BAD_REQUEST', 
-          message: 'Questa domanda non ha una risposta aperta da correggere' 
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Questa domanda non ha una risposta aperta da correggere'
         });
       }
 
-      // Get question to calculate points
-      const question = await ctx.prisma.question.findUnique({
-        where: { id: questionId },
-        select: { points: true, negativePoints: true },
-      });
-
-      const points = result.simulation.useQuestionPoints && question
-        ? question.points
-        : result.simulation.correctPoints;
-
-      // Calculate point difference
-      const oldPoints = answer.earnedPoints;
-      const newPoints = isCorrect ? points : 0; // If wrong, no points (not negative for self-practice)
-      const pointDifference = newPoints - oldPoints;
-
-      // Update the answer
-      currentAnswers[answerIndex] = {
-        ...answer,
+      const verdict = await applyOpenAnswerVerdict(ctx.prisma, {
+        resultId,
+        questionId,
         isCorrect,
-        earnedPoints: newPoints,
-      };
-
-      // Calculate new counts using helper
-      const deltas = calculateSelfCorrectionDeltas(isCorrect, answer.isCorrect);
-
-      // Update result
-      await ctx.prisma.simulationResult.update({
-        where: { id: resultId },
-        data: {
-          answers: currentAnswers as Prisma.JsonArray,
-          totalScore: (result.totalScore ?? 0) + pointDifference,
-          correctAnswers: (result.correctAnswers ?? 0) + deltas.correctDelta,
-          wrongAnswers: (result.wrongAnswers ?? 0) + deltas.wrongDelta,
-          pendingOpenAnswers: Math.max(0, (result.pendingOpenAnswers ?? 0) + deltas.pendingDelta),
-        },
       });
 
       return {
         success: true,
-        newScore: (result.totalScore ?? 0) + pointDifference,
-        correctAnswers: (result.correctAnswers ?? 0) + deltas.correctDelta,
-        wrongAnswers: (result.wrongAnswers ?? 0) + deltas.wrongDelta,
+        newScore: verdict.newScore,
+        correctAnswers: verdict.correctAnswers,
+        wrongAnswers: verdict.wrongAnswers,
       };
     }),
 
@@ -4578,6 +4544,7 @@ export const simulationsRouter = router({
               isCorrect: result.simulation.showCorrectAnswers,
             },
           },
+          keywords: { select: { keyword: true }, orderBy: { createdAt: 'asc' } },
           subject: { select: { name: true, color: true } },
           topic: { select: { name: true } },
         },
@@ -4606,14 +4573,40 @@ export const simulationsRouter = router({
         };
       }
 
+      // Alternative-answer proposals already sent from this attempt, so the review
+      // shows their outcome instead of inviting the student to propose again
+      const proposals = await ctx.prisma.questionFeedback.findMany({
+        where: {
+          studentId: result.studentId,
+          simulationResultId: result.id,
+          type: 'ALTERNATIVE_ANSWER',
+        },
+        select: { questionId: true, proposedKeyword: true, status: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const proposalByQuestion = new Map<string, { proposedKeyword: string | null; status: string }>();
+      for (const proposal of proposals) {
+        // Keep the most recent one per question (already ordered desc)
+        if (!proposalByQuestion.has(proposal.questionId)) {
+          proposalByQuestion.set(proposal.questionId, {
+            proposedKeyword: proposal.proposedKeyword,
+            status: proposal.status,
+          });
+        }
+      }
+
       // Build answers with question details
+      const showSolution = result.simulation.showCorrectAnswers;
       const detailedAnswers = answersData.map((answer, index) => {
         const question = questions.find(q => q.id === answer.questionId);
         return {
+          alternativeAnswerProposal: proposalByQuestion.get(answer.questionId) ?? null,
           id: answer.questionId,
           order: index + 1,
           question: {
             id: question?.id || '',
+            type: question?.type || 'SINGLE_CHOICE',
             text: question?.text || '',
             textLatex: question?.textLatex || null,
             imageUrl: questionImageSource(question),
@@ -4622,6 +4615,9 @@ export const simulationsRouter = router({
             subjectColor: question?.subject?.color || null,
             section: questionSections.get(answer.questionId) || null,
             explanation: question?.generalExplanation || question?.correctExplanation || null,
+            // Reference solution for OPEN_TEXT: gated like isCorrect, it reveals the expected answer
+            keywords: showSolution ? question?.keywords ?? [] : [],
+            correctExplanation: showSolution ? question?.correctExplanation ?? null : null,
             answers: question?.answers || [],
           },
           selectedAnswerId: answer.answerId,
@@ -5188,6 +5184,7 @@ export const simulationsRouter = router({
                   subject: { select: { id: true, name: true, code: true, color: true } },
                   topic: { select: { id: true, name: true } },
                   answers: { orderBy: { order: 'asc' } },
+                  keywords: { select: { keyword: true }, orderBy: { createdAt: 'asc' } },
                 },
               },
             },
@@ -5237,7 +5234,8 @@ export const simulationsRouter = router({
       type AnswerData = {
         questionId: string;
         answerId: string | null;
-        isCorrect: boolean;
+        answerText?: string | null;
+        isCorrect: boolean | null; // null while an open answer awaits correction
         timeSpent?: number;
       };
 
@@ -5253,15 +5251,19 @@ export const simulationsRouter = router({
         questionId: string;
         order: number;
         text: string;
+        type: QuestionType;
         subject: { id: string; name: string; code: string; color: string } | null;
         topic: { id: string; name: string } | null;
         correctAnswer: string;
         answers: Array<{ label: string; text: string; isCorrect: boolean }>;
+        keywords: string[];
         totalAnswers: number;
         correctCount: number;
         wrongCount: number;
         blankCount: number;
+        pendingCount: number;
         answerDistribution: Record<string, number>;
+        openAnswerTexts: Array<string | null>;
         totalTimeSpent: number;
         timeSpentCount: number;
       }>();
@@ -5284,15 +5286,19 @@ export const simulationsRouter = router({
           questionId: sq.questionId,
           order: idx + 1,
           text: sq.question.text,
+          type: sq.question.type,
           subject: sq.question.subject,
           topic: sq.question.topic,
           correctAnswer: correctAnswerLetter,
           answers: answersWithLabels,
+          keywords: sq.question.keywords.map(k => k.keyword),
           totalAnswers: 0,
           correctCount: 0,
           wrongCount: 0,
           blankCount: 0,
+          pendingCount: 0,
           answerDistribution: { A: 0, B: 0, C: 0, D: 0, E: 0, BLANK: 0 },
+          openAnswerTexts: [],
           totalTimeSpent: 0,
           timeSpentCount: 0,
         });
@@ -5308,24 +5314,24 @@ export const simulationsRouter = router({
           if (!stats) return;
 
           stats.totalAnswers++;
-          
-          // Check if answer is blank (no answerId)
+
+          const outcome = classifyAnswerOutcome(answerData);
+
+          if (outcome === 'correct') stats.correctCount++;
+          else if (outcome === 'wrong') stats.wrongCount++;
+          else if (outcome === 'pending') stats.pendingCount++;
+          else stats.blankCount++;
+
           if (answerData.answerId) {
             // Get the letter label for this answerId
             const answerLetter = answerIdToLetter.get(answerData.answerId) || 'UNKNOWN';
-            
-            if (answerData.isCorrect) {
-              stats.correctCount++;
-              stats.answerDistribution[answerLetter] = 
-                (stats.answerDistribution[answerLetter] || 0) + 1;
-            } else {
-              stats.wrongCount++;
-              stats.answerDistribution[answerLetter] = 
-                (stats.answerDistribution[answerLetter] || 0) + 1;
-            }
-          } else {
-            stats.blankCount++;
+            stats.answerDistribution[answerLetter] =
+              (stats.answerDistribution[answerLetter] || 0) + 1;
+          } else if (outcome === 'blank') {
             stats.answerDistribution['BLANK']++;
+          } else {
+            // Open answer: the text itself is the distribution
+            stats.openAnswerTexts.push(answerData.answerText ?? null);
           }
 
           if (typeof answerData.timeSpent === 'number' && answerData.timeSpent > 0) {
@@ -5336,21 +5342,34 @@ export const simulationsRouter = router({
       });
 
       // Convert to array and calculate percentages
-      const questionAnalysis = Array.from(questionStats.values()).map(stats => ({
-        ...stats,
-        correctRate: stats.totalAnswers > 0 
-          ? (stats.correctCount / stats.totalAnswers) * 100 
-          : 0,
-        wrongRate: stats.totalAnswers > 0 
-          ? (stats.wrongCount / stats.totalAnswers) * 100 
-          : 0,
-        blankRate: stats.totalAnswers > 0 
-          ? (stats.blankCount / stats.totalAnswers) * 100 
-          : 0,
-        averageTimeSpent: stats.timeSpentCount > 0 
-          ? stats.totalTimeSpent / stats.timeSpentCount 
-          : 0,
-      }));
+      const questionAnalysis = Array.from(questionStats.values()).map(({ openAnswerTexts, ...stats }) => {
+        const isOpen = stats.type === 'OPEN_TEXT';
+        // Open answers awaiting correction would otherwise drag the rate to 0% and
+        // make every uncorrected question look critical, so they leave the denominator.
+        const gradedCount = isOpen
+          ? stats.correctCount + stats.wrongCount
+          : stats.totalAnswers;
+
+        return {
+          ...stats,
+          gradedCount,
+          textDistribution: isOpen
+            ? buildTextAnswerDistribution(openAnswerTexts, stats.keywords)
+            : null,
+          correctRate: gradedCount > 0
+            ? (stats.correctCount / gradedCount) * 100
+            : 0,
+          wrongRate: gradedCount > 0
+            ? (stats.wrongCount / gradedCount) * 100
+            : 0,
+          blankRate: stats.totalAnswers > 0
+            ? (stats.blankCount / stats.totalAnswers) * 100
+            : 0,
+          averageTimeSpent: stats.timeSpentCount > 0
+            ? stats.totalTimeSpent / stats.timeSpentCount
+            : 0,
+        };
+      });
 
       // Calculate subject breakdown
       const subjectStats = new Map<string, {

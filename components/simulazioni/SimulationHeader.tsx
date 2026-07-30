@@ -10,6 +10,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { colors } from '@/lib/theme/colors';
+import OfflineSaveBadge from './OfflineSaveBadge';
 
 interface SimulationHeaderProps {
   readonly simulationTitle: string;
@@ -31,6 +32,8 @@ interface SimulationHeaderProps {
   readonly sectionTimeRemaining?: number | null;
   readonly currentSectionQuestionIndex?: number;
   readonly currentSectionQuestionsLength?: number;
+  /** Connection lost: answers are still being kept safe on the device */
+  readonly isOffline?: boolean;
 }
 
 // Format time helper
@@ -61,6 +64,7 @@ export default function SimulationHeader({
   sectionTimeRemaining = null,
   currentSectionQuestionIndex = 0,
   currentSectionQuestionsLength = 0,
+  isOffline = false,
 }: SimulationHeaderProps) {
   // Render progress text
   const renderProgress = () => {
@@ -153,6 +157,7 @@ export default function SimulationHeader({
 
         {/* Right side - Controls */}
         <div className="flex items-center gap-4">
+          <OfflineSaveBadge isOffline={isOffline} />
           {renderAntiCheatIndicator()}
           {renderTimer()}
 

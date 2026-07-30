@@ -541,6 +541,23 @@ export async function notifyQuestionFeedback(
 }
 
 /**
+ * Notify the students who proposed an alternative answer about the outcome
+ */
+export async function notifyAlternativeAnswerReviewed(
+  prisma: PrismaClient,
+  params: {
+    questionId: string;
+    questionTitle: string;
+    keyword: string;
+    approved: boolean;
+    recipientUserIds: string[];
+    rescoredUserIds?: string[];
+  }
+): Promise<void> {
+  await notifications.alternativeAnswerReviewed(prisma, params);
+}
+
+/**
  * Notify a specific staff member about open questions to review
  * Used when a student requests correction from a specific teacher
  */

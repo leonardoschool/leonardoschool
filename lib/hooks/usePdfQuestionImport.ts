@@ -141,7 +141,10 @@ export function usePdfQuestionImport() {
     try {
       const pdf = await loadPdf(file);
       pdfRef.current = pdf;
-      const parsed = parseQuestions(await pdf.extractItems());
+      const textItems = await pdf.extractItems();
+      // Papers distributed "con risposte" mark the correct option with a colour.
+      const highlights = await pdf.extractHighlights();
+      const parsed = parseQuestions(textItems, { highlights });
       const rows = buildImportItems(parsed, guessMetadata(file.name));
 
       const { existing } = await checkExisting({

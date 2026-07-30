@@ -16,6 +16,7 @@ import ZoomableImageArea from '@/components/ui/ZoomableImageArea';
 import QuestionImage from '@/components/ui/QuestionImage';
 import { questionImageSource } from '@/lib/utils/imageUrl';
 import SimulationResultBreakdown from './SimulationResultBreakdown';
+import { OpenAnswerSolution, ProposeAlternativeAnswerModal } from '@/components/simulazioni';
 import CustomSelect from '@/components/ui/CustomSelect';
 import type { SelectOption } from '@/components/ui/CustomSelect';
 import {
@@ -37,6 +38,7 @@ import {
   ThumbsUp,
   ThumbsDown,
   MessageSquare,
+  Lightbulb,
 } from 'lucide-react';
 
 // --- Helper Components to reduce cognitive complexity ---
@@ -72,6 +74,13 @@ function getAnswerStatusIcon(status: AnswerStatus): React.ReactNode {
   if (status === 'wrong') return <XCircle className="w-4 h-4" />;
   if (status === 'pending') return <Edit3 className="w-4 h-4" />;
   return <MinusCircle className="w-4 h-4" />;
+}
+
+function getProposalStatusLabel(status: string, keyword: string | null): string {
+  const proposed = keyword ? `"${keyword}"` : 'la tua risposta';
+  if (status === 'FIXED') return `Proposta accettata: ${proposed} è ora fra le soluzioni valide.`;
+  if (status === 'REJECTED') return `Proposta non accettata: ${proposed} non è stata ritenuta equivalente.`;
+  return `Hai proposto ${proposed}: è in attesa di valutazione da parte di un tutor.`;
 }
 
 function getOpenQuestionBorderClass(isCorrect: boolean | null): string {
@@ -279,6 +288,11 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
   const [filterType, setFilterType] = useState<'all' | 'correct' | 'wrong' | 'blank' | 'pending'>('all');
   const [subjectFilter, setSubjectFilter] = useState('all');
   const [sectionFilter, setSectionFilter] = useState('all');
+  const [proposalTarget, setProposalTarget] = useState<{
+    questionId: string;
+    answerText: string;
+    keywords: string[];
+  } | null>(null);
 
   // Check authentication
   const { data: user, isLoading: userLoading, error: userError } = trpc.auth.me.useQuery();
@@ -311,6 +325,16 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
   const selfCorrectMutation = trpc.simulations.selfCorrectOpenAnswer.useMutation({
     onSuccess: () => {
       showSuccess('Corretto!', 'La tua risposta è stata valutata.');
+      refetch();
+    },
+    onError: handleMutationError,
+  });
+
+  // Propose an alternative accepted answer for an open question
+  const proposeMutation = trpc.questions.submitFeedback.useMutation({
+    onSuccess: () => {
+      showSuccess('Proposta inviata', 'Un tutor la valuterà: se è corretta entrerà fra le soluzioni accettate.');
+      setProposalTarget(null);
       refetch();
     },
     onError: handleMutationError,
@@ -606,6 +630,7 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
               order?: number;
               question: {
                 id: string;
+                type?: string;
                 text: string;
                 textLatex?: string | null;
                 imageUrl?: string | null;
@@ -615,18 +640,26 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                 section?: string | null;
                 answers: { id: string; text: string; textLatex?: string | null; imageUrl?: string | null; imageStoragePath?: string | null; imageAlt?: string | null; isCorrect: boolean }[];
                 explanation?: string;
+                keywords?: { keyword: string }[];
+                correctExplanation?: string | null;
               };
               selectedAnswerId: string | null;
               answerText?: string | null;
               isCorrect: boolean | null;
               earnedPoints?: number;
               timeSpent: number;
+              alternativeAnswerProposal?: { proposedKeyword: string | null; status: string } | null;
             }) => {
               const isExpanded = showAllQuestions || expandedQuestion === answer.id;
               const subjectColor = answer.question.subjectColor;
               const answerStatus = getAnswerStatus(answer);
-              const isOpenQuestion = !!answer.answerText && answer.question.answers.length === 0;
-              const canSelfCorrect = isOpenQuestion && answer.isCorrect === null && simulation.showCorrectAnswers;
+              // Trust the question type: deriving it from answerText hid the solution
+              // for open questions left blank
+              const isOpenQuestion = answer.question.type
+                ? answer.question.type === 'OPEN_TEXT'
+                : answer.question.answers.length === 0;
+              const hasOpenAnswerText = !!answer.answerText?.trim();
+              const canSelfCorrect = isOpenQuestion && hasOpenAnswerText && answer.isCorrect === null && simulation.showCorrectAnswers;
 
               return (
                 <div key={answer.id} className="p-4">
@@ -716,10 +749,23 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                               <MessageSquare className="w-4 h-4 text-gray-500" />
                               <span className={`text-sm font-medium ${colors.text.secondary}`}>La tua risposta:</span>
                             </div>
-                            <p className={colors.text.primary}>
-                              {sanitizeStudentOpenAnswerInput(answer.answerText || '')}
-                            </p>
+                            {hasOpenAnswerText ? (
+                              <p className={colors.text.primary}>
+                                {sanitizeStudentOpenAnswerInput(answer.answerText || '')}
+                              </p>
+                            ) : (
+                              <p className={`italic ${colors.text.muted}`}>Nessuna risposta data</p>
+                            )}
                           </div>
+
+                          {/* Reference solution (keywords + explanation) */}
+                          {simulation.showCorrectAnswers && (
+                            <OpenAnswerSolution
+                              keywords={answer.question.keywords}
+                              correctExplanation={answer.question.correctExplanation}
+                              generalExplanation={answer.question.explanation}
+                            />
+                          )}
 
                           {/* Self-correction buttons */}
                           {canSelfCorrect && currentResultId && (
@@ -760,8 +806,36 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                             </div>
                           )}
 
+                          {/* Propose the student's own answer as an accepted alternative.
+                              Only once it has actually been judged wrong: there is nothing
+                              to contest while the answer is still awaiting correction. */}
+                          {hasOpenAnswerText && answer.isCorrect === false && (
+                            answer.alternativeAnswerProposal ? (
+                              <div className={`p-3 rounded-lg border ${colors.border.light} ${colors.background.secondary}`}>
+                                <p className={`text-sm ${colors.text.secondary}`}>
+                                  {getProposalStatusLabel(
+                                    answer.alternativeAnswerProposal.status,
+                                    answer.alternativeAnswerProposal.proposedKeyword
+                                  )}
+                                </p>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setProposalTarget({
+                                  questionId: answer.question.id,
+                                  answerText: sanitizeStudentOpenAnswerInput(answer.answerText || ''),
+                                  keywords: (answer.question.keywords ?? []).map((k) => k.keyword),
+                                })}
+                                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border ${colors.border.light} ${colors.text.secondary} ${colors.background.hover} text-sm font-medium transition-colors`}
+                              >
+                                <Lightbulb className="w-4 h-4" />
+                                La mia risposta doveva valere: proponila
+                              </button>
+                            )
+                          )}
+
                           {/* Already corrected status */}
-                          {isOpenQuestion && answer.isCorrect !== null && (
+                          {answer.isCorrect !== null && (
                             <div className={`p-3 rounded-lg flex items-center gap-2 ${
                               answer.isCorrect 
                                 ? 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300'
@@ -832,8 +906,8 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
                       </div>
                       )}
 
-                      {/* Explanation */}
-                      {answer.question.explanation && (
+                      {/* Explanation — for open questions it is already part of the solution panel */}
+                      {answer.question.explanation && !(isOpenQuestion && simulation.showCorrectAnswers) && (
                         <div className={`p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800`}>
                           <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">Spiegazione:</p>
                           <RichTextRenderer
@@ -857,6 +931,23 @@ export default function SimulationResultPage({ params }: { readonly params: Prom
             })}
           </div>
         </div>
+      )}
+
+      {proposalTarget && (
+        <ProposeAlternativeAnswerModal
+          questionId={proposalTarget.questionId}
+          studentAnswer={proposalTarget.answerText}
+          currentKeywords={proposalTarget.keywords}
+          onClose={() => setProposalTarget(null)}
+          onSubmit={({ questionId, proposedKeyword, message }) => proposeMutation.mutate({
+            questionId,
+            type: 'ALTERNATIVE_ANSWER',
+            message,
+            proposedKeyword,
+            simulationResultId: currentResultId ?? undefined,
+          })}
+          isSubmitting={proposeMutation.isPending}
+        />
       )}
 
       {/* Actions */}

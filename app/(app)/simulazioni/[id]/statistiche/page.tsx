@@ -9,6 +9,7 @@ import { stripHtml } from '@/lib/utils/sanitizeHtml';
 import { PageLoader } from '@/components/ui/loaders';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { TemplateStatistics } from '@/components/simulazioni';
+import QuestionAnalysisRow from './QuestionAnalysisRow';
 import {
   ArrowLeft,
   Users,
@@ -17,9 +18,6 @@ import {
   XCircle,
   MinusCircle,
   BarChart3,
-  AlertTriangle,
-  ChevronDown,
-  ChevronUp,
   BookOpen,
   ShieldX,
 } from 'lucide-react';
@@ -223,168 +221,15 @@ export default function SimulationStatsPage({ params }: { readonly params: Promi
               
               return (
                 <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {questionAnalysis.questionAnalysis.map((q) => {
-                const isExpanded = expandedQuestions.has(q.questionId);
-                const isProblematic = q.correctRate < 40;
-
-                return (
-                  <div key={q.questionId} className={`${colors.background.hover}`}>
-                    <button onClick={() => toggleQuestion(q.questionId)} className="w-full px-6 py-4 text-left">
-                      <div className="flex items-start gap-4">
-                        <div
-                          className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
-                            isProblematic
-                              ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                              : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
-                          }`}
-                        >
-                          {q.order}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            {q.subject && (
-                              <span
-                                className="px-2 py-0.5 rounded text-xs font-medium"
-                                style={{
-                                  backgroundColor: q.subject.color + '20',
-                                  color: q.subject.color,
-                                }}
-                              >
-                                {q.subject.name}
-                              </span>
-                            )}
-                            {q.topic && (
-                              <span className={`text-xs ${colors.text.muted}`}>{q.topic.name}</span>
-                            )}
-                            {isProblematic && (
-                              <span className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">
-                                <AlertTriangle className="w-3 h-3" />
-                                Critica
-                              </span>
-                            )}
-                          </div>
-                          <p className={`text-sm ${colors.text.primary} line-clamp-2`}>
-                            {stripHtml(q.text)}
-                          </p>
-                        </div>
-                        <div className="flex-shrink-0 flex items-center gap-4">
-                          <div className="text-right">
-                            <p
-                              className={`text-lg font-bold ${(() => {
-                                if (q.correctRate >= 70) return 'text-green-600 dark:text-green-400';
-                                if (q.correctRate >= 40) return 'text-yellow-600 dark:text-yellow-400';
-                                return 'text-red-600 dark:text-red-400';
-                              })()}`}
-                            >
-                              {q.correctRate.toFixed(0)}%
-                            </p>
-                            <p className={`text-xs ${colors.text.muted}`}>corrette</p>
-                          </div>
-                          {isExpanded ? (
-                            <ChevronUp className={`w-5 h-5 ${colors.text.muted}`} />
-                          ) : (
-                            <ChevronDown className={`w-5 h-5 ${colors.text.muted}`} />
-                          )}
-                        </div>
-                      </div>
-                    </button>
-
-                    {isExpanded && (
-                      <div
-                        className={`px-6 pb-6 pt-0 ml-14 ${colors.background.secondary} mx-6 mb-4 rounded-lg`}
-                      >
-                        <div className="py-4">
-                          {/* Stats row */}
-                          <div className="grid grid-cols-4 gap-4 mb-4">
-                            <div className="text-center">
-                              <p className="text-2xl font-bold text-green-600">{q.correctCount}</p>
-                              <p className={`text-xs ${colors.text.muted}`}>Corrette</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-2xl font-bold text-red-600">{q.wrongCount}</p>
-                              <p className={`text-xs ${colors.text.muted}`}>Errate</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-2xl font-bold text-gray-500">{q.blankCount}</p>
-                              <p className={`text-xs ${colors.text.muted}`}>Vuote</p>
-                            </div>
-                            <div className="text-center">
-                              <p className={`text-2xl font-bold ${colors.text.primary}`}>
-                                {q.averageTimeSpent > 0 ? `${Math.round(q.averageTimeSpent)}s` : '-'}
-                              </p>
-                              <p className={`text-xs ${colors.text.muted}`}>Tempo medio</p>
-                            </div>
-                          </div>
-
-                          {/* Answer distribution */}
-                          <h4 className={`text-sm font-medium ${colors.text.primary} mb-2`}>
-                            Distribuzione risposte
-                          </h4>
-                          <div className="space-y-2">
-                            {(q.answers && q.answers.length > 0 ? q.answers : ['A', 'B', 'C', 'D', 'E'].map(l => ({ label: l, text: '', isCorrect: l === q.correctAnswer }))).map((answer) => {
-                              const letter = typeof answer === 'string' ? answer : answer.label;
-                              const answerText = typeof answer === 'string' ? '' : answer.text;
-                              const isCorrect = typeof answer === 'string' ? letter === q.correctAnswer : answer.isCorrect;
-                              const count = q.answerDistribution[letter] || 0;
-                              const percentage = q.totalAnswers > 0 ? (count / q.totalAnswers) * 100 : 0;
-
-                              return (
-                                <div key={letter} className="flex items-center gap-3">
-                                  <span
-                                    className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                                      isCorrect
-                                        ? 'bg-green-500 text-white'
-                                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                                    }`}
-                                  >
-                                    {letter}
-                                  </span>
-                                  <div className="flex-1 min-w-0">
-                                    {answerText && (
-                                      <p className={`text-sm ${colors.text.secondary} truncate mb-1`} title={answerText}>
-                                        {answerText}
-                                      </p>
-                                    )}
-                                    <div className="h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
-                                      <div
-                                        className={`h-full transition-all ${
-                                          isCorrect ? 'bg-green-500' : 'bg-red-400'
-                                        }`}
-                                        style={{ width: `${percentage}%` }}
-                                      />
-                                    </div>
-                                  </div>
-                                  <span className={`text-sm ${colors.text.secondary} w-16 text-right flex-shrink-0`}>
-                                    {count} ({percentage.toFixed(0)}%)
-                                  </span>
-                                </div>
-                              );
-                            })}
-                            {/* Blank answers */}
-                            {q.blankCount > 0 && (
-                              <div className="flex items-center gap-3">
-                                <span className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-400">
-                                  —
-                                </span>
-                                <div className="flex-1 h-4 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
-                                  <div
-                                    className="h-full bg-gray-400"
-                                    style={{ width: `${q.blankRate}%` }}
-                                  />
-                                </div>
-                                <span className={`text-sm ${colors.text.secondary} w-16 text-right`}>
-                                  {q.blankCount} ({q.blankRate.toFixed(0)}%)
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                  {questionAnalysis.questionAnalysis.map((q) => (
+                    <QuestionAnalysisRow
+                      key={q.questionId}
+                      question={q}
+                      isExpanded={expandedQuestions.has(q.questionId)}
+                      onToggle={() => toggleQuestion(q.questionId)}
+                    />
+                  ))}
+                </div>
               );
             })()}
         </div>

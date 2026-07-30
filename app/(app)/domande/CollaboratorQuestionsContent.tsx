@@ -10,6 +10,7 @@ import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useToast } from '@/components/ui/Toast';
 import { PageLoader } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
+import QuestionStatsBadge from '@/components/admin/QuestionStatsBadge';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import { Portal } from '@/components/ui/Portal';
 import Link from 'next/link';
@@ -18,6 +19,8 @@ import {
   Plus,
   Search,
   Filter,
+  AlertTriangle,
+  Scale,
   MoreVertical,
   Edit2,
   Trash2,
@@ -113,6 +116,9 @@ export default function CollaboratorQuestionsContent() {
 
   // Filter options
   const [showFilters, setShowFilters] = useState(false);
+  // Questions students get wrong far more than expected: candidates for a review of
+  // the question itself, not a difficulty filter.
+  const [onlyCritical, setOnlyCritical] = useState(() => searchParams.get('critiche') === '1');
 
   // Export state
   const [isExporting, setIsExporting] = useState(false);
@@ -154,12 +160,13 @@ export default function CollaboratorQuestionsContent() {
     if (statuses.length) params.set('statuses', statuses.join(','));
     if (difficulties.length) params.set('difficulties', difficulties.join(','));
     if (selectedTagIds.length) params.set('tags', selectedTagIds.join(','));
+    if (onlyCritical) params.set('critiche', '1');
     if (page > 1) params.set('page', String(page));
 
     const query = params.toString();
     const nextPath = query ? `${pathname}?${query}` : pathname;
     router.replace(nextPath, { scroll: false });
-  }, [debouncedSearch, subjectIds, topicIds, types, statuses, difficulties, selectedTagIds, page]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, subjectIds, topicIds, types, statuses, difficulties, selectedTagIds, onlyCritical, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close bulk subject dropdown on click outside
   useEffect(() => {
@@ -219,6 +226,7 @@ export default function CollaboratorQuestionsContent() {
       statuses: statuses.length > 0 ? (statuses as QuestionStatus[]) : undefined,
       difficulties: difficulties.length > 0 ? (difficulties as DifficultyLevel[]) : undefined,
       tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+      onlyCritical: onlyCritical || undefined,
       includeAnswers: false,
       includeDrafts: true,
       includeArchived: true,
@@ -249,6 +257,7 @@ export default function CollaboratorQuestionsContent() {
   const { can } = usePermissions();
   const canReviewFeedback = can('questions.reviewFeedback');
   const canCorrectOpenAnswers = can('simulations.correctOpenAnswers');
+  const canCalibrate = can('questions.calibrateDifficulty');
   // Cross-ownership management + publish gate the question action menu below.
   const canManage = can('questions.manage');
   const canManageAll = can('questions.manageAll');
@@ -269,6 +278,11 @@ export default function CollaboratorQuestionsContent() {
   const { data: pendingReviewsData } = trpc.simulations.getResultsWithPendingReviews.useQuery(
     { limit: 1, offset: 0 },
     { enabled: canCorrectOpenAnswers }
+  );
+  // Difficulty proposals waiting for confirmation, so the count is visible from here too.
+  const { data: pendingCalibration } = trpc.questionCalibration.getPendingProposalCount.useQuery(
+    undefined,
+    { enabled: canCalibrate }
   );
 
   // Mutations
@@ -614,7 +628,7 @@ export default function CollaboratorQuestionsContent() {
         </div>
       )}
 
-      {(canReviewFeedback || canCorrectOpenAnswers) && (
+      {(canReviewFeedback || canCorrectOpenAnswers || canCalibrate) && (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {canReviewFeedback && (
         <Link
@@ -665,6 +679,31 @@ export default function CollaboratorQuestionsContent() {
           </div>
         </Link>
         )}
+
+        {canCalibrate && (
+        <Link
+          href="/domande/calibrazione"
+          className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} border ${colors.border.primary} hover:${colors.background.secondary} transition-colors`}
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className={`w-10 h-10 rounded-lg ${colors.status.info.softBg} flex items-center justify-center shrink-0`}>
+                <Scale className={`w-5 h-5 ${colors.status.info.text}`} />
+              </div>
+              <div className="min-w-0">
+                <p className={`font-semibold ${colors.text.primary}`}>Calibrazione difficoltà</p>
+                <p className={`text-sm ${colors.text.muted} truncate`}>Modifiche proposte da confermare</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <span className={`px-2.5 py-1 rounded-full text-sm font-semibold ${(pendingCalibration?.count ?? 0) > 0 ? (colors.primary.bg + ' text-white') : (colors.background.tertiary + ' ' + colors.text.muted)}`}>
+                {pendingCalibration?.count ?? 0}
+              </span>
+              <ChevronRight className={`w-5 h-5 ${colors.text.muted}`} />
+            </div>
+          </div>
+        </Link>
+        )}
       </div>
       )}
 
@@ -683,6 +722,21 @@ export default function CollaboratorQuestionsContent() {
             />
           </div>
 
+          {/* Questions the students get wrong far more than expected. Not a difficulty
+              filter: these are candidates for a review of the question itself. */}
+          <button
+            type="button"
+            onClick={() => { setOnlyCritical((prev) => !prev); setPage(1); }}
+            title="Domande con meno del 40% di risposte corrette, su almeno 20 risposte valutate"
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+              onlyCritical
+                ? 'border-red-400 text-red-600 dark:border-red-700 dark:text-red-300'
+                : `${colors.border.primary} ${colors.text.secondary}`
+            } hover:${colors.background.secondary}`}
+          >
+            <AlertTriangle className="w-4 h-4" />
+            Critiche
+          </button>
           {/* Filter Toggle */}
           <button
             onClick={() => setShowFilters(!showFilters)}
@@ -1195,9 +1249,19 @@ export default function CollaboratorQuestionsContent() {
                       </span>
                     </td>
                     <td className="px-4 py-3 hidden xl:table-cell">
-                      <span className={`text-xs px-2 py-1 rounded-full ${difficultyColors[question.difficulty as DifficultyLevel]}`}>
-                        {difficultyLabels[question.difficulty as DifficultyLevel]}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-xs px-2 py-1 rounded-full ${difficultyColors[question.difficulty as DifficultyLevel]}`}>
+                          {difficultyLabels[question.difficulty as DifficultyLevel]}
+                        </span>
+                        <QuestionStatsBadge
+                          avgCorrectRate={question.avgCorrectRate}
+                          timesGraded={question.timesGraded}
+                          hasSuggestion={
+                            !!question.suggestedDifficulty &&
+                            question.suggestedDifficulty !== question.difficulty
+                          }
+                        />
+                      </div>
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell">
                       {question.questionTags && question.questionTags.length > 0 ? (

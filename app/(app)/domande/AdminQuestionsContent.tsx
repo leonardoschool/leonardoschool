@@ -9,6 +9,7 @@ import { useApiError } from '@/lib/hooks/useApiError';
 import { useToast } from '@/components/ui/Toast';
 import { PageLoader } from '@/components/ui/loaders';
 import CustomSelect from '@/components/ui/CustomSelect';
+import QuestionStatsBadge from '@/components/admin/QuestionStatsBadge';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import { Portal } from '@/components/ui/Portal';
 import Link from 'next/link';
@@ -17,6 +18,8 @@ import {
   Plus,
   Search,
   Filter,
+  AlertTriangle,
+  Scale,
   MoreVertical,
   Edit2,
   Trash2,
@@ -136,6 +139,9 @@ export default function AdminQuestionsContent() {
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showFilters, setShowFilters] = useState(false);
+  // Questions students get wrong far more than expected: candidates for a review of
+  // the question itself, not a difficulty filter.
+  const [onlyCritical, setOnlyCritical] = useState(() => searchParams.get('critiche') === '1');
   const [showBulkSubjectSelect, setShowBulkSubjectSelect] = useState(false);
   const [showBulkLanguageSelect, setShowBulkLanguageSelect] = useState(false);
   const [showBulkTagSelect, setShowBulkTagSelect] = useState(false);
@@ -188,6 +194,7 @@ export default function AdminQuestionsContent() {
     if (selectedTagIds.length) params.set('tags', selectedTagIds.join(','));
     if (selectedYears.length) params.set('years', selectedYears.join(','));
     if (selectedSources.length) params.set('sources', selectedSources.join(','));
+    if (onlyCritical) params.set('critiche', '1');
     if (page > 1) params.set('page', String(page));
     if (pageSize !== 50) params.set('size', String(pageSize));
     if (sortBy !== 'text') params.set('sortBy', sortBy);
@@ -196,7 +203,7 @@ export default function AdminQuestionsContent() {
     const query = params.toString();
     const nextPath = query ? `${pathname}?${query}` : pathname;
     router.replace(nextPath, { scroll: false });
-  }, [debouncedSearch, subjectIds, topicIds, types, statuses, difficulties, languages, selectedTagIds, selectedYears, selectedSources, page, pageSize, sortBy, sortOrder]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, subjectIds, topicIds, types, statuses, difficulties, languages, selectedTagIds, selectedYears, selectedSources, onlyCritical, page, pageSize, sortBy, sortOrder]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close bulk subject dropdown on click outside
   useEffect(() => {
@@ -248,6 +255,8 @@ export default function AdminQuestionsContent() {
   const { data: distinctFilters } = trpc.questions.getDistinctFilters.useQuery();
 
   // Fetch questions
+  // Difficulty proposals waiting for confirmation, so the count is visible from here too.
+  const { data: pendingCalibration } = trpc.questionCalibration.getPendingProposalCount.useQuery();
   const { data: questionsData, isLoading } = trpc.questions.getQuestions.useQuery(
     {
       page,
@@ -264,6 +273,7 @@ export default function AdminQuestionsContent() {
       sources: selectedSources.length > 0 ? selectedSources : undefined,
       sortBy,
       sortOrder,
+      onlyCritical: onlyCritical || undefined,
       includeAnswers: false,
       includeDrafts: true,
       includeArchived: true,
@@ -651,6 +661,20 @@ export default function AdminQuestionsContent() {
             </div>
           </button>
           <Link
+            href="/domande/calibrazione"
+            className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} hover:ring-2 hover:ring-sky-400 transition-shadow`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+                <Scale className="w-5 h-5 text-sky-600 dark:text-sky-400" />
+              </div>
+              <div>
+                <p className={`text-2xl font-bold ${colors.text.primary}`}>{pendingCalibration?.count ?? 0}</p>
+                <p className={`text-sm ${colors.text.muted}`}>Calibrazione</p>
+              </div>
+            </div>
+          </Link>
+          <Link
             href="/domande/segnalazioni"
             className={`${colors.background.card} rounded-xl p-4 ${colors.effects.shadow.sm} hover:ring-2 hover:ring-amber-400 transition-shadow`}
           >
@@ -682,6 +706,21 @@ export default function AdminQuestionsContent() {
             />
           </div>
 
+          {/* Questions the students get wrong far more than expected. Not a difficulty
+              filter: these are candidates for a review of the question itself. */}
+          <button
+            type="button"
+            onClick={() => { setOnlyCritical((prev) => !prev); setPage(1); }}
+            title="Domande con meno del 40% di risposte corrette, su almeno 20 risposte valutate"
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+              onlyCritical
+                ? 'border-red-400 text-red-600 dark:border-red-700 dark:text-red-300'
+                : `${colors.border.primary} ${colors.text.secondary}`
+            } hover:${colors.background.secondary}`}
+          >
+            <AlertTriangle className="w-4 h-4" />
+            Critiche
+          </button>
           {/* Filter Toggle */}
           <button
             onClick={() => setShowFilters(!showFilters)}
@@ -1203,9 +1242,19 @@ export default function AdminQuestionsContent() {
                       </span>
                     </td>
                     <td className="px-3 py-3 hidden xl:table-cell">
-                      <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${difficultyColors[question.difficulty as DifficultyLevel]}`}>
-                        {difficultyLabels[question.difficulty as DifficultyLevel]}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${difficultyColors[question.difficulty as DifficultyLevel]}`}>
+                          {difficultyLabels[question.difficulty as DifficultyLevel]}
+                        </span>
+                        <QuestionStatsBadge
+                          avgCorrectRate={question.avgCorrectRate}
+                          timesGraded={question.timesGraded}
+                          hasSuggestion={
+                            !!question.suggestedDifficulty &&
+                            question.suggestedDifficulty !== question.difficulty
+                          }
+                        />
+                      </div>
                     </td>
                     <td className="px-3 py-3 hidden lg:table-cell">
                       {question.questionTags && question.questionTags.length > 0 ? (

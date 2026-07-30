@@ -15,7 +15,16 @@ import {
   validateQuestionKeywords,
   importQuestionRowSchema,
   QuestionFilterInput,
+  MAX_PROPOSED_KEYWORD_LENGTH,
 } from '@/lib/validations/questionValidation';
+import {
+  assertCanManageFeedback,
+  assertProposableAlternativeAnswer,
+  buildProposalAnswerTexts,
+  buildQuestionTitle,
+  normalizeKeyword,
+} from './questions.helpers';
+import { applyOpenAnswerVerdict } from '@/server/services/openAnswerGrading';
 import {
   smartRandomGenerationSchema,
   getDifficultyRatiosFromLevels,
@@ -70,8 +79,20 @@ function buildQuestionBasicFilters(input: QuestionFilterInput): Record<string, u
   if (input.languages && input.languages.length > 0) where.language = { in: input.languages };
   if (input.tags && input.tags.length > 0) where.legacyTags = { hasEvery: input.tags };
 
+  // Both statistics filters require a real denominator: without the timesGraded
+  // floor a question answered twice by one student would top the "critical" list.
+  if (input.onlyCritical) {
+    where.avgCorrectRate = { lt: CRITICAL_CORRECT_RATE };
+    where.timesGraded = { gte: CRITICAL_MIN_GRADED };
+  }
+  if (input.onlyWithSuggestion) where.suggestedDifficulty = { not: null };
+
   return where;
 }
+
+/** Mirrors the threshold the per-simulation question analysis already uses. */
+const CRITICAL_CORRECT_RATE = 40;
+const CRITICAL_MIN_GRADED = 20;
 
 /**
  * Build status filter for questions
@@ -2382,12 +2403,25 @@ export const questionsRouter = router({
       // Get question title and creator for notification
       const question = await ctx.prisma.question.findUnique({
         where: { id: input.questionId },
-        select: { 
+        select: {
           text: true,
+          type: true,
           subjectId: true,
           createdById: true,
+          keywords: { select: { keyword: true } },
         },
       });
+
+      const proposedKeyword = input.type === 'ALTERNATIVE_ANSWER'
+        ? await assertProposableAlternativeAnswer(ctx.prisma, {
+            studentId: student.id,
+            questionId: input.questionId,
+            questionType: question?.type ?? null,
+            existingKeywords: question?.keywords.map(k => k.keyword) ?? [],
+            proposedKeyword: input.proposedKeyword ?? '',
+            simulationResultId: input.simulationResultId,
+          })
+        : null;
 
       const feedback = await ctx.prisma.questionFeedback.create({
         data: {
@@ -2395,6 +2429,8 @@ export const questionsRouter = router({
           studentId: student.id,
           type: input.type,
           message: input.message,
+          proposedKeyword,
+          simulationResultId: proposedKeyword ? input.simulationResultId ?? null : null,
         },
       });
 
@@ -2471,7 +2507,16 @@ export const questionsRouter = router({
         orderBy: { createdAt: 'desc' },
         include: {
           question: {
-            select: { id: true, text: true, type: true, imageUrl: true, imageStoragePath: true, imageAlt: true },
+            select: {
+              id: true,
+              text: true,
+              type: true,
+              imageUrl: true,
+              imageStoragePath: true,
+              imageAlt: true,
+              // Context for reviewing an alternative-answer proposal
+              keywords: { select: { keyword: true }, orderBy: { createdAt: 'asc' } },
+            },
           },
           student: {
             include: {
@@ -2481,8 +2526,15 @@ export const questionsRouter = router({
         },
       });
 
+      // For alternative-answer proposals, surface the full answer the student wrote:
+      // the proposed keyword alone doesn't show the reasoning behind it.
+      const studentAnswers = await buildProposalAnswerTexts(ctx.prisma, feedbacks);
+
       return {
-        feedbacks,
+        feedbacks: feedbacks.map(feedback => ({
+          ...feedback,
+          studentAnswerText: studentAnswers.get(feedback.id) ?? null,
+        })),
         pagination: {
           page: input.page,
           pageSize: input.pageSize,
@@ -2497,39 +2549,12 @@ export const questionsRouter = router({
     .input(updateQuestionFeedbackSchema)
     .mutation(async ({ ctx, input }) => {
       assertCapability(ctx, 'questions.reviewFeedback');
-      if (ctx.user.role === 'COLLABORATOR' && !hasCapability(ctx, 'questions.reviewAllFeedback')) {
-        const feedback = await ctx.prisma.questionFeedback.findUnique({
-          where: { id: input.id },
-          select: {
-            question: { select: { subjectId: true } },
-          },
-        });
-
-        if (!feedback) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Segnalazione non trovata.',
-          });
-        }
-
-        const canManageFeedback = feedback.question.subjectId
-          ? await ctx.prisma.collaborator.findFirst({
-              where: {
-                userId: ctx.user.id,
-                kind: 'TUTOR',
-                subjects: { some: { subjectId: feedback.question.subjectId } },
-              },
-              select: { id: true },
-            })
-          : null;
-
-        if (!canManageFeedback) {
-          throw new TRPCError({
-            code: 'FORBIDDEN',
-            message: 'Puoi gestire solo le segnalazioni delle tue materie.',
-          });
-        }
-      }
+      await assertCanManageFeedback(
+        ctx.prisma,
+        input.id,
+        ctx.user,
+        hasCapability(ctx, 'questions.reviewAllFeedback')
+      );
 
       return ctx.prisma.questionFeedback.update({
         where: { id: input.id },
@@ -2540,6 +2565,146 @@ export const questionsRouter = router({
           reviewedAt: new Date(),
         },
       });
+    }),
+
+  /**
+   * Approve a student-proposed alternative answer: it becomes a real keyword of the
+   * question, and the proposer's own answer is re-graded so they get the credit they
+   * asked for. Staff can correct the wording first ("zero virgola ottantatré" → "0.83").
+   */
+  approveAlternativeAnswer: staffProcedure
+    .input(z.object({
+      feedbackId: z.string(),
+      keyword: z.string().trim().min(1).max(MAX_PROPOSED_KEYWORD_LENGTH).optional(),
+      adminResponse: z.string().optional().nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.reviewFeedback');
+      await assertCanManageFeedback(
+        ctx.prisma,
+        input.feedbackId,
+        ctx.user,
+        hasCapability(ctx, 'questions.reviewAllFeedback')
+      );
+
+      const feedback = await ctx.prisma.questionFeedback.findUnique({
+        where: { id: input.feedbackId },
+        select: {
+          id: true,
+          type: true,
+          questionId: true,
+          studentId: true,
+          proposedKeyword: true,
+          simulationResultId: true,
+          question: { select: { text: true, keywords: { select: { keyword: true } } } },
+          student: { select: { userId: true } },
+        },
+      });
+
+      if (!feedback) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Segnalazione non trovata.' });
+      }
+
+      if (feedback.type !== 'ALTERNATIVE_ANSWER') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Questa segnalazione non è una proposta di risposta alternativa.',
+        });
+      }
+
+      const keyword = (input.keyword ?? feedback.proposedKeyword ?? '').trim().replace(/\s+/g, ' ');
+      if (keyword.length === 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'La risposta da approvare è vuota.',
+        });
+      }
+
+      const normalized = normalizeKeyword(keyword);
+
+      // Every pending proposal of the same answer is the same request: resolving only
+      // the one being reviewed would leave its twins hanging in the queue forever.
+      const twins = await ctx.prisma.questionFeedback.findMany({
+        where: {
+          questionId: feedback.questionId,
+          type: 'ALTERNATIVE_ANSWER',
+          status: 'PENDING',
+          id: { not: feedback.id },
+        },
+        select: { id: true, proposedKeyword: true, simulationResultId: true, student: { select: { userId: true } } },
+      });
+
+      const sameProposals = twins.filter(
+        t => normalizeKeyword(t.proposedKeyword ?? '') === normalized
+      );
+
+      const keywordCreated = await ctx.prisma.$transaction(async (tx) => {
+        // Re-read inside the transaction: re-approving must not add the keyword twice
+        const existing = await tx.questionKeyword.findMany({
+          where: { questionId: feedback.questionId },
+          select: { keyword: true },
+        });
+        const alreadyAccepted = existing.some(k => normalizeKeyword(k.keyword) === normalized);
+
+        if (!alreadyAccepted) {
+          await tx.questionKeyword.create({
+            data: {
+              questionId: feedback.questionId,
+              keyword,
+              createdById: ctx.user.id,
+            },
+          });
+        }
+
+        await tx.questionFeedback.updateMany({
+          where: { id: { in: [feedback.id, ...sameProposals.map(t => t.id)] } },
+          data: {
+            status: 'FIXED',
+            adminResponse: input.adminResponse ?? `Risposta accettata e aggiunta alle soluzioni: "${keyword}"`,
+            reviewedById: ctx.user.id,
+            reviewedAt: new Date(),
+          },
+        });
+
+        return !alreadyAccepted;
+      });
+
+      // Re-grade outside the transaction: a failed re-grade must not undo an
+      // approved keyword, and each attempt is an independent write.
+      const regraded: string[] = [];
+      for (const proposal of [feedback, ...sameProposals]) {
+        if (!proposal.simulationResultId) continue;
+        const verdict = await applyOpenAnswerVerdict(ctx.prisma, {
+          resultId: proposal.simulationResultId,
+          questionId: feedback.questionId,
+          isCorrect: true,
+        }).catch(err => {
+          console.error('[Questions] Failed to re-grade after approving an alternative answer:', err);
+          return null;
+        });
+        if (verdict?.applied && proposal.student?.userId) {
+          regraded.push(proposal.student.userId);
+        }
+      }
+
+      notificationService.notifyAlternativeAnswerReviewed(ctx.prisma, {
+        questionId: feedback.questionId,
+        questionTitle: buildQuestionTitle(feedback.question.text),
+        keyword,
+        approved: true,
+        recipientUserIds: [feedback.student?.userId, ...sameProposals.map(t => t.student?.userId)]
+          .filter((id): id is string => Boolean(id)),
+        rescoredUserIds: regraded,
+      }).catch(err => {
+        console.error('[Questions] Failed to notify an approved alternative answer:', err);
+      });
+
+      return {
+        keyword,
+        keywordCreated,
+        resolvedProposals: 1 + sameProposals.length,
+        rescoredCount: regraded.length,
+      };
     }),
 
   // ==================== STATISTICS ====================
@@ -2740,12 +2905,18 @@ export const questionsRouter = router({
           imageAlt: true,
           difficulty: true,
           generalExplanation: true,
+          correctExplanation: true,
           type: true,
           subject: {
             select: { id: true, name: true, color: true },
           },
           topic: {
             select: { id: true, name: true },
+          },
+          // Reference solution for OPEN_TEXT questions, which have no answer options
+          keywords: {
+            select: { keyword: true },
+            orderBy: { createdAt: 'asc' },
           },
           answers: {
             select: {

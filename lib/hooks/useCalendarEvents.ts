@@ -93,7 +93,12 @@ export function useCalendarEvents({ selectedDate, view, filterType, filterTagId 
     tagId: filterTagId || undefined,
     includeInvitations: true,
     includeCancelled: false,
-    onlyMyEvents: true,
+    // No `onlyMyEvents`: that filter short-circuits the role-based visibility in
+    // getEvents, so a collaborator with 'events.viewAll' would keep seeing only their
+    // own events while the stat cards above — which always apply the role rule —
+    // counted every class event. The grid and the cards must answer the same question.
+    // The grid must show every event of the range (see AdminCalendarContent)
+    pageSize: 500,
   });
 
   const { data: stats } = trpc.calendar.getStats.useQuery();

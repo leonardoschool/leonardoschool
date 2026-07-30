@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Users, User, Calendar, Clock, MapPin, Search, Info, CheckSquare, FileText } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { Modal } from '@/components/ui/Modal';
@@ -252,15 +252,23 @@ export function SimulationAssignModal({
     }
   }, [selectedGroupIds, alreadyAssignedGroupIds, simulationId, utils]);
 
+  // `isPending` only flips after a re-render, so two clicks in the same frame would
+  // both fire the mutation and create duplicate assignments/calendar events.
+  const isSubmittingRef = useRef(false);
+
   // Mutation
   const assignMutation = trpc.simulations.addAssignments.useMutation({
     onSuccess: () => {
+      isSubmittingRef.current = false;
       showSuccess('Simulazione assegnata', 'La simulazione è stata assegnata con successo.');
       utils.simulations.invalidate();
       onAssigned?.();
       handleClose();
     },
-    onError: handleMutationError,
+    onError: (error) => {
+      isSubmittingRef.current = false;
+      handleMutationError(error);
+    },
   });
 
   // Remove assignment mutation (for reassigning)
@@ -282,6 +290,7 @@ export function SimulationAssignModal({
   };
 
   const resetForm = () => {
+    isSubmittingRef.current = false;
     setSelectedGroupIds([]);
     setSelectedStudentIds([]);
     setStartDate('');
@@ -310,6 +319,8 @@ export function SimulationAssignModal({
   const handleSubmit = () => {
     if (selectedGroupIds.length === 0 && selectedStudentIds.length === 0) return;
     if (!startDate || !endDate) return;
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
 
     // Convert to ISO format for API
     const isoStartDate = toISOString(startDate);

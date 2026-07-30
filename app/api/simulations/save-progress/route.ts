@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma/client';
 import { getAdminAuth } from '@/lib/firebase/admin';
-import { Prisma } from '@prisma/client';
-import { sanitizeStudentAnswerText } from '@/lib/utils/studentOpenAnswer';
 import { logApp } from '@/lib/logging/appLog';
+import { persistProgress, type PersistProgressStatus } from '@/server/trpc/routers/simulations.helpers';
+
+// Maps a failed persistProgress outcome onto an HTTP response (the tRPC
+// saveProgress mutation maps the same outcomes onto TRPCError codes).
+// Successful outcomes are absent, so a lookup on them yields undefined.
+const SAVE_PROGRESS_FAILURES: Partial<
+  Record<PersistProgressStatus, { status: number; error: string }>
+> = {
+  not_found: { status: 404, error: 'Tentativo non trovato' },
+  forbidden: { status: 403, error: 'Non autorizzato' },
+  completed: { status: 400, error: 'Tentativo già completato' },
+  reset: { status: 409, error: 'Tentativo ripristinato dallo staff' },
+};
 
 /**
  * API endpoint for saving simulation progress via sendBeacon
@@ -37,18 +48,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { resultId, answers, timeSpent, sectionTimes, currentSectionIndex, currentQuestionIndex, resetToken } = body;
+    const { resultId, answers, timeSpent, sectionTimes, currentSectionIndex, currentQuestionIndex, resetToken, rev } = body;
 
     if (!resultId || !Array.isArray(answers)) {
       return NextResponse.json({ error: 'Dati mancanti' }, { status: 400 });
     }
-
-    const sanitizedAnswers = answers.map((answer: Record<string, unknown>) => ({
-      ...answer,
-      answerText: typeof answer.answerText === 'string'
-        ? sanitizeStudentAnswerText(answer.answerText)
-        : null,
-    }));
 
     // Get student from user
     const student = await prisma.student.findFirst({
@@ -60,46 +64,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Studente non trovato' }, { status: 404 });
     }
 
-    // Verify result belongs to student
-    const result = await prisma.simulationResult.findUnique({
-      where: { id: resultId },
-      select: { studentId: true, completedAt: true, resetAt: true },
+    // Ownership, completion, staff-reset and out-of-order guards all live in
+    // persistProgress, shared with the tRPC saveProgress mutation
+    const outcome = await persistProgress(prisma, {
+      resultId,
+      studentId: student.id,
+      answers,
+      timeSpent: typeof timeSpent === 'number' ? timeSpent : 0,
+      sectionTimes,
+      currentSectionIndex,
+      currentQuestionIndex,
+      resetToken,
+      rev,
     });
 
-    if (!result) {
-      return NextResponse.json({ error: 'Tentativo non trovato' }, { status: 404 });
+    const failure = SAVE_PROGRESS_FAILURES[outcome];
+    if (failure) {
+      return NextResponse.json({ error: failure.error }, { status: failure.status });
     }
-
-    if (result.studentId !== student.id) {
-      return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 });
-    }
-
-    if (result.completedAt) {
-      return NextResponse.json({ error: 'Tentativo già completato' }, { status: 400 });
-    }
-
-    // A tab opened before a staff reset carries a stale (or missing) token:
-    // reject its writes so they can't overwrite the reset state
-    if (result.resetAt && resetToken !== result.resetAt.getTime()) {
-      return NextResponse.json({ error: 'Tentativo ripristinato dallo staff' }, { status: 409 });
-    }
-
-    // Prepare answers with section progress metadata
-    const answersWithMeta = {
-      items: sanitizedAnswers,
-      sectionTimes: sectionTimes || {},
-      currentSectionIndex: currentSectionIndex ?? 0,
-      currentQuestionIndex: currentQuestionIndex ?? 0,
-    };
-
-    // Save progress
-    await prisma.simulationResult.update({
-      where: { id: resultId },
-      data: {
-        answers: answersWithMeta as unknown as Prisma.JsonArray,
-        durationSeconds: timeSpent,
-      },
-    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
