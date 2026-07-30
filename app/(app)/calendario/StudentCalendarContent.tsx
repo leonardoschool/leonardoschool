@@ -73,6 +73,8 @@ export default function StudentCalendarContent() {
     includeInvitations: true,
     includeCancelled: false,
     onlyMyEvents: true,
+    // The grid must show every event of the range (see AdminCalendarContent)
+    pageSize: 500,
   });
 
   const { data: stats } = trpc.calendar.getStats.useQuery();

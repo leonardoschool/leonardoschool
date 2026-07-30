@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import type { EventEmailData, InviteeData } from '@/lib/email/eventEmails';
 
 type InvitationUser = { id: string; email: string | null; name: string | null } | null;
@@ -66,4 +67,53 @@ export function buildEventEmailData(event: EventForEmail): EventEmailData | null
     onlineLink: event.onlineLink,
     createdByName: event.createdBy?.name ?? 'Staff',
   };
+}
+
+// ==================== EVENT VISIBILITY ====================
+
+type EventWhereCondition = Prisma.CalendarEventWhereInput;
+
+export interface CollaboratorEventVisibility {
+  /** The collaborator's own user id */
+  userId: string;
+  /** Groups the collaborator is a member of */
+  groupIds: string[];
+  /** `events.viewAll` — read every class event, including other collaborators' */
+  canViewAllClassEvents: boolean;
+  /** `events.manageAll` / `attendance.manageAll` — cross-ownership, no restriction at all */
+  seesEveryEvent: boolean;
+}
+
+/**
+ * The set of events a collaborator is allowed to see, as Prisma OR conditions.
+ * Returns `null` when no restriction applies (cross-ownership capabilities, or ADMIN).
+ *
+ * Shared by the event list and the calendar stats: while these were two separate
+ * copies of the same rule, a change to one silently gave the cards a different
+ * count from the calendar underneath them.
+ */
+export function buildCollaboratorEventVisibility(
+  visibility: CollaboratorEventVisibility
+): EventWhereCondition[] | null {
+  if (visibility.seesEveryEvent) return null;
+
+  const conditions: EventWhereCondition[] = [
+    { isPublic: true },
+    { createdById: visibility.userId },
+    { invitations: { some: { userId: visibility.userId } } },
+  ];
+
+  if (visibility.canViewAllClassEvents) {
+    // Any event tied to a class is shared staff-wide. Events with no class
+    // invited stay private to their creator, so a personal appointment a
+    // collaborator put in the calendar is not exposed to colleagues.
+    conditions.push({ invitations: { some: { groupId: { not: null } } } });
+    return conditions;
+  }
+
+  if (visibility.groupIds.length > 0) {
+    conditions.push({ invitations: { some: { groupId: { in: visibility.groupIds } } } });
+  }
+
+  return conditions;
 }

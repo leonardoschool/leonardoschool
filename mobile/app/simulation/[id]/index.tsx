@@ -37,6 +37,11 @@ import { showConfirmAlert } from '../../../lib/errorHandler';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { trpc } from '../../../lib/trpc';
 import {
+  accumulateQuestionMs,
+  questionMsToSeconds,
+  questionSecondsToMs,
+} from '@shared/simulationTime';
+import {
   StudentWaitingRoom,
   TolcInstructions,
   TolcSimulationLayout,
@@ -135,6 +140,15 @@ export default function SimulationExecutionScreen() {
   const currentQuestionIndexRef = useRef(currentQuestionIndex);
   const answersInitializedRef = useRef(false);
   const lastSectionTimeUpdateRef = useRef(-1);
+  /**
+   * Per-question time in milliseconds. Until this existed the app submitted every
+   * answer with `timeSpent: 0`, which the difficulty calibration reads as "the
+   * student never reached this question" — so an attempt taken on the phone made
+   * its questions look easier than they are.
+   */
+  const questionTimesMsRef = useRef<Record<string, number>>({});
+  const questionStartTimeRef = useRef(0);
+  const currentQuestionIdRef = useRef<string | null>(null);
 
   // Animazioni
   const progressScale = useSharedValue(1);
@@ -250,6 +264,11 @@ export default function SimulationExecutionScreen() {
           }));
           setAnswers(restoredAnswers);
           answersInitializedRef.current = true;
+          // Seed the accumulator, or the first commit after a resume would replace
+          // the restored totals with this session's time alone.
+          questionTimesMsRef.current = questionSecondsToMs(
+            Object.fromEntries(restoredAnswers.map((a) => [a.questionId, a.timeSpent]))
+          );
         }
         if (data.savedSectionTimes) {
           setSectionTimes(data.savedSectionTimes);
@@ -310,18 +329,50 @@ export default function SimulationExecutionScreen() {
     currentQuestionIndexRef.current = currentQuestionIndex;
   }, [currentQuestionIndex]);
 
+  useEffect(() => {
+    currentQuestionIdRef.current = simulation?.questions[currentQuestionIndex]?.id ?? null;
+  }, [simulation, currentQuestionIndex]);
+
+  /**
+   * Commits the time spent on the question currently open and returns the whole
+   * per-question seconds map. Callers must use the return value: writing it into
+   * state and reading that state back in the same tick would see the totals from
+   * before this commit.
+   */
+  const flushQuestionTime = useCallback((): Record<string, number> => {
+    const now = Date.now();
+    if (questionStartTimeRef.current > 0) {
+      questionTimesMsRef.current = accumulateQuestionMs(
+        questionTimesMsRef.current,
+        currentQuestionIdRef.current,
+        now - questionStartTimeRef.current
+      );
+    }
+    questionStartTimeRef.current = now;
+
+    const seconds = questionMsToSeconds(questionTimesMsRef.current);
+    setAnswers((prev) =>
+      prev.map((answer) => ({ ...answer, timeSpent: seconds[answer.questionId] ?? answer.timeSpent }))
+    );
+    return seconds;
+  }, []);
+
   // Timer
   useEffect(() => {
     if (!hasStarted || !simulation) return;
 
+    questionStartTimeRef.current = Date.now();
     timerRef.current = setInterval(() => {
       setTimeSpent((prev) => prev + 1);
     }, 1000);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      // Commit before the clock stops, or the time since the last navigation is
+      // discarded when this effect re-runs.
+      flushQuestionTime();
     };
-  }, [hasStarted, simulation]);
+  }, [hasStarted, simulation, flushQuestionTime]);
 
   // Section timer management
   useEffect(() => {
@@ -375,11 +426,14 @@ export default function SimulationExecutionScreen() {
     if (!hasStarted || !resultId) return;
 
     const saveProgress = () => {
+      // Commit first, so a save taken while the student sits on one question does
+      // not store that question as if no time had been spent on it.
+      const currentTimes = flushQuestionTime();
       const answersWithTimes = answers.map((a) => ({
         questionId: a.questionId,
         answerId: a.selectedOptionId,
         answerText: a.answerText,
-        timeSpent: a.timeSpent,
+        timeSpent: currentTimes[a.questionId] ?? a.timeSpent,
         flagged: false,
       }));
 
@@ -469,18 +523,21 @@ export default function SimulationExecutionScreen() {
 
   // Navigazione domande
   const goToQuestion = (index: number) => {
+    flushQuestionTime();
     setCurrentQuestionIndex(index);
     setShowQuestionNav(false);
   };
 
   const goNext = () => {
     if (currentQuestionIndex < (simulation?.questions.length || 0) - 1) {
+      flushQuestionTime();
       setCurrentQuestionIndex((prev) => prev + 1);
     }
   };
 
   const goPrev = () => {
     if (currentQuestionIndex > 0) {
+      flushQuestionTime();
       setCurrentQuestionIndex((prev) => prev - 1);
     }
   };
@@ -514,12 +571,15 @@ export default function SimulationExecutionScreen() {
     
     setIsSubmitting(true);
     try {
+      // Read the returned map, not `a.timeSpent`: the state write inside the flush
+      // lands on the next render, so the question open at submit would go out at 0.
+      const finalTimes = flushQuestionTime();
       // Prepara le risposte nel formato API
       const apiAnswers = answers.map((a) => ({
         questionId: a.questionId,
         answerId: a.selectedOptionId,
         answerText: a.answerText,
-        timeSpent: a.timeSpent,
+        timeSpent: finalTimes[a.questionId] ?? a.timeSpent,
         flagged: false,
       }));
 

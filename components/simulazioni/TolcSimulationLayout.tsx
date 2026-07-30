@@ -10,6 +10,7 @@ import { questionImageSource } from '@/lib/utils/imageUrl';
 import { TextareaWithSymbols } from '@/components/ui/SymbolKeyboard';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import OfflineSaveBadge from './OfflineSaveBadge';
 import {
   AlertTriangle,
   ChevronLeft,
@@ -64,6 +65,8 @@ interface TolcSimulationLayoutProps {
   readonly onReportQuestion: () => void;
   readonly answeredCount: number;
   readonly totalQuestions: number;
+  /** Connection lost: answers are still being kept safe on the device */
+  readonly isOffline?: boolean;
 }
 
 export default function TolcSimulationLayout({
@@ -83,6 +86,7 @@ export default function TolcSimulationLayout({
   onCompleteSection,
   onToggleFlag,
   onReportQuestion,
+  isOffline = false,
   // Props available for future use
   // onSubmit - for final submission
   // answeredCount, totalQuestions - for progress display
@@ -236,7 +240,8 @@ export default function TolcSimulationLayout({
 
           {/* Right: Report button */}
           <div className="flex items-center gap-2">
-            <button 
+            <OfflineSaveBadge isOffline={isOffline} />
+            <button
               onClick={onToggleFlag}
               className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               title="Evidenzia per rispondere dopo"

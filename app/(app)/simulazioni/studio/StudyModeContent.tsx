@@ -11,6 +11,7 @@ import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import ZoomableImageArea from '@/components/ui/ZoomableImageArea';
 import QuestionImage from '@/components/ui/QuestionImage';
 import { questionImageSource } from '@/lib/utils/imageUrl';
+import { OpenAnswerSolution } from '@/components/simulazioni';
 import {
   BookOpen,
   ChevronLeft,
@@ -144,7 +145,15 @@ export default function StudyModeContent({ questionIds }: StudyModeContentProps)
             </ZoomableImageArea>
           </div>
 
-          {/* Answers */}
+          {/* Open questions have no options: the answers list below renders empty for them */}
+          {question.type === 'OPEN_TEXT' && (
+            <OpenAnswerSolution
+              keywords={question.keywords}
+              correctExplanation={question.correctExplanation}
+              generalExplanation={question.generalExplanation}
+            />
+          )}
+
           <div className="space-y-3">
             {question.answers?.map((answer, answerIndex) => {
               const isCorrect = answer.isCorrect;
@@ -202,8 +211,8 @@ export default function StudyModeContent({ questionIds }: StudyModeContentProps)
             })}
           </div>
 
-          {/* Explanation if available */}
-          {question.generalExplanation && (
+          {/* Explanation if available — already shown inside the open-question solution */}
+          {question.generalExplanation && question.type !== 'OPEN_TEXT' && (
             <div className={`mt-4 p-4 rounded-xl ${colors.status.info.bgLight} border ${colors.status.info.border}`}>
               <p className={`text-sm font-medium ${colors.status.info.text} mb-2`}>
                 💡 Spiegazione

@@ -139,6 +139,16 @@ export default function AppHeader() {
       refetchInterval: focusAwarePollingInterval,
     }
   );
+  // Difficulty proposals awaiting confirmation — staff only, and scoped by the same
+  // visibility rule as the calibration page, so the badge can never advertise work the
+  // viewer is not allowed to open.
+  const { data: pendingCalibration } = trpc.questionCalibration.getPendingProposalCount.useQuery(
+    undefined,
+    {
+      enabled: user?.role === 'ADMIN' || (user?.role as string) === 'COLLABORATOR',
+      refetchInterval: focusAwarePollingInterval,
+    }
+  );
   const { data: unreadMessagesData } = trpc.messages.getUnreadCount.useQuery(
     undefined,
     { enabled: !!user, refetchInterval: focusAwarePollingInterval }
@@ -162,6 +172,9 @@ export default function AppHeader() {
   const pendingContractUsersCount = studentsPendingContract?.length || 0;
   const totalGestionePending = pendingApplicationsCount + pendingContactRequestsCount + pendingContractUsersCount;
   const pendingQuestionFeedbackCount = pendingQuestionFeedback?.count || 0;
+  const pendingCalibrationCount = pendingCalibration?.count || 0;
+  // Both queues live under Didattica → Domande, so the menu shows one number.
+  const didatticaPendingCount = pendingQuestionFeedbackCount + pendingCalibrationCount;
 
   // Navigation permissions
   const collaboratorCanNavigate = checkCollaboratorNavigation(
@@ -249,7 +262,7 @@ export default function AppHeader() {
     getGestioneBadgeCount(href, isAdmin, pendingContractUsersCount, pendingApplicationsCount, pendingContactRequestsCount);
 
   const getDidatticaBadgeCountForHref = (href: string) =>
-    getDidatticaBadgeCount(href, pendingQuestionFeedbackCount);
+    getDidatticaBadgeCount(href, didatticaPendingCount);
 
   const closeMobileMenu = () => {
     setMobileMenuOpen(false);
@@ -331,7 +344,7 @@ export default function AppHeader() {
                   onToggle={() => setDidatticaMenuOpen(!didatticaMenuOpen)}
                   isActive={isDidatticaActive}
                   pathname={pathname}
-                  totalBadgeCount={pendingQuestionFeedbackCount}
+                  totalBadgeCount={didatticaPendingCount}
                   getBadgeCount={getDidatticaBadgeCountForHref}
                 />
               )}
@@ -477,7 +490,7 @@ export default function AppHeader() {
           unreadCount={unreadCount}
           totalGestionePending={totalGestionePending}
           getBadgeCountForHref={getBadgeCountForHref}
-          pendingQuestionFeedbackCount={pendingQuestionFeedbackCount}
+          pendingQuestionFeedbackCount={didatticaPendingCount}
           getDidatticaBadgeCountForHref={getDidatticaBadgeCountForHref}
           isGestioneActive={isGestioneActive}
           isDidatticaActive={isDidatticaActive}

@@ -393,6 +393,16 @@ describe('questionFilterSchema', () => {
     expect(result.sortOrder).toBe('asc');
   });
 
+  it('should accept the statistics filters and leave them off by default', () => {
+    const defaults = questionFilterSchema.parse({});
+    expect(defaults.onlyCritical).toBeUndefined();
+    expect(defaults.onlyWithSuggestion).toBeUndefined();
+
+    const filtered = questionFilterSchema.parse({ onlyCritical: true, onlyWithSuggestion: true });
+    expect(filtered.onlyCritical).toBe(true);
+    expect(filtered.onlyWithSuggestion).toBe(true);
+  });
+
   it('should accept all filter options', () => {
     const filter = {
       page: 2,

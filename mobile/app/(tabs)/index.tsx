@@ -87,6 +87,8 @@ export default function DashboardScreen() {
       onlyMyEvents: true,
       includeInvitations: true,
       includeCancelled: false,
+      // MiniCalendar marks every day of the range, so fetch it whole (see calendario.tsx)
+      pageSize: 500,
     },
     { enabled: !!user?.isActive }
   );

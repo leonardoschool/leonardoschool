@@ -2,6 +2,7 @@
 // virtualRoom routers (kept out of simulations.ts so virtualRoom.ts can import
 // them without pulling in the whole router).
 import { Prisma, PrismaClient } from '@prisma/client';
+import { sanitizeStudentAnswerText, sanitizeStudentOpenAnswerInput } from '@/lib/utils/studentOpenAnswer';
 
 // Types for saved answer parsing
 export interface SavedAnswerItem {
@@ -17,6 +18,62 @@ export interface ParsedSavedProgress {
   savedSectionTimes: Record<number, number>;
   savedCurrentSectionIndex: number;
   savedCurrentQuestionIndex: number;
+  /** Monotonic revision of the stored snapshot; 0 for legacy saves written before it existed */
+  savedRev: number;
+}
+
+/**
+ * A graded answer as stored in `SimulationResult.answers` after submission.
+ *
+ * `isCorrect` is deliberately tri-state: `null` means an open answer still
+ * awaiting correction, which is NOT the same as wrong. And `isCorrect === false`
+ * does not imply the student answered — the scorer writes `false` for blanks on
+ * multiple-choice questions too, so `classifyAnswerOutcome` is the only safe way
+ * to read the outcome.
+ */
+export interface StoredAnswer {
+  questionId: string;
+  answerId: string | null;
+  answerText: string | null;
+  isCorrect: boolean | null;
+  earnedPoints: number;
+  timeSpent: number;
+  /**
+   * Difficulty the question carried when the attempt was graded. Frozen here so a
+   * later recalibration cannot move a student's historical statistics; absent on
+   * results written before this was recorded, hence optional.
+   */
+  difficulty?: string;
+}
+
+/**
+ * Reads the graded answers out of a stored result, tolerating both shapes the
+ * column has held: a bare array (post-submission) and the `{ items }` envelope
+ * used by autosave. Shared with the calibration service — duplicating a defensive
+ * parser is the surest way to have two of them disagree.
+ */
+export function parseResultAnswers(value: Prisma.JsonValue): StoredAnswer[] {
+  const rawAnswers = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object' && 'items' in value && Array.isArray((value as { items?: unknown }).items)
+      ? (value as { items: unknown[] }).items
+      : [];
+
+  return rawAnswers.flatMap((rawAnswer) => {
+    if (!rawAnswer || typeof rawAnswer !== 'object' || Array.isArray(rawAnswer)) return [];
+    const answer = rawAnswer as Record<string, unknown>;
+    if (typeof answer.questionId !== 'string') return [];
+
+    return [{
+      questionId: answer.questionId,
+      answerId: typeof answer.answerId === 'string' ? answer.answerId : null,
+      answerText: typeof answer.answerText === 'string' ? answer.answerText : null,
+      isCorrect: typeof answer.isCorrect === 'boolean' ? answer.isCorrect : null,
+      earnedPoints: typeof answer.earnedPoints === 'number' ? answer.earnedPoints : 0,
+      timeSpent: typeof answer.timeSpent === 'number' ? answer.timeSpent : 0,
+      ...(typeof answer.difficulty === 'string' ? { difficulty: answer.difficulty } : {}),
+    }];
+  });
 }
 
 /**
@@ -27,6 +84,7 @@ export function parseSavedProgress(savedData: unknown): ParsedSavedProgress {
   let savedSectionTimes: Record<number, number> = {};
   let savedCurrentSectionIndex = 0;
   let savedCurrentQuestionIndex = 0;
+  let savedRev = 0;
 
   if (Array.isArray(savedData)) {
     // Old format: just an array of answers
@@ -38,6 +96,7 @@ export function parseSavedProgress(savedData: unknown): ParsedSavedProgress {
       sectionTimes?: Record<string, number>;
       currentSectionIndex?: number;
       currentQuestionIndex?: number;
+      rev?: number;
     };
     savedAnswers = meta.items || [];
     // Convert string keys to number keys for sectionTimes
@@ -48,9 +107,156 @@ export function parseSavedProgress(savedData: unknown): ParsedSavedProgress {
     }
     savedCurrentSectionIndex = meta.currentSectionIndex ?? 0;
     savedCurrentQuestionIndex = meta.currentQuestionIndex ?? 0;
+    savedRev = typeof meta.rev === 'number' && Number.isFinite(meta.rev) ? meta.rev : 0;
   }
 
-  return { savedAnswers, savedSectionTimes, savedCurrentSectionIndex, savedCurrentQuestionIndex };
+  return {
+    savedAnswers,
+    savedSectionTimes,
+    savedCurrentSectionIndex,
+    savedCurrentQuestionIndex,
+    savedRev,
+  };
+}
+
+/**
+ * True for Prisma's "unique constraint failed" (P2002). Used to turn a lost
+ * create-race into a resume instead of an error the user has to recover from.
+ */
+export function isUniqueConstraintError(error: unknown): boolean {
+  return (error as { code?: string })?.code === 'P2002';
+}
+
+export interface ResumableAttempt {
+  id: string;
+  resetAt: Date | null;
+  durationSeconds: number | null;
+  answers: Prisma.JsonValue;
+}
+
+/**
+ * The payload `startAttempt` returns when a student picks an attempt back up.
+ * Shared by the normal resume path and by the create-race fallback so the two
+ * can never hand the client a different shape.
+ */
+export function buildResumeAttemptPayload(attempt: ResumableAttempt) {
+  const savedProgress = parseSavedProgress(attempt.answers);
+
+  return {
+    resultId: attempt.id,
+    resumed: true,
+    // Echoed back by saveProgress/submit: writes from a tab opened before
+    // a staff reset carry a stale token and are rejected
+    resetToken: attempt.resetAt?.getTime() ?? null,
+    savedTimeSpent: attempt.durationSeconds || 0,
+    // Lets the client tell its local draft apart from what is already stored
+    savedRev: savedProgress.savedRev,
+    savedAnswers: savedProgress.savedAnswers,
+    savedSectionTimes: savedProgress.savedSectionTimes,
+    savedCurrentSectionIndex: savedProgress.savedCurrentSectionIndex,
+    savedCurrentQuestionIndex: savedProgress.savedCurrentQuestionIndex,
+  };
+}
+
+export interface PersistProgressInput {
+  resultId: string;
+  studentId: string;
+  // questionId is optional here because the beacon route receives an unvalidated
+  // JSON body; entries without one are dropped before writing
+  answers: Array<{
+    questionId?: string;
+    answerId?: string | null;
+    answerText?: string | null;
+    timeSpent?: number | null;
+    flagged?: boolean | null;
+  }>;
+  timeSpent: number;
+  sectionTimes?: Record<string | number, number> | null;
+  currentSectionIndex?: number | null;
+  currentQuestionIndex?: number | null;
+  /** Echoed from startAttempt; guards against a tab opened before a staff reset */
+  resetToken?: number | null;
+  /** Monotonic counter from the client; writes older than what is stored are dropped */
+  rev?: number | null;
+}
+
+/**
+ * Flat status rather than a discriminated union: this project compiles with
+ * `strict: false`, so narrowing on a boolean discriminant is unreliable.
+ */
+export type PersistProgressStatus =
+  | 'saved'
+  | 'skipped'
+  | 'not_found'
+  | 'forbidden'
+  | 'completed'
+  | 'reset';
+
+export type PersistProgressFailure = Exclude<PersistProgressStatus, 'saved' | 'skipped'>;
+
+/**
+ * Single write path for in-progress autosaves, shared by the tRPC `saveProgress`
+ * mutation and the `sendBeacon` REST route so their guards can't drift apart.
+ * Returns a result instead of throwing: each caller maps it onto its own error
+ * surface (TRPCError vs HTTP status).
+ */
+export async function persistProgress(
+  prisma: PrismaClientOrTx,
+  input: PersistProgressInput
+): Promise<PersistProgressStatus> {
+  const result = await prisma.simulationResult.findUnique({
+    where: { id: input.resultId },
+    select: { studentId: true, completedAt: true, resetAt: true, answers: true },
+  });
+
+  if (!result) return 'not_found';
+  if (result.studentId !== input.studentId) return 'forbidden';
+  if (result.completedAt) return 'completed';
+
+  // A tab opened before a staff reset carries a stale (or missing) token:
+  // reject its writes so they can't overwrite the reset state
+  if (result.resetAt && input.resetToken !== result.resetAt.getTime()) {
+    return 'reset';
+  }
+
+  // Beacons can arrive out of order, and a second tab left open lags behind:
+  // an older snapshot must never overwrite a newer one. Reported as success
+  // because nothing is wrong — the write was simply redundant.
+  const incomingRev = typeof input.rev === 'number' && Number.isFinite(input.rev) ? input.rev : null;
+  const { savedRev } = parseSavedProgress(result.answers);
+  if (incomingRev !== null && incomingRev < savedRev) return 'skipped';
+
+  // A client that does not number its writes — the Expo app never sends `rev` — must
+  // not erase the ordering guard for the ones that do. Carrying the stored revision
+  // forward keeps a lagging beacon from another tab recognisable as older; dropping it
+  // reset the counter to zero and let that beacon overwrite newer answers.
+  const nextRev = incomingRev ?? savedRev;
+
+  const answersWithMeta = {
+    items: input.answers
+      .filter((answer) => typeof answer.questionId === 'string' && answer.questionId.length > 0)
+      .map((answer) => ({
+        questionId: answer.questionId,
+        answerId: answer.answerId ?? null,
+        answerText: sanitizeStudentAnswerText(answer.answerText),
+        timeSpent: answer.timeSpent ?? 0,
+        flagged: answer.flagged ?? false,
+      })),
+    sectionTimes: input.sectionTimes || {},
+    currentSectionIndex: input.currentSectionIndex ?? 0,
+    currentQuestionIndex: input.currentQuestionIndex ?? 0,
+    ...(nextRev > 0 && { rev: nextRev }),
+  };
+
+  await prisma.simulationResult.update({
+    where: { id: input.resultId },
+    data: {
+      answers: answersWithMeta as unknown as Prisma.InputJsonValue,
+      durationSeconds: input.timeSpent,
+    },
+  });
+
+  return 'saved';
 }
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
@@ -249,6 +455,39 @@ export interface AssignmentEventSchedule {
   description: string | null;
 }
 
+export interface AssignmentTargetIdentity {
+  studentId?: string | null;
+  groupId?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+}
+
+/**
+ * Identity of an assignment target: same recipient + same availability window.
+ * Used to make "Assegna" idempotent — a re-sent request (double click, client retry,
+ * duplicated targets in one payload) must not produce a second assignment and, with
+ * it, a second calendar event. The overlap check can't cover this on its own: it
+ * skips windows longer than 24h and assignments without dates.
+ */
+export function assignmentTargetKey(target: AssignmentTargetIdentity): string {
+  const recipient = target.studentId ? `s:${target.studentId}` : `g:${target.groupId ?? ''}`;
+  return `${recipient}|${target.startDate ?? ''}|${target.endDate ?? ''}`;
+}
+
+/**
+ * Drop targets that repeat the same recipient + window inside a single request,
+ * keeping the first occurrence.
+ */
+export function dedupeAssignmentTargets<T extends AssignmentTargetIdentity>(targets: T[]): T[] {
+  const seen = new Set<string>();
+  return targets.filter((target) => {
+    const key = assignmentTargetKey(target);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /**
  * Description shown on the calendar event when the availability window spans more
  * than one day (single-day windows carry no generated description).
@@ -421,4 +660,110 @@ export function sanitizeSectionsForQuestionUpdate(
       order: section.order ?? index,
     };
   });
+}
+
+// ==================== ANSWER OUTCOMES & OPEN ANSWER STATS ====================
+
+export type AnswerOutcome = 'correct' | 'wrong' | 'pending' | 'blank';
+
+/**
+ * Classify a stored answer for statistics.
+ *
+ * An open answer carries no `answerId`, so keying off that alone counts every
+ * open answer as blank — which zeroed the correct rate of every OPEN_TEXT
+ * question and flagged them all as critical.
+ */
+export function classifyAnswerOutcome(answer: {
+  answerId?: string | null;
+  answerText?: string | null;
+  isCorrect?: boolean | null;
+}): AnswerOutcome {
+  const hasAnswer = Boolean(answer.answerId) || Boolean(answer.answerText?.trim());
+  if (!hasAnswer) return 'blank';
+  if (answer.isCorrect === true) return 'correct';
+  if (answer.isCorrect === false) return 'wrong';
+  return 'pending';
+}
+
+/**
+ * Match an open answer against keywords, case-insensitively.
+ *
+ * Single source of truth for "does this text satisfy the question": the scorer
+ * and the statistics must not drift apart. Keywords are alternatives (OR).
+ */
+export function matchOpenAnswerKeywords(
+  answerText: string,
+  keywords: string[]
+): { matched: string[]; missed: string[] } {
+  const answerLower = answerText.toLowerCase();
+  const matched: string[] = [];
+  const missed: string[] = [];
+
+  for (const keyword of keywords) {
+    if (answerLower.includes(keyword.toLowerCase())) {
+      matched.push(keyword);
+    } else {
+      missed.push(keyword);
+    }
+  }
+
+  return { matched, missed };
+}
+
+export type TextAnswerDistributionItem = {
+  text: string;
+  count: number;
+  matchesKeyword: boolean;
+};
+
+export type TextAnswerDistribution = {
+  items: TextAnswerDistributionItem[];
+  otherCount: number;
+  otherDistinct: number;
+};
+
+/**
+ * Group the open answers actually submitted, most frequent first.
+ *
+ * Grouping is case- and whitespace-insensitive, but the displayed text keeps the
+ * first spelling encountered. `otherCount`/`otherDistinct` report what the limit
+ * left out, so a truncated list never reads as the whole picture.
+ */
+export function buildTextAnswerDistribution(
+  answerTexts: Array<string | null | undefined>,
+  keywords: string[],
+  limit = 15
+): TextAnswerDistribution {
+  const groups = new Map<string, { text: string; count: number }>();
+
+  for (const rawText of answerTexts) {
+    const text = sanitizeStudentOpenAnswerInput(rawText).trim().replace(/\s+/g, ' ');
+    if (!text) continue;
+
+    const key = text.toLowerCase();
+    const existing = groups.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      groups.set(key, { text, count: 1 });
+    }
+  }
+
+  const sorted = Array.from(groups.values()).sort(
+    (a, b) => b.count - a.count || a.text.localeCompare(b.text, 'it')
+  );
+
+  const items = sorted.slice(0, limit).map((group) => ({
+    text: group.text,
+    count: group.count,
+    matchesKeyword: matchOpenAnswerKeywords(group.text, keywords).matched.length > 0,
+  }));
+
+  const rest = sorted.slice(limit);
+
+  return {
+    items,
+    otherCount: rest.reduce((total, group) => total + group.count, 0),
+    otherDistinct: rest.length,
+  };
 }

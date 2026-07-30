@@ -35,13 +35,43 @@ function extractMessage(input: LogInput): string {
 }
 
 /**
+ * The cause behind the log line, stored in `stack`.
+ *
+ * A thrown Error carries a stack, but plenty of callers only have a string —
+ * the email transports, for instance, report SMTP failures as text. Reading the
+ * stack off `Error` instances alone silently discarded those, so the log
+ * recorded THAT an email had failed and never WHY.
+ */
+function extractDetail(input: LogInput): string | null {
+  if (input.error instanceof Error) {
+    return input.error.stack ?? input.error.message ?? null;
+  }
+  if (input.error === undefined || input.error === null) return null;
+
+  let detail: string;
+  if (typeof input.error === 'string') {
+    detail = input.error;
+  } else {
+    try {
+      detail = JSON.stringify(input.error);
+    } catch {
+      // Circular or otherwise unserializable: a rough description beats nothing
+      detail = String(input.error);
+    }
+  }
+
+  // A cause identical to the title adds nothing but noise in the detail panel
+  return detail.length > 0 && detail !== input.message ? detail : null;
+}
+
+/**
  * Persist a log entry. NEVER throws — a failure to log must not break the caller's flow.
  * Missing fields are auto-filled from the current request context (userId, path, ip…).
  */
 export async function logApp(input: LogInput): Promise<void> {
   try {
     const ctx = getRequestContext();
-    const stack = input.error instanceof Error ? input.error.stack : undefined;
+    const stack = extractDetail(input);
 
     await prisma.applicationLog.create({
       data: {

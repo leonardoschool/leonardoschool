@@ -11,6 +11,10 @@ import {
   computeAssignmentEventSchedule,
   syncCalendarEventsForAssignments,
   syncAssignmentsForCalendarEvent,
+  dedupeAssignmentTargets,
+  parseSavedProgress,
+  isUniqueConstraintError,
+  buildResumeAttemptPayload,
 } from '@/server/trpc/routers/simulations.helpers';
 
 describe('buildSimulationEventDescription', () => {
@@ -131,5 +135,167 @@ describe('syncAssignmentsForCalendarEvent', () => {
       where: { calendarEventId: 'evt-9' },
       data: { startDate: start, endDate: end },
     });
+  });
+});
+
+describe('dedupeAssignmentTargets', () => {
+  const window = { startDate: '2026-04-10T08:00:00.000Z', endDate: '2026-04-10T10:00:00.000Z' };
+
+  it('collapses the same student on the same window', () => {
+    const result = dedupeAssignmentTargets([
+      { studentId: 'stu-1', ...window },
+      { studentId: 'stu-1', ...window },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].studentId).toBe('stu-1');
+  });
+
+  it('collapses the same group on the same window', () => {
+    const result = dedupeAssignmentTargets([
+      { groupId: 'grp-1', ...window },
+      { groupId: 'grp-1', ...window },
+      { groupId: 'grp-1', ...window },
+    ]);
+
+    expect(result).toHaveLength(1);
+  });
+
+  it('keeps the same recipient on different windows', () => {
+    const result = dedupeAssignmentTargets([
+      { studentId: 'stu-1', ...window },
+      { studentId: 'stu-1', startDate: '2026-04-11T08:00:00.000Z', endDate: '2026-04-11T10:00:00.000Z' },
+    ]);
+
+    expect(result).toHaveLength(2);
+  });
+
+  it('keeps distinct recipients and never confuses a student with a group', () => {
+    const result = dedupeAssignmentTargets([
+      { studentId: 'x', ...window },
+      { groupId: 'x', ...window },
+      { studentId: 'y', ...window },
+    ]);
+
+    expect(result).toHaveLength(3);
+  });
+
+  it('collapses duplicated targets without dates', () => {
+    const result = dedupeAssignmentTargets([{ groupId: 'grp-2' }, { groupId: 'grp-2' }]);
+
+    expect(result).toHaveLength(1);
+  });
+});
+
+describe('parseSavedProgress', () => {
+  it('reads the envelope written by an autosave', () => {
+    const result = parseSavedProgress({
+      items: [{ questionId: 'q1', answerId: 'a1', answerText: null, timeSpent: 4, flagged: false }],
+      sectionTimes: { '0': 120, '1': 45 },
+      currentSectionIndex: 1,
+      currentQuestionIndex: 7,
+      rev: 12,
+    });
+
+    expect(result.savedAnswers).toHaveLength(1);
+    expect(result.savedSectionTimes).toEqual({ 0: 120, 1: 45 });
+    expect(result.savedCurrentSectionIndex).toBe(1);
+    expect(result.savedCurrentQuestionIndex).toBe(7);
+    expect(result.savedRev).toBe(12);
+  });
+
+  it('treats an envelope saved before revisions existed as revision zero', () => {
+    const result = parseSavedProgress({
+      items: [{ questionId: 'q1', answerId: 'a1', answerText: null, timeSpent: 0, flagged: false }],
+      currentSectionIndex: 0,
+      currentQuestionIndex: 3,
+    });
+
+    expect(result.savedRev).toBe(0);
+    expect(result.savedCurrentQuestionIndex).toBe(3);
+  });
+
+  it('still reads the legacy bare-array format', () => {
+    const result = parseSavedProgress([
+      { questionId: 'q1', answerId: 'a1', answerText: null, timeSpent: 0, flagged: false },
+    ]);
+
+    expect(result.savedAnswers).toHaveLength(1);
+    expect(result.savedRev).toBe(0);
+    expect(result.savedSectionTimes).toEqual({});
+  });
+
+  it('ignores a non-numeric revision rather than propagating it', () => {
+    const result = parseSavedProgress({ items: [], rev: 'nope' });
+
+    expect(result.savedRev).toBe(0);
+  });
+
+  it('returns empty state for an attempt that was never saved', () => {
+    const result = parseSavedProgress(null);
+
+    expect(result.savedAnswers).toEqual([]);
+    expect(result.savedRev).toBe(0);
+    expect(result.savedCurrentSectionIndex).toBe(0);
+  });
+});
+
+describe('isUniqueConstraintError', () => {
+  it('recognises Prisma\'s unique-violation code', () => {
+    expect(isUniqueConstraintError({ code: 'P2002' })).toBe(true);
+  });
+
+  it('leaves other Prisma failures to propagate', () => {
+    expect(isUniqueConstraintError({ code: 'P2025' })).toBe(false);
+    expect(isUniqueConstraintError(new Error('boom'))).toBe(false);
+    expect(isUniqueConstraintError(null)).toBe(false);
+    expect(isUniqueConstraintError(undefined)).toBe(false);
+  });
+});
+
+describe('buildResumeAttemptPayload', () => {
+  const attempt = {
+    id: 'result-1',
+    resetAt: null as Date | null,
+    durationSeconds: 320,
+    answers: {
+      items: [{ questionId: 'q1', answerId: 'a1', answerText: null, timeSpent: 8, flagged: true }],
+      sectionTimes: { '0': 60 },
+      currentSectionIndex: 1,
+      currentQuestionIndex: 4,
+      rev: 17,
+    },
+  };
+
+  it('hands the client everything it needs to restore the attempt', () => {
+    const payload = buildResumeAttemptPayload(attempt);
+
+    expect(payload.resultId).toBe('result-1');
+    expect(payload.resumed).toBe(true);
+    expect(payload.savedTimeSpent).toBe(320);
+    expect(payload.savedRev).toBe(17);
+    expect(payload.savedAnswers).toHaveLength(1);
+    expect(payload.savedSectionTimes).toEqual({ 0: 60 });
+    expect(payload.savedCurrentSectionIndex).toBe(1);
+    expect(payload.savedCurrentQuestionIndex).toBe(4);
+  });
+
+  it('exposes the staff-reset marker as a comparable token', () => {
+    const resetAt = new Date('2026-07-20T10:00:00Z');
+    const payload = buildResumeAttemptPayload({ ...attempt, resetAt });
+
+    expect(payload.resetToken).toBe(resetAt.getTime());
+  });
+
+  it('reports no token for an attempt never reset', () => {
+    expect(buildResumeAttemptPayload(attempt).resetToken).toBeNull();
+  });
+
+  it('copes with an attempt that has no saved progress yet', () => {
+    const payload = buildResumeAttemptPayload({ id: 'r2', resetAt: null, durationSeconds: null, answers: [] });
+
+    expect(payload.savedTimeSpent).toBe(0);
+    expect(payload.savedRev).toBe(0);
+    expect(payload.savedAnswers).toEqual([]);
   });
 });

@@ -22,7 +22,7 @@ import {
   sendAbsenceStatusEmail,
 } from '@/lib/email/eventEmails';
 import { notifications, createBulkNotifications } from '@/lib/notifications/notificationHelpers';
-import { resolveInvitees, buildEventEmailData } from './calendar.helpers';
+import { resolveInvitees, buildEventEmailData, buildCollaboratorEventVisibility } from './calendar.helpers';
 import { sortParticipantsBySurname } from './virtualRoom.helpers';
 import { syncAssignmentsForCalendarEvent } from './simulations.helpers';
 
@@ -43,7 +43,9 @@ export const calendarRouter = router({
         includeCancelled: z.boolean().optional().default(false),
         onlyMyEvents: z.boolean().optional().default(false),
         page: z.number().min(1).optional().default(1),
-        pageSize: z.number().min(1).max(100).optional().default(50),
+        // Calendar views need every event of the visible range in one shot (a busy month
+        // easily exceeds 50), so the cap is high enough to hold a full range.
+        pageSize: z.number().min(1).max(500).optional().default(50),
       })
     )
     .query(async ({ ctx, input }) => {
@@ -52,11 +54,15 @@ export const calendarRouter = router({
 
       const where: Parameters<typeof ctx.prisma.calendarEvent.findMany>[0]['where'] = {};
 
-      // Date filters
-      if (startDate) {
+      // Date filters. With both bounds the range behaves as a window: an event belongs to
+      // it when it OVERLAPS the window, not only when it is fully contained in it —
+      // otherwise multi-day events crossing a boundary disappear from the view.
+      if (startDate && endDate) {
+        where.startDate = { lte: endDate };
+        where.endDate = { gte: startDate };
+      } else if (startDate) {
         where.startDate = { gte: startDate };
-      }
-      if (endDate) {
+      } else if (endDate) {
         where.endDate = { lte: endDate };
       }
 
@@ -162,20 +168,19 @@ export const calendarRouter = router({
         
         where.OR = orConditions;
       }
-      // Collaborators see: public events, events created by them, events they're invited to directly, or events their groups are invited to
+      // Collaborators see: public events, their own, those they're invited to, and — with
+      // 'events.viewAll' — every event tied to a class, whoever created it
       else if (ctx.user?.role === 'COLLABORATOR') {
-        type WhereCondition = Parameters<typeof ctx.prisma.calendarEvent.findMany>[0]['where'];
-        const orConditions: WhereCondition[] = [
-          { isPublic: true },
-          { createdById: ctx.user.id },
-          { invitations: { some: { userId: ctx.user.id } } },
-        ];
-        
-        if (collaboratorGroupIds.length > 0) {
-          orConditions.push({ invitations: { some: { groupId: { in: collaboratorGroupIds } } } });
+        const orConditions = buildCollaboratorEventVisibility({
+          userId: ctx.user.id,
+          groupIds: collaboratorGroupIds,
+          canViewAllClassEvents: hasCapability(ctx, 'events.viewAll'),
+          seesEveryEvent: false,
+        });
+
+        if (orConditions) {
+          where.OR = orConditions;
         }
-        
-        where.OR = orConditions;
       }
 
       const [events, total] = await Promise.all([
@@ -1491,17 +1496,17 @@ export const calendarRouter = router({
         collaboratorGroupIds = groupMembers.map(gm => gm.groupId);
       }
 
-      // Collaborators see: public events, events created by them, events they're invited to, or events their groups are invited to
+      // Same rule as the event list, so the cards can't disagree with the calendar below them
+      const orConditions = buildCollaboratorEventVisibility({
+        userId: ctx.user.id,
+        groupIds: collaboratorGroupIds,
+        canViewAllClassEvents: hasCapability(ctx, 'events.viewAll'),
+        seesEveryEvent: false,
+      });
+
       eventFilter = {
         isCancelled: false,
-        OR: [
-          { isPublic: true },
-          { createdById: ctx.user.id },
-          { invitations: { some: { userId: ctx.user.id } } },
-          ...(collaboratorGroupIds.length > 0
-            ? [{ invitations: { some: { groupId: { in: collaboratorGroupIds } } } }]
-            : []),
-        ],
+        ...(orConditions ? { OR: orConditions } : {}),
       };
     } else if (ctx.user.role === 'STUDENT') {
       // Students see: public events, events they're invited to directly, or events their groups are invited to

@@ -23,6 +23,7 @@ export const QuestionFeedbackTypeEnum = z.enum([
   'ERROR_IN_ANSWER',
   'UNCLEAR',
   'SUGGESTION',
+  'ALTERNATIVE_ANSWER',
   'OTHER',
 ]);
 export type QuestionFeedbackType = z.infer<typeof QuestionFeedbackTypeEnum>;
@@ -167,6 +168,14 @@ export const questionFilterSchema = z.object({
   languages: z.array(QuestionLanguageEnum).optional(),
   tags: z.array(z.string()).optional(), // Legacy tags filter
   tagIds: z.array(z.string()).optional(), // New QuestionTag IDs filter
+  /**
+   * Only questions students get wrong far more often than expected, with enough
+   * answers for that to mean something. Deliberately not a "difficulty" filter:
+   * these are candidates for a review of the question itself.
+   */
+  onlyCritical: z.boolean().optional(),
+  /** Only questions the calibration has proposed a new difficulty for. */
+  onlyWithSuggestion: z.boolean().optional(),
 
   // Sorting
   sortBy: z.enum([
@@ -196,11 +205,48 @@ export type QuestionFilterInput = z.infer<typeof questionFilterSchema>;
 
 // ==================== FEEDBACK SCHEMAS ====================
 
+/** Max length of a proposed keyword: it is a word, a number or a short phrase, never a paragraph. */
+export const MAX_PROPOSED_KEYWORD_LENGTH = 100;
+
 export const createQuestionFeedbackSchema = z.object({
   questionId: z.string(),
   type: QuestionFeedbackTypeEnum,
-  message: z.string().min(10, 'Descrivi il problema in almeno 10 caratteri'),
-});
+  message: z.string().default(''),
+  // ALTERNATIVE_ANSWER only: the answer the student claims should also be accepted
+  proposedKeyword: z.string().trim().max(MAX_PROPOSED_KEYWORD_LENGTH).optional(),
+  // ALTERNATIVE_ANSWER only: the attempt the proposal comes from, so approving it
+  // can re-grade the proposer's own answer
+  simulationResultId: z.string().optional(),
+})
+  .superRefine((input, ctx) => {
+    // A proposal is the keyword itself, so it needs no explanation; every other
+    // kind of report is only actionable if the student describes the problem.
+    if (input.type === 'ALTERNATIVE_ANSWER') {
+      if (!input.proposedKeyword || input.proposedKeyword.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['proposedKeyword'],
+          message: 'Indica la risposta che secondo te dovrebbe essere accettata',
+        });
+      }
+      if (input.proposedKeyword && /[\n\r]/.test(input.proposedKeyword)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['proposedKeyword'],
+          message: 'La risposta proposta deve stare su una sola riga',
+        });
+      }
+      return;
+    }
+
+    if (input.message.trim().length < 10) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['message'],
+        message: 'Descrivi il problema in almeno 10 caratteri',
+      });
+    }
+  });
 
 export type CreateQuestionFeedbackInput = z.infer<typeof createQuestionFeedbackSchema>;
 
@@ -355,6 +401,7 @@ export const feedbackTypeLabels: Record<QuestionFeedbackType, string> = {
   ERROR_IN_ANSWER: 'Errore nelle risposte',
   UNCLEAR: 'Domanda poco chiara',
   SUGGESTION: 'Suggerimento',
+  ALTERNATIVE_ANSWER: 'Risposta alternativa',
   OTHER: 'Altro',
 };
 

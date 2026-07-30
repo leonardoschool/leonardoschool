@@ -143,6 +143,9 @@ export default function AdminCalendarContent() {
     groupId: filterGroupId || undefined,
     includeInvitations: true,
     includeCancelled: false,
+    // The grid must show every event of the range: with the default page size a busy
+    // month got silently truncated (events reappeared only once a filter shrank the set).
+    pageSize: 500,
   });
 
   const { data: tagsData } = trpc.calendar.listTags.useQuery({ includeInactive: false });

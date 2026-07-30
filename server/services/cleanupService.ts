@@ -61,7 +61,10 @@ export interface CleanupOptions {
   // Calendar & Events
   oldCalendarEventsDays?: number;       // Default: 365 - Delete old non-recurring events
   oldStaffAbsencesDays?: number;        // Default: 365 - Delete old confirmed/rejected absences
-  
+
+  // Difficulty calibration
+  calibrationProposalsDays?: number;    // Default: 90 - Drop undecided proposals (worklist, not history)
+
   // Dry run mode (log but don't delete)
   dryRun?: boolean;
 }
@@ -87,6 +90,7 @@ const DEFAULT_OPTIONS: Required<CleanupOptions> = {
   // Calendar & Events
   oldCalendarEventsDays: 365,
   oldStaffAbsencesDays: 365,
+  calibrationProposalsDays: 90,
   dryRun: false,
 };
 
@@ -113,6 +117,7 @@ const CLEANUP_TASKS: CleanupTask[] = [
   { name: 'simulationSessions', fn: cleanupSimulationSessions },
   { name: 'calendarEvents', fn: cleanupOldCalendarEvents },
   { name: 'staffAbsences', fn: cleanupOldStaffAbsences },
+  { name: 'calibrationProposals', fn: cleanupCalibrationProposals },
 ];
 
 /**
@@ -356,6 +361,32 @@ async function cleanupQuestionFeedback(
   });
 
   console.log(`[Cleanup] Deleted ${result.count} question feedbacks`);
+  return result.count;
+}
+
+/**
+ * Drops difficulty proposals nobody ever decided on.
+ *
+ * A `PROPOSED` row is a worklist entry, not history: the job recreates it on the next
+ * run if the evidence still supports it. Decided rows (`APPLIED`, `REJECTED`,
+ * `REVERTED`) are the audit trail and are never touched here — they are how a change
+ * to a question's difficulty stays explainable, and how it can be undone.
+ */
+async function cleanupCalibrationProposals(
+  prisma: PrismaClient,
+  opts: Required<CleanupOptions>
+): Promise<number> {
+  const cutoff = new Date(Date.now() - opts.calibrationProposalsDays * 24 * 60 * 60 * 1000);
+  const where = { status: 'PROPOSED' as const, createdAt: { lt: cutoff } };
+
+  if (opts.dryRun) {
+    const count = await prisma.questionDifficultyAudit.count({ where });
+    console.log(`[Cleanup] Would delete ${count} stale difficulty proposals`);
+    return 0;
+  }
+
+  const result = await prisma.questionDifficultyAudit.deleteMany({ where });
+  console.log(`[Cleanup] Deleted ${result.count} stale difficulty proposals`);
   return result.count;
 }
 

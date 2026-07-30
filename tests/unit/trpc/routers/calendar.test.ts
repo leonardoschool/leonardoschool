@@ -236,9 +236,11 @@ describe('Calendar Router', () => {
         expect(defaultPageSize).toBe(50);
       });
 
-      it('should limit pageSize to 100', () => {
-        const maxPageSize = 100;
-        expect(maxPageSize).toBe(100);
+      // Calendar views fetch a whole visible range in one page, so the cap has to be
+      // well above a busy month's event count.
+      it('should limit pageSize to 500', () => {
+        const maxPageSize = 500;
+        expect(maxPageSize).toBe(500);
       });
     });
 
@@ -284,17 +286,19 @@ describe('Calendar Router', () => {
     });
 
     describe('filtering', () => {
-      it('should filter by date range', async () => {
+      // A range is a window: events overlapping it belong to it, so multi-day events
+      // crossing a boundary stay visible.
+      it('should filter by date range as an overlap', async () => {
         const startDate = new Date('2024-01-01');
         const endDate = new Date('2024-12-31');
-        
+
         const where = {
-          startDate: { gte: startDate },
-          endDate: { lte: endDate },
+          startDate: { lte: endDate },
+          endDate: { gte: startDate },
         };
-        
-        expect(where.startDate.gte).toEqual(startDate);
-        expect(where.endDate.lte).toEqual(endDate);
+
+        expect(where.startDate.lte).toEqual(endDate);
+        expect(where.endDate.gte).toEqual(startDate);
       });
 
       it('should filter by event type', async () => {

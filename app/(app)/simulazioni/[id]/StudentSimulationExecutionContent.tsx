@@ -27,15 +27,22 @@ import {
 } from '@/components/simulazioni/SimulationModals';
 import { useRouter } from 'next/navigation';
 import { useAntiCheat } from '@/lib/hooks/useAntiCheat';
+import { useSimulationDraft } from '@/lib/hooks/useSimulationDraft';
+import { useSimulationAutosave } from '@/lib/hooks/useSimulationAutosave';
+import {
+  accumulateQuestionMs,
+  buildProgressItems,
+  mergeProgress,
+  nextRev,
+  normalizeAnswerItems,
+  questionMsToSeconds,
+  questionSecondsToMs,
+  type SimulationAnswerItem,
+  type SimulationProgressSnapshot,
+} from '@/lib/utils/simulationProgress';
 import { sanitizeStudentAnswerText, sanitizeStudentOpenAnswerInput } from '@/lib/utils/studentOpenAnswer';
 
-interface Answer {
-  questionId: string;
-  answerId: string | null;
-  answerText: string | null;
-  timeSpent: number;
-  flagged: boolean;
-}
+type Answer = SimulationAnswerItem;
 
 // Section type matching database schema (from wizard)
 interface SimulationSection {
@@ -93,6 +100,19 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   const questionStartTimeRef = useRef<number>(0);
+  /**
+   * Per-question time in milliseconds — the authoritative accumulator.
+   *
+   * A ref, not state, for two reasons: the submit paths have to read it in the same
+   * tick they commit to it (a state read there sees the value from before the
+   * commit), and the autosave loop must be able to look at it without forcing a
+   * re-render. `questionTimes` below is the rendered mirror, in whole seconds.
+   */
+  const questionTimesMsRef = useRef<Record<string, number>>({});
+  const currentQuestionIdRef = useRef<string | null>(null);
+  // Lets the timer and the autosave loop commit the pending time without taking a
+  // dependency on the callback, which would rebuild the interval on every change.
+  const flushQuestionTimeRef = useRef<() => Record<string, number>>(() => ({}));
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const autoSubmitRef = useRef<(() => void) | null>(null);
   const answersInitializedRef = useRef<boolean>(false);
@@ -168,30 +188,16 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   }, [hasReadInstructions, id]);
 
   // Helper to restore saved attempt state
-  const restoreAttemptState = useCallback((data: { 
-    savedTimeSpent?: number; 
-    savedAnswers?: Array<{ questionId?: string | null; answerId?: string | null; answerText?: string | null; timeSpent?: number | null; flagged?: boolean | null }>; 
-    savedSectionTimes?: Record<number, number>; 
-    savedCurrentSectionIndex?: number;
-    savedCurrentQuestionIndex?: number;
-  }) => {
-    const {
-      savedTimeSpent,
-      savedAnswers,
-      savedSectionTimes,
-      savedCurrentSectionIndex,
-      savedCurrentQuestionIndex,
-    } = data;
-    
-    if (savedTimeSpent) {
-      setTimeSpent(savedTimeSpent);
-      lastSectionTimeUpdateRef.current = savedTimeSpent;
+  const restoreAttemptState = useCallback((snapshot: SimulationProgressSnapshot) => {
+    if (snapshot.timeSpent) {
+      setTimeSpent(snapshot.timeSpent);
+      lastSectionTimeUpdateRef.current = snapshot.timeSpent;
     }
-    
-    if (savedAnswers && savedAnswers.length > 0) {
-      const restoredAnswers = savedAnswers.map(a => ({
+
+    if (snapshot.items.length > 0) {
+      const restoredAnswers = snapshot.items.map(a => ({
         questionId: a.questionId,
-        answerId: a.answerId,
+        answerId: a.answerId ?? null,
         answerText: sanitizeStudentAnswerText(a.answerText),
         timeSpent: a.timeSpent || 0,
         flagged: a.flagged ?? false,
@@ -200,55 +206,83 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
       answersInitializedRef.current = true;
 
       const restoredQuestionTimes: Record<string, number> = {};
-      savedAnswers.forEach(a => {
+      snapshot.items.forEach(a => {
         if (a.timeSpent) {
-          restoredQuestionTimes[a.questionId ?? ''] = a.timeSpent;
+          restoredQuestionTimes[a.questionId] = a.timeSpent;
         }
       });
+      // Seed the millisecond accumulator too, or the first commit after a resume
+      // would overwrite the restored totals with the time of this session alone.
+      questionTimesMsRef.current = questionSecondsToMs(restoredQuestionTimes);
+      questionTimesRef.current = restoredQuestionTimes;
       setQuestionTimes(restoredQuestionTimes);
     }
-    
-    if (savedSectionTimes) {
-      setSectionTimes(savedSectionTimes);
+
+    if (snapshot.sectionTimes) {
+      setSectionTimes(snapshot.sectionTimes);
     }
-    if (savedCurrentSectionIndex !== undefined) {
-      setCurrentSectionIndex(savedCurrentSectionIndex);
-      setCompletedSections(new Set(Array.from({ length: savedCurrentSectionIndex }, (_, index) => index)));
-    }
-    if (savedCurrentQuestionIndex !== undefined) {
-      setCurrentQuestionIndex(savedCurrentQuestionIndex);
-    }
+    setCurrentSectionIndex(snapshot.currentSectionIndex);
+    setCompletedSections(new Set(Array.from({ length: snapshot.currentSectionIndex }, (_, index) => index)));
+    setCurrentQuestionIndex(snapshot.currentQuestionIndex);
   }, []);
 
   // Echoed back on every saveProgress/submit so the server can reject writes
   // from a tab opened before a staff reset of this attempt
   const resetTokenRef = useRef<number | null>(null);
 
+  const { readDraft, saveDraft, clearDraft } = useSimulationDraft();
+  // Revision the autosave must continue from, so a resumed attempt never
+  // reuses a number already stored on the server
+  const [baseRev, setBaseRev] = useState(0);
+
   // Mutations
   const startAttemptMutation = trpc.simulations.startAttempt.useMutation({
     onSuccess: (data) => {
       console.log('[VirtualRoom] startAttemptMutation onSuccess, resumed:', data.resumed);
-      resetTokenRef.current = ('resetToken' in data ? data.resetToken : null) ?? null;
-      if (data.resumed) {
-        // Extract saved data with type narrowing
-        const savedData = {
-          savedTimeSpent: 'savedTimeSpent' in data ? data.savedTimeSpent : undefined,
-          savedAnswers: 'savedAnswers' in data ? data.savedAnswers : undefined,
-          savedSectionTimes: 'savedSectionTimes' in data ? data.savedSectionTimes : undefined,
-          savedCurrentSectionIndex: 'savedCurrentSectionIndex' in data ? data.savedCurrentSectionIndex : undefined,
-          savedCurrentQuestionIndex: 'savedCurrentQuestionIndex' in data ? data.savedCurrentQuestionIndex : undefined,
-        };
-        restoreAttemptState(savedData);
+      const serverResetToken = ('resetToken' in data ? data.resetToken : null) ?? null;
+      resetTokenRef.current = serverResetToken;
+
+      // The server only knows what reached it. A student who went offline may
+      // hold newer answers on this device, so both are compared before restoring.
+      const serverSnapshot: SimulationProgressSnapshot | null = data.resumed
+        ? {
+            rev: ('savedRev' in data ? data.savedRev : 0) ?? 0,
+            updatedAt: 0,
+            resetToken: serverResetToken,
+            items: normalizeAnswerItems('savedAnswers' in data ? data.savedAnswers : []),
+            timeSpent: ('savedTimeSpent' in data ? data.savedTimeSpent : 0) ?? 0,
+            sectionTimes: ('savedSectionTimes' in data ? data.savedSectionTimes : {}) ?? {},
+            currentSectionIndex: ('savedCurrentSectionIndex' in data ? data.savedCurrentSectionIndex : 0) ?? 0,
+            currentQuestionIndex: ('savedCurrentQuestionIndex' in data ? data.savedCurrentQuestionIndex : 0) ?? 0,
+          }
+        : null;
+      const localSnapshot = readDraft(data.resultId);
+      const restored = mergeProgress(serverSnapshot, localSnapshot);
+
+      if (restored) {
+        restoreAttemptState(restored);
       }
+      setBaseRev(nextRev(serverSnapshot, localSnapshot));
+
       console.log('[VirtualRoom] Setting hasStarted = true');
       setHasStarted(true);
     },
     onError: handleMutationError,
   });
 
+  // Shown at most once: a staff reset makes every further autosave fail, and
+  // repeating the toast on each retry would bury the student in notifications
+  const resetConflictNotifiedRef = useRef(false);
+
   const saveProgressMutation = trpc.simulations.saveProgress.useMutation({
     onError: (error) => {
       console.error('Save progress error:', error);
+      // A CONFLICT is not a connection problem: the attempt was reset by staff
+      // and only reloading can reattach this tab to it.
+      if (error.data?.code === 'CONFLICT' && !resetConflictNotifiedRef.current) {
+        resetConflictNotifiedRef.current = true;
+        showError('Tentativo ripristinato', error.message);
+      }
     },
   });
 
@@ -256,10 +290,19 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     onSuccess: (data) => {
       // Clear TOLC instructions state on completion
       sessionStorage.removeItem(`tolc-instructions-read-${id}`);
+      // The attempt is safely scored: the local safety net is no longer needed
+      const attemptId = startAttemptMutation.data?.resultId;
+      if (attemptId) clearDraft(attemptId);
       showSuccess('Completata!', 'Simulazione inviata con successo');
       router.push(`/simulazioni/${id}/risultato?resultId=${data.resultId}`);
     },
-    onError: handleMutationError,
+    onError: (error) => {
+      // A failed submit must not leave the attempt frozen: `isSubmitting` also
+      // gates the timer and the autosave, so staying stuck here would silently
+      // stop saving everything from this point on.
+      setIsSubmitting(false);
+      handleMutationError(error);
+    },
   });
 
   // Feedback mutation
@@ -320,29 +363,6 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
 
   const antiCheat = useAntiCheat(antiCheatConfig);
 
-  // Update auto-submit ref when dependencies change
-  useEffect(() => {
-    autoSubmitRef.current = () => {
-      if (!simulation || isSubmitting) return;
-      setIsSubmitting(true);
-      
-      const finalAnswers = answers.map((a) => ({
-        questionId: a.questionId,
-        answerId: a.answerId,
-        answerText: sanitizeStudentAnswerText(a.answerText),
-        timeSpent: questionTimes[a.questionId] || 0,
-        flagged: a.flagged,
-      }));
-
-      submitMutation.mutate({
-        simulationId: id,
-        answers: finalAnswers,
-        totalTimeSpent: timeSpent,
-        resetToken: resetTokenRef.current,
-      });
-    };
-  }, [simulation, isSubmitting, answers, questionTimes, timeSpent, id, submitMutation]);
-
   // Initialize answers when simulation loads (only if not already initialized from resume)
   useEffect(() => {
     if (simulation && hasStarted && answers.length === 0 && !answersInitializedRef.current) {
@@ -359,11 +379,13 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     }
   }, [simulation, hasStarted, answers.length]);
 
-  // Timer
+  // Timer. Paused while a submit is in flight (prevents negative display) and
+  // resumed if that submit fails, so a dropped connection doesn't freeze the clock.
   useEffect(() => {
-    if (!hasStarted || !simulation) return;
+    if (!hasStarted || !simulation || isSubmitting) return;
 
-    // Initialize question start time when simulation starts
+    // The question clock (re)starts now, so a pause — a submit in flight — is never
+    // billed to the question the student happens to be on.
     questionStartTimeRef.current = Date.now();
 
     timerRef.current = setInterval(() => {
@@ -372,16 +394,13 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [hasStarted, simulation]);
-
-  // Stop timer when submission starts (prevents negative display)
-  useEffect(() => {
-    if (isSubmitting && timerRef.current) {
-      clearInterval(timerRef.current);
       timerRef.current = null;
-    }
-  }, [isSubmitting]);
+      // Commit before the clock stops. Without this, every pause (and every re-run
+      // of this effect) would silently discard the time accrued since the last
+      // navigation, because the line above resets the origin on the way back in.
+      flushQuestionTimeRef.current();
+    };
+  }, [hasStarted, simulation, isSubmitting]);
 
   // Keep answersRef in sync with answers state (for heartbeat interval)
   useEffect(() => {
@@ -395,6 +414,14 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   useEffect(() => {
     questionTimesRef.current = questionTimes;
   }, [questionTimes]);
+
+  // The time accumulator credits whatever question this ref names, so it has to be
+  // updated before any navigation commits — hence a ref rather than reading the
+  // index out of a closure that may already belong to the next question.
+  useEffect(() => {
+    currentQuestionIdRef.current =
+      simulation?.questions[currentQuestionIndex]?.questionId ?? null;
+  }, [simulation, currentQuestionIndex]);
 
   useEffect(() => {
     currentSectionIndexRef.current = currentSectionIndex;
@@ -413,13 +440,14 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     participantIdRef.current = participantId;
   }, [participantId]);
 
-  const buildProgressPayload = useCallback((resultId: string) => ({
-    resultId,
-    answers: answersRef.current.map((answer) => ({
-      ...answer,
-      answerText: sanitizeStudentAnswerText(answer.answerText),
-      timeSpent: questionTimesRef.current[answer.questionId] || answer.timeSpent || 0,
-    })),
+  // Reads the live state through the refs the timers already maintain, so the
+  // autosave loop never forces a re-render just to look at the answers
+  const buildSnapshot = useCallback(() => ({
+    // Commit first: otherwise a snapshot taken while the student sits on one
+    // question — an autosave tick, or the beacon fired as the tab closes — would
+    // save that question as if no time had been spent on it, and a resume would
+    // start it back from zero.
+    items: buildProgressItems(answersRef.current, flushQuestionTimeRef.current()),
     timeSpent: timeSpentRef.current,
     sectionTimes: sectionTimesRef.current,
     currentSectionIndex: currentSectionIndexRef.current,
@@ -427,10 +455,43 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     resetToken: resetTokenRef.current,
   }), []);
 
-  const flushProgressToApi = useCallback((resultId: string) => {
-    if (isSubmittingRef.current) return;
+  const persistLocal = useCallback((snapshot: SimulationProgressSnapshot) => {
+    const resultId = startAttemptMutation.data?.resultId;
+    if (resultId) saveDraft(resultId, snapshot);
+  }, [startAttemptMutation.data?.resultId, saveDraft]);
 
-    const requestBody = JSON.stringify(buildProgressPayload(resultId));
+  const persistRemote = useCallback((snapshot: SimulationProgressSnapshot) => {
+    const resultId = startAttemptMutation.data?.resultId;
+    if (!resultId) return Promise.resolve();
+
+    return saveProgressMutation.mutateAsync({
+      resultId,
+      answers: snapshot.items,
+      timeSpent: snapshot.timeSpent,
+      sectionTimes: snapshot.sectionTimes,
+      currentSectionIndex: snapshot.currentSectionIndex,
+      currentQuestionIndex: snapshot.currentQuestionIndex,
+      resetToken: snapshot.resetToken,
+      rev: snapshot.rev,
+    });
+  }, [startAttemptMutation.data?.resultId, saveProgressMutation]);
+
+  // The page is going away: sendBeacon still gets through where a normal
+  // request would be cancelled
+  const persistOnUnload = useCallback((snapshot: SimulationProgressSnapshot) => {
+    const resultId = startAttemptMutation.data?.resultId;
+    if (!resultId) return;
+
+    const requestBody = JSON.stringify({
+      resultId,
+      answers: snapshot.items,
+      timeSpent: snapshot.timeSpent,
+      sectionTimes: snapshot.sectionTimes,
+      currentSectionIndex: snapshot.currentSectionIndex,
+      currentQuestionIndex: snapshot.currentQuestionIndex,
+      resetToken: snapshot.resetToken,
+      rev: snapshot.rev,
+    });
 
     if (navigator.sendBeacon) {
       const beaconPayload = new Blob([requestBody], { type: 'application/json' });
@@ -446,8 +507,21 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
       },
       body: requestBody,
       keepalive: true,
+    }).catch(() => {
+      // Offline: the local draft written just before this call is the fallback
     });
-  }, [buildProgressPayload]);
+  }, [startAttemptMutation.data?.resultId]);
+
+  const { isOffline, flushNow } = useSimulationAutosave({
+    resultId: startAttemptMutation.data?.resultId ?? null,
+    enabled: hasStarted && !!startAttemptMutation.data?.resultId,
+    paused: isSubmitting,
+    baseRev,
+    buildSnapshot,
+    persistLocal,
+    persistRemote,
+    persistOnUnload,
+  });
 
   // Virtual Room heartbeat - send progress updates
   const heartbeatMutation = trpc.virtualRoom.heartbeat.useMutation({
@@ -497,64 +571,50 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isVirtualRoom, participantId, hasStarted]);
 
-  // Track question time
-  const trackQuestionTime = useCallback(() => {
-    if (!simulation || !hasStarted) return;
-    const currentQuestion = simulation.questions[currentQuestionIndex];
-    if (!currentQuestion) return;
+  /**
+   * Commits the time spent on the question currently open and **returns** the
+   * resulting per-question seconds.
+   *
+   * It returns the map instead of leaving callers to read `questionTimes`: that
+   * state update lands on the next render, so a submit that called this and then
+   * read the state would send the totals from *before* its own commit — silently
+   * dropping the time spent on the last question the student looked at.
+   */
+  const flushQuestionTime = useCallback((): Record<string, number> => {
+    const now = Date.now();
+    if (hasStarted && questionStartTimeRef.current > 0) {
+      questionTimesMsRef.current = accumulateQuestionMs(
+        questionTimesMsRef.current,
+        currentQuestionIdRef.current,
+        now - questionStartTimeRef.current
+      );
+    }
+    questionStartTimeRef.current = now;
 
-    const elapsed = Math.floor((Date.now() - questionStartTimeRef.current) / 1000);
-    setQuestionTimes((prev) => ({
-      ...prev,
-      [currentQuestion.questionId]: (prev[currentQuestion.questionId] || 0) + elapsed,
-    }));
-    questionStartTimeRef.current = Date.now();
-  }, [simulation, currentQuestionIndex, hasStarted]);
+    const seconds = questionMsToSeconds(questionTimesMsRef.current);
+    questionTimesRef.current = seconds;
+    setQuestionTimes(seconds);
+    return seconds;
+  }, [hasStarted]);
 
-  // Save progress function (reusable)
-  const saveProgress = useCallback(() => {
-    if (!hasStarted || !startAttemptMutation.data?.resultId || isSubmittingRef.current) return;
-
-    saveProgressMutation.mutate(buildProgressPayload(startAttemptMutation.data.resultId));
-  }, [hasStarted, startAttemptMutation.data?.resultId, saveProgressMutation, buildProgressPayload]);
-
-  // Save on page unload/refresh and on client-side navigation unmount
   useEffect(() => {
-    const resultId = startAttemptMutation.data?.resultId;
-    if (!hasStarted || !resultId) return;
+    flushQuestionTimeRef.current = flushQuestionTime;
+  }, [flushQuestionTime]);
+
+  // Leave confirmation. The progress flush itself lives in useSimulationAutosave,
+  // which writes the local draft and fires the beacon on `pagehide` and unmount.
+  useEffect(() => {
+    if (!hasStarted || !startAttemptMutation.data?.resultId) return;
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      flushProgressToApi(resultId);
-
-      // Show confirmation dialog
       e.preventDefault();
       // Modern browsers show a generic message; custom messages are ignored.
       return 'Hai una simulazione in corso. Sei sicuro di voler lasciare la pagina?';
     };
 
-    const handlePageHide = () => {
-      flushProgressToApi(resultId);
-    };
-
     globalThis.addEventListener('beforeunload', handleBeforeUnload);
-    globalThis.addEventListener('pagehide', handlePageHide);
-    return () => {
-      globalThis.removeEventListener('beforeunload', handleBeforeUnload);
-      globalThis.removeEventListener('pagehide', handlePageHide);
-      flushProgressToApi(resultId);
-    };
-  }, [hasStarted, startAttemptMutation.data?.resultId, flushProgressToApi]);
-
-  // Auto-save progress periodically
-  useEffect(() => {
-    if (!hasStarted || !startAttemptMutation.data?.resultId) return;
-
-    const interval = setInterval(() => {
-      saveProgress();
-    }, 30000); // Save every 30 seconds
-
-    return () => clearInterval(interval);
-  }, [hasStarted, startAttemptMutation.data?.resultId, saveProgress]);
+    return () => globalThis.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasStarted, startAttemptMutation.data?.resultId]);
 
   // Update the answer for the current question, creating its entry if missing.
   // A restored/partial `answers` array (resume) may lack a slot for questions
@@ -609,7 +669,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
 
   // Navigate questions
   const goToQuestion = (index: number) => {
-    trackQuestionTime();
+    flushQuestionTime();
     setCurrentQuestionIndex(index);
     setShowNavigation(false);
   };
@@ -628,14 +688,14 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
         const nextSectionQ = currentSectionQuestions[sectionQIndex + 1];
         const globalIndex = simulation.questions.findIndex(q => q.questionId === nextSectionQ.questionId);
         if (globalIndex !== -1) {
-          trackQuestionTime();
+          flushQuestionTime();
           setCurrentQuestionIndex(globalIndex);
         }
       }
     } else {
       // Normal mode - navigate globally
       if (currentQuestionIndex >= simulation.questions.length - 1) return;
-      trackQuestionTime();
+      flushQuestionTime();
       setCurrentQuestionIndex((prev) => prev + 1);
     }
   };
@@ -654,30 +714,37 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
         const prevSectionQ = currentSectionQuestions[sectionQIndex - 1];
         const globalIndex = simulation.questions.findIndex(q => q.questionId === prevSectionQ.questionId);
         if (globalIndex !== -1) {
-          trackQuestionTime();
+          flushQuestionTime();
           setCurrentQuestionIndex(globalIndex);
         }
       }
     } else {
       // Normal mode - navigate globally
       if (currentQuestionIndex <= 0) return;
-      trackQuestionTime();
+      flushQuestionTime();
       setCurrentQuestionIndex((prev) => prev - 1);
     }
   };
 
   // Submit simulation
   const handleSubmit = useCallback(async () => {
-    if (!simulation) return;
+    // Guarded through the ref: `isSubmitting` in this closure can still be false
+    // when an external trigger (the Virtual Room ending) fires right after a manual
+    // submit, and a second submit would score the attempt twice.
+    if (!simulation || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
 
-    trackQuestionTime();
+    // Read the map this returns, not the state: the commit it just made lands on the
+    // next render, so `questionTimes` here would still be missing the time spent on
+    // the question the student was looking at when they pressed submit.
+    const finalTimes = flushQuestionTime();
 
     const finalAnswers = answers.map((a) => ({
       questionId: a.questionId,
       answerId: a.answerId,
       answerText: sanitizeStudentAnswerText(a.answerText),
-      timeSpent: questionTimes[a.questionId] || 0,
+      timeSpent: finalTimes[a.questionId] || 0,
       flagged: a.flagged,
     }));
 
@@ -686,8 +753,10 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
       answers: finalAnswers,
       totalTimeSpent: timeSpent,
       resetToken: resetTokenRef.current,
+      // Submit against the very attempt that has been autosaved
+      resultId: startAttemptMutation.data?.resultId,
     });
-  }, [simulation, trackQuestionTime, answers, questionTimes, submitMutation, id, timeSpent]);
+  }, [simulation, flushQuestionTime, answers, submitMutation, id, timeSpent, startAttemptMutation.data?.resultId]);
 
   // Keep autoSubmitRef updated with the latest handleSubmit function
   // This allows external triggers (like Virtual Room session end) to auto-submit
@@ -801,7 +870,11 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   // Complete current section and move to next
   const handleCompleteSection = useCallback(() => {
     if (!hasSectionsMode) return;
-    
+
+    // A section can never be re-entered: get its answers to the server now
+    // rather than waiting out the debounce
+    flushNow();
+
     // Mark section as completed
     setCompletedSections(prev => new Set([...prev, currentSectionIndex]));
     
@@ -957,6 +1030,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
           onReportQuestion={() => setShowFeedbackModal(true)}
           answeredCount={answeredCount}
           totalQuestions={simulation.totalQuestions}
+          isOffline={isOffline}
         />
 
         {/* In-test messaging for virtual room - TOLC mode */}
@@ -1050,6 +1124,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
         sectionTimeRemaining={sectionTimeRemaining}
         currentSectionQuestionIndex={currentSectionQuestionIndex}
         currentSectionQuestionsLength={currentSectionQuestions.length}
+        isOffline={isOffline}
       />
 
       {/* Main content */}

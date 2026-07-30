@@ -12,6 +12,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { LaTeXRenderer } from '@/components/ui/LaTeXEditor';
 import RichTextRenderer from '@/components/ui/RichTextRenderer';
+import QuestionStatsCard from './QuestionStatsCard';
 import {
   ArrowLeft,
   Edit2,
@@ -560,32 +561,7 @@ export default function DettaglioDomandaPage() {
             </div>
           )}
 
-          {/* Statistics */}
-          <div className={`${colors.background.card} rounded-xl p-6 ${colors.effects.shadow.sm}`}>
-            <h3 className={`font-semibold ${colors.text.primary} mb-4`}>Statistiche</h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className={`text-sm ${colors.text.muted}`}>Usata in simulazioni</span>
-                <span className={`font-medium ${colors.text.primary}`}>{question.timesUsed ?? 0}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className={`text-sm ${colors.text.muted}`}>Risposte totali</span>
-                <span className={`font-medium ${colors.text.primary}`}>{question.timesAnswered ?? 0}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className={`text-sm ${colors.text.muted}`}>Risposte corrette</span>
-                <span className={`font-medium text-green-600`}>{question.timesCorrect ?? 0}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className={`text-sm ${colors.text.muted}`}>% Correttezza</span>
-                <span className={`font-medium ${colors.text.primary}`}>
-                  {(question.timesAnswered ?? 0) > 0
-                    ? `${Math.round(((question.timesCorrect ?? 0) / (question.timesAnswered ?? 1)) * 100)}%`
-                    : 'N/A'}
-                </span>
-              </div>
-            </div>
-          </div>
+          <QuestionStatsCard stats={question} />
 
           {/* Audit Info */}
           <div className={`${colors.background.card} rounded-xl p-6 ${colors.effects.shadow.sm}`}>

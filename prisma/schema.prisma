@@ -23,6 +23,25 @@ enum DifficultyLevel {
   HARD
 }
 
+/// Where a question's difficulty came from. Decides whether the calibration may
+/// propose a change quietly, or must flag that it is contradicting a human.
+/// LEGACY is the default on purpose: with MANUAL the existing bank would be frozen
+/// forever, and "nobody ever recorded a decision here" is the truth about it.
+enum DifficultySource {
+  LEGACY // Pre-calibration value, or from a CSV column: no human decision recorded
+  MANUAL // Chosen explicitly by staff in the editor
+  AUTO // Applied by staff accepting a proposal from the calibration
+}
+
+/// Lifecycle of a proposed difficulty change. PROPOSED rows are an ephemeral
+/// worklist and may be regenerated; the other three are history and are kept.
+enum DifficultyChangeStatus {
+  PROPOSED
+  APPLIED
+  REJECTED
+  REVERTED
+}
+
 // ==================== QUESTION ENUMS ====================
 
 enum QuestionType {
@@ -53,6 +72,7 @@ enum QuestionFeedbackType {
   ERROR_IN_ANSWER // Errore nelle risposte
   UNCLEAR // Domanda poco chiara
   SUGGESTION // Suggerimento miglioramento
+  ALTERNATIVE_ANSWER // Risposta alternativa proposta per una domanda aperta (diventa keyword se approvata)
   OTHER // Altro
 }
 
@@ -588,6 +608,20 @@ model Question {
   avgTimeSeconds Float? // Tempo medio di risposta
   avgCorrectRate Float? // % risposte corrette
 
+  // === CALIBRATION ===
+  // The real denominator for avgCorrectRate: open answers still awaiting
+  // correction are excluded, otherwise they would zero every OPEN_TEXT question.
+  timesGraded          Int              @default(0)
+  statsComputedAt      DateTime? // null = statistiche mai calcolate
+  difficultySource     DifficultySource @default(LEGACY)
+  difficultyLockedAt   DateTime? // Quando lo staff ha deciso a mano la difficoltà
+  difficultyScore      Float? // Durezza continua (logit, scala ancorata per materia)
+  suggestedDifficulty  DifficultyLevel? // Proposta corrente, null = nessuna
+  suggestionConfidence Float? // 0..1
+  suggestedAt          DateTime?
+  discriminationIndex  Float? // Punto-biseriale rest-score; ≤0 ⇒ possibile chiave errata
+  qualityFlagCode      String? // LOW_DISCRIMINATION | BELOW_CHANCE | KEY_SUSPECT
+
   // === AUDIT ===
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -612,6 +646,7 @@ model Question {
   versions              QuestionVersion[] // Storico versioni
   openAnswerSubmissions OpenAnswerSubmission[] // Risposte aperte ricevute
   questionTags          QuestionTagAssignment[] // Tag assegnati alla domanda
+  difficultyAudits      QuestionDifficultyAudit[] // Proposte e storico ricalibrazioni
 
   @@index([subjectId])
   @@index([topicId])
@@ -621,6 +656,8 @@ model Question {
   @@index([year])
   @@index([language])
   @@index([createdById])
+  @@index([difficultySource])
+  @@index([suggestedDifficulty])
   @@map("questions")
 }
 
@@ -764,13 +801,19 @@ model QuestionKeyword {
 
 model QuestionFeedback {
   id         String @id @default(cuid())
-  questionId String
   studentId  String
+  questionId String
 
   // Feedback details
   type    QuestionFeedbackType
   status  QuestionFeedbackStatus @default(PENDING)
   message String                 @db.Text // Descrizione del problema
+
+  // === ALTERNATIVE_ANSWER (proposta di risposta valida per una domanda aperta) ===
+  proposedKeyword    String? // Testo proposto; diventa una QuestionKeyword se approvato
+  // Attempt in cui è nata la proposta: serve a rivalutare la risposta del proponente.
+  // SetNull perché la proposta resta valida anche se l'attempt viene cancellato.
+  simulationResultId String?
 
   // Admin response
   adminResponse String?   @db.Text // Risposta dell'admin
@@ -781,13 +824,15 @@ model QuestionFeedback {
   updatedAt DateTime @updatedAt
 
   // Relations
-  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  question         Question          @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  student          Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  simulationResult SimulationResult? @relation(fields: [simulationResultId], references: [id], onDelete: SetNull)
 
   @@index([questionId])
   @@index([studentId])
   @@index([status])
   @@index([type])
+  @@index([simulationResultId])
   @@map("question_feedbacks")
 }
 
@@ -834,6 +879,134 @@ model QuestionVersion {
   @@index([questionId])
   @@index([changedAt])
   @@map("question_versions")
+}
+
+// ==================== DIFFICULTY CALIBRATION ====================
+
+/// The frozen measuring stick for one subject.
+///
+/// A Rasch difficulty is identified only up to an additive constant: recomputing
+/// that constant every run would mean a cohort that simply got better shifts the
+/// whole scale, and with it every label — precisely the drift this feature must
+/// not have. So the constant is fixed ONCE against a set of anchor questions, and
+/// every later run is equated back onto them. This row is that guarantee.
+model DifficultyScale {
+  id        String @id @default(cuid())
+  subjectId String @unique
+
+  /// Question ids the scale is pinned to. Frozen at bootstrap; changing them
+  /// re-defines the scale, so it is deliberately an explicit, auditable act.
+  anchorQuestionIds Json
+  /// Cut points on the anchored logit scale, chosen to agree with the human labels.
+  cutEasyMedium     Float
+  cutMediumHard     Float
+  frozenAt          DateTime @default(now())
+
+  /// Root-mean-square drift of the anchors at the last equating: a large value
+  /// means the anchor set itself has moved and the scale needs human attention.
+  lastEquatingRmsd Float?
+  lastEquatedAt    DateTime?
+  /// HIGH | MEDIUM | LOW — how much data the scale rests on.
+  confidence       String    @default("LOW")
+  /// Agreement with the human labels the cuts were fitted on (quadratic kappa).
+  fitKappa         Float?
+  fitSampleSize    Int       @default(0)
+
+  subject CustomSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@map("difficulty_scales")
+}
+
+/// One execution of the calibration job.
+///
+/// The verifiable summary: Vercel log retention is short, so the counters that say
+/// whether the system is healthy live here. It is also the handle for undoing a
+/// whole night's worth of changes in one click.
+model QuestionCalibrationRun {
+  id            String    @id @default(cuid())
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+  durationMs    Int?
+  /// DRY_RUN | STATS_ONLY | PROPOSE
+  mode          String
+  /// CRON | MANUAL
+  trigger       String
+  triggeredById String?
+
+  resultsScanned     Int @default(0)
+  answersScanned     Int @default(0)
+  questionsWithStats Int @default(0)
+  statsUpdated       Int @default(0) // Solo le domande i cui numeri sono cambiati
+  proposalsCreated   Int @default(0)
+  // Un'esecuzione che non muove nulla deve poter spiegare perché: ogni motivo di
+  // scarto della regola di decisione ha la sua colonna, altrimenti lo storico —
+  // che esiste proprio perché i log Vercel durano poco — non risponde alla domanda.
+  skippedLowEvidence    Int @default(0) // Intervallo di confidenza non oltre il taglio
+  skippedCooldown       Int @default(0)
+  skippedAlreadyCorrect Int @default(0) // L'etichetta attuale è già quella misurata
+  skippedUnconnected    Int @default(0) // Scala non comparabile con il resto della materia
+  skippedQualityFlag    Int @default(0) // Sospetta chiave errata: si segnala, non si riclassifica
+  skippedBucketFloor    Int @default(0) // Svuoterebbe un bucket (materia, livello) sotto il minimo
+  qualityFlagged        Int @default(0) // Possibili domande rotte, non riclassificate
+
+  distributionBefore Json? // {EASY: n, MEDIUM: n, HARD: n}
+  distributionAfter  Json? // Come sarebbe accettando tutte le proposte
+
+  /// True when the run refused to publish its proposals because the movement
+  /// looked implausible (too many at once, or overwhelmingly one-directional).
+  /// Twenty questions do not change nature in the same week: something else broke.
+  isAnomalous   Boolean  @default(false)
+  anomalyReason String?
+  errors        String[]
+
+  audits QuestionDifficultyAudit[]
+
+  @@index([startedAt])
+  @@index([mode])
+  @@map("question_calibration_runs")
+}
+
+/// Proposals and the history of what was done with them.
+///
+/// The evidence is frozen into `reasonMetadata` at proposal time: the question can
+/// change afterwards, but the reason a decision was taken has to stay readable and
+/// must not be recomputed. `reasonCode` stays in English — Italian copy belongs in
+/// the UI layer, or the history becomes unreadable when the wording changes.
+model QuestionDifficultyAudit {
+  id         String                 @id @default(cuid())
+  questionId String
+  runId      String?
+  status     DifficultyChangeStatus @default(PROPOSED)
+  /// CRON | STAFF_REVIEW | REVERT
+  trigger    String
+
+  fromLevel DifficultyLevel
+  toLevel   DifficultyLevel
+
+  reasonCode      String // TOO_HARD_FOR_LEVEL | TOO_EASY_FOR_LEVEL | STAFF_OVERRIDE | REVERT
+  reasonMetadata  Json?
+  difficultyScore Float?
+  confidence      Float?
+  sampleSize      Int    @default(0)
+  correctRate     Float?
+
+  decidedAt   DateTime?
+  decidedById String?
+
+  /// The APPLIED row this one undoes, when it is a revert.
+  revertedFromId String? @unique
+
+  createdAt DateTime @default(now())
+
+  question     Question                 @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  run          QuestionCalibrationRun?  @relation(fields: [runId], references: [id], onDelete: SetNull)
+  revertedFrom QuestionDifficultyAudit? @relation("AuditRevert", fields: [revertedFromId], references: [id], onDelete: SetNull)
+  revertedBy   QuestionDifficultyAudit? @relation("AuditRevert")
+
+  @@index([status, createdAt])
+  @@index([questionId, createdAt])
+  @@index([runId])
+  @@map("question_difficulty_audits")
 }
 
 // ==================== OPEN ANSWER SUBMISSIONS ====================
@@ -1188,6 +1361,9 @@ model SimulationResult {
 
   // Open answer submissions for this result
   openAnswerSubmissions OpenAnswerSubmission[]
+
+  // Alternative-answer proposals raised from this attempt
+  questionFeedbacks QuestionFeedback[]
 
   // Virtual room participant link
   sessionParticipant SimulationSessionParticipant?
@@ -2037,10 +2213,11 @@ model CustomSubject {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  materials     Material[]
-  collaborators CollaboratorSubject[] // Collaboratori che insegnano questa materia
-  topics        Topic[] // Argomenti della materia
-  questions     Question[] // Domande di questa materia
+  materials       Material[]
+  collaborators   CollaboratorSubject[] // Collaboratori che insegnano questa materia
+  topics          Topic[] // Argomenti della materia
+  questions       Question[] // Domande di questa materia
+  difficultyScale DifficultyScale? // Scala di difficoltà ancorata della materia
 
   @@index([isActive])
   @@index([order])

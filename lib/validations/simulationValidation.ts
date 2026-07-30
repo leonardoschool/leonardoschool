@@ -354,6 +354,10 @@ export const submitSimulationSchema = z.object({
   totalTimeSpent: z.number().int().min(0), // Total seconds
   isPartial: z.boolean().default(false), // Partial save vs final submission
   resetToken: z.number().nullable().optional(), // From startAttempt: guards against stale tabs after a staff reset
+  // From startAttempt: pins the submit to the exact attempt the client has been
+  // autosaving into. Without it, a student with several assignments for the same
+  // simulation can submit against a different row than the one holding their answers.
+  resultId: z.string().optional(),
 });
 
 export type SubmitSimulationInput = z.infer<typeof submitSimulationSchema>;

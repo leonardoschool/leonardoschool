@@ -77,6 +77,12 @@ export const CAPABILITIES: CapabilityDef[] = [
   { key: 'questions.bulkOps', area: 'Domande', label: 'Operazioni massive sulle domande', description: 'Modifiche in blocco: stato, tag, materia, lingua, eliminazione multipla.', defaults: d(false, false, false) },
   { key: 'questions.reviewFeedback', area: 'Domande', label: 'Gestire le segnalazioni sulle domande', description: 'Gestire le segnalazioni delle proprie materie (solo Tutor delle materie assegnate).', defaults: d(false, true, false) },
   { key: 'questions.reviewAllFeedback', area: 'Domande', label: 'Gestire le segnalazioni di tutte le materie', description: 'Vedere e gestire le segnalazioni di qualsiasi materia, non solo quelle assegnate. Richiede "Gestire le segnalazioni sulle domande".', defaults: d(false, false, false) },
+  // Off by default for everyone configurable: ADMIN holds every capability by
+  // construction, and handing the difficulty of the whole bank to a tutor should be
+  // a deliberate act. Mirrors the "own subjects / all subjects" pair above so the
+  // mental model stays the same.
+  { key: 'questions.calibrateDifficulty', area: 'Domande', label: 'Confermare la ricalibrazione della difficoltà', description: 'Accettare o rifiutare le modifiche di difficoltà proposte dal sistema per le proprie materie, e annullarle.', defaults: d(false, false, false) },
+  { key: 'questions.calibrateAllSubjects', area: 'Domande', label: 'Confermare la ricalibrazione di tutte le materie', description: 'Confermare le proposte di qualsiasi materia, non solo quelle assegnate. Richiede "Confermare la ricalibrazione della difficoltà".', defaults: d(false, false, false) },
 
   // ── Tag domande ──────────────────────────────────────────────────────────────
   { key: 'tags.manage', area: 'Tag', label: 'Gestire categorie e tag delle domande', description: 'Creazione, modifica ed eliminazione delle proprie categorie e tag.', defaults: d(false, true, true) },
@@ -101,6 +107,7 @@ export const CAPABILITIES: CapabilityDef[] = [
   // ── Calendario, presenze e assenze ───────────────────────────────────────────
   { key: 'calendar.view', area: 'Calendario', label: 'Vedere il calendario', defaults: d(true, true, true) },
   { key: 'events.manage', area: 'Calendario', label: 'Creare e modificare eventi', description: 'Creare, modificare e annullare i propri eventi.', defaults: d(false, true, true) },
+  { key: 'events.viewAll', area: 'Calendario', label: 'Vedere gli eventi di tutte le classi', description: 'Vedere nel calendario gli eventi di una classe anche se creati da un altro collaboratore o se non si è membri di quella classe. Sola lettura: per modificarli serve "Gestire gli eventi di tutti". Gli eventi non collegati ad alcuna classe restano visibili solo a chi li ha creati.', defaults: d(false, true, true) },
   { key: 'events.manageAll', area: 'Calendario', label: 'Gestire gli eventi di tutti', description: 'Modificare, annullare e gestire gli inviti anche degli eventi creati da altri, non solo i propri.', defaults: d(false, false, false) },
   { key: 'attendance.manage', area: 'Calendario', label: 'Registrare le presenze', description: 'Registrare le presenze dei propri eventi.', defaults: d(false, true, true) },
   { key: 'attendance.manageAll', area: 'Calendario', label: 'Registrare le presenze di tutti gli eventi', description: 'Registrare le presenze anche degli eventi creati da altri, non solo dei propri.', defaults: d(false, false, false) },

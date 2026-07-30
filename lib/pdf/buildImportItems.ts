@@ -83,7 +83,9 @@ export function buildImportItems(
   return parsed.map((q, index) => ({
     localId: `pdf-${q.number}-${index}`,
     number: q.number,
-    type: 'SINGLE_CHOICE' as QuestionType,
+    // Honour the parser: a completion section carries no options, and forcing those
+    // rows to SINGLE_CHOICE is what made them arrive as empty multiple-choice questions.
+    type: q.type as QuestionType,
     language: defaults.language ?? 'IT',
     text: q.text,
     answers: q.answers.map((a) => ({

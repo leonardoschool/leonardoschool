@@ -15,6 +15,7 @@ import RichTextRenderer from '@/components/ui/RichTextRenderer';
 import QuestionImage from '@/components/ui/QuestionImage';
 import { questionImageSource } from '@/lib/utils/imageUrl';
 import Link from 'next/link';
+import { AlternativeAnswerContext, AlternativeAnswerApproveAction } from './AlternativeAnswerReview';
 import {
   ArrowLeft,
   MessageSquare,
@@ -29,6 +30,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  KeyRound,
 } from 'lucide-react';
 
 // Feedback type labels and icons
@@ -52,6 +54,11 @@ const feedbackTypeLabels: Record<string, { label: string; icon: React.ReactNode;
     label: 'Suggerimento',
     icon: <Lightbulb className="w-4 h-4" />,
     color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+  },
+  ALTERNATIVE_ANSWER: {
+    label: 'Risposta alternativa',
+    icon: <KeyRound className="w-4 h-4" />,
+    color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
   },
   OTHER: {
     label: 'Altro',
@@ -111,6 +118,24 @@ export default function FeedbacksPage() {
       utils.questions.getQuestionStats.invalidate();
       setSelectedFeedback(null);
       setAdminResponse('');
+    },
+    onError: handleMutationError,
+  });
+
+  // Approving a proposed alternative answer also adds it as a keyword and re-grades
+  // the answers of whoever proposed it
+  const approveMutation = trpc.questions.approveAlternativeAnswer.useMutation({
+    onSuccess: (result) => {
+      const rescored = result.rescoredCount > 0
+        ? ` ${result.rescoredCount === 1 ? 'Un punteggio è stato' : `${result.rescoredCount} punteggi sono stati`} aggiornato.`
+        : '';
+      showSuccess(
+        'Risposta approvata',
+        `"${result.keyword}" è ora fra le soluzioni accettate.${rescored}`
+      );
+      utils.questions.getPendingFeedbacks.invalidate();
+      utils.questions.getPendingFeedbackCount.invalidate();
+      utils.questions.getQuestionStats.invalidate();
     },
     onError: handleMutationError,
   });
@@ -266,13 +291,25 @@ export default function FeedbacksPage() {
                       </div>
                     </div>
 
+                    {/* Alternative-answer proposal context */}
+                    {feedback.type === 'ALTERNATIVE_ANSWER' && (
+                      <AlternativeAnswerContext
+                        proposedKeyword={feedback.proposedKeyword}
+                        studentAnswerText={feedback.studentAnswerText}
+                        currentKeywords={(feedback.question.keywords ?? []).map((k) => k.keyword)}
+                      />
+                    )}
+
                     {/* Student Message */}
-                    <div>
-                      <p className={`text-xs font-medium ${colors.text.muted} mb-1`}>
-                        Segnalazione da {feedback.student?.user?.name || 'Studente'}:
-                      </p>
-                      <p className={`text-sm ${colors.text.secondary}`}>{feedback.message}</p>
-                    </div>
+                    {feedback.message?.trim() && (
+                      <div>
+                        <p className={`text-xs font-medium ${colors.text.muted} mb-1`}>
+                          {feedback.type === 'ALTERNATIVE_ANSWER' ? 'Motivazione di' : 'Segnalazione da'}{' '}
+                          {feedback.student?.user?.name || 'Studente'}:
+                        </p>
+                        <p className={`text-sm ${colors.text.secondary}`}>{feedback.message}</p>
+                      </div>
+                    )}
 
                     {/* Admin Response (if exists) */}
                     {feedback.adminResponse && (
@@ -331,6 +368,16 @@ export default function FeedbacksPage() {
                         </>
                       ) : (
                         <>
+                          {feedback.type === 'ALTERNATIVE_ANSWER' && (
+                            <AlternativeAnswerApproveAction
+                              proposedKeyword={feedback.proposedKeyword}
+                              isApproving={approveMutation.isPending}
+                              onApprove={(keyword) => approveMutation.mutate({
+                                feedbackId: feedback.id,
+                                keyword,
+                              })}
+                            />
+                          )}
                           <Link
                             href={`/domande/${feedback.question.id}/modifica`}
                             className={`flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg ${colors.background.secondary} ${colors.text.primary} text-sm hover:${colors.background.tertiary} transition-colors`}
