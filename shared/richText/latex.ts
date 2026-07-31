@@ -116,12 +116,8 @@ function containsMathCmd(text: string): boolean {
   return false;
 }
 
-/**
- * Low-level normalizer shared by both the full-text and LaTeX-only paths.
- * Unescapes double backslashes and decodes HTML entities.
- * Does NOT convert \newline or wrap undelimited math — callers handle those.
- */
-function normalizeLatexContent(text: string): string {
+/** Unescapes `\\(`, `\\sqrt`, … left behind by double-escaped legacy strings. */
+function collapseEscapedBackslashes(text: string): string {
   let normalized = text;
   let previous: string;
 
@@ -130,7 +126,63 @@ function normalizeLatexContent(text: string): string {
     normalized = normalized.replace(/\\\\(?=(?:[()[\]]|[a-zA-Z]))/g, '\\');
   } while (normalized !== previous);
 
-  return normalized
+  return normalized;
+}
+
+// Matches an environment opener, with or without the extra backslash of double-escaped text.
+const ENV_BEGIN_RE = /\\begin\{(\w+\*?)\}/g;
+
+/**
+ * Returns [start, end) of the `\end{env}` that closes the environment opened at `from`,
+ * or null when the environment is unterminated. Handles the `\\end{env}` spelling too.
+ */
+function findEnvEnd(text: string, envName: string, from: number): [number, number] | null {
+  const token = `\\end{${envName}}`;
+  const idx = text.indexOf(token, from);
+  if (idx === -1) return null;
+  // A preceding backslash belongs to the token (double-escaped form), not to the body.
+  return [text[idx - 1] === '\\' ? idx - 1 : idx, idx + token.length];
+}
+
+/**
+ * Collapses escaped backslashes everywhere EXCEPT inside `\begin{...}...\end{...}` bodies.
+ *
+ * Inside a table environment `\\` is the row separator, so collapsing it both drops the
+ * line break and welds the next word onto the backslash: `...20.10\\Orari\,di\,oggi`
+ * became `\Orari`, an undefined control sequence KaTeX prints in red (#cc0000).
+ */
+function collapseOutsideEnvironments(text: string): string {
+  let result = '';
+  let cursor = 0;
+  ENV_BEGIN_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = ENV_BEGIN_RE.exec(text)) !== null) {
+    const beginStart = text[match.index - 1] === '\\' ? match.index - 1 : match.index;
+    const bodyStart = match.index + match[0].length;
+    const envEnd = findEnvEnd(text, match[1], bodyStart);
+    result += collapseEscapedBackslashes(text.slice(cursor, beginStart));
+    result += collapseEscapedBackslashes(text.slice(beginStart, bodyStart));
+    // Unterminated environment: keep the rest verbatim rather than collapsing separators
+    // that a missing \end can't turn back into prose.
+    if (!envEnd) return result + text.slice(bodyStart);
+
+    result += text.slice(bodyStart, envEnd[0]);
+    result += collapseEscapedBackslashes(text.slice(envEnd[0], envEnd[1]));
+    cursor = envEnd[1];
+    ENV_BEGIN_RE.lastIndex = cursor;
+  }
+
+  return result + collapseEscapedBackslashes(text.slice(cursor));
+}
+
+/**
+ * Low-level normalizer shared by both the full-text and LaTeX-only paths.
+ * Unescapes double backslashes and decodes HTML entities.
+ * Does NOT convert \newline or wrap undelimited math — callers handle those.
+ */
+function normalizeLatexContent(text: string): string {
+  return collapseOutsideEnvironments(text)
     .replace(/&gt;/g, '>')
     .replace(/&lt;/g, '<')
     .replace(/&amp;/g, '&')
@@ -319,7 +371,21 @@ export function normalizeStoredRichText(value: string): string {
  * adding `$...$` wrappers would break KaTeX's parser.
  */
 export function sanitizeLatexForKatex(latex: string): string {
-  return normalizeLatexContent(latex)
-    .replace(/\\(?:tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge)\b\s*/g, '')
-    .replace(/\\newline\b\s*/g, ' ');
+  return dropOrphanTrailingBackslash(
+    normalizeLatexContent(latex)
+      .replace(/\\(?:tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge)\b\s*/g, '')
+      .replace(/\\newline\b\s*/g, ' ')
+  );
+}
+
+/**
+ * Imported formulas often end with `\ ` (control space). Callers trim the segment before
+ * rendering, which strips the space and leaves a lone backslash: KaTeX then fails on the
+ * whole formula and paints it red. Drop the orphan, keep a real `\\` row separator.
+ */
+function dropOrphanTrailingBackslash(latex: string): string {
+  const trimmed = latex.trimEnd();
+  let run = 0;
+  while (run < trimmed.length && trimmed[trimmed.length - 1 - run] === '\\') run++;
+  return run % 2 === 0 ? trimmed : trimmed.slice(0, -1);
 }
