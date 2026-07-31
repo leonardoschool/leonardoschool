@@ -8,6 +8,13 @@ The version lives in `package.json` (`version`) and is shown by the badge at the
 
 ## [Unreleased]
 
+### Fixed
+- **Le formule e le tabelle non finiscono più a schermo come sorgente rosso.** KaTeX gira con `throwOnError: false`: quando non riesce a leggere un pezzo di LaTeX non rompe la pagina, lo stampa in rosso — quindi ogni difetto arrivava allo studente sotto forma di `\righlefttarrows` o di una tabella scritta come codice. Su 17.803 domande in produzione erano 25. Tre cause distinte, due delle quali erano nostre:
+  - **Il separatore di riga delle tabelle veniva mangiato.** Il normalizer riduce `\\` a `\` per recuperare i testi salvati con i backslash raddoppiati, ma dentro `\begin{array}` il `\\` è il ritorno a capo della tabella: se la riga seguente iniziava con una lettera, il ritorno a capo spariva e la parola veniva saldata al backslash (`...20.10\\Orari` → `\Orari`, comando inesistente). Colpiva i manifesti e le tabelle dati importati da CINECA. Ora il contenuto degli ambienti `\begin{...}...\end{...}` viene lasciato intatto.
+  - **Le formule già renderizzate venivano rilette dai passaggi successivi.** KaTeX conserva il sorgente LaTeX dentro `<annotation encoding="application/x-tex">`: il passaggio sugli ambienti lo ritrovava e rirenderizzava la tabella una seconda volta, e un importo scritto `\$` rendeva un `$` che il passaggio `$...$` prendeva per un delimitatore, inghiottendo il markup. Le formule vengono ora messe da parte e reinserite alla fine. La sequenza dei passaggi è stata estratta in `shared/richText/render.ts`, così lo script diagnostico vede esattamente ciò che vede lo studente.
+  - **Un `\` orfano a fine formula** (residuo di un `\ ` finale, la cui spaziatura sparisce quando il segmento viene ripulito) faceva fallire l'intera formula: ora viene scartato, mentre un vero `\\` resta.
+- **Corretti i refusi nel testo di 17 domande importate** (19 campi): `\righlefttarrows` per la freccia di equilibrio, `\newlinie` per `\newline`, delimitatori `\(`/`\)` mancanti, doppi o storpiati in `\8` (su tastiera italiana `(` è shift+8), `\m` e `\I` usati come variabili, e un esponente troncato ricostruito come `x^2`. Le due cause — codice e dati — insieme portano le domande che mostrano LaTeX rosso in produzione da **25 a zero**. Nuovo script `scripts/fix-latex-question-content.ts`: elenca le domande che renderizzano in rosso, propone le sostituzioni in dry-run, le applica con `--run` salvando i valori originali in un file di backup.
+
 ## [1.19.0] - 2026-07-30
 
 ### Added

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hasRenderableRichText, normalizeStoredRichText } from '@/lib/utils/latex';
+import { hasRenderableRichText, normalizeStoredRichText, sanitizeLatexForKatex } from '@/lib/utils/latex';
 import { RICH_TEXT_ALLOWED_TAGS, RICH_TEXT_ALLOWED_ATTR } from '@/shared/richText/sanitize';
 
 describe('hasRenderableRichText', () => {
@@ -85,6 +85,63 @@ describe('normalizeStoredRichText — inline images', () => {
     const result = normalizeStoredRichText('Domanda?\n<ol>\n  <li>Pentose sugar</li>\n</ol>');
     expect(result).toContain('<ol>');
     expect(result).toContain('<li>Pentose sugar</li>');
+  });
+});
+
+describe('normalizeStoredRichText — escaped backslashes vs table row separators', () => {
+  it('keeps \\\\ row separators inside \\begin{array} bodies', () => {
+    // Real CINECA question (cinema listing table): collapsing the row separator produced
+    // \Orari / \Durata, undefined control sequences KaTeX prints in red.
+    const stored =
+      '\\(\\begin{array}{|c|} \\hline \\textbf{KINGPIN}\\\\Orari\\,di\\,oggi:\\,12.00\\\\Durata\\,120\\,min \\\\ \\hline \\end{array}\\)';
+    const result = normalizeStoredRichText(stored);
+
+    expect(result).toContain('\\\\Orari');
+    expect(result).toContain('\\\\Durata');
+    expect(result).toContain('\\begin{array}');
+    expect(result).toContain('\\end{array}');
+  });
+
+  it('keeps a \\\\ that precedes a unit inside a table cell', () => {
+    // '1.251,2\\kJ/mol' → collapsing gives \kJ, rendered red.
+    const result = normalizeStoredRichText('\\(\\begin{array}{|c|} 1.251,2\\\\kJ/mol \\end{array}\\)');
+    expect(result).toContain('\\\\kJ');
+  });
+
+  it('still collapses double-escaped delimiters and commands outside environments', () => {
+    const result = normalizeStoredRichText('20\\\\(\\\\sqrt{2}\\\\)');
+    expect(result).toContain('\\(\\sqrt{2}\\)');
+    expect(result).not.toContain('\\\\(');
+  });
+
+  it('collapses a double-escaped \\begin/\\end pair while leaving its body alone', () => {
+    const result = normalizeStoredRichText('\\\\begin{array}{c} a\\\\b \\\\end{array}');
+    expect(result).toContain('\\begin{array}');
+    expect(result).toContain('\\end{array}');
+    expect(result).toContain('a\\\\b');
+  });
+
+  it('does not choke on an unterminated environment', () => {
+    const result = normalizeStoredRichText('\\begin{array}{c} a\\\\b');
+    expect(result).toContain('\\begin{array}');
+    expect(result).toContain('a\\\\b');
+  });
+});
+
+describe('sanitizeLatexForKatex', () => {
+  it('drops the orphan backslash left by a trailing control space', () => {
+    // Stored as '\\(3 \\cdot \\ 10^3\\ \\)': the renderer trims the segment, so the space
+    // after the last backslash disappears and KaTeX rejects the whole formula.
+    expect(sanitizeLatexForKatex('3 \\cdot \\ 10^3\\')).toBe('3 \\cdot \\ 10^3');
+    expect(sanitizeLatexForKatex('\\left\\{ x \\right.\\')).toBe('\\left\\{ x \\right.');
+  });
+
+  it('keeps a real \\\\ row separator at the end', () => {
+    expect(sanitizeLatexForKatex('a \\\\')).toBe('a \\\\');
+  });
+
+  it('leaves well-formed formulas untouched', () => {
+    expect(sanitizeLatexForKatex('\\frac{1}{2}')).toBe('\\frac{1}{2}');
   });
 });
 
