@@ -25,11 +25,33 @@ const EN_STOPWORDS = new Set([
   'when', 'where', 'while', 'about', 'into', 'between', 'because', 'does',
 ]);
 
+/**
+ * Toglie i tag HTML sostituendoli con uno SPAZIO.
+ *
+ * Non riusa `stripHtml` di sanitizeHtml.ts perché quello li elimina senza
+ * separatore: `a<br>b` diventerebbe `ab`, saldando due parole e falsando il
+ * conteggio. Scritto a indici invece che con una regex, come lì, per non
+ * incorrere in `sonarjs/slow-regex`.
+ */
+function stripTags(input: string): string {
+  let result = '';
+  let cursor = 0;
+  let open = input.indexOf('<');
+  while (open !== -1) {
+    const close = input.indexOf('>', open);
+    if (close === -1) break;
+    result += input.slice(cursor, open) + ' ';
+    cursor = close + 1;
+    open = input.indexOf('<', cursor);
+  }
+  return result + input.slice(cursor);
+}
+
 /** Via HTML, comandi LaTeX e immagini inline: resta il testo leggibile. */
 function plainText(raw: string): string {
-  return raw
-    .replace(/\\includegraphics(?:\[[^\]]*\])?\{[^}]*\}/g, ' ')
-    .replace(/<[^>]+>/g, ' ')
+  // Classi negate senza quantificatori annidati: match lineare, nessun rischio ReDoS.
+  const withoutImages = raw.replace(/\\includegraphics[^{]*\{[^}]*\}/g, ' ');
+  return stripTags(withoutImages)
     .replace(/\\[a-zA-Z]+/g, ' ')
     .replace(/[{}$\\]/g, ' ')
     .toLowerCase();

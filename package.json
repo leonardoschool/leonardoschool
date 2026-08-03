@@ -1,6 +1,6 @@
 {
   "name": "leonardoschool",
-  "version": "1.19.0",
+  "version": "1.19.1",
   "private": true,
   "scripts": {
     "prepare": "git config core.hooksPath .githooks || exit 0",

@@ -51,10 +51,25 @@ const EN_STOPWORDS = new Set([
   'when', 'where', 'while', 'about', 'into', 'between', 'because', 'does',
 ]);
 
+/** Toglie i tag HTML sostituendoli con uno spazio (a indici, per evitare sonarjs/slow-regex). */
+function stripTags(input: string): string {
+  let result = '';
+  let cursor = 0;
+  let open = input.indexOf('<');
+  while (open !== -1) {
+    const close = input.indexOf('>', open);
+    if (close === -1) break;
+    result += input.slice(cursor, open) + ' ';
+    cursor = close + 1;
+    open = input.indexOf('<', cursor);
+  }
+  return result + input.slice(cursor);
+}
+
 function plainText(raw: string): string {
-  return raw
-    .replace(/\\includegraphics(?:\[[^\]]*\])?\{[^}]*\}/g, ' ')
-    .replace(/<[^>]+>/g, ' ')
+  // Classi negate senza quantificatori annidati: match lineare, nessun rischio ReDoS.
+  const withoutImages = raw.replace(/\\includegraphics[^{]*\{[^}]*\}/g, ' ');
+  return stripTags(withoutImages)
     .replace(/\\[a-zA-Z]+/g, ' ')
     .replace(/[{}$\\]/g, ' ')
     .toLowerCase();
