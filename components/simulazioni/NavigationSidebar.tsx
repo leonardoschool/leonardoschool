@@ -227,7 +227,10 @@ function QuestionGrid({
       {questions.map((sq, index) => {
         const answer = answers.find((a) => a.questionId === sq.questionId);
         const isCurrent = index === currentQuestionIndex;
-        const isAnswered = answer?.answerId !== null || (answer?.answerText && answer.answerText.trim().length > 0);
+        // A restored attempt only carries the questions the student touched, so a
+        // missing entry means "never seen", not "answered" — without the guard,
+        // `undefined !== null` painted every untouched question green.
+        const isAnswered = !!answer && (answer.answerId !== null || (answer.answerText !== null && answer.answerText.trim().length > 0));
         const isFlagged = answer?.flagged === true;
 
         let bgColor = 'bg-gray-200 dark:bg-gray-700';

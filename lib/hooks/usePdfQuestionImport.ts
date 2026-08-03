@@ -41,6 +41,7 @@ async function saveItem(
 
   const status = mode === 'PUBLISHED' && isPublishable(item) ? 'PUBLISHED' : 'DRAFT';
   const filledAnswers = item.answers.filter((a) => a.text.trim().length > 0);
+  const filledKeywords = item.keywords.map((k) => k.trim()).filter(Boolean);
 
   const created = await deps.createQuestion({
     type: item.type,
@@ -51,6 +52,8 @@ async function saveItem(
     topicId: item.topicId || null,
     difficulty: item.difficulty,
     shuffleAnswers: item.shuffleAnswers,
+    openValidationType:
+      item.type === 'OPEN_TEXT' && item.openValidationType ? item.openValidationType : null,
     points: 1,
     negativePoints: 0,
     imageUrl: imageUrl ?? null,
@@ -70,7 +73,10 @@ async function saveItem(
             order: index,
             label: a.label,
           })),
-    keywords: [],
+    keywords:
+      item.type === 'OPEN_TEXT'
+        ? filledKeywords.map((keyword) => ({ keyword }))
+        : [],
     tags: [],
   });
 

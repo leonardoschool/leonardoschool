@@ -117,7 +117,7 @@ export function useQuestionForm({ questionId, basePath = '/domande', returnTo, i
   const [correctExplanation, setCorrectExplanation] = useState(initialData?.correctExplanation ?? '');
   const [wrongExplanation, setWrongExplanation] = useState(initialData?.wrongExplanation ?? '');
   const [generalExplanation, setGeneralExplanation] = useState(initialData?.generalExplanation ?? '');
-  const [shuffleAnswers, setShuffleAnswers] = useState(initialData?.shuffleAnswers ?? false);
+  const [shuffleAnswers, setShuffleAnswers] = useState(initialData?.shuffleAnswers ?? true);
   const [openValidationType, setOpenValidationType] = useState<OpenAnswerValidationType | ''>(
     initialData?.openValidationType ?? ''
   );
