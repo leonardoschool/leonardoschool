@@ -21,6 +21,13 @@ export interface SimulationProgressSnapshot {
   items: SimulationAnswerItem[];
   timeSpent: number;
   sectionTimes: Record<number, number>;
+  /**
+   * Wall-clock origin (epoch ms) of each section's timer, Virtual Room only:
+   * elapsed = now - origin. Persisted so a reload or connection loss cannot
+   * pause the clock relative to the rest of the room. Optional — legacy
+   * snapshots and the mobile app don't carry it.
+   */
+  sectionStartedAt?: Record<number, number>;
   currentSectionIndex: number;
   currentQuestionIndex: number;
 }

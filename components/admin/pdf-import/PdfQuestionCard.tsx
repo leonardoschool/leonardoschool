@@ -21,6 +21,7 @@ import FormattingHelp from '@/components/admin/question-form/FormattingHelp';
 import ImageUrlField from '@/components/admin/question-form/ImageUrlField';
 import RichTextField from '@/components/admin/question-form/RichTextField';
 import PdfAnswerEditor from './PdfAnswerEditor';
+import PdfOpenAnswerEditor from './PdfOpenAnswerEditor';
 
 interface PdfQuestionCardProps {
   item: PdfImportItem;
@@ -181,9 +182,15 @@ export default function PdfQuestionCard({ item, subjectOptions, onPatch }: PdfQu
         </div>
       )}
       {item.type === 'OPEN_TEXT' && (
-        <p className={`mt-3 text-sm ${colors.text.muted} p-3 rounded-lg ${colors.background.secondary}`}>
-          Risposta aperta: le keyword di valutazione si configurano dopo l&apos;import nella domanda.
-        </p>
+        <div className="mt-3">
+          <PdfOpenAnswerEditor
+            validationType={item.openValidationType}
+            keywords={item.keywords}
+            disabled={disabled}
+            onValidationTypeChange={(openValidationType) => patch({ openValidationType })}
+            onKeywordsChange={(keywords) => patch({ keywords })}
+          />
+        </div>
       )}
 
       {/* Categorization */}

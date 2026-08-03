@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { resultId, answers, timeSpent, sectionTimes, currentSectionIndex, currentQuestionIndex, resetToken, rev } = body;
+    const { resultId, answers, timeSpent, sectionTimes, sectionStartedAt, currentSectionIndex, currentQuestionIndex, resetToken, rev } = body;
 
     if (!resultId || !Array.isArray(answers)) {
       return NextResponse.json({ error: 'Dati mancanti' }, { status: 400 });
@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
       answers,
       timeSpent: typeof timeSpent === 'number' ? timeSpent : 0,
       sectionTimes,
+      sectionStartedAt,
       currentSectionIndex,
       currentQuestionIndex,
       resetToken,

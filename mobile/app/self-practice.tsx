@@ -5,7 +5,7 @@
  * Replica la logica del SelfPracticeModal della webapp.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -28,6 +28,8 @@ import { colors } from '../lib/theme/colors';
 import { AppHeader } from '../components/navigation';
 import { trpc } from '../lib/trpc';
 import { spacing, layout } from '../lib/theme/spacing';
+import { storage } from '../lib/storage';
+import { config } from '../lib/config';
 
 // Types matching API
 type SmartRandomPreset = 'PROPORTIONAL' | 'BALANCED' | 'SINGLE_SUBJECT';
@@ -35,6 +37,9 @@ type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD';
 type QuizMode = 'quiz' | 'reading';
 // Mirrors the web SelfPracticeModal: 'BOTH' means "no filter", not a value sent to the API.
 type LanguageFilter = 'BOTH' | 'IT' | 'EN';
+
+const isLanguageFilter = (value: string | null): value is LanguageFilter =>
+  value === 'IT' || value === 'EN' || value === 'BOTH';
 
 interface Subject {
   id: string;
@@ -52,9 +57,26 @@ export default function SelfPracticeScreen() {
   const [preset, setPreset] = useState<SmartRandomPreset>('PROPORTIONAL');
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
   const [selectedDifficulties, setSelectedDifficulties] = useState<DifficultyLevel[]>(['EASY', 'MEDIUM', 'HARD']);
-  const [languageFilter, setLanguageFilter] = useState<LanguageFilter>('BOTH');
+  // Solo italiano di default: la banca è per larghissima parte italiana, quindi
+  // "Entrambe" produce quiz misti che gli studenti segnalano come filtro rotto.
+  const [languageFilter, setLanguageFilter] = useState<LanguageFilter>('IT');
   const [showSubjects, setShowSubjects] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+
+  // L'ultima scelta vince, così chi prepara l'IMAT non reimposta "Solo inglese" a ogni sessione.
+  useEffect(() => {
+    let active = true;
+    storage.get(config.storageKeys.selfPracticeLanguage).then((stored) => {
+      if (active && isLanguageFilter(stored)) setLanguageFilter(stored);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const changeLanguageFilter = (next: LanguageFilter) => {
+    setLanguageFilter(next);
+    // Preferenza best-effort: se il salvataggio fallisce il quiz parte lo stesso.
+    storage.set(config.storageKeys.selfPracticeLanguage, next).catch(() => undefined);
+  };
 
   // Queries
   const { data: subjectsData } = trpc.questions.getSubjects.useQuery();
@@ -461,7 +483,7 @@ export default function SelfPracticeScreen() {
                         borderColor: isSelected ? colors.primary.main : themedColors.border,
                       },
                     ]}
-                    onPress={() => setLanguageFilter(opt.value)}
+                    onPress={() => changeLanguageFilter(opt.value)}
                   >
                     <Text style={{ fontSize: 18 }}>{opt.emoji}</Text>
                     <Text variant="caption" style={{ color: isSelected ? colors.primary.main : themedColors.text, marginTop: 2 }}>

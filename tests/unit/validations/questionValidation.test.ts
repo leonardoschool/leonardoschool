@@ -245,7 +245,7 @@ describe('createQuestionSchema', () => {
     expect(result.blankPoints).toBe(0);
     expect(result.openCaseSensitive).toBe(false);
     expect(result.openPartialMatch).toBe(true);
-    expect(result.shuffleAnswers).toBe(false);
+    expect(result.shuffleAnswers).toBe(true);
     expect(result.showExplanation).toBe(true);
     expect(result.tags).toEqual([]);
     expect(result.answers).toEqual([]);

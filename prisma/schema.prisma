@@ -588,7 +588,7 @@ model Question {
   openPartialMatch   Boolean                   @default(true) // Match parziale keywords?
 
   // === DISPLAY OPTIONS ===
-  shuffleAnswers  Boolean @default(false) // Mescola ordine risposte
+  shuffleAnswers  Boolean @default(true) // Mescola ordine risposte
   showExplanation Boolean @default(true) // Mostra spiegazione dopo risposta
 
   // === METADATA ===

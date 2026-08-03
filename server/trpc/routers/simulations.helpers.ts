@@ -16,6 +16,8 @@ export interface SavedAnswerItem {
 export interface ParsedSavedProgress {
   savedAnswers: SavedAnswerItem[];
   savedSectionTimes: Record<number, number>;
+  /** Wall-clock origin (epoch ms) of each section's timer; empty for legacy saves and mobile */
+  savedSectionStartedAt: Record<number, number>;
   savedCurrentSectionIndex: number;
   savedCurrentQuestionIndex: number;
   /** Monotonic revision of the stored snapshot; 0 for legacy saves written before it existed */
@@ -82,6 +84,7 @@ export function parseResultAnswers(value: Prisma.JsonValue): StoredAnswer[] {
 export function parseSavedProgress(savedData: unknown): ParsedSavedProgress {
   let savedAnswers: SavedAnswerItem[] = [];
   let savedSectionTimes: Record<number, number> = {};
+  let savedSectionStartedAt: Record<number, number> = {};
   let savedCurrentSectionIndex = 0;
   let savedCurrentQuestionIndex = 0;
   let savedRev = 0;
@@ -94,6 +97,7 @@ export function parseSavedProgress(savedData: unknown): ParsedSavedProgress {
     const meta = savedData as {
       items: SavedAnswerItem[];
       sectionTimes?: Record<string, number>;
+      sectionStartedAt?: Record<string, number>;
       currentSectionIndex?: number;
       currentQuestionIndex?: number;
       rev?: number;
@@ -105,6 +109,11 @@ export function parseSavedProgress(savedData: unknown): ParsedSavedProgress {
         Object.entries(meta.sectionTimes).map(([k, v]) => [Number(k), v])
       );
     }
+    if (meta.sectionStartedAt) {
+      savedSectionStartedAt = Object.fromEntries(
+        Object.entries(meta.sectionStartedAt).map(([k, v]) => [Number(k), v])
+      );
+    }
     savedCurrentSectionIndex = meta.currentSectionIndex ?? 0;
     savedCurrentQuestionIndex = meta.currentQuestionIndex ?? 0;
     savedRev = typeof meta.rev === 'number' && Number.isFinite(meta.rev) ? meta.rev : 0;
@@ -113,6 +122,7 @@ export function parseSavedProgress(savedData: unknown): ParsedSavedProgress {
   return {
     savedAnswers,
     savedSectionTimes,
+    savedSectionStartedAt,
     savedCurrentSectionIndex,
     savedCurrentQuestionIndex,
     savedRev,
@@ -153,6 +163,7 @@ export function buildResumeAttemptPayload(attempt: ResumableAttempt) {
     savedRev: savedProgress.savedRev,
     savedAnswers: savedProgress.savedAnswers,
     savedSectionTimes: savedProgress.savedSectionTimes,
+    savedSectionStartedAt: savedProgress.savedSectionStartedAt,
     savedCurrentSectionIndex: savedProgress.savedCurrentSectionIndex,
     savedCurrentQuestionIndex: savedProgress.savedCurrentQuestionIndex,
   };
@@ -172,6 +183,8 @@ export interface PersistProgressInput {
   }>;
   timeSpent: number;
   sectionTimes?: Record<string | number, number> | null;
+  /** Wall-clock origin (epoch ms) of each section's timer, Virtual Room only */
+  sectionStartedAt?: Record<string | number, number> | null;
   currentSectionIndex?: number | null;
   currentQuestionIndex?: number | null;
   /** Echoed from startAttempt; guards against a tab opened before a staff reset */
@@ -243,6 +256,7 @@ export async function persistProgress(
         flagged: answer.flagged ?? false,
       })),
     sectionTimes: input.sectionTimes || {},
+    sectionStartedAt: input.sectionStartedAt || {},
     currentSectionIndex: input.currentSectionIndex ?? 0,
     currentQuestionIndex: input.currentQuestionIndex ?? 0,
     ...(nextRev > 0 && { rev: nextRev }),
@@ -295,6 +309,9 @@ export async function resetSimulationResultForResume(
     flagged: a.flagged ?? false,
   }));
 
+  // Section clock anchors are deliberately dropped on every reset: the client
+  // re-anchors from the kept elapsed time on resume, so the wall-clock gap
+  // while staff handled the reset is never billed to the student.
   const answersWithMeta = {
     items,
     sectionTimes: opts.resetTimer ? {} : saved.savedSectionTimes,
