@@ -138,7 +138,10 @@ export default function TolcSimulationLayout({
   const hasResponse = useCallback(
     (questionId: string) => {
       const answer = answers.find(a => a.questionId === questionId);
-      return answer?.answerId !== null || !!answer?.answerText?.trim();
+      // A restored attempt only carries the questions the student touched, so a
+      // missing entry means "never seen", not "answered" — without the guard,
+      // `undefined !== null` painted every untouched question green.
+      return !!answer && (answer.answerId !== null || !!answer.answerText?.trim());
     },
     [answers]
   );

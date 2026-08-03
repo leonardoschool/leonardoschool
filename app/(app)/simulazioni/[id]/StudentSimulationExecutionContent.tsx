@@ -121,6 +121,14 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   const questionTimesRef = useRef<Record<string, number>>({});
   const currentSectionIndexRef = useRef<number>(0);
   const sectionTimesRef = useRef<Record<number, number>>({});
+  // Wall-clock origin of each section's timer (epoch ms), Virtual Room only:
+  // elapsed is derived as now - origin, so a reload, a connection loss or a
+  // throttled background tab can never pause the clock relative to the room.
+  const sectionStartedAtRef = useRef<Record<number, number>>({});
+  // Server-authoritative countdown for the Virtual Room, refreshed by the 5s
+  // status poll: remaining seconds as the server computed them, plus when we
+  // heard them. The room clock keeps running while a student is offline.
+  const serverClockRef = useRef<{ remainingSeconds: number; syncedAtMs: number } | null>(null);
   const isSubmittingRef = useRef<boolean>(false);
   const participantIdRef = useRef<string | null>(null); // Ref for anti-cheat to read current participantId
   const lastSectionTimeUpdateRef = useRef<number>(-1); // Track last timeSpent used for section time update
@@ -152,10 +160,16 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   // Set participantId from session status
   useEffect(() => {
     console.log('[VirtualRoom] sessionStatus changed:', sessionStatus);
-    
+
     if (sessionStatus?.hasSession && 'participantId' in sessionStatus && sessionStatus.participantId) {
       console.log('[VirtualRoom] Got participantId:', sessionStatus.participantId);
       setParticipantId(sessionStatus.participantId);
+    }
+
+    // Resync the room countdown on every poll: the server computes it from
+    // actualStartAt, so every participant converges on the same clock.
+    if (sessionStatus?.hasSession && 'timeRemaining' in sessionStatus && typeof sessionStatus.timeRemaining === 'number') {
+      serverClockRef.current = { remainingSeconds: sessionStatus.timeRemaining, syncedAtMs: Date.now() };
     }
     
     // A kicked/disconnected student also gets a synthetic status: 'COMPLETED' from the
@@ -221,6 +235,9 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     if (snapshot.sectionTimes) {
       setSectionTimes(snapshot.sectionTimes);
     }
+    if (snapshot.sectionStartedAt) {
+      sectionStartedAtRef.current = snapshot.sectionStartedAt;
+    }
     setCurrentSectionIndex(snapshot.currentSectionIndex);
     setCompletedSections(new Set(Array.from({ length: snapshot.currentSectionIndex }, (_, index) => index)));
     setCurrentQuestionIndex(snapshot.currentQuestionIndex);
@@ -252,6 +269,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
             items: normalizeAnswerItems('savedAnswers' in data ? data.savedAnswers : []),
             timeSpent: ('savedTimeSpent' in data ? data.savedTimeSpent : 0) ?? 0,
             sectionTimes: ('savedSectionTimes' in data ? data.savedSectionTimes : {}) ?? {},
+            sectionStartedAt: ('savedSectionStartedAt' in data ? data.savedSectionStartedAt : {}) ?? {},
             currentSectionIndex: ('savedCurrentSectionIndex' in data ? data.savedCurrentSectionIndex : 0) ?? 0,
             currentQuestionIndex: ('savedCurrentQuestionIndex' in data ? data.savedCurrentQuestionIndex : 0) ?? 0,
           }
@@ -450,6 +468,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     items: buildProgressItems(answersRef.current, flushQuestionTimeRef.current()),
     timeSpent: timeSpentRef.current,
     sectionTimes: sectionTimesRef.current,
+    sectionStartedAt: sectionStartedAtRef.current,
     currentSectionIndex: currentSectionIndexRef.current,
     currentQuestionIndex: currentQuestionIndexRef.current,
     resetToken: resetTokenRef.current,
@@ -469,6 +488,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
       answers: snapshot.items,
       timeSpent: snapshot.timeSpent,
       sectionTimes: snapshot.sectionTimes,
+      sectionStartedAt: snapshot.sectionStartedAt,
       currentSectionIndex: snapshot.currentSectionIndex,
       currentQuestionIndex: snapshot.currentQuestionIndex,
       resetToken: snapshot.resetToken,
@@ -487,6 +507,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
       answers: snapshot.items,
       timeSpent: snapshot.timeSpent,
       sectionTimes: snapshot.sectionTimes,
+      sectionStartedAt: snapshot.sectionStartedAt,
       currentSectionIndex: snapshot.currentSectionIndex,
       currentQuestionIndex: snapshot.currentQuestionIndex,
       resetToken: snapshot.resetToken,
@@ -828,6 +849,21 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     return currentSectionQuestions.findIndex(q => q.questionId === currentQ.questionId);
   }, [hasSectionsMode, currentQuestionIndex, simulation?.questions, currentSectionQuestions]);
 
+  // Virtual Room: anchor the section clock to the wall clock the moment the
+  // section becomes active. Elapsed time is then derived from the anchor
+  // instead of accumulated tick by tick, so all participants stay on the same
+  // time across reloads, connection losses and background-tab throttling.
+  // A legacy resume without an anchor continues from the saved elapsed time.
+  useEffect(() => {
+    if (!isVirtualRoom || !hasSectionsMode || !hasStarted) return;
+    if (sectionStartedAtRef.current[currentSectionIndex]) return;
+    const alreadyElapsed = sectionTimesRef.current[currentSectionIndex] || 0;
+    sectionStartedAtRef.current = {
+      ...sectionStartedAtRef.current,
+      [currentSectionIndex]: Date.now() - alreadyElapsed * 1000,
+    };
+  }, [isVirtualRoom, hasSectionsMode, hasStarted, currentSectionIndex]);
+
   // Section timer management
   useEffect(() => {
     if (!hasStarted || !hasSectionsMode) return;
@@ -837,12 +873,17 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     if (timeSpent <= lastSectionTimeUpdateRef.current) return;
     lastSectionTimeUpdateRef.current = timeSpent;
 
-    // Update section time when timer changes
-    setSectionTimes(prev => ({
-      ...prev,
-      [currentSectionIndex]: (prev[currentSectionIndex] || 0) + 1,
-    }));
-  }, [timeSpent, hasStarted, hasSectionsMode, currentSectionIndex]);
+    const anchor = isVirtualRoom ? sectionStartedAtRef.current[currentSectionIndex] : undefined;
+    setSectionTimes(prev => {
+      const previous = prev[currentSectionIndex] || 0;
+      // max() keeps the anchored clock monotonic even if the device clock is
+      // adjusted mid-attempt; without an anchor, legacy tick accumulation.
+      const next = anchor
+        ? Math.max(previous, Math.floor((Date.now() - anchor) / 1000))
+        : previous + 1;
+      return { ...prev, [currentSectionIndex]: next };
+    });
+  }, [timeSpent, hasStarted, hasSectionsMode, currentSectionIndex, isVirtualRoom]);
 
   // Section time remaining
   const sectionTimeRemaining = useMemo(() => {
@@ -907,10 +948,17 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
     setShowSectionTransition(true);
   };
 
-  // Time remaining
-  const timeRemaining = simulation?.durationMinutes
+  // Time remaining. In a Virtual Room the countdown follows the server clock
+  // (resynced by the 5s status poll): the room clock keeps running while a
+  // student is offline, so a reload or connection loss must never hand them
+  // extra time relative to the rest of the room.
+  const localTimeRemaining = simulation?.durationMinutes
     ? Math.max(0, simulation.durationMinutes * 60 - timeSpent)
     : null;
+  const serverClock = isVirtualRoom ? serverClockRef.current : null;
+  const timeRemaining = serverClock
+    ? Math.max(0, serverClock.remainingSeconds - Math.floor((Date.now() - serverClock.syncedAtMs) / 1000))
+    : localTimeRemaining;
 
   // Auto-submit when time runs out
   useEffect(() => {

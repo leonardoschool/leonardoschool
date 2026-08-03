@@ -192,6 +192,7 @@ describe('parseSavedProgress', () => {
     const result = parseSavedProgress({
       items: [{ questionId: 'q1', answerId: 'a1', answerText: null, timeSpent: 4, flagged: false }],
       sectionTimes: { '0': 120, '1': 45 },
+      sectionStartedAt: { '0': 1700000000000, '1': 1700000120000 },
       currentSectionIndex: 1,
       currentQuestionIndex: 7,
       rev: 12,
@@ -199,9 +200,21 @@ describe('parseSavedProgress', () => {
 
     expect(result.savedAnswers).toHaveLength(1);
     expect(result.savedSectionTimes).toEqual({ 0: 120, 1: 45 });
+    expect(result.savedSectionStartedAt).toEqual({ 0: 1700000000000, 1: 1700000120000 });
     expect(result.savedCurrentSectionIndex).toBe(1);
     expect(result.savedCurrentQuestionIndex).toBe(7);
     expect(result.savedRev).toBe(12);
+  });
+
+  it('returns empty section anchors for an envelope saved before they existed', () => {
+    const result = parseSavedProgress({
+      items: [],
+      sectionTimes: { '0': 30 },
+      currentSectionIndex: 0,
+      currentQuestionIndex: 0,
+    });
+
+    expect(result.savedSectionStartedAt).toEqual({});
   });
 
   it('treats an envelope saved before revisions existed as revision zero', () => {

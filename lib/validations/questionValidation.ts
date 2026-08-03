@@ -119,7 +119,7 @@ const questionBaseSchema = z.object({
   openPartialMatch: z.boolean().default(true),
   
   // Display Options
-  shuffleAnswers: z.boolean().default(false),
+  shuffleAnswers: z.boolean().default(true),
   showExplanation: z.boolean().default(true),
   
   // Metadata

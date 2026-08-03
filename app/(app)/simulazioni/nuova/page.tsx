@@ -872,7 +872,10 @@ export default function NewSimulationPage() {
       questionTypeCounts: {},
       difficultyLevels: [],
       tagIds: [],
-      language: null,
+      // "Tutte le lingue" (null) non filtra nulla: su una banca quasi interamente
+      // italiana produce sezioni miste IT/EN che lo studente subisce senza poterle
+      // cambiare (nei template il selettore lingua non gli viene mostrato).
+      language: 'IT',
       order: sections.length,
     };
     setSections([...sections, newSection]);

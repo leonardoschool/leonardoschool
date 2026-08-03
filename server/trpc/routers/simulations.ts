@@ -4137,6 +4137,8 @@ export const simulationsRouter = router({
       timeSpent: z.number().int().min(0),
       // TOLC section progress
       sectionTimes: z.record(z.number()).optional(),
+      // Wall-clock origin (epoch ms) of each section's timer, Virtual Room only
+      sectionStartedAt: z.record(z.number()).optional(),
       currentSectionIndex: z.number().int().min(0).optional(),
       currentQuestionIndex: z.number().int().min(0).optional(),
       // Reset token from startAttempt (guards against stale tabs after a staff reset)
@@ -4154,6 +4156,7 @@ export const simulationsRouter = router({
         answers: input.answers,
         timeSpent: input.timeSpent,
         sectionTimes: input.sectionTimes,
+        sectionStartedAt: input.sectionStartedAt,
         currentSectionIndex: input.currentSectionIndex,
         currentQuestionIndex: input.currentQuestionIndex,
         resetToken: input.resetToken,

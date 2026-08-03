@@ -4,10 +4,12 @@
  */
 import type { ParsedQuestion } from './parseQuestions';
 import type { QuestionRegion } from './pdfClient';
+import { detectQuestionLanguage } from '@/lib/utils/detectLanguage';
 import type {
   QuestionType,
   QuestionLanguage,
   DifficultyLevel,
+  OpenAnswerValidationType,
 } from '@/lib/validations/questionValidation';
 
 export type ImportItemStatus = 'pending' | 'saving' | 'saved' | 'error';
@@ -32,6 +34,10 @@ export interface PdfImportItem {
   difficulty: DifficultyLevel;
   /** Shuffle answer order during the test — on by default, per the form. */
   shuffleAnswers: boolean;
+  /** OPEN_TEXT only: how the answer is evaluated ('' = decide later, saves as manual). */
+  openValidationType: OpenAnswerValidationType | '';
+  /** OPEN_TEXT only: accepted keywords (alternatives — one match suffices). */
+  keywords: string[];
   imageUrl: string;
   year: number | null;
   source: string;
@@ -86,7 +92,13 @@ export function buildImportItems(
     // Honour the parser: a completion section carries no options, and forcing those
     // rows to SINGLE_CHOICE is what made them arrive as empty multiple-choice questions.
     type: q.type as QuestionType,
-    language: defaults.language ?? 'IT',
+    // Riconosciuta dal testo: un tema d'esame IMAT è inglese, e importarlo con
+    // l'italiano di default lo farebbe finire nelle esercitazioni "solo italiano".
+    // Quando il testo non basta a decidere si ricade sul default, modificabile a mano.
+    language:
+      detectQuestionLanguage(q.text, ...q.answers.map((a) => a.text)) ??
+      defaults.language ??
+      'IT',
     text: q.text,
     answers: q.answers.map((a) => ({
       label: a.label,
@@ -99,6 +111,8 @@ export function buildImportItems(
     tagIds: [],
     difficulty: defaults.difficulty ?? 'MEDIUM',
     shuffleAnswers: true,
+    openValidationType: '',
+    keywords: [],
     imageUrl: '',
     year: defaults.year,
     source: defaults.source,
@@ -122,7 +136,13 @@ export function buildImportItems(
 /** Whether a row carries everything required to be PUBLISHED (not just drafted). */
 export function isPublishable(item: PdfImportItem): boolean {
   if (!item.subjectId || !item.topicId || item.text.trim().length === 0) return false;
-  if (item.type === 'OPEN_TEXT') return true;
+  if (item.type === 'OPEN_TEXT') {
+    // Keyword-based validation without keywords is rejected by the server outright.
+    if (item.openValidationType === 'KEYWORDS' || item.openValidationType === 'BOTH') {
+      return item.keywords.some((k) => k.trim().length > 0);
+    }
+    return true;
+  }
   const filledAnswers = item.answers.filter((a) => a.text.trim().length > 0);
   const correctCount = filledAnswers.filter((a) => a.isCorrect).length;
   if (filledAnswers.length < 2) return false;

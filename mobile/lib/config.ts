@@ -58,6 +58,7 @@ export const config = {
     fcmToken: 'fcm-token',
     theme: 'theme-preference',
     onboardingCompleted: 'onboarding-completed',
+    selfPracticeLanguage: 'self-practice-language',
   },
 
   // Cache Configuration
