@@ -23,7 +23,16 @@ export default function SimulationDetailPage({ params }: { params: Promise<{ id:
   const searchParams = useSearchParams();
   const assignmentId = searchParams.get('assignmentId');
   
-  const { data: user, isLoading, error } = trpc.auth.me.useQuery();
+  // A failure here signs the student out and throws them to the login page, so
+  // it has to be a settled fact rather than a lost race. Past its first hour the
+  // Firebase token is renewed over the network, and under the load of a full
+  // exam room that renewal can miss its window: without these retries a single
+  // transient 401 ends a simulation in progress. The global policy gives up on
+  // a 401 immediately, which is right everywhere except here.
+  const { data: user, isLoading, error } = trpc.auth.me.useQuery(undefined, {
+    retry: (failureCount) => failureCount < 3,
+    retryDelay: (failureCount) => Math.min(1000 * 2 ** failureCount, 5000),
+  });
 
   // Handle error or no user - sign out and redirect to login
   useEffect(() => {

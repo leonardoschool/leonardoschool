@@ -133,7 +133,10 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
         refetchOnReconnect: true,
         retry: (failureCount, error) => {
           const httpStatus = (error as { data?: { httpStatus?: number } })?.data?.httpStatus;
-          if (httpStatus === 401 || httpStatus === 403) {
+          // The server rejected the request itself — a wrong id, an attempt
+          // already completed, a missing permission. Repeating it verbatim
+          // cannot change the answer and only adds load at the worst moment.
+          if (httpStatus !== undefined && httpStatus >= 400 && httpStatus < 500) {
             return false;
           }
           return failureCount < 2;
