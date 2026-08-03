@@ -82,11 +82,17 @@ export async function getSessionState(sessionId: string, participantIdForMessage
           group: { include: { members: { include: { student: { include: { user: true } } } } } },
         },
       },
+      // Only the four fields this function actually returns, plus the
+      // assignments needed to list who was invited. This used to `include`
+      // everything, which pulled every question of the simulation — full text,
+      // explanation and images — on a query that runs once per second for each
+      // connected client, for the whole duration of the exam.
       simulation: {
-        include: {
-          questions: {
-            include: { question: true },
-          },
+        select: {
+          id: true,
+          title: true,
+          durationMinutes: true,
+          totalQuestions: true,
           assignments: {
             include: {
               student: { include: { user: true } },

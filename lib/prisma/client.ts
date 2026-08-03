@@ -14,6 +14,14 @@ const globalForPrisma = globalThis as unknown as {
 // `ERR_INVALID_ARG_TYPE: Received an instance of Object` in the wire protocol.
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,
+  // A saturated pool must fail fast rather than hang. `pg` waits forever for a
+  // free connection by default: during a Virtual Room submit rush — everyone
+  // pressing "Consegna" at the same minute — that turned into requests that
+  // never answered at all, so the client saw neither success nor error and the
+  // submit button stayed frozen on its loading state.
+  connectionTimeoutMillis: 10_000,
+  idleTimeoutMillis: 30_000,
+  max: 10,
 });
 
 // Log configuration:

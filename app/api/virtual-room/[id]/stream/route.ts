@@ -12,8 +12,32 @@ interface SSEConnection {
 // Store active connections for broadcasting
 const connections = new Map<string, Set<SSEConnection>>();
 
-// Maximum connections per session (prevents resource exhaustion from bugs)
-const MAX_CONNECTIONS_PER_SESSION = 10;
+// Maximum connections per session (prevents resource exhaustion from bugs).
+// It has to comfortably exceed a full classroom: every student holds one
+// connection and the staff dashboard another, so a limit of 10 evicted real
+// participants as soon as an eleventh joined, and each evicted client
+// reconnected — turning a full room into a permanent reconnection churn.
+const MAX_CONNECTIONS_PER_SESSION = 200;
+
+/**
+ * How often the session state is pushed. Nothing can change faster than this
+ * anyway: participant progress reaches the database through a heartbeat the
+ * students send every 3 seconds, so polling more often only multiplied the
+ * database load without ever producing newer data.
+ */
+const REFRESH_INTERVAL_MS = 3000;
+
+/**
+ * A stream is closed deliberately a little before the platform's own ceiling.
+ * Left alone it runs until Vercel kills the function, which logs a runtime
+ * timeout error for every participant every five minutes: with one stream per
+ * student that noise was burying the errors worth reading, and the forced kill
+ * skips the cleanup that a deliberate close performs. The client reconnects on
+ * its own either way.
+ */
+const STREAM_LIFETIME_MS = 240_000;
+
+export const maxDuration = 300;
 
 function addConnection(
   sessionId: string,
@@ -104,10 +128,12 @@ export async function GET(
   let controllerRef: ReadableStreamDefaultController | null = null;
   let heartbeatInterval: NodeJS.Timeout | null = null;
   let refreshInterval: NodeJS.Timeout | null = null;
+  let lifetimeTimeout: NodeJS.Timeout | null = null;
 
   function cleanup() {
     if (heartbeatInterval) clearInterval(heartbeatInterval);
     if (refreshInterval) clearInterval(refreshInterval);
+    if (lifetimeTimeout) clearTimeout(lifetimeTimeout);
     if (controllerRef) {
       removeConnection(sessionId, controllerRef);
     }
@@ -140,7 +166,14 @@ export async function GET(
         }
       }, 15000);
 
+      // Overlapping ticks are how a slow database becomes an unrecoverable one:
+      // each tick would start another full state query while the previous one
+      // is still running, piling on load exactly when it is already too high.
+      let refreshInFlight = false;
+
       refreshInterval = setInterval(async () => {
+        if (refreshInFlight) return;
+        refreshInFlight = true;
         try {
           const data = await getSessionState(sessionId, participantIdForMessages);
           if (data) {
@@ -149,8 +182,19 @@ export async function GET(
           }
         } catch {
           // Will retry next interval
+        } finally {
+          refreshInFlight = false;
         }
-      }, 1000);
+      }, REFRESH_INTERVAL_MS);
+
+      lifetimeTimeout = setTimeout(() => {
+        cleanup();
+        try {
+          controller.close();
+        } catch {
+          // Already closed by the client going away first
+        }
+      }, STREAM_LIFETIME_MS);
 
       request.signal.addEventListener('abort', () => {
         console.log('[SSE] Client disconnected from session ' + sessionId);

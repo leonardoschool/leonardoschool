@@ -8,6 +8,8 @@ interface SubmitConfirmModalProps {
   readonly answeredCount: number;
   readonly totalQuestions: number;
   readonly isLoading: boolean;
+  /** Failed attempts so far; >0 means the submit is being retried */
+  readonly retryAttempt?: number;
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
 }
@@ -17,6 +19,7 @@ export function SubmitConfirmModal({
   answeredCount,
   totalQuestions,
   isLoading,
+  retryAttempt = 0,
   onConfirm,
   onCancel,
 }: SubmitConfirmModalProps) {
@@ -28,7 +31,16 @@ export function SubmitConfirmModal({
       title="Consegna Simulazione"
       message={
         <div className="space-y-3">
-          <p>Sei sicuro di voler consegnare la simulazione?</p>
+          {retryAttempt > 0 ? (
+            // A spinner that lasts half a minute reads as a frozen page and
+            // invites a reload: say that the retry is deliberate.
+            <p className="text-orange-600 dark:text-orange-400">
+              Connessione lenta: sto riprovando l&apos;invio (tentativo {retryAttempt + 1} di 4).
+              Non chiudere la pagina.
+            </p>
+          ) : (
+            <p>Sei sicuro di voler consegnare la simulazione?</p>
+          )}
           <div className={`p-3 rounded-lg ${colors.background.secondary}`}>
             <p className="text-sm">
               <strong>Risposte date:</strong> {answeredCount}/{totalQuestions}

@@ -1228,6 +1228,51 @@ function buildOpenAnswerSubmissions(
 }
 
 /**
+ * Builds the submit response from the stored result row.
+ *
+ * Both the freshly scored submit and the replay of an already scored one go
+ * through here, so a retry — which the client fires whenever a response is
+ * lost — cannot answer in a shape the original submit would not have.
+ */
+function buildSubmitResponse(
+  simulation: {
+    showResults: boolean;
+    maxScore: number | null;
+    totalQuestions: number;
+    passingScore: number | null;
+    showCorrectAnswers: boolean;
+  },
+  result: {
+    id: string;
+    totalScore: number;
+    correctAnswers: number;
+    wrongAnswers: number;
+    blankAnswers: number;
+    answers: Prisma.JsonValue;
+  }
+) {
+  if (!simulation.showResults) {
+    return {
+      resultId: result.id,
+      message: 'Simulazione completata. I risultati saranno disponibili dopo la chiusura.',
+    };
+  }
+
+  return {
+    resultId: result.id,
+    score: result.totalScore,
+    maxScore: simulation.maxScore,
+    correctCount: result.correctAnswers,
+    wrongCount: result.wrongAnswers,
+    blankCount: result.blankAnswers,
+    totalQuestions: simulation.totalQuestions,
+    passed: simulation.passingScore ? result.totalScore >= simulation.passingScore : null,
+    showCorrectAnswers: simulation.showCorrectAnswers,
+    answers: simulation.showCorrectAnswers ? result.answers : undefined,
+  };
+}
+
+/**
  * Get or create simulation result for submission
  */
 async function getOrCreateSimulationResult(
@@ -4206,6 +4251,22 @@ export const simulationsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulazione non trovata' });
       }
 
+      // A submit whose response never made it back to the student gets retried,
+      // and by then the attempt it names is already scored. Replaying it would
+      // fall through to `getOrCreateSimulationResult`, which only recognises an
+      // attempt still in progress and would answer "Hai già completato questa
+      // simulazione" — stranding a student whose test is in fact safely stored.
+      // A reset clears completedAt, so a reopened attempt still takes the
+      // normal path and stays subject to the reset-token check below.
+      if (input.resultId) {
+        const alreadyScored = await ctx.prisma.simulationResult.findFirst({
+          where: { id: input.resultId, simulationId, studentId, completedAt: { not: null } },
+        });
+        if (alreadyScored) {
+          return buildSubmitResponse(simulation, alreadyScored);
+        }
+      }
+
       // Get or create simulation result using helper
       const result = await getOrCreateSimulationResult(
         ctx.prisma,
@@ -4274,9 +4335,18 @@ export const simulationsRouter = router({
         );
         
         if (openAnswersToCreate.length > 0) {
-          await ctx.prisma.openAnswerSubmission.createMany({
-            data: openAnswersToCreate,
-          });
+          // The client retries a submit whose response was lost, and the attempt
+          // it targets is identified by resultId — so this has to be a replace,
+          // not an append, or a retry would leave the reviewer two copies of
+          // every open answer to correct.
+          await ctx.prisma.$transaction([
+            ctx.prisma.openAnswerSubmission.deleteMany({
+              where: { simulationResultId: result.id },
+            }),
+            ctx.prisma.openAnswerSubmission.createMany({
+              data: openAnswersToCreate,
+            }),
+          ]);
           // Only count submissions that still need staff review (not auto-validated)
           const pendingCount = openAnswersToCreate.filter(s => !s.isValidated).length;
           await ctx.prisma.simulationResult.update({
@@ -4310,25 +4380,7 @@ export const simulationsRouter = router({
       });
 
       // Return results if allowed
-      if (simulation.showResults) {
-        return {
-          resultId: updatedResult.id,
-          score: scoringResult.totalScore,
-          maxScore: simulation.maxScore,
-          correctCount: scoringResult.correctCount,
-          wrongCount: scoringResult.wrongCount,
-          blankCount: scoringResult.blankCount,
-          totalQuestions: simulation.totalQuestions,
-          passed: simulation.passingScore ? scoringResult.totalScore >= simulation.passingScore : null,
-          showCorrectAnswers: simulation.showCorrectAnswers,
-          answers: simulation.showCorrectAnswers ? scoringResult.evaluatedAnswers : undefined,
-        };
-      }
-
-      return {
-        resultId: updatedResult.id,
-        message: 'Simulazione completata. I risultati saranno disponibili dopo la chiusura.',
-      };
+      return buildSubmitResponse(simulation, updatedResult);
     }),
 
   // Self-correct open answer (student can mark their own open answer as correct/incorrect)

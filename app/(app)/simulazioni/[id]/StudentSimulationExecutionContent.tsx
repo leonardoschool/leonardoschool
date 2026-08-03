@@ -305,6 +305,17 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   });
 
   const submitMutation = trpc.simulations.submit.useMutation({
+    // The one request a student cannot afford to lose. Submitting is a replace
+    // keyed on the attempt, so retrying it is safe, and at the end of an exam
+    // every participant fires it within the same minute — the moment a blip is
+    // most likely and a red toast least useful.
+    retry: (failureCount, error) => {
+      const httpStatus = (error as { data?: { httpStatus?: number } })?.data?.httpStatus;
+      // The server has spoken: a conflict or a rejection will not change on a retry
+      if (httpStatus !== undefined && httpStatus < 500) return false;
+      return failureCount < 3;
+    },
+    retryDelay: (failureCount) => Math.min(2000 * 2 ** failureCount, 10_000),
     onSuccess: (data) => {
       // Clear TOLC instructions state on completion
       sessionStorage.removeItem(`tolc-instructions-read-${id}`);
@@ -1043,6 +1054,14 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
   const currentAnswer = answers.find((a) => a.questionId === currentQuestion?.questionId);
   // Count answers including both choice answers and text answers
   const answeredCount = answers.filter((a) => a.answerId !== null || (a.answerText && a.answerText.trim().length > 0)).length;
+
+  // A retry in flight is the difference between "the app is thinking" and "the
+  // connection dropped and it is trying again": without saying so, a spinner
+  // that lasts half a minute reads as a frozen page and invites a reload.
+  const submitModalMessage = submitMutation.failureCount > 0
+    ? `Connessione lenta: sto riprovando l'invio (tentativo ${submitMutation.failureCount + 1} di 4). Non chiudere la pagina.`
+    : `Hai risposto a ${answeredCount}/${simulation.totalQuestions} domande. Vuoi consegnare?`;
+
   // Use TOLC layout for simulations with sections
   if (hasSectionsMode) {
     return (
@@ -1116,7 +1135,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
         <ConfirmModal
           isOpen={submitConfirm}
           title="Consegna Simulazione"
-          message={`Hai risposto a ${answeredCount}/${simulation.totalQuestions} domande. Vuoi consegnare?`}
+          message={submitModalMessage}
           confirmLabel="Consegna"
           cancelLabel="Torna alla Simulazione"
           variant="warning"
@@ -1246,6 +1265,7 @@ export default function StudentSimulationExecutionContent({ id, assignmentId }: 
         answeredCount={answeredCount}
         totalQuestions={simulation.totalQuestions}
         isLoading={submitMutation.isPending}
+        retryAttempt={submitMutation.failureCount}
         onConfirm={handleSubmit}
         onCancel={() => setSubmitConfirm(false)}
       />
