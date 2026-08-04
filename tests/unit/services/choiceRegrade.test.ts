@@ -14,6 +14,7 @@ import {
   categoryOfStoredAnswer,
   gradeChoiceAnswer,
   normalizeAnswerText,
+  summarizeOutcomes,
 } from '@/server/services/choiceRegrade';
 
 const config = { points: 1.5, negativePoints: -0.4, blankPoints: 0 };
@@ -168,5 +169,51 @@ describe('buildAnswerIdRemap', () => {
     const remap = buildAnswerIdRemap(currentAnswers, snapshots);
     expect(remap.get('old-x')).toBe('new-b');
     expect(remap.size).toBe(1);
+  });
+});
+
+describe('summarizeOutcomes', () => {
+  it('keeps link repairs out of the score changes', () => {
+    const summary = summarizeOutcomes([
+      { pointDelta: 1.9, linkOnly: false },
+      { pointDelta: 0, linkOnly: true },
+      { pointDelta: 0, linkOnly: true },
+    ]);
+
+    expect(summary.updatedResults).toBe(3);
+    expect(summary.scoreChanges).toBe(1);
+    expect(summary.linkRepairs).toBe(2);
+  });
+
+  it('separates the attempts that gain from the ones that lose', () => {
+    const summary = summarizeOutcomes([
+      { pointDelta: 1.9, linkOnly: false },
+      { pointDelta: 1.9, linkOnly: false },
+      { pointDelta: -1.9, linkOnly: false },
+    ]);
+
+    expect(summary.gained).toBe(2);
+    expect(summary.lost).toBe(1);
+  });
+
+  it('sums the net movement without float drift', () => {
+    const summary = summarizeOutcomes([
+      { pointDelta: 1.9, linkOnly: false },
+      { pointDelta: -0.4, linkOnly: false },
+      { pointDelta: -0.4, linkOnly: false },
+    ]);
+
+    expect(summary.netPoints).toBe(1.1);
+  });
+
+  it('reports nothing for an empty run', () => {
+    expect(summarizeOutcomes([])).toEqual({
+      updatedResults: 0,
+      scoreChanges: 0,
+      linkRepairs: 0,
+      gained: 0,
+      lost: 0,
+      netPoints: 0,
+    });
   });
 });

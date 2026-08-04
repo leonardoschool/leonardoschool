@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 The version lives in `package.json` (`version`) and is shown by the badge at the bottom-left of the app.
 
+## [1.21.1] - 2026-08-04
+
+### Infrastructure
+- **Il controllo `pnpm fix:stale-verdicts:dry` ora dice cosa cambierebbe davvero.** Prima riportava un totale solo: sulla banca di produzione, "95 tentativi da riallineare". Ma quel numero metteva insieme due cose diverse — i tentativi il cui **punteggio si sposta** e quelli in cui il punteggio non cambia di un centesimo e viene solo risanato il collegamento alla risposta scelta (l'effetto visibile è che ricompare *"La tua risposta"* nella pagina di revisione). Una riparazione innocua si leggeva come un voto sbagliato. E non diceva nemmeno la **direzione**: riapplicando la chiave attuale c'è chi guadagna punti e chi ne perde, cosa da vedere prima di toccare i voti di studenti reali. Ora il report separa punteggi che cambiano da riparazioni del collegamento, quanti salgono e quanti scendono, il movimento netto in punti, e chiude con l'elenco delle domande coinvolte — id, materia e testo — perché decidere se applicare vuol dire poter controllare che la risposta corretta di quelle domande sia giusta oggi.
+
 ## [1.21.0] - 2026-08-04
 
 ### Changed

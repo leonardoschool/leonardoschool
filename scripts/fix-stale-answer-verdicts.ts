@@ -26,12 +26,23 @@
  */
 
 import prisma from '../lib/prisma/client';
-import { regradeChoiceQuestionResults } from '../server/services/choiceRegrade';
+import { stripHtml } from '../lib/utils/sanitizeHtml';
+import { regradeChoiceQuestionResults, type RegradeReport } from '../server/services/choiceRegrade';
 
 /** Questions handled per round-trip, so a large bank does not land in memory at once. */
 const QUESTION_BATCH_SIZE = 200;
 
-type Totals = { scanned: number; withChanges: number; attempts: number; students: Set<string> };
+type Totals = {
+  scanned: number;
+  withChanges: number;
+  attempts: number;
+  scoreChanges: number;
+  linkRepairs: number;
+  gained: number;
+  lost: number;
+  netPoints: number;
+  students: Set<string>;
+};
 
 async function collectQuestionIds(onlyQuestionId: string | null): Promise<string[]> {
   if (onlyQuestionId) return [onlyQuestionId];
@@ -69,7 +80,18 @@ async function main() {
   const questionIds = await collectQuestionIds(onlyQuestionId);
   console.log(`Domande da esaminare: ${questionIds.length}\n`);
 
-  const totals: Totals = { scanned: 0, withChanges: 0, attempts: 0, students: new Set() };
+  const totals: Totals = {
+    scanned: 0,
+    withChanges: 0,
+    attempts: 0,
+    scoreChanges: 0,
+    linkRepairs: 0,
+    gained: 0,
+    lost: 0,
+    netPoints: 0,
+    students: new Set(),
+  };
+  const affected: Array<{ questionId: string; report: RegradeReport }> = [];
   const startedAt = Date.now();
 
   for (const questionId of questionIds) {
@@ -81,24 +103,76 @@ async function main() {
 
     totals.withChanges += 1;
     totals.attempts += report.updatedResults;
+    totals.scoreChanges += report.scoreChanges;
+    totals.linkRepairs += report.linkRepairs;
+    totals.gained += report.gained;
+    totals.lost += report.lost;
+    totals.netPoints += report.netPoints;
     for (const studentId of report.affectedStudentIds) totals.students.add(studentId);
 
-    console.log(
-      `  ${questionId}  ${String(report.updatedResults).padStart(4)} tentativi  ` +
-        `${report.affectedStudentIds.length} studenti`
-    );
+    affected.push({ questionId, report });
   }
 
-  const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
-  console.log(`\nDomande esaminate:        ${totals.scanned}`);
-  console.log(`Domande con disallineamenti: ${totals.withChanges}`);
-  console.log(`Tentativi ${isDryRun ? 'da riallineare' : 'riallineati'}:  ${totals.attempts}`);
-  console.log(`Studenti coinvolti:       ${totals.students.size}`);
-  console.log(`Durata:                   ${seconds}s`);
+  await printAffectedQuestions(affected);
 
+  const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+  const verb = isDryRun ? 'da riallineare' : 'riallineati';
+  console.log(`\nDomande esaminate:           ${totals.scanned}`);
+  console.log(`Domande con disallineamenti: ${totals.withChanges}`);
+  console.log(`Tentativi ${verb}:${' '.repeat(Math.max(1, 16 - verb.length))}${totals.attempts}`);
+  console.log(`  punteggio che cambia:      ${totals.scoreChanges}  (${totals.gained} in su, ${totals.lost} in giù)`);
+  console.log(`  solo collegamento:         ${totals.linkRepairs}  (punteggio invariato)`);
+  console.log(`Movimento netto:             ${formatDelta(roundPoints(totals.netPoints))} punti`);
+  console.log(`Studenti coinvolti:          ${totals.students.size}`);
+  console.log(`Durata:                      ${seconds}s`);
+
+  if (totals.scoreChanges === 0 && totals.linkRepairs > 0) {
+    console.log('\nNessun voto cambia: sono tutte riparazioni del collegamento alla risposta scelta.');
+  }
   if (isDryRun && totals.attempts > 0) {
     console.log('\nRilancia senza --dry-run per applicare.');
   }
+}
+
+/**
+ * The per-question detail, with the question text.
+ *
+ * Printed at the end and not as the scan goes, because deciding whether to apply means
+ * reading which questions moved — and an id alone does not let anyone check that the
+ * answer key those attempts are about to be graded against is the right one.
+ */
+async function printAffectedQuestions(
+  affected: Array<{ questionId: string; report: RegradeReport }>
+): Promise<void> {
+  if (affected.length === 0) return;
+
+  const questions = await prisma.question.findMany({
+    where: { id: { in: affected.map(a => a.questionId) } },
+    select: { id: true, text: true, subject: { select: { name: true } } },
+  });
+  const byId = new Map(questions.map(q => [q.id, q]));
+
+  console.log('\nDomande coinvolte:\n');
+  for (const { questionId, report } of affected) {
+    const question = byId.get(questionId);
+    const title = stripHtml(question?.text ?? '').slice(0, 70);
+    const subject = question?.subject?.name ?? 'senza materia';
+
+    console.log(`  ${questionId}  [${subject}]`);
+    console.log(
+      `    ${report.scoreChanges} punteggi (${report.gained}↑ ${report.lost}↓), ` +
+        `${report.linkRepairs} solo collegamento, netto ${formatDelta(roundPoints(report.netPoints))}`
+    );
+    console.log(`    ${title}${(question?.text.length ?? 0) > 70 ? '…' : ''}\n`);
+  }
+}
+
+function roundPoints(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function formatDelta(value: number): string {
+  return value > 0 ? `+${value}` : String(value);
 }
 
 main()

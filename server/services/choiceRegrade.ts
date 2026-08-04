@@ -161,11 +161,37 @@ function roundScore(value: number): number {
 export type RegradeReport = {
   /** False when the question has no usable key to re-grade against (open text, or no correct option). */
   applicable: boolean;
+  /** Attempts touched: the score changes plus the link repairs below. */
   updatedResults: number;
+  /**
+   * Attempts whose earned points actually moved.
+   *
+   * Deliberately separate from `linkRepairs`: an attempt can need writing without its
+   * score changing by a cent — the healed field is the orphaned `answerId`, which only
+   * brings "La tua risposta" back to the review page. Reporting the two as one number
+   * makes a harmless repair read like a wrong grade.
+   */
+  scoreChanges: number;
+  /** Attempts where only the orphaned answerId was healed: same verdict, same points. */
+  linkRepairs: number;
+  /** How many of the score changes went up, and how many went down. */
+  gained: number;
+  lost: number;
+  /** Net point movement summed over every attempt touched. */
+  netPoints: number;
   affectedStudentIds: string[];
 };
 
-const emptyReport: RegradeReport = { applicable: false, updatedResults: 0, affectedStudentIds: [] };
+const emptyReport: RegradeReport = {
+  applicable: false,
+  updatedResults: 0,
+  scoreChanges: 0,
+  linkRepairs: 0,
+  gained: 0,
+  lost: 0,
+  netPoints: 0,
+  affectedStudentIds: [],
+};
 
 type SimulationScoringFields = {
   useQuestionPoints: boolean;
@@ -233,7 +259,7 @@ export async function regradeChoiceQuestionResults(
   });
 
   const affectedStudentIds = new Set<string>();
-  let updatedResults = 0;
+  const touched: SingleResultOutcome[] = [];
 
   for (const placement of placements) {
     const regraded = await regradeSimulationResults(prisma, {
@@ -246,11 +272,37 @@ export async function regradeChoiceQuestionResults(
       dryRun: options.dryRun ?? false,
     });
 
-    updatedResults += regraded.length;
-    for (const studentId of regraded) affectedStudentIds.add(studentId);
+    for (const outcome of regraded) {
+      touched.push(outcome);
+      affectedStudentIds.add(outcome.studentId);
+    }
   }
 
-  return { applicable: true, updatedResults, affectedStudentIds: [...affectedStudentIds] };
+  return {
+    applicable: true,
+    ...summarizeOutcomes(touched),
+    affectedStudentIds: [...affectedStudentIds],
+  };
+}
+
+/**
+ * Split the touched attempts into what a reader has to tell apart before applying a
+ * repair: the scores that actually move, in which direction, and the attempts that only
+ * needed their orphaned answer link healed.
+ */
+export function summarizeOutcomes(
+  touched: Array<{ pointDelta: number; linkOnly: boolean }>
+): Omit<RegradeReport, 'applicable' | 'affectedStudentIds'> {
+  const scoreChanges = touched.filter(o => !o.linkOnly);
+
+  return {
+    updatedResults: touched.length,
+    scoreChanges: scoreChanges.length,
+    linkRepairs: touched.length - scoreChanges.length,
+    gained: scoreChanges.filter(o => o.pointDelta > 0).length,
+    lost: scoreChanges.filter(o => o.pointDelta < 0).length,
+    netPoints: roundScore(touched.reduce((sum, o) => sum + o.pointDelta, 0)),
+  };
 }
 
 const RESULT_SELECT = {
@@ -284,13 +336,22 @@ type RegradeSimulationParams = {
   dryRun: boolean;
 };
 
-/** Walk one simulation's completed attempts in batches; returns the students whose score moved. */
+/** What one attempt did, so the caller can tell a real score change from a link repair. */
+type SingleResultOutcome = {
+  studentId: string;
+  /** Points the attempt gained (positive) or lost (negative); 0 for a link repair. */
+  pointDelta: number;
+  /** The verdict and the points are identical: only the orphaned answerId was healed. */
+  linkOnly: boolean;
+};
+
+/** Walk one simulation's completed attempts in batches; returns the ones that were touched. */
 async function regradeSimulationResults(
   prisma: PrismaClient,
   params: RegradeSimulationParams
-): Promise<string[]> {
+): Promise<SingleResultOutcome[]> {
   const { placement, questionPoints } = params;
-  const affected: string[] = [];
+  const affected: SingleResultOutcome[] = [];
   let skip = 0;
 
   for (;;) {
@@ -322,7 +383,7 @@ async function regradeSimulationResults(
         },
       });
 
-      if (applied) affected.push(result.studentId);
+      if (applied) affected.push({ studentId: result.studentId, ...applied });
     }
 
     if (results.length < RESULT_BATCH_SIZE) return affected;
@@ -348,17 +409,21 @@ type SingleResultParams = {
   dryRun: boolean;
 };
 
-async function regradeSingleResult(prisma: PrismaClient, params: SingleResultParams): Promise<boolean> {
+/** Returns what moved, or null when the attempt is already consistent and nothing is written. */
+async function regradeSingleResult(
+  prisma: PrismaClient,
+  params: SingleResultParams
+): Promise<Omit<SingleResultOutcome, 'studentId'> | null> {
   const { result, questionId, correctAnswerIds, answerIdRemap, config } = params;
 
-  if (!Array.isArray(result.answers)) return false;
+  if (!Array.isArray(result.answers)) return null;
   const answers = result.answers as unknown as StoredEvaluatedAnswer[];
   const index = answers.findIndex(a => a?.questionId === questionId);
-  if (index === -1) return false;
+  if (index === -1) return null;
 
   const stored = answers[index];
   // Still waiting on a manual correction: that verdict belongs to the open-answer flow.
-  if (stored.isCorrect === null && stored.answerText) return false;
+  if (stored.isCorrect === null && stored.answerText) return null;
 
   const resolvedAnswerId = stored.answerId ? answerIdRemap.get(stored.answerId) ?? stored.answerId : null;
   const graded = gradeChoiceAnswer(resolvedAnswerId, correctAnswerIds, config);
@@ -369,11 +434,18 @@ async function regradeSingleResult(prisma: PrismaClient, params: SingleResultPar
     (stored.earnedPoints ?? 0) === graded.earnedPoints &&
     previousCategory === graded.category;
   const idUnchanged = (stored.answerId ?? null) === resolvedAnswerId;
-  if (verdictUnchanged && idUnchanged) return false;
+  if (verdictUnchanged && idUnchanged) return null;
+
+  // `linkOnly` is the whole point of reporting this: the attempt still needs writing,
+  // but only to heal the orphaned answerId — the student's score does not move.
+  const outcome = {
+    pointDelta: roundScore(graded.earnedPoints - (stored.earnedPoints ?? 0)),
+    linkOnly: verdictUnchanged,
+  };
 
   // Counted as it would move, but nothing is written: this is what makes the repair
   // script's --dry-run report the real numbers without touching an attempt.
-  if (params.dryRun) return true;
+  if (params.dryRun) return outcome;
 
   answers[index] = {
     ...stored,
@@ -400,5 +472,5 @@ async function regradeSingleResult(prisma: PrismaClient, params: SingleResultPar
     },
   });
 
-  return true;
+  return outcome;
 }
