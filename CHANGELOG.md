@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 The version lives in `package.json` (`version`) and is shown by the badge at the bottom-left of the app.
 
+## [1.20.0] - 2026-08-04
+
+### Fixed
+- **Correggere la risposta esatta di una domanda ora aggiorna anche le simulazioni già svolte.** Era la segnalazione *"perché me la dà sbagliata se è corretta?"*: nella pagina del risultato la risposta B appariva verde con l'etichetta **Corretta**, ma la domanda valeva **-0,40 pt** invece di **+1,50**. Le due informazioni arrivavano da due posti diversi. Il punteggio di un tentativo viene calcolato al momento della consegna e **congelato** nel risultato, mentre la pagina di revisione mostra la risposta esatta **leggendola dal vivo dalla domanda**. Cambiando in un secondo momento quale opzione è corretta, si spostava solo la seconda: il tentativo restava con il verdetto guadagnato contro la vecchia chiave, accanto a un'opzione ora dichiarata giusta. Ora, quando si modifica quale risposta è quella esatta, i tentativi già consegnati che contengono quella domanda vengono **rivalutati automaticamente** — verdetto, punti, totale, percentuale, conteggi di corrette/sbagliate/omesse e riepilogo per materia. Il salvataggio dice quanti tentativi sono stati ricalcolati.
+- **Modificare una domanda non cancella più la traccia di cosa aveva scelto lo studente.** Ogni salvataggio eliminava tutte le righe delle risposte e le ricreava da zero, quindi con identificativi nuovi: i tentativi già svolti puntavano a opzioni che non esistevano più. È il motivo per cui, nella schermata segnalata, **non compariva da nessuna parte l'etichetta "La tua risposta"** — l'unica cosa che avrebbe reso leggibile cosa era stato scelto. Ora le righe esistenti vengono riscritte al loro posto: si creano solo le opzioni aggiunte e si eliminano solo quelle rimosse, anche riordinandole. Per i tentativi già rovinati da una modifica precedente, il collegamento viene recuperato dallo storico versioni della domanda, abbinando l'opzione per testo e, in mancanza, per posizione.
+
+### Added
+- **Nuova azione "Ricalcola punteggi"** nel menu della scheda domanda (per le domande a scelta multipla). Riapplica la risposta corretta attuale a tutti i tentativi già consegnati che contengono quella domanda, e riporta quanti ne sono stati riallineati. Serve per le domande corrette **prima** di questo rilascio, quando l'aggiornamento automatico non esisteva ancora: è l'azione da usare sulla domanda di Biologia della segnalazione. È ripetibile senza effetti collaterali — un tentativo già coerente non viene toccato — e non tocca le domande a risposta aperta, che continuano a passare dalla correzione manuale.
+
 ## [1.19.1] - 2026-08-03
 
 ### Added

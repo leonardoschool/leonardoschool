@@ -76,6 +76,9 @@ export default function ModificaDomandaPage() {
     year: question.year,
     source: question.source,
     answers: question.answers.map((a) => ({
+      // Sent back on save so the row is rewritten instead of recreated: attempts
+      // already taken reference this id to show what the student picked.
+      id: a.id,
       text: a.text,
       isCorrect: a.isCorrect,
       order: a.order,

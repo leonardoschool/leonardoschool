@@ -3,6 +3,7 @@
 import { TRPCError } from '@trpc/server';
 import type { Prisma, PrismaClient, QuestionType } from '@prisma/client';
 import { sanitizeStudentOpenAnswerInput } from '@/lib/utils/studentOpenAnswer';
+import { normalizeAnswerText } from '@/server/services/choiceRegrade';
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -190,4 +191,82 @@ export async function assertProposableAlternativeAnswer(
   }
 
   return keyword;
+}
+
+// ==================== ANSWER RECONCILIATION ====================
+
+type ExistingAnswerRow = { id: string; order: number };
+type IncomingAnswer = { id?: string | null; order?: number | null };
+
+export type AnswerReconciliation<T> = {
+  /** Existing rows to rewrite in place: the id survives, so past attempts keep pointing at them. */
+  updates: Array<{ id: string; answer: T; index: number }>;
+  /** Answers with no counterpart to reuse. */
+  creates: Array<{ answer: T; index: number }>;
+  /** Rows the edit dropped. */
+  deletedIds: string[];
+};
+
+/**
+ * Pair the submitted answers with the rows already stored for the question.
+ *
+ * Editing a question used to delete every answer row and recreate it, which minted
+ * new ids and orphaned the `answerId` recorded in the attempts already taken — the
+ * review page then had nothing to mark as "La tua risposta". Reusing the rows keeps
+ * that link alive. The editor does not always send back the ids, so an answer
+ * without one falls back to its position, which is how the form builds the list.
+ */
+export function reconcileAnswers<T extends IncomingAnswer>(
+  existing: ExistingAnswerRow[],
+  incoming: T[]
+): AnswerReconciliation<T> {
+  const available = [...existing].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+  const byId = new Map(available.map(row => [row.id, row]));
+  const claimed = new Set<string>();
+  const matched = new Map<number, string>();
+
+  incoming.forEach((answer, index) => {
+    const id = answer.id ?? undefined;
+    if (id && byId.has(id) && !claimed.has(id)) {
+      claimed.add(id);
+      matched.set(index, id);
+    }
+  });
+
+  const spare = available.filter(row => !claimed.has(row.id));
+  incoming.forEach((_, index) => {
+    if (matched.has(index)) return;
+    const row = spare.shift();
+    if (row) {
+      claimed.add(row.id);
+      matched.set(index, row.id);
+    }
+  });
+
+  const updates: AnswerReconciliation<T>['updates'] = [];
+  const creates: AnswerReconciliation<T>['creates'] = [];
+  incoming.forEach((answer, index) => {
+    const id = matched.get(index);
+    if (id) updates.push({ id, answer, index });
+    else creates.push({ answer, index });
+  });
+
+  return {
+    updates,
+    creates,
+    deletedIds: available.filter(row => !claimed.has(row.id)).map(row => row.id),
+  };
+}
+
+/** True when the set of options flagged correct is not the same one as before. */
+export function correctAnswerKeyChanged(
+  before: Array<{ text: string; isCorrect: boolean }>,
+  after: Array<{ text: string; isCorrect: boolean }>
+): boolean {
+  const key = (answers: Array<{ text: string; isCorrect: boolean }>) =>
+    answers.filter(a => a.isCorrect).map(a => normalizeAnswerText(a.text)).sort();
+
+  const keyBefore = key(before);
+  const keyAfter = key(after);
+  return keyBefore.length !== keyAfter.length || keyBefore.some((text, i) => text !== keyAfter[i]);
 }

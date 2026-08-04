@@ -16,15 +16,19 @@ import {
   importQuestionRowSchema,
   QuestionFilterInput,
   MAX_PROPOSED_KEYWORD_LENGTH,
+  type QuestionAnswerInput,
 } from '@/lib/validations/questionValidation';
 import {
   assertCanManageFeedback,
   assertProposableAlternativeAnswer,
   buildProposalAnswerTexts,
   buildQuestionTitle,
+  correctAnswerKeyChanged,
   normalizeKeyword,
+  reconcileAnswers,
 } from './questions.helpers';
 import { applyOpenAnswerVerdict } from '@/server/services/openAnswerGrading';
+import { regradeChoiceQuestionResults } from '@/server/services/choiceRegrade';
 import {
   smartRandomGenerationSchema,
   getDifficultyRatiosFromLevels,
@@ -229,6 +233,23 @@ function matchTopicId(
     t => t.subjectId === subjectId && t.name.toLowerCase() === topicName.toLowerCase()
   );
   return matchedTopic?.id ?? null;
+}
+
+/**
+ * Column values of one answer row, shared by the create and the in-place update so
+ * an option cannot end up with different defaults depending on how it was saved.
+ */
+function buildAnswerRowData(answer: QuestionAnswerInput, index: number) {
+  return {
+    text: answer.text,
+    textLatex: answer.textLatex ?? null,
+    imageUrl: answer.imageUrl ?? null,
+    imageAlt: answer.imageAlt ?? null,
+    isCorrect: answer.isCorrect ?? false,
+    explanation: answer.explanation ?? null,
+    order: answer.order ?? index,
+    label: answer.label ?? String.fromCodePoint(65 + index),
+  };
 }
 
 /**
@@ -1239,16 +1260,7 @@ export const questionsRouter = router({
           // Create answers with nested write
           ...(answers && answers.length > 0 ? {
             answers: {
-              create: answers.map((answer, index) => ({
-                text: answer.text,
-                textLatex: answer.textLatex ?? null,
-                imageUrl: answer.imageUrl ?? null,
-                imageAlt: answer.imageAlt ?? null,
-                isCorrect: answer.isCorrect ?? false,
-                explanation: answer.explanation ?? null,
-                order: answer.order ?? index,
-                label: answer.label ?? String.fromCodePoint(65 + index),
-              })),
+              create: answers.map((answer, index) => buildAnswerRowData(answer, index)),
             }
           } : {}),
           // Create keywords with nested write
@@ -1340,6 +1352,13 @@ export const questionsRouter = router({
         }
       }
 
+      const answerPlan = answers
+        ? reconcileAnswers(
+            currentQuestion.answers.map(a => ({ id: a.id, order: a.order })),
+            answers
+          )
+        : null;
+
       // Update using sequential operations with callback transaction (using ctx.prisma inside)
       const updatedQuestion = await ctx.prisma.$transaction(async () => {
         // Create version snapshot before update
@@ -1359,9 +1378,20 @@ export const questionsRouter = router({
           },
         });
 
-        // Delete answers if provided (before update to avoid foreign key issues)
-        if (answers) {
-          await ctx.prisma.questionAnswer.deleteMany({ where: { questionId: id } });
+        // Rewrite the answer rows in place instead of recreating them: an attempt
+        // already taken stores the id of the option the student picked, and a fresh
+        // set of ids would orphan it (see reconcileAnswers).
+        if (answerPlan) {
+          if (answerPlan.deletedIds.length > 0) {
+            await ctx.prisma.questionAnswer.deleteMany({ where: { id: { in: answerPlan.deletedIds } } });
+          }
+
+          for (const { id: answerId, answer, index } of answerPlan.updates) {
+            await ctx.prisma.questionAnswer.update({
+              where: { id: answerId },
+              data: buildAnswerRowData(answer, index),
+            });
+          }
         }
 
         // Delete keywords if provided
@@ -1392,19 +1422,10 @@ export const questionsRouter = router({
               ? new Date()
               : currentQuestion.publishedAt,
             archivedAt: restData.status === 'ARCHIVED' ? new Date() : null,
-            // Create new answers with nested write
-            ...(answers ? {
+            // Only the options with no existing row left to reuse are created here
+            ...(answerPlan && answerPlan.creates.length > 0 ? {
               answers: {
-                create: answers.map((answer, index) => ({
-                  text: answer.text,
-                  textLatex: answer.textLatex ?? null,
-                  imageUrl: answer.imageUrl ?? null,
-                  imageAlt: answer.imageAlt ?? null,
-                  isCorrect: answer.isCorrect ?? false,
-                  explanation: answer.explanation ?? null,
-                  order: answer.order ?? index,
-                  label: answer.label ?? String.fromCodePoint(65 + index),
-                })),
+                create: answerPlan.creates.map(({ answer, index }) => buildAnswerRowData(answer, index)),
               }
             } : {}),
             // Create new keywords with nested write
@@ -1433,7 +1454,7 @@ export const questionsRouter = router({
         updatedQuestion.subjectId,
       ]);
 
-      return ctx.prisma.question.findUnique({
+      const question = await ctx.prisma.question.findUniqueOrThrow({
         where: { id: updatedQuestion.id },
         include: {
           subject: true,
@@ -1442,6 +1463,60 @@ export const questionsRouter = router({
           keywords: true,
         },
       });
+
+      // Attempts already scored kept the verdict they earned against the old key, so
+      // fixing which option is correct has to reach them too — otherwise the review
+      // page shows the new "Corretta" next to the penalty from the old one.
+      // Outside the transaction: a failed re-grade must not roll back the fix itself.
+      let regradedResults = 0;
+      if (answers && correctAnswerKeyChanged(currentQuestion.answers, question.answers)) {
+        const report = await regradeChoiceQuestionResults(ctx.prisma, id).catch(err => {
+          console.error('[Questions] Failed to re-grade attempts after an answer key change:', err);
+          return null;
+        });
+        regradedResults = report?.updatedResults ?? 0;
+      }
+
+      return { ...question, regradedResults };
+    }),
+
+  // Re-apply the current answer key to the attempts that already scored this question.
+  // Runs automatically when the key changes; exposed on its own for the attempts that
+  // were left inconsistent by an edit made before that became automatic.
+  recalculateQuestionResults: staffProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.manage');
+
+      const question = await ctx.prisma.question.findUnique({
+        where: { id: input.id },
+        select: { id: true, type: true },
+      });
+
+      if (!question) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Domanda non trovata.' });
+      }
+
+      if (question.type === 'OPEN_TEXT') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Le domande a risposta aperta si ricorreggono dalla pagina delle risposte aperte.',
+        });
+      }
+
+      const report = await regradeChoiceQuestionResults(ctx.prisma, input.id);
+
+      if (!report.applicable) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'La domanda non ha una risposta corretta impostata: non è possibile ricalcolare i punteggi.',
+        });
+      }
+
+      return {
+        updatedResults: report.updatedResults,
+        affectedStudents: report.affectedStudentIds.length,
+      };
     }),
 
   // Delete a question

@@ -183,7 +183,7 @@ export function useQuestionForm({ questionId, basePath = '/domande', returnTo, i
   });
 
   const updateMutation = trpc.questions.updateQuestion.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       const currentTagIds = selectedTagIdsRef.current;
       if (questionId) {
         try {
@@ -192,7 +192,15 @@ export function useQuestionForm({ questionId, basePath = '/domande', returnTo, i
           console.error('Failed to update tags:', error);
         }
       }
-      showSuccess('Domanda aggiornata', 'Le modifiche sono state salvate.');
+      const regraded = data?.regradedResults ?? 0;
+      const regradeNotice =
+        regraded === 1
+          ? ' È stato ricalcolato 1 tentativo già svolto.'
+          : ` Sono stati ricalcolati ${regraded} tentativi già svolti.`;
+      showSuccess(
+        'Domanda aggiornata',
+        `Le modifiche sono state salvate.${regraded > 0 ? regradeNotice : ''}`
+      );
       utils.questions.getQuestions.invalidate();
       utils.questions.getQuestion.invalidate({ id: questionId });
       router.push(questionId ? getQuestionDetailPath(questionId) : basePath);
