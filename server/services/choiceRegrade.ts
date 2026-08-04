@@ -192,7 +192,8 @@ function effectiveMaxScore(simulation: SimulationScoringFields): number {
  */
 export async function regradeChoiceQuestionResults(
   prisma: PrismaClient,
-  questionId: string
+  questionId: string,
+  options: { dryRun?: boolean } = {}
 ): Promise<RegradeReport> {
   const question = await prisma.question.findUnique({
     where: { id: questionId },
@@ -242,6 +243,7 @@ export async function regradeChoiceQuestionResults(
       questionPoints: { points: question.points, negativePoints: question.negativePoints },
       correctAnswerIds,
       answerIdRemap,
+      dryRun: options.dryRun ?? false,
     });
 
     updatedResults += regraded.length;
@@ -279,6 +281,7 @@ type RegradeSimulationParams = {
   questionPoints: { points: number; negativePoints: number };
   correctAnswerIds: ReadonlySet<string>;
   answerIdRemap: Map<string, string>;
+  dryRun: boolean;
 };
 
 /** Walk one simulation's completed attempts in batches; returns the students whose score moved. */
@@ -310,6 +313,7 @@ async function regradeSimulationResults(
         subjectName: params.subjectName,
         correctAnswerIds: params.correctAnswerIds,
         answerIdRemap: params.answerIdRemap,
+        dryRun: params.dryRun,
         config: {
           points: placement.customPoints ?? (useQuestionPoints ? questionPoints.points : correctPoints),
           negativePoints:
@@ -341,6 +345,7 @@ type SingleResultParams = {
   correctAnswerIds: ReadonlySet<string>;
   answerIdRemap: Map<string, string>;
   config: ChoicePointsConfig;
+  dryRun: boolean;
 };
 
 async function regradeSingleResult(prisma: PrismaClient, params: SingleResultParams): Promise<boolean> {
@@ -365,6 +370,10 @@ async function regradeSingleResult(prisma: PrismaClient, params: SingleResultPar
     previousCategory === graded.category;
   const idUnchanged = (stored.answerId ?? null) === resolvedAnswerId;
   if (verdictUnchanged && idUnchanged) return false;
+
+  // Counted as it would move, but nothing is written: this is what makes the repair
+  // script's --dry-run report the real numbers without touching an attempt.
+  if (params.dryRun) return true;
 
   answers[index] = {
     ...stored,

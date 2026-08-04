@@ -258,6 +258,29 @@ export function reconcileAnswers<T extends IncomingAnswer>(
   };
 }
 
+type QuestionScoringShape = {
+  points: number;
+  negativePoints: number;
+  answers: Array<{ text: string; isCorrect: boolean }>;
+};
+
+/**
+ * Whether an edit invalidates the verdicts already stored for this question.
+ *
+ * Two things decide what an attempt earned: which option is correct, and what a
+ * right or wrong answer is worth. `blankPoints` is deliberately not one of them —
+ * an unanswered question is paid by the simulation's own `blankPoints`, never the
+ * question's, both when scoring and when re-grading, so including it here would
+ * only schedule a pass that finds nothing to do.
+ */
+export function shouldRegradeAttempts(before: QuestionScoringShape, after: QuestionScoringShape): boolean {
+  return (
+    before.points !== after.points ||
+    before.negativePoints !== after.negativePoints ||
+    correctAnswerKeyChanged(before.answers, after.answers)
+  );
+}
+
 /** True when the set of options flagged correct is not the same one as before. */
 export function correctAnswerKeyChanged(
   before: Array<{ text: string; isCorrect: boolean }>,

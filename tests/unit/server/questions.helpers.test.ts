@@ -7,7 +7,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { correctAnswerKeyChanged, reconcileAnswers } from '@/server/trpc/routers/questions.helpers';
+import {
+  correctAnswerKeyChanged,
+  reconcileAnswers,
+  shouldRegradeAttempts,
+} from '@/server/trpc/routers/questions.helpers';
 
 describe('reconcileAnswers', () => {
   const existing = [
@@ -128,5 +132,48 @@ describe('correctAnswerKeyChanged', () => {
     ];
 
     expect(correctAnswerKeyChanged(before, after)).toBe(true);
+  });
+});
+
+describe('shouldRegradeAttempts', () => {
+  const question = {
+    points: 1.5,
+    negativePoints: -0.4,
+    answers: [
+      { text: 'Legami idrogeno', isCorrect: true },
+      { text: 'Legami covalenti', isCorrect: false },
+    ],
+  };
+
+  it('fires when the correct option moves', () => {
+    const after = {
+      ...question,
+      answers: [
+        { text: 'Legami idrogeno', isCorrect: false },
+        { text: 'Legami covalenti', isCorrect: true },
+      ],
+    };
+
+    expect(shouldRegradeAttempts(question, after)).toBe(true);
+  });
+
+  it('fires when what a right answer is worth changes', () => {
+    expect(shouldRegradeAttempts(question, { ...question, points: 2 })).toBe(true);
+  });
+
+  it('fires when the penalty changes', () => {
+    expect(shouldRegradeAttempts(question, { ...question, negativePoints: -0.5 })).toBe(true);
+  });
+
+  it('stays quiet for an edit that changes nothing about the score', () => {
+    const after = {
+      ...question,
+      answers: [
+        { text: '<p>Legami  idrogeno</p>', isCorrect: true },
+        { text: 'Interazioni idrofobiche', isCorrect: false },
+      ],
+    };
+
+    expect(shouldRegradeAttempts(question, after)).toBe(false);
   });
 });

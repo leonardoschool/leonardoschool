@@ -26,7 +26,6 @@ import {
   BookOpen,
   AlertCircle,
   MoreHorizontal,
-  RefreshCw,
   FileText,
   Calendar,
   CheckCircle,
@@ -86,19 +85,6 @@ export default function DettaglioDomandaPage() {
         showSuccess('Domanda ritirata', 'La domanda non è più visibile agli studenti.');
       }
       utils.questions.getQuestion.invalidate({ id: questionId });
-    },
-    onError: handleMutationError,
-  });
-
-  const recalculateMutation = trpc.questions.recalculateQuestionResults.useMutation({
-    onSuccess: ({ updatedResults }) => {
-      const subject = updatedResults === 1 ? '1 tentativo è stato riallineato' : `${updatedResults} tentativi sono stati riallineati`;
-      showSuccess(
-        'Punteggi ricalcolati',
-        updatedResults === 0
-          ? 'Tutti i tentativi erano già allineati alla risposta corretta attuale.'
-          : `${subject} alla risposta corretta attuale.`
-      );
     },
     onError: handleMutationError,
   });
@@ -255,19 +241,6 @@ export default function DettaglioDomandaPage() {
                     >
                       <XCircle className="w-4 h-4" />
                       Ritira
-                    </button>
-                  )}
-                  {question.type !== 'OPEN_TEXT' && (
-                    <button
-                      onClick={() => {
-                        recalculateMutation.mutate({ id: questionId });
-                        setShowActionsMenu(false);
-                      }}
-                      disabled={recalculateMutation.isPending}
-                      className={`w-full flex items-center gap-2 px-4 py-2 text-sm ${colors.text.primary} hover:${colors.background.secondary} disabled:opacity-50`}
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                      Ricalcola punteggi
                     </button>
                   )}
                   {question.status !== 'ARCHIVED' && (

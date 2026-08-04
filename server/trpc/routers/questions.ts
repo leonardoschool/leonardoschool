@@ -23,9 +23,9 @@ import {
   assertProposableAlternativeAnswer,
   buildProposalAnswerTexts,
   buildQuestionTitle,
-  correctAnswerKeyChanged,
   normalizeKeyword,
   reconcileAnswers,
+  shouldRegradeAttempts,
 } from './questions.helpers';
 import { applyOpenAnswerVerdict } from '@/server/services/openAnswerGrading';
 import { regradeChoiceQuestionResults } from '@/server/services/choiceRegrade';
@@ -1464,59 +1464,21 @@ export const questionsRouter = router({
         },
       });
 
-      // Attempts already scored kept the verdict they earned against the old key, so
-      // fixing which option is correct has to reach them too — otherwise the review
-      // page shows the new "Corretta" next to the penalty from the old one.
+      // Attempts already scored kept the verdict they earned under the old rules, so
+      // changing which option is correct — or what that option is worth — has to reach
+      // them too, otherwise the review page shows the new "Corretta" next to the
+      // penalty from the old key.
       // Outside the transaction: a failed re-grade must not roll back the fix itself.
       let regradedResults = 0;
-      if (answers && correctAnswerKeyChanged(currentQuestion.answers, question.answers)) {
+      if (shouldRegradeAttempts(currentQuestion, question)) {
         const report = await regradeChoiceQuestionResults(ctx.prisma, id).catch(err => {
-          console.error('[Questions] Failed to re-grade attempts after an answer key change:', err);
+          console.error('[Questions] Failed to re-grade attempts after a scoring change:', err);
           return null;
         });
         regradedResults = report?.updatedResults ?? 0;
       }
 
       return { ...question, regradedResults };
-    }),
-
-  // Re-apply the current answer key to the attempts that already scored this question.
-  // Runs automatically when the key changes; exposed on its own for the attempts that
-  // were left inconsistent by an edit made before that became automatic.
-  recalculateQuestionResults: staffProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      assertCapability(ctx, 'questions.manage');
-
-      const question = await ctx.prisma.question.findUnique({
-        where: { id: input.id },
-        select: { id: true, type: true },
-      });
-
-      if (!question) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Domanda non trovata.' });
-      }
-
-      if (question.type === 'OPEN_TEXT') {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Le domande a risposta aperta si ricorreggono dalla pagina delle risposte aperte.',
-        });
-      }
-
-      const report = await regradeChoiceQuestionResults(ctx.prisma, input.id);
-
-      if (!report.applicable) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'La domanda non ha una risposta corretta impostata: non è possibile ricalcolare i punteggi.',
-        });
-      }
-
-      return {
-        updatedResults: report.updatedResults,
-        affectedStudents: report.affectedStudentIds.length,
-      };
     }),
 
   // Delete a question

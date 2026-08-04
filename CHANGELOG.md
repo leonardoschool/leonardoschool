@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 The version lives in `package.json` (`version`) and is shown by the badge at the bottom-left of the app.
 
+## [1.21.0] - 2026-08-04
+
+### Changed
+- **Anche cambiare i punti di una domanda ora aggiorna le simulazioni già svolte.** Era lo stesso identico difetto della risposta corretta, rimasto scoperto: portando una domanda da 1,5 a 2 punti, o cambiandone la penalità, i tentativi già consegnati restavano al vecchio valore. La rivalutazione automatica ora scatta su entrambe le cose — quale opzione è corretta **e** quanto vale — perché sono le due che decidono cosa un tentativo ha guadagnato. Il punteggio delle omesse resta escluso di proposito: quello lo decide la simulazione, non la domanda, sia in fase di consegna che in rivalutazione. E se la simulazione usa punteggi propri o un override sulla singola domanda, il ricalcolo se ne accorge e la salta senza toccare nulla.
+
+### Removed
+- **Tolta l'azione "Ricalcola punteggi" dal menu della domanda.** Era comparsa in 1.20.0 per riparare i tentativi rovinati dalle modifiche fatte prima che la rivalutazione automatica esistesse, ma era la forma sbagliata: un pulsante permanente in interfaccia per una riparazione una tantum, per giunta visibile su **ogni** domanda a scelta multipla, anche appena creata e mai usata in una simulazione. Il problema che risolveva ora non si presenta più alla radice.
+
+### Infrastructure
+- **Nuovo `scripts/fix-stale-answer-verdicts.ts`** al posto del pulsante, sulla falsariga degli altri `fix-*` del progetto. Riapplica le regole attuali ai tentativi già consegnati: `pnpm fix:stale-verdicts:dry` legge e conta senza scrivere niente, `pnpm fix:stale-verdicts` applica, `-- --question <id>` limita a una domanda sola. Chiama lo stesso servizio del salvataggio domanda, quindi non c'è una seconda implementazione da tenere allineata, ed è ripetibile senza effetti collaterali: un tentativo già coerente non viene toccato. Serve per le riparazioni storiche e come recupero se una rivalutazione automatica dovesse fallire (l'errore viene registrato e non annulla la modifica alla domanda).
+
 ## [1.20.0] - 2026-08-04
 
 ### Fixed
