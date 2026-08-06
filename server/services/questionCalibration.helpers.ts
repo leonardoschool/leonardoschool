@@ -47,6 +47,23 @@ export const CALIBRATION = {
   keyCheckMinPicks: 8,
   keyCheckMarginInSd: 0.5,
 
+  /**
+   * Above this share of omissions, a question's measured difficulty says more about
+   * avoidance than about the question.
+   *
+   * These papers carry a penalty for a wrong answer and none for a blank, so leaving
+   * one out is a tactic, not a failed attempt — and the model counts every blank as an
+   * error. That is defensible on average and misleading at the extremes: a question a
+   * third of the room skips on sight is measured as brutally hard whether it is hard or
+   * merely long, off-syllabus, or intimidating to look at.
+   *
+   * Flagged rather than corrected. Guessing what a skipped question would have scored
+   * means inventing data, and the honest move is to say the measure cannot be trusted
+   * and leave the label alone.
+   */
+  highOmissionShare: 0.4,
+  minSampleForOmission: 20,
+
   // ── Scale bootstrap ───────────────────────────────────────────────────────
   anchorsPerSubject: 50,
   anchorsMinimum: 20,
@@ -545,6 +562,40 @@ function cooldownElapsed(input: DifficultyDecisionInput): boolean {
     elapsedDays >= CALIBRATION.cooldownDays &&
     newResponses >= CALIBRATION.cooldownNewResponses
   );
+}
+
+/**
+ * The quality read of one question: reasons to look at it rather than relabel it.
+ *
+ * Order is precedence, worst first. A mis-keyed question is the only one of these
+ * that is outright broken; the other two say the measurement cannot carry a decision,
+ * which is a different and softer claim.
+ */
+export function deriveQualityFlag(
+  discrimination: number | null,
+  stats: QuestionStatsSnapshot
+): string | null {
+  if (discrimination !== null && discrimination < 0) return 'KEY_SUSPECT';
+
+  // Checked before discrimination, and independently of it: a question most of the
+  // room skips has little variance left to correlate with anything, so it tends to
+  // look undiscriminating too. Reporting the avoidance is the more useful of the two.
+  if (
+    stats.timesGraded >= CALIBRATION.minSampleForOmission &&
+    stats.timesSkipped / stats.timesGraded >= CALIBRATION.highOmissionShare
+  ) {
+    return 'HIGH_OMISSION';
+  }
+
+  if (
+    discrimination !== null &&
+    discrimination <= CALIBRATION.lowDiscriminationThreshold &&
+    stats.timesGraded >= CALIBRATION.minSampleForDiscrimination
+  ) {
+    return 'LOW_DISCRIMINATION';
+  }
+
+  return null;
 }
 
 // ==================== RUN-LEVEL GUARDS ====================

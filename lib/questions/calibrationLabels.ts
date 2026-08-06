@@ -28,6 +28,8 @@ export const qualityFlagLabels: Record<string, string> = {
     'Da verificare: l’esito non dipende dalla preparazione dello studente. Può indicare un testo ambiguo, oppure un argomento diverso dal resto della materia.',
   BELOW_CHANCE:
     'Da verificare: la percentuale di risposte corrette è inferiore a quella che darebbe il caso.',
+  HIGH_OMISSION:
+    'Da verificare: moltissimi studenti la lasciano in bianco. Con la penalità sull’errore omettere è una tattica, quindi la difficoltà misurata dice quanto la domanda viene evitata più di quanto sia difficile. Può indicare un testo lungo, un argomento fuori programma o una consegna poco chiara.',
 };
 
 /**

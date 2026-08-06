@@ -36,6 +36,7 @@ import {
 import * as notificationService from '@/server/services/notificationService';
 import { getAdminStorage } from '@/lib/firebase/admin';
 import { normalizeQuestionText } from '@/lib/utils/questionText';
+import { CALIBRATION } from '@/server/services/questionCalibration.helpers';
 
 // ============ Helper Functions ============
 
@@ -90,6 +91,12 @@ function buildQuestionBasicFilters(input: QuestionFilterInput): Record<string, u
     where.timesGraded = { gte: CRITICAL_MIN_GRADED };
   }
   if (input.onlyWithSuggestion) where.suggestedDifficulty = { not: null };
+  // The same evidence floor the calibration itself uses before it will publish a
+  // difficulty score: below it a label teaches the subject's scale nothing.
+  if (input.onlyNeedsHumanLabel) {
+    where.difficultySource = 'LEGACY';
+    where.timesGraded = { gte: CALIBRATION.minSampleForScore };
+  }
 
   return where;
 }
@@ -1407,6 +1414,26 @@ export const questionsRouter = router({
           where: { id },
           data: {
             ...restData,
+            // Changing the difficulty of an EXISTING question is a decision, and the
+            // calibration needs to know that: it fits each subject's scale on the
+            // labels humans actually chose, and treats `LEGACY` as "nobody ever said".
+            // Without this the bank stays entirely LEGACY, no scale can ever be fitted,
+            // and every question is judged against generic fallback cuts forever.
+            //
+            // Only on update, never on create: the level picked while writing a new
+            // question is a guess made before anyone has answered it, which is exactly
+            // the kind of optimism the calibration exists to correct.
+            ...(restData.difficulty && restData.difficulty !== currentQuestion.difficulty
+              ? {
+                  difficultySource: 'MANUAL' as const,
+                  difficultyLockedAt: new Date(),
+                  // A human has now ruled on this question, so a pending machine
+                  // suggestion for it is answered and must stop being advertised.
+                  suggestedDifficulty: null,
+                  suggestionConfidence: null,
+                  suggestedAt: null,
+                }
+              : {}),
             // The editor manages the picture via imageUrl only, and every view falls back
             // to imageStoragePath: clear the legacy field whenever imageUrl is (re)set,
             // otherwise a removed image would resurrect through the fallback.
@@ -1830,6 +1857,40 @@ export const questionsRouter = router({
       ]);
 
       return { updated: result.count, subjectName: subject.name };
+    }),
+
+  /**
+   * Labels many questions at once — the only practical way to build the reference set.
+   *
+   * A subject's scale is fitted on the levels humans chose, and needs a few dozen of
+   * them before it means anything. Doing that one question at a time through the editor
+   * is enough work that it does not get done, and the scale stays on generic cuts.
+   *
+   * Every row it touches becomes a human decision, exactly as if it had been set in the
+   * editor: same source, same lock, same clearing of a pending machine suggestion.
+   */
+  bulkSetDifficulty: staffProcedure
+    .input(z.object({
+      ids: z.array(z.string()).min(1).max(500),
+      difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      assertCapability(ctx, 'questions.bulkOps');
+
+      const result = await ctx.prisma.question.updateMany({
+        where: { id: { in: input.ids } },
+        data: {
+          difficulty: input.difficulty,
+          difficultySource: 'MANUAL',
+          difficultyLockedAt: new Date(),
+          suggestedDifficulty: null,
+          suggestionConfidence: null,
+          suggestedAt: null,
+          updatedById: ctx.user.id,
+        },
+      });
+
+      return { updated: result.count, difficulty: input.difficulty };
     }),
 
   // Bulk update language

@@ -18,6 +18,7 @@ import {
   checkBucketFloors,
   createCalibrationAccumulator,
   decideDifficulty,
+  deriveQualityFlag,
   detectRunAnomaly,
   statsChanged,
   type CalibrationAnswer,
@@ -748,21 +749,6 @@ function deriveQualitySignals(
     });
   }
   return signals;
-}
-
-function deriveQualityFlag(
-  discrimination: number | null,
-  stats: QuestionStatsSnapshot
-): string | null {
-  if (discrimination === null) return null;
-  if (discrimination < 0) return 'KEY_SUSPECT';
-  if (
-    discrimination <= CALIBRATION.lowDiscriminationThreshold &&
-    stats.timesGraded >= CALIBRATION.minSampleForDiscrimination
-  ) {
-    return 'LOW_DISCRIMINATION';
-  }
-  return null;
 }
 
 /**

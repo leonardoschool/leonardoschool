@@ -68,6 +68,8 @@ export const questionCalibrationRouter = router({
       manuallyLocked,
       flagged,
       scales,
+      labelledBySubject,
+      labellableBySubject,
     ] = await Promise.all([
       ctx.prisma.questionDifficultyAudit.findMany({
         where: visibleWhere,
@@ -101,13 +103,53 @@ export const questionCalibrationRouter = router({
           frozenAt: true,
         },
       }),
+      // Progress towards a real scale, per subject. The cuts are fitted on the levels
+      // humans chose among well-measured questions, so both halves have to be counted
+      // the same way the fit counts them: hand-decided, and above the evidence floor.
+      ctx.prisma.question.groupBy({
+        by: ['subjectId'],
+        where: {
+          status: { not: 'ARCHIVED' },
+          difficultySource: 'MANUAL',
+          timesGraded: { gte: CALIBRATION.minSampleForScore },
+        },
+        _count: true,
+      }),
+      // How many more could be labelled right now. A subject with nothing measured
+      // cannot reach the threshold however much anyone clicks, and saying so is
+      // kinder than a progress bar that cannot move.
+      ctx.prisma.question.groupBy({
+        by: ['subjectId'],
+        where: {
+          status: { not: 'ARCHIVED' },
+          difficultySource: 'LEGACY',
+          timesGraded: { gte: CALIBRATION.minSampleForScore },
+        },
+        _count: true,
+      }),
     ]);
+
+    const labelled = new Map(labelledBySubject.map((row) => [row.subjectId, row._count]));
+    const labellable = new Map(labellableBySubject.map((row) => [row.subjectId, row._count]));
 
     return {
       scales,
       // Sent rather than duplicated in the UI: the copy explains the threshold, and a
       // second hardcoded copy of it would drift the first time the constant changes.
       minAnchorsForScale: CALIBRATION.anchorsMinimum,
+      /**
+       * What each subject still needs before its scale can stop being a placeholder.
+       * Every subject that has anything to label appears, including those with zero
+       * labels — those are precisely the ones the reviewer has to be told about.
+       */
+      goldSetTarget: CALIBRATION.minGoldSetForCuts,
+      goldSetBySubject: [...new Set([...labelled.keys(), ...labellable.keys()])]
+        .filter((subjectId): subjectId is string => subjectId !== null)
+        .map((subjectId) => ({
+          subjectId,
+          labelled: labelled.get(subjectId) ?? 0,
+          labellable: labellable.get(subjectId) ?? 0,
+        })),
       pendingTotal: pending.length,
       // Split by direction because "quante diventerebbero più difficili" is the first
       // thing anyone checks, and a one-sided batch is a symptom rather than a result.

@@ -176,6 +176,12 @@ export const questionFilterSchema = z.object({
   onlyCritical: z.boolean().optional(),
   /** Only questions the calibration has proposed a new difficulty for. */
   onlyWithSuggestion: z.boolean().optional(),
+  /**
+   * Only questions whose difficulty nobody has ever decided, and that have enough
+   * answers to be judged on evidence. This is the queue for building a subject's
+   * reference set: labelling anything less measured teaches the scale nothing.
+   */
+  onlyNeedsHumanLabel: z.boolean().optional(),
 
   // Sorting
   sortBy: z.enum([
@@ -192,6 +198,8 @@ export const questionFilterSchema = z.object({
     'updatedAt',
     'timesUsed',
     'avgCorrectRate',
+    /** Best-measured first: the order the reference set has to be built in. */
+    'timesGraded',
   ]).default('text'),
   sortOrder: z.enum(['asc', 'desc']).default('asc'),
 

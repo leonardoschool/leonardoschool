@@ -113,6 +113,17 @@ export default function CalibrazionePage() {
     [subjects]
   );
 
+  // Only the subjects that have not yet earned a real scale: a subject already fitted
+  // on enough human labels has nothing to ask for, and listing it would turn the panel
+  // into a permanent chore board.
+  const needsGoldSet = useMemo(
+    () =>
+      (overview?.goldSetBySubject ?? [])
+        .filter((row) => row.labelled < (overview?.goldSetTarget ?? 0))
+        .sort((a, b) => b.labellable - a.labellable),
+    [overview]
+  );
+
   const proposals = list?.proposals ?? [];
 
   const toggleSelect = (id: string) =>
@@ -247,6 +258,48 @@ export default function CalibrazionePage() {
                 {subjectNames.get(scale.subjectId) ?? 'Materia'} ·{' '}
                 {scaleConfidenceLabels[scale.confidence] ?? scale.confidence}
               </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/*
+        What actually moves a scale off "affidabilità bassa".
+        The cuts are fitted on the levels people chose, so a bank nobody has ever ruled
+        on can only ever be judged against generic thresholds — and that is what makes
+        a whole batch of proposals lean the same way. This panel is the only place that
+        says how far each subject is from having a real reference, and hands over the
+        exact list of questions worth deciding.
+      */}
+      {needsGoldSet.length > 0 && (
+        <div className={`rounded-xl p-4 ${colors.background.card} ${colors.effects.shadow.sm}`}>
+          <p className={`text-sm ${colors.text.secondary}`}>
+            <strong>Scala di riferimento da costruire.</strong> Le soglie di ogni materia si
+            ricavano dalle difficoltà decise da una persona. Finché non ce ne sono abbastanza il
+            sistema usa soglie generiche, e le proposte tendono a pendere tutte dalla stessa parte.
+          </p>
+          <div className="mt-3 space-y-2">
+            {needsGoldSet.map((row) => (
+              <div key={row.subjectId} className="flex flex-wrap items-center gap-3">
+                <span className={`text-sm ${colors.text.primary} min-w-[7rem]`}>
+                  {subjectNames.get(row.subjectId) ?? 'Materia'}
+                </span>
+                <span className={`text-sm ${colors.text.muted}`}>
+                  {row.labelled} su {overview?.goldSetTarget} decise
+                </span>
+                {row.labellable > 0 ? (
+                  <Link
+                    href={`/domande?daEtichettare=1&subjects=${row.subjectId}&sortBy=timesGraded&sortOrder=desc`}
+                    className={`text-sm ${colors.primary.text} hover:underline`}
+                  >
+                    Etichetta le più misurate ({row.labellable} disponibili)
+                  </Link>
+                ) : (
+                  <span className={`text-sm ${colors.text.muted}`}>
+                    nessuna domanda con abbastanza risposte: servono altre simulazioni svolte
+                  </span>
+                )}
+              </div>
             ))}
           </div>
         </div>

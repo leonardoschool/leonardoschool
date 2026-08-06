@@ -6,6 +6,7 @@ import {
   checkBucketFloors,
   createCalibrationAccumulator,
   decideDifficulty,
+  deriveQualityFlag,
   detectNotReached,
   detectRunAnomaly,
   statsChanged,
@@ -514,6 +515,53 @@ describe('anti-drift specification', () => {
       })
     );
     expect(decisions.every((d) => d.kind === 'skipped')).toBe(true);
+  });
+});
+
+describe('deriveQualityFlag', () => {
+  const stats = (over: Partial<QuestionStatsSnapshot> = {}): QuestionStatsSnapshot => ({
+    timesAnswered: 100,
+    timesCorrect: 50,
+    timesWrong: 50,
+    timesSkipped: 0,
+    timesGraded: 100,
+    avgCorrectRate: 50,
+    avgTimeSeconds: 30,
+    ...over,
+  });
+
+  it('calls a negative correlation a suspect key, before anything else', () => {
+    expect(deriveQualityFlag(-0.3, stats({ timesSkipped: 90 }))).toBe('KEY_SUSPECT');
+  });
+
+  /**
+   * These papers penalise a wrong answer and not a blank, so omitting is a tactic. The
+   * model counts every blank as an error, which measures a question most of the room
+   * skips as brutally hard whether it is hard or merely long and off-putting.
+   */
+  it('flags a question the room avoids rather than reading it as difficulty', () => {
+    expect(deriveQualityFlag(0.4, stats({ timesSkipped: 45 }))).toBe('HIGH_OMISSION');
+  });
+
+  it('leaves an ordinary omission rate alone', () => {
+    expect(deriveQualityFlag(0.4, stats({ timesSkipped: 20 }))).toBeNull();
+  });
+
+  it('needs a real denominator before calling anything avoidance', () => {
+    expect(deriveQualityFlag(0.4, stats({ timesGraded: 5, timesSkipped: 5 }))).toBeNull();
+  });
+
+  /** Avoidance leaves little variance to correlate, so it must be the reported cause. */
+  it('reports the avoidance rather than the low discrimination it causes', () => {
+    expect(deriveQualityFlag(0.01, stats({ timesSkipped: 60 }))).toBe('HIGH_OMISSION');
+  });
+
+  it('still reports low discrimination on its own', () => {
+    expect(deriveQualityFlag(0.01, stats())).toBe('LOW_DISCRIMINATION');
+  });
+
+  it('says nothing when the correlation could not be measured', () => {
+    expect(deriveQualityFlag(null, stats())).toBeNull();
   });
 });
 

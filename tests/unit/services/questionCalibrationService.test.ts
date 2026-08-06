@@ -142,6 +142,38 @@ function oneSidedBank() {
   return { questions, results };
 }
 
+/**
+ * A subject whose questions carry real human decisions, spread across the range.
+ *
+ * This is the input the whole scale machinery was built for and that the production
+ * bank has never had: every difficulty there is a `LEGACY` import, so `humanLabel` is
+ * null everywhere and no subject can ever fit its own cuts.
+ */
+function labelledBank() {
+  const rand = lcg(11);
+  const items = Array.from({ length: 60 }, (_, i) => {
+    const b = -2 + (4 * i) / 59;
+    return { id: `q${i}`, b, level: b < -0.7 ? 'EASY' : b > 0.7 ? 'HARD' : 'MEDIUM' };
+  });
+
+  const questions = items.map((entry) =>
+    questionRow({ id: entry.id, difficulty: entry.level, difficultySource: 'MANUAL' })
+  );
+  const results = Array.from({ length: 80 }, (_, person) => {
+    const ability = -2 + (4 * person) / 79;
+    return resultRow(
+      `r${person}`,
+      `s${person}`,
+      items.map((entry) => ({
+        questionId: entry.id,
+        isCorrect: rand() < 1 / (1 + Math.exp(entry.b - ability)),
+      }))
+    );
+  });
+
+  return { questions, results };
+}
+
 /** Feeds the cursor loop one page then stops. */
 function singlePage(prisma: MockPrisma, rows: unknown[]) {
   prisma.simulationResult.findMany.mockResolvedValueOnce(rows).mockResolvedValue([]);
@@ -316,6 +348,29 @@ describe('runQuestionCalibration', () => {
       timesCorrect: 0,
       avgCorrectRate: 0,
     });
+  });
+
+  /**
+   * The loop the feature depends on and that has never closed in production: humans
+   * decide some difficulties, and those decisions become the subject's own thresholds.
+   * With a bank that is entirely `LEGACY` there is nothing to fit, the generic cuts
+   * stay forever, and every question is judged against a stick nobody measured.
+   */
+  it('fits a subject its own cuts from the levels humans decided', async () => {
+    const { questions, results } = labelledBank();
+    prisma.question.findMany.mockResolvedValue(questions);
+    singlePage(prisma, results);
+
+    await run({ mode: 'PROPOSE' });
+
+    expect(prisma.difficultyScale.create).toHaveBeenCalledTimes(1);
+    const scale = prisma.difficultyScale.create.mock.calls[0][0].data;
+    expect(scale.confidence).not.toBe('LOW');
+    expect(scale.fitSampleSize).toBeGreaterThanOrEqual(40);
+    // Fitted, not the fallback pair the bank has been stuck on.
+    expect(scale.cutEasyMedium).not.toBeCloseTo(-0.65, 2);
+    expect(scale.cutMediumHard).not.toBeCloseTo(0.65, 2);
+    expect(scale.cutEasyMedium).toBeLessThan(scale.cutMediumHard);
   });
 
   /**

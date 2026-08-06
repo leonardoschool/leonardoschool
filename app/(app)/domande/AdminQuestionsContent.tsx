@@ -122,7 +122,9 @@ export default function AdminQuestionsContent() {
   });
 
   // Sorting state — default: alphabetical by question text
-  type SortByOption = 'text' | 'year' | 'source' | 'type' | 'language' | 'status' | 'difficulty' | 'subject' | 'tag';
+  // 'timesGraded' has no column header: it is set by the "Da etichettare" filter, which
+  // is only useful best-measured first.
+  type SortByOption = 'text' | 'year' | 'source' | 'type' | 'language' | 'status' | 'difficulty' | 'subject' | 'tag' | 'timesGraded';
   const [sortBy, setSortBy] = useState<SortByOption>(() => (searchParams.get('sortBy') as SortByOption) ?? 'text');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => (searchParams.get('sortOrder') as 'asc' | 'desc') ?? 'asc');
 
@@ -142,9 +144,13 @@ export default function AdminQuestionsContent() {
   // Questions students get wrong far more than expected: candidates for a review of
   // the question itself, not a difficulty filter.
   const [onlyCritical, setOnlyCritical] = useState(() => searchParams.get('critiche') === '1');
+  // Well-measured questions whose difficulty nobody has ever decided: the queue for
+  // building a subject's reference scale. Linked to from the calibration page.
+  const [onlyNeedsLabel, setOnlyNeedsLabel] = useState(() => searchParams.get('daEtichettare') === '1');
   const [showBulkSubjectSelect, setShowBulkSubjectSelect] = useState(false);
   const [showBulkLanguageSelect, setShowBulkLanguageSelect] = useState(false);
   const [showBulkTagSelect, setShowBulkTagSelect] = useState(false);
+  const [showBulkDifficultySelect, setShowBulkDifficultySelect] = useState(false);
   const [bulkTagMode, setBulkTagMode] = useState<'add' | 'remove' | 'replace'>('add');
   const [selectedBulkTagIds, setSelectedBulkTagIds] = useState<Set<string>>(new Set());
 
@@ -195,6 +201,7 @@ export default function AdminQuestionsContent() {
     if (selectedYears.length) params.set('years', selectedYears.join(','));
     if (selectedSources.length) params.set('sources', selectedSources.join(','));
     if (onlyCritical) params.set('critiche', '1');
+    if (onlyNeedsLabel) params.set('daEtichettare', '1');
     if (page > 1) params.set('page', String(page));
     if (pageSize !== 50) params.set('size', String(pageSize));
     if (sortBy !== 'text') params.set('sortBy', sortBy);
@@ -203,7 +210,7 @@ export default function AdminQuestionsContent() {
     const query = params.toString();
     const nextPath = query ? `${pathname}?${query}` : pathname;
     router.replace(nextPath, { scroll: false });
-  }, [debouncedSearch, subjectIds, topicIds, types, statuses, difficulties, languages, selectedTagIds, selectedYears, selectedSources, onlyCritical, page, pageSize, sortBy, sortOrder]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, subjectIds, topicIds, types, statuses, difficulties, languages, selectedTagIds, selectedYears, selectedSources, onlyCritical, onlyNeedsLabel, page, pageSize, sortBy, sortOrder]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close bulk subject dropdown on click outside
   useEffect(() => {
@@ -234,6 +241,21 @@ export default function AdminQuestionsContent() {
     document.addEventListener('click', handleClick);
     return () => document.removeEventListener('click', handleClick);
   }, [showBulkLanguageSelect]);
+
+  // Close bulk difficulty dropdown on click outside
+  useEffect(() => {
+    if (!showBulkDifficultySelect) return;
+
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-bulk-difficulty-dropdown]')) {
+        setShowBulkDifficultySelect(false);
+      }
+    };
+
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [showBulkDifficultySelect]);
 
   // Close bulk tag dropdown on click outside
   useEffect(() => {
@@ -274,6 +296,7 @@ export default function AdminQuestionsContent() {
       sortBy,
       sortOrder,
       onlyCritical: onlyCritical || undefined,
+      onlyNeedsHumanLabel: onlyNeedsLabel || undefined,
       includeAnswers: false,
       includeDrafts: true,
       includeArchived: true,
@@ -385,6 +408,21 @@ export default function AdminQuestionsContent() {
       utils.questions.getQuestions.invalidate();
       setSelectedIds(new Set());
       setShowBulkLanguageSelect(false);
+    },
+    onError: handleMutationError,
+  });
+
+  const bulkDifficultyMutation = trpc.questions.bulkSetDifficulty.useMutation({
+    onSuccess: (result) => {
+      showSuccess(
+        'Difficoltà decisa',
+        `${result.updated} domande impostate su ${difficultyLabels[result.difficulty]}. La calibrazione userà queste etichette per tarare la scala della materia.`
+      );
+      utils.questions.getQuestions.invalidate();
+      utils.questions.getQuestionStats.invalidate();
+      utils.questionCalibration.getOverview.invalidate();
+      setSelectedIds(new Set());
+      setShowBulkDifficultySelect(false);
     },
     onError: handleMutationError,
   });
@@ -721,6 +759,28 @@ export default function AdminQuestionsContent() {
             <AlertTriangle className="w-4 h-4" />
             Critiche
           </button>
+
+          {/* The reference set is built from here: well-measured questions nobody has
+              ever ruled on. Sorting by number of answers is what makes the labelling
+              worth doing — the best-measured ones teach the scale the most. */}
+          <button
+            type="button"
+            onClick={() => {
+              const next = !onlyNeedsLabel;
+              setOnlyNeedsLabel(next);
+              if (next) { setSortBy('timesGraded'); setSortOrder('desc'); }
+              setPage(1);
+            }}
+            title="Domande con almeno 20 risposte valutate la cui difficoltà non è mai stata decisa da una persona"
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+              onlyNeedsLabel
+                ? 'border-amber-400 text-amber-600 dark:border-amber-600 dark:text-amber-300'
+                : `${colors.border.primary} ${colors.text.secondary}`
+            } hover:${colors.background.secondary}`}
+          >
+            <Scale className="w-4 h-4" />
+            Da etichettare
+          </button>
           {/* Filter Toggle */}
           <button
             onClick={() => setShowFilters(!showFilters)}
@@ -911,6 +971,38 @@ export default function AdminQuestionsContent() {
                         style={{ backgroundColor: subject.color || '#6b7280' }}
                       />
                       {subject.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* Decide the difficulty by hand. This is the gesture the calibration was
+                missing: it marks the level as a human decision, which is what a
+                subject's scale is fitted on. */}
+            <div className="relative" data-bulk-difficulty-dropdown>
+              <button
+                onClick={() => setShowBulkDifficultySelect(!showBulkDifficultySelect)}
+                disabled={bulkDifficultyMutation.isPending}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors text-sm"
+              >
+                <Scale className="w-4 h-4" />
+                Decidi Difficoltà
+              </button>
+              {showBulkDifficultySelect && (
+                <div className={`absolute top-full left-0 mt-1 z-50 min-w-[220px] ${colors.background.card} ${colors.effects.shadow.lg} rounded-lg border ${colors.border.primary} py-1`}>
+                  <p className={`px-4 py-2 text-xs ${colors.text.muted}`}>
+                    La difficoltà scelta qui vale come decisione tua e fa da riferimento
+                    per la calibrazione.
+                  </p>
+                  {(['EASY', 'MEDIUM', 'HARD'] as DifficultyLevel[]).map((level) => (
+                    <button
+                      key={level}
+                      onClick={() => {
+                        bulkDifficultyMutation.mutate({ ids: [...selectedIds], difficulty: level });
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:${colors.background.secondary} ${colors.text.primary} transition-colors`}
+                    >
+                      {difficultyLabels[level]}
                     </button>
                   ))}
                 </div>

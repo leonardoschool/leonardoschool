@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 The version lives in `package.json` (`version`) and is shown by the badge at the bottom-left of the app.
 
+## [1.23.0] - 2026-08-06
+
+Seguito diretto della 1.22.0. Registrare il lotto rifiutato ha permesso di leggere cosa stesse succedendo davvero, e la diagnosi sui dati di produzione è stata netta: **nessuna delle 18.039 domande in banca ha una difficoltà decisa da una persona** — sono tutte `LEGACY`, importate. Ma le soglie di ogni materia si ricavano proprio dalle etichette scelte dai docenti: senza nemmeno una, nessuna scala può essere tarata, tutte le materie restano sulle soglie generiche per sempre, e ogni domanda viene giudicata contro un metro mai misurato su questo banco. È da lì che nasce il lotto che pende tutto dalla stessa parte. Mancava proprio il gesto: **non c'era modo di dire al sistema "questa difficoltà l'ho decisa io"**.
+
+### Added
+- **Ora impostare una difficoltà a mano vale come decisione.** Cambiando il livello di una domanda già esistente, quel livello viene registrato come scelta umana e diventa riferimento per la taratura della materia. Non vale alla creazione: il livello scelto mentre si scrive una domanda nuova è una stima fatta prima che qualcuno l'abbia mai risposta, cioè esattamente l'ottimismo che la calibrazione esiste per correggere.
+- **Azione di massa "Decidi Difficoltà"** nell'elenco domande. Etichettarne quaranta per materia una alla volta dall'editor è abbastanza lavoro da non farlo mai, e la scala resta ferma. Ogni domanda toccata diventa una decisione umana esattamente come dall'editor.
+- **Filtro "Da etichettare"**, che mostra solo le domande con almeno 20 risposte valutate la cui difficoltà non è mai stata decisa, ordinate dalla più misurata. Sono quelle che insegnano di più alla scala: etichettarne una risposta tre volte non insegna niente.
+- **Pannello "Scala di riferimento da costruire"** nella pagina di calibrazione: per ogni materia quante difficoltà sono state decise sulle quaranta che servono, e il collegamento diretto all'elenco già filtrato e ordinato. Se una materia non ha domande abbastanza misurate lo dice, invece di mostrare un avanzamento che non può muoversi.
+- **Nuova segnalazione qualità "moltissimi la lasciano in bianco".** Con la penalità sull'errore (attiva su tutte le simulazioni svolte) omettere è una tattica, non un tentativo fallito — ma il modello conta ogni bianca come errore. Sui dati reali il divario è netto: **47,9% di risposte corrette contando le omesse, 58,2% fra chi ha effettivamente risposto**. In media è accettabile, agli estremi no: una domanda che metà aula salta a vista viene misurata come durissima anche quando è solo lunga, fuori programma o scritta male. Oltre il 40% di omesse la domanda viene segnalata e lasciata stare, invece che indurita in silenzio. Segnalata e non corretta di proposito: indovinare che punteggio avrebbe preso chi ha saltato significherebbe inventarsi i dati.
+
 ## [1.22.0] - 2026-08-06
 
 ### Fixed
