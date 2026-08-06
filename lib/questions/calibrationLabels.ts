@@ -8,9 +8,9 @@
 
 export const reasonCodeLabels: Record<string, string> = {
   TOO_HARD_FOR_LEVEL:
-    'Sbagliata o omessa molto più di quanto fosse prevedibile per il livello attuale.',
+    'Gli studenti la sbagliano o la saltano molto più di quanto ci si aspetti dal livello che ha adesso.',
   TOO_EASY_FOR_LEVEL:
-    'Indovinata molto più di quanto fosse prevedibile per il livello attuale.',
+    'Gli studenti la azzeccano molto più di quanto ci si aspetti dal livello che ha adesso.',
   STAFF_OVERRIDE: 'Difficoltà cambiata a mano dallo staff.',
   REVERT: 'Annullamento di una modifica precedente.',
 };
@@ -29,7 +29,7 @@ export const qualityFlagLabels: Record<string, string> = {
   BELOW_CHANCE:
     'Da verificare: la percentuale di risposte corrette è inferiore a quella che darebbe il caso.',
   HIGH_OMISSION:
-    'Da verificare: moltissimi studenti la lasciano in bianco. Con la penalità sull’errore omettere è una tattica, quindi la difficoltà misurata dice quanto la domanda viene evitata più di quanto sia difficile. Può indicare un testo lungo, un argomento fuori programma o una consegna poco chiara.',
+    'Da verificare: moltissimi la lasciano in bianco. Saltarla conviene, visto che sbagliare toglie punti, quindi qui il sistema misura quanto viene evitata più di quanto sia difficile. Spesso è un testo troppo lungo, un argomento fuori programma o una consegna poco chiara.',
 };
 
 /**

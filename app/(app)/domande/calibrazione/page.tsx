@@ -89,8 +89,8 @@ export default function CalibrazionePage() {
       showSuccess(
         'Ricalcolo eseguito',
         summary.isAnomalous
-          ? `${summary.proposalsComputed} proposte calcolate, nessuna pubblicata: ancora anomalo (${summary.anomalyReason}).`
-          : `${summary.proposalsCreated} proposte pubblicate.`
+          ? `Si è fermato di nuovo: ${summary.proposalsComputed} proposte tutte dalla stessa parte, nessuna applicata.`
+          : `${summary.proposalsCreated} proposte da confermare.`
       );
       utils.questionCalibration.listProposals.invalidate();
       utils.questionCalibration.getOverview.invalidate();
@@ -160,8 +160,8 @@ export default function CalibrazionePage() {
         <div>
           <h1 className={`text-2xl font-bold ${colors.text.primary}`}>Calibrazione difficoltà</h1>
           <p className={`text-sm ${colors.text.muted}`}>
-            Modifiche proposte in base alle performance reali degli studenti. Nulla viene
-            applicato senza la tua conferma.
+            Confronta la difficoltà scritta su ogni domanda con come sono andati davvero gli
+            studenti, e ti segnala quelle che non tornano. Decidi tu: niente cambia da solo.
           </p>
         </div>
       </div>
@@ -196,16 +196,12 @@ export default function CalibrazionePage() {
 
       {overview?.lastRun?.isAnomalous && (
         <div className="rounded-xl p-4 bg-amber-50 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">
-          <p className="font-medium">L&apos;ultimo ricalcolo è stato marcato come anomalo.</p>
-          <p className="text-sm mt-1">
-            Aveva calcolato <strong>{overview.lastRun.proposalsComputed} proposte</strong>{' '}
-            ({overview.lastRun.proposalsHarder} più difficili, {overview.lastRun.proposalsEasier} più
-            facili) e non ne ha pubblicata nessuna. Venti domande non cambiano natura nella stessa
-            settimana: conviene capire cosa è cambiato a monte prima di procedere.
-          </p>
-          <p className="text-sm mt-1 opacity-80">
-            Nessuna difficoltà è stata modificata. Codice del controllo:{' '}
-            <code>{overview.lastRun.anomalyReason}</code>.
+          <p className="font-medium">Il ricalcolo si è fermato da solo, e non ha cambiato niente.</p>
+          <p className="text-sm mt-1" title={`Controllo: ${overview.lastRun.anomalyReason}`}>
+            Voleva rendere <strong>{overview.lastRun.proposalsHarder} domande più difficili</strong> e{' '}
+            <strong>{overview.lastRun.proposalsEasier} più facili</strong>. Quando le proposte vanno
+            tutte dalla stessa parte non è una correzione: vuol dire che il metro è tarato male. Meglio
+            sistemare quello, qui sotto.
           </p>
           {canRevertRun && (
             <button
@@ -231,18 +227,22 @@ export default function CalibrazionePage() {
       {overview && (overview.scales?.length ?? 0) === 0 && (
         <div className={`rounded-xl p-4 ${colors.background.card} ${colors.effects.shadow.sm}`}>
           <p className={`text-sm ${colors.text.secondary}`}>
-            Nessuna materia ha ancora una <strong>scala di riferimento</strong>: servono almeno{' '}
-            {overview.minAnchorsForScale} domande ben misurate per materia. Fino ad allora il sistema usa
-            soglie generiche, quindi le proposte vanno lette come un suggerimento da verificare, non
-            come una misura.
+            Nessuna materia ha ancora un <strong>metro suo</strong>: servono almeno{' '}
+            {overview.minAnchorsForScale} domande con abbastanza risposte. Fino ad allora il sistema
+            usa soglie valide un po&apos; per tutti, quindi le sue proposte sono indizi da
+            controllare, non misure.
           </p>
         </div>
       )}
 
       {overview && (overview.scales?.length ?? 0) > 0 && (
         <div className={`rounded-xl p-4 ${colors.background.card} ${colors.effects.shadow.sm}`}>
-          <p className={`text-sm ${colors.text.secondary} mb-2`}>
-            Scala di riferimento per materia — è ciò che tiene ferme le etichette nel tempo.
+          <p className={`text-sm ${colors.text.secondary}`}>
+            Quanto il sistema si fida del proprio metro, materia per materia.
+          </p>
+          <p className={`text-xs ${colors.text.muted} mb-2`}>
+            <strong>Bassa</strong> vuol dire che sta ancora usando soglie generiche: su quella materia
+            prendi le sue proposte con le pinze.
           </p>
           <div className="flex flex-wrap gap-2">
             {(overview.scales ?? []).map((scale) => (
@@ -251,8 +251,8 @@ export default function CalibrazionePage() {
                 className={`text-xs px-2 py-1 rounded-full ${colors.background.secondary} ${colors.text.secondary}`}
                 title={
                   scale.fitKappa != null
-                    ? `Accordo con le etichette dei docenti: ${scale.fitKappa.toFixed(2)} su ${scale.fitSampleSize} domande`
-                    : 'Soglie generiche: non ci sono ancora abbastanza etichette scelte a mano'
+                    ? `Il metro è tarato su ${scale.fitSampleSize} domande che avete etichettato voi`
+                    : 'Soglie generiche: nessuno ha ancora deciso abbastanza difficoltà a mano'
                 }
               >
                 {subjectNames.get(scale.subjectId) ?? 'Materia'} ·{' '}
@@ -273,10 +273,14 @@ export default function CalibrazionePage() {
       */}
       {needsGoldSet.length > 0 && (
         <div className={`rounded-xl p-4 ${colors.background.card} ${colors.effects.shadow.sm}`}>
-          <p className={`text-sm ${colors.text.secondary}`}>
-            <strong>Scala di riferimento da costruire.</strong> Le soglie di ogni materia si
-            ricavano dalle difficoltà decise da una persona. Finché non ce ne sono abbastanza il
-            sistema usa soglie generiche, e le proposte tendono a pendere tutte dalla stessa parte.
+          <p className={`text-sm ${colors.text.primary} font-medium`}>
+            Insegna al sistema cosa vuol dire facile, media e difficile
+          </p>
+          <p className={`text-sm ${colors.text.secondary} mt-1`}>
+            Lui il metro non ce l&apos;ha: se lo costruisce guardando le domande a cui{' '}
+            <strong>tu</strong> hai deciso la difficoltà. Servono {overview?.goldSetTarget} domande
+            decise per materia. Apri il link, leggi le domande e assegna il livello — bastano pochi
+            minuti a gruppi.
           </p>
           <div className="mt-3 space-y-2">
             {needsGoldSet.map((row) => (
@@ -285,23 +289,27 @@ export default function CalibrazionePage() {
                   {subjectNames.get(row.subjectId) ?? 'Materia'}
                 </span>
                 <span className={`text-sm ${colors.text.muted}`}>
-                  {row.labelled} su {overview?.goldSetTarget} decise
+                  {row.labelled} su {overview?.goldSetTarget}
                 </span>
                 {row.labellable > 0 ? (
                   <Link
                     href={`/domande?daEtichettare=1&subjects=${row.subjectId}&sortBy=timesGraded&sortOrder=desc`}
                     className={`text-sm ${colors.primary.text} hover:underline`}
                   >
-                    Etichetta le più misurate ({row.labellable} disponibili)
+                    Decidi le prossime ({row.labellable} pronte)
                   </Link>
                 ) : (
                   <span className={`text-sm ${colors.text.muted}`}>
-                    nessuna domanda con abbastanza risposte: servono altre simulazioni svolte
+                    nessuna domanda ha ancora abbastanza risposte — servono altre simulazioni svolte
                   </span>
                 )}
               </div>
             ))}
           </div>
+          <p className={`text-xs ${colors.text.muted} mt-3`}>
+            Guarda la domanda, non la percentuale di risposte corrette: se ti basi su quella stai
+            ripetendo al sistema ciò che ti ha già detto lui.
+          </p>
         </div>
       )}
 
@@ -399,8 +407,8 @@ export default function CalibrazionePage() {
           </div>
         ) : proposals.length === 0 ? (
           <div className={`p-8 text-center ${colors.text.muted}`}>
-            Nessuna proposta in attesa. Le statistiche si aggiornano ogni notte; le proposte al
-            massimo una volta a settimana.
+            Niente da confermare. Il sistema ricontrolla ogni notte e propone al massimo una volta
+            a settimana.
           </div>
         ) : (
           proposals.map((proposal) => (

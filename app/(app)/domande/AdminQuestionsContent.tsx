@@ -416,7 +416,7 @@ export default function AdminQuestionsContent() {
     onSuccess: (result) => {
       showSuccess(
         'Difficoltà decisa',
-        `${result.updated} domande impostate su ${difficultyLabels[result.difficulty]}. La calibrazione userà queste etichette per tarare la scala della materia.`
+        `${result.updated} domande impostate su ${difficultyLabels[result.difficulty]}. Il sistema userà la tua scelta per tarare il metro della materia.`
       );
       utils.questions.getQuestions.invalidate();
       utils.questions.getQuestionStats.invalidate();
@@ -771,7 +771,7 @@ export default function AdminQuestionsContent() {
               if (next) { setSortBy('timesGraded'); setSortOrder('desc'); }
               setPage(1);
             }}
-            title="Domande con almeno 20 risposte valutate la cui difficoltà non è mai stata decisa da una persona"
+            title="Domande già risposte da abbastanza studenti, ma a cui nessuno ha ancora deciso la difficoltà. Sono quelle che insegnano di più al sistema."
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
               onlyNeedsLabel
                 ? 'border-amber-400 text-amber-600 dark:border-amber-600 dark:text-amber-300'
@@ -799,6 +799,17 @@ export default function AdminQuestionsContent() {
             )}
           </button>
         </div>
+
+        {/* Arriving here from the calibration page means arriving at a bare list. Say what
+            this list is for, once, in a line. */}
+        {onlyNeedsLabel && (
+          <p className={`mt-3 text-sm ${colors.text.secondary}`}>
+            Leggi la domanda e decidi tu se è <strong>facile, media o difficile</strong>: selezionale
+            e usa <strong>Decidi Difficoltà</strong>. Il sistema impara da qui cosa significano quei
+            tre livelli nelle tue materie. Sono ordinate dalla più risposta: quelle in cima contano
+            di più.
+          </p>
+        )}
 
         {/* Expanded Filters */}
         {showFilters && (
@@ -991,8 +1002,8 @@ export default function AdminQuestionsContent() {
               {showBulkDifficultySelect && (
                 <div className={`absolute top-full left-0 mt-1 z-50 min-w-[220px] ${colors.background.card} ${colors.effects.shadow.lg} rounded-lg border ${colors.border.primary} py-1`}>
                   <p className={`px-4 py-2 text-xs ${colors.text.muted}`}>
-                    La difficoltà scelta qui vale come decisione tua e fa da riferimento
-                    per la calibrazione.
+                    Quello che scegli qui fa da riferimento: il sistema impara da qui cosa vuol
+                    dire facile, media e difficile.
                   </p>
                   {(['EASY', 'MEDIUM', 'HARD'] as DifficultyLevel[]).map((level) => (
                     <button

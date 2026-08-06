@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 The version lives in `package.json` (`version`) and is shown by the badge at the bottom-left of the app.
 
+## [1.23.1] - 2026-08-06
+
+### Changed
+- **Riscritti i testi della calibrazione in italiano comprensibile.** La pagina spiegava se stessa a chi l'aveva costruita: "scala di riferimento", "marcato come anomalo", "capire cosa è cambiato a monte", il codice `ONE_DIRECTION:100%` in bella vista. Chi la usa non doveva capire il meccanismo, doveva capire cosa fare. Ora: il metro è "il metro", l'avviso dice *"il ricalcolo si è fermato da solo, e non ha cambiato niente"* e perché, il pannello di taratura si intitola *"Insegna al sistema cosa vuol dire facile, media e difficile"*, e i codici tecnici sono passati nei suggerimenti al passaggio del mouse invece che nel testo. Aggiunta una riga di istruzioni nell'elenco domande quando si arriva dal collegamento, perché altrimenti si atterra su una lista senza sapere che farne.
+
 ## [1.23.0] - 2026-08-06
 
 Seguito diretto della 1.22.0. Registrare il lotto rifiutato ha permesso di leggere cosa stesse succedendo davvero, e la diagnosi sui dati di produzione è stata netta: **nessuna delle 18.039 domande in banca ha una difficoltà decisa da una persona** — sono tutte `LEGACY`, importate. Ma le soglie di ogni materia si ricavano proprio dalle etichette scelte dai docenti: senza nemmeno una, nessuna scala può essere tarata, tutte le materie restano sulle soglie generiche per sempre, e ogni domanda viene giudicata contro un metro mai misurato su questo banco. È da lì che nasce il lotto che pende tutto dalla stessa parte. Mancava proprio il gesto: **non c'era modo di dire al sistema "questa difficoltà l'ho decisa io"**.
