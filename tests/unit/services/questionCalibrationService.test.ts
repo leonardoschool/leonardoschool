@@ -97,6 +97,51 @@ function resultRow(
   };
 }
 
+/** Deterministic pseudo-randomness: a flaky psychometrics fixture is a useless one. */
+function lcg(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
+/**
+ * The shape that trips the run-level guard: every question the run can measure is
+ * mislabelled the same way.
+ *
+ * Twenty-five questions marked EASY that almost nobody gets right, plus twenty-five
+ * genuinely easy ones. The second half earns its place twice over — it gives the
+ * estimator a spread to centre on, and it keeps the EASY bucket above its floor, so
+ * the only thing left for the guard to react to is the one-sidedness itself.
+ */
+function oneSidedBank() {
+  const rand = lcg(7);
+  // Far enough past the cut to clear the confidence margin, close enough that stronger
+  // students still get some right: an item nobody at all can answer carries no
+  // information about ability, so it earns a quality flag and is skipped rather than
+  // proposed — which is correct behaviour, and would leave this fixture measuring it.
+  const items = [
+    ...Array.from({ length: 25 }, (_, i) => ({ id: `hard${i}`, b: 1.8 })),
+    ...Array.from({ length: 25 }, (_, i) => ({ id: `easy${i}`, b: -1.8 })),
+  ];
+
+  const questions = items.map((entry) => questionRow({ id: entry.id, difficulty: 'EASY' }));
+  const results = Array.from({ length: 80 }, (_, person) => {
+    const ability = -2 + (4 * person) / 79;
+    return resultRow(
+      `r${person}`,
+      `s${person}`,
+      items.map((entry) => ({
+        questionId: entry.id,
+        isCorrect: rand() < 1 / (1 + Math.exp(entry.b - ability)),
+      }))
+    );
+  });
+
+  return { questions, results };
+}
+
 /** Feeds the cursor loop one page then stops. */
 function singlePage(prisma: MockPrisma, rows: unknown[]) {
   prisma.simulationResult.findMany.mockResolvedValueOnce(rows).mockResolvedValue([]);
@@ -271,6 +316,54 @@ describe('runQuestionCalibration', () => {
       timesCorrect: 0,
       avgCorrectRate: 0,
     });
+  });
+
+  /**
+   * A refused run used to record `proposalsCreated: 0` and a `distributionAfter`
+   * identical to `distributionBefore`, so the first question anyone asks in front of
+   * the warning — how many were there, and which way did they point — had no answer
+   * anywhere. The batch is still discarded; the evidence of it is not.
+   */
+  it('records the batch an anomalous run refused, instead of a silent zero', async () => {
+    const { questions, results } = oneSidedBank();
+    prisma.question.findMany.mockResolvedValue(questions);
+    singlePage(prisma, results);
+
+    const summary = await run({ mode: 'PROPOSE' });
+
+    expect(summary.isAnomalous).toBe(true);
+    expect(summary.anomalyReason).toMatch(/ONE_DIRECTION/);
+
+    // The guard still refuses: nothing published, and the standing worklist untouched.
+    expect(summary.proposalsCreated).toBe(0);
+    expect(prisma.questionDifficultyAudit.createMany).not.toHaveBeenCalled();
+    expect(prisma.questionDifficultyAudit.deleteMany).not.toHaveBeenCalled();
+
+    expect(summary.proposalsComputed).toBeGreaterThanOrEqual(20);
+    expect(summary.proposalsHarder).toBe(summary.proposalsComputed);
+    expect(summary.proposalsEasier).toBe(0);
+    expect(summary.distributionAfter).not.toEqual(summary.distributionBefore);
+
+    const recorded = prisma.questionCalibrationRun.create.mock.calls[0][0].data;
+    expect(recorded.proposalsCreated).toBe(0);
+    expect(recorded.proposalsComputed).toBe(summary.proposalsComputed);
+    expect(recorded.proposalsHarder).toBe(summary.proposalsHarder);
+  });
+
+  /**
+   * The gate keyed on `proposalsCreated > 0`, which an anomalous run never satisfies:
+   * the cron recomputed the same refused batch every night and logged the same warning
+   * about a state that by definition had not changed.
+   */
+  it('lets a refused run close the weekly window instead of retrying every night', async () => {
+    prisma.question.findMany.mockResolvedValue([questionRow()]);
+    singlePage(prisma, [resultRow('r1', 's1', [{ questionId: 'q1', isCorrect: false }])]);
+
+    await run({ mode: 'PROPOSE' });
+
+    const where = prisma.questionCalibrationRun.findFirst.mock.calls[0][0].where;
+    expect(where.OR).toContainEqual({ isAnomalous: true });
+    expect(where.OR).toContainEqual({ proposalsCreated: { gt: 0 } });
   });
 
   it('holds proposals back until the weekly window reopens', async () => {

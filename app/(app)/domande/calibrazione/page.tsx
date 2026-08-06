@@ -23,7 +23,7 @@ import CustomSelect from '@/components/ui/CustomSelect';
 import CalibrationProposalRow from './CalibrationProposalRow';
 import CalibrationHistoryTab from './CalibrationHistoryTab';
 import { scaleConfidenceLabels } from '@/lib/questions/calibrationLabels';
-import { ArrowLeft, Check, Scale, TrendingDown, TrendingUp, X } from 'lucide-react';
+import { ArrowLeft, Check, RefreshCw, Scale, TrendingDown, TrendingUp, X } from 'lucide-react';
 
 type DirectionFilter = 'all' | 'harder' | 'easier';
 type Tab = 'proposals' | 'history';
@@ -77,6 +77,24 @@ export default function CalibrazionePage() {
       utils.questionCalibration.getOverview.invalidate();
       utils.questionCalibration.getPendingProposalCount.invalidate();
       utils.questions.getQuestions.invalidate();
+    },
+  });
+
+  // The weekly gate now counts a refused run as an attempt, so the nightly cron stops
+  // re-flagging the same batch. That only works if a human who has fixed something
+  // upstream can ask for a fresh run instead of waiting out the week.
+  const rerun = trpc.questionCalibration.runNow.useMutation({
+    onError: handleMutationError,
+    onSuccess: (summary) => {
+      showSuccess(
+        'Ricalcolo eseguito',
+        summary.isAnomalous
+          ? `${summary.proposalsComputed} proposte calcolate, nessuna pubblicata: ancora anomalo (${summary.anomalyReason}).`
+          : `${summary.proposalsCreated} proposte pubblicate.`
+      );
+      utils.questionCalibration.listProposals.invalidate();
+      utils.questionCalibration.getOverview.invalidate();
+      utils.questionCalibration.getPendingProposalCount.invalidate();
     },
   });
 
@@ -169,10 +187,28 @@ export default function CalibrazionePage() {
         <div className="rounded-xl p-4 bg-amber-50 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">
           <p className="font-medium">L&apos;ultimo ricalcolo è stato marcato come anomalo.</p>
           <p className="text-sm mt-1">
-            Il sistema voleva spostare un numero di domande insolito ({overview.lastRun.anomalyReason}),
-            quindi non ha pubblicato nessuna proposta. Venti domande non cambiano natura nella stessa
+            Aveva calcolato <strong>{overview.lastRun.proposalsComputed} proposte</strong>{' '}
+            ({overview.lastRun.proposalsHarder} più difficili, {overview.lastRun.proposalsEasier} più
+            facili) e non ne ha pubblicata nessuna. Venti domande non cambiano natura nella stessa
             settimana: conviene capire cosa è cambiato a monte prima di procedere.
           </p>
+          <p className="text-sm mt-1 opacity-80">
+            Nessuna difficoltà è stata modificata. Codice del controllo:{' '}
+            <code>{overview.lastRun.anomalyReason}</code>.
+          </p>
+          {canRevertRun && (
+            <button
+              type="button"
+              onClick={() => rerun.mutate({ mode: 'PROPOSE', forceProposals: true })}
+              disabled={rerun.isPending}
+              className={`mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg border ${colors.border.primary} disabled:opacity-50`}
+            >
+              <ButtonLoader loading={rerun.isPending} loadingText="Ricalcolo in corso...">
+                <RefreshCw className="w-4 h-4" />
+                Riprova adesso
+              </ButtonLoader>
+            </button>
+          )}
         </div>
       )}
 

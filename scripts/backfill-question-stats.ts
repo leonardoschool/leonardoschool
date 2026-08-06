@@ -58,8 +58,12 @@ async function main() {
     }
     if (summary.isAnomalous) {
       console.log(`\n⚠️  Esecuzione marcata ANOMALA (${summary.anomalyReason}).`);
+      console.log(`   Proposte calcolate e scartate: ${summary.proposalsComputed}`);
+      console.log(`     più difficili:            ${summary.proposalsHarder}`);
+      console.log(`     più facili:               ${summary.proposalsEasier}`);
       console.log('   Nessuna proposta pubblicata: il movimento richiesto non sembra calibrazione.');
-      console.log('   Rieseguire su una materia per volta con --propose e questionIds ristretti.');
+      console.log('   Rieseguire su una materia per volta con questionCalibration.runNow');
+      console.log('   (mode PROPOSE, forceProposals, questionIds ristretti).');
     }
   }
 

@@ -93,8 +93,14 @@ export async function POST(request: NextRequest) {
     await logApp({
       source: 'CRON',
       level: summary.isAnomalous ? 'WARN' : 'INFO',
+      // The refused batch is the whole content of the alert: a bare reason code says a
+      // run was stopped without saying what it wanted to do, which leaves the reader
+      // with nothing to act on.
       message: summary.isAnomalous
-        ? `Calibrazione difficoltà marcata anomala: ${summary.anomalyReason}`
+        ? `Calibrazione difficoltà marcata anomala: ${summary.anomalyReason} — ` +
+          `${summary.proposalsComputed} proposte calcolate ` +
+          `(${summary.proposalsHarder} più difficili, ${summary.proposalsEasier} più facili), ` +
+          'nessuna pubblicata'
         : 'Calibrazione difficoltà completata',
       path: 'POST /api/cron/calibrate-difficulty',
       metadata: {
@@ -105,6 +111,9 @@ export async function POST(request: NextRequest) {
         questionsWithStats: summary.questionsWithStats,
         statsUpdated: summary.statsUpdated,
         proposalsCreated: summary.proposalsCreated,
+        proposalsComputed: summary.proposalsComputed,
+        proposalsHarder: summary.proposalsHarder,
+        proposalsEasier: summary.proposalsEasier,
         qualityFlagged: summary.qualityFlagged,
         durationMs: summary.durationMs,
       },
@@ -113,7 +122,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: summary.errors.length === 0,
       message: summary.isAnomalous
-        ? `Esecuzione anomala (${summary.anomalyReason}): nessuna proposta pubblicata.`
+        ? `Esecuzione anomala (${summary.anomalyReason}): ${summary.proposalsComputed} proposte calcolate, nessuna pubblicata.`
         : `Calibrazione completata: ${summary.statsUpdated} domande aggiornate, ${summary.proposalsCreated} proposte.`,
       ...summary,
     });

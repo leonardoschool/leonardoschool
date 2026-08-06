@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 The version lives in `package.json` (`version`) and is shown by the badge at the bottom-left of the app.
 
+## [1.22.0] - 2026-08-06
+
+### Fixed
+- **L'avviso "Calibrazione difficoltà marcata anomala" ora dice cosa il sistema voleva fare.** Il controllo che lo genera è sano e ha funzionato: quando un ricalcolo produce venti o più proposte che spingono tutte dalla stessa parte (`ONE_DIRECTION:100%`), rifiuta l'intero lotto invece di riversare in coda modifiche che non somigliano a una calibrazione. Il problema era che, scartando il lotto, non ne restava traccia da nessuna parte: l'esecuzione salvava `proposalsCreated: 0` e una distribuzione finale identica a quella iniziale, quindi l'unica domanda che un revisore si pone davanti all'avviso — **quante erano e in che direzione** — non trovava risposta né nello storico, né nel log, né in pagina. Ora il lotto calcolato viene registrato anche quando viene rifiutato: il banner mostra il numero e la direzione, il log applicativo li riporta nel messaggio, e lo storico elenca l'esecuzione come "N proposte scartate" invece che come un fuorviante "0 proposte". Il comportamento di sicurezza non cambia: nessuna difficoltà viene toccata e la coda esistente resta al suo posto.
+- **Un'esecuzione rifiutata non si ripete più ogni notte.** La regola "proposte al massimo una volta a settimana" guardava l'ultimo ricalcolo che *aveva pubblicato* qualcosa. Un'esecuzione anomala non pubblica nulla, quindi non chiudeva mai la finestra: il cron notturno ricalcolava lo stesso lotto rifiutato, lo rifiutava di nuovo e riscriveva lo stesso avviso, ogni notte, su uno stato che per definizione non era cambiato dal primo. Ora la cadenza settimanale vale per il tentativo, non solo per il successo.
+- **Una materia non resta più bloccata sulla scala di ripiego con cui era partita.** La scala di riferimento per materia — ciò che tiene ferme le etichette nel tempo — viene fissata al primo ricalcolo con proposte. Una materia che a quel momento non aveva ancora abbastanza domande etichettate a mano veniva congelata sulle **soglie generiche** di default e ci restava per sempre, perché nessun'altra parte del sistema riscrive quelle soglie: ogni domanda veniva poi giudicata contro un metro mai misurato su quella materia, ed è così che un intero lotto finisce per pendere tutto dalla stessa parte. Ora una scala ancora ad **affidabilità bassa** può adottare, una volta sola, le soglie ricavate dalle etichette decise dai docenti, non appena la materia ha dati sufficienti a sostenerle. Una scala già tarata su etichette reali non viene mai ritoccata, e gli ancoraggi non si spostano: cambia dove cadono i confini, non il punto zero, quindi le misure passate restano confrontabili.
+
+### Added
+- **Pulsante "Riprova adesso" nel banner dell'anomalia** (solo per chi può gestire la calibrazione di tutte le materie). Serviva per forza, ora che un'esecuzione rifiutata blocca i tentativi per una settimana: chi ha corretto qualcosa a monte deve poter chiedere subito un ricalcolo invece di aspettare. Il risultato viene riportato con i numeri, anche quando è di nuovo anomalo.
+
 ## [1.21.1] - 2026-08-04
 
 ### Infrastructure

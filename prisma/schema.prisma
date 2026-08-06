@@ -937,7 +937,14 @@ model QuestionCalibrationRun {
   answersScanned     Int @default(0)
   questionsWithStats Int @default(0)
   statsUpdated       Int @default(0) // Solo le domande i cui numeri sono cambiati
-  proposalsCreated   Int @default(0)
+  proposalsCreated   Int @default(0) // Pubblicate: quelle finite in coda di revisione
+  // Quante ne aveva calcolate, e da che parte spingevano, PRIMA del controllo di
+  // anomalia. Un'esecuzione anomala pubblica zero proposte: senza queste colonne
+  // l'unica domanda che conta — quante erano e in che direzione — non ha risposta
+  // da nessuna parte, e non resta modo di capire cosa aveva visto il sistema.
+  proposalsComputed  Int @default(0)
+  proposalsHarder    Int @default(0)
+  proposalsEasier    Int @default(0)
   // Un'esecuzione che non muove nulla deve poter spiegare perché: ogni motivo di
   // scarto della regola di decisione ha la sua colonna, altrimenti lo storico —
   // che esiste proprio perché i log Vercel durano poco — non risponde alla domanda.
@@ -950,7 +957,7 @@ model QuestionCalibrationRun {
   qualityFlagged        Int @default(0) // Possibili domande rotte, non riclassificate
 
   distributionBefore Json? // {EASY: n, MEDIUM: n, HARD: n}
-  distributionAfter  Json? // Come sarebbe accettando tutte le proposte
+  distributionAfter  Json? // Come sarebbe accettando tutte le proposte calcolate
 
   /// True when the run refused to publish its proposals because the movement
   /// looked implausible (too many at once, or overwhelmingly one-directional).

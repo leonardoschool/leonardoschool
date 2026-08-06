@@ -194,6 +194,49 @@ export function scaleConfidence(anchorCount: number, fitSampleSize: number): str
   return 'LOW';
 }
 
+export interface ScaleRefit {
+  cuts: ScaleCuts;
+  kappa: number;
+  sampleSize: number;
+  confidence: string;
+}
+
+/**
+ * Replaces the fallback cuts a subject was bootstrapped on — once, and only from LOW.
+ *
+ * Freezing is what makes "media" mean the same thing in June as it did in January, and
+ * that has to keep being true: a scale fitted on real labels is never re-fitted here.
+ *
+ * But a subject whose first proposal run happened before it had `minGoldSetForCuts`
+ * labelled questions was frozen on `DEFAULT_CUTS` — generic numbers, never measured
+ * against this bank — and froze them permanently, because nothing else in the system
+ * ever writes cuts again. Every question in that subject is then judged against a stick
+ * nobody calibrated, which is precisely how an entire batch ends up leaning one way and
+ * tripping the run-level guard. A placeholder is not a scale, so it may be replaced the
+ * first time the subject can support a real fit.
+ *
+ * The anchors are deliberately left alone: this moves where the boundaries sit, not
+ * where the zero point is, so past measurements stay comparable.
+ */
+export function refitPlaceholderCuts(
+  currentConfidence: string,
+  anchorCount: number,
+  items: readonly MeasuredItem[],
+  shift: number
+): ScaleRefit | null {
+  if (currentConfidence !== 'LOW') return null;
+
+  const fit = fitCutsFromLabels(items, shift);
+  if (!fit) return null;
+
+  // Only a fit that clears the placeholder's own confidence is an improvement; swapping
+  // one under-evidenced set of cuts for another would just move the labels for nothing.
+  const confidence = scaleConfidence(anchorCount, fit.sampleSize);
+  if (confidence === 'LOW') return null;
+
+  return { cuts: fit.cuts, kappa: fit.kappa, sampleSize: fit.sampleSize, confidence };
+}
+
 /** Maps a 0/1/2 category index back to the enum, for tests and diagnostics. */
 export function levelFromIndex(index: number): DifficultyLevel {
   return INDEX_LEVEL[Math.max(0, Math.min(2, index))];

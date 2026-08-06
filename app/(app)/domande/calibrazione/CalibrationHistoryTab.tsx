@@ -104,7 +104,11 @@ export default function CalibrationHistoryTab({ canDecide, canRevertRun }: Props
     { value: '', label: 'Tutti i ricalcoli' },
     ...(runs ?? []).map((run) => ({
       value: run.id,
-      label: `${formatDate(run.startedAt)} · ${run.proposalsCreated ?? 0} proposte${run.isAnomalous ? ' · anomalo' : ''}`,
+      // An anomalous run published nothing, so listing it as "0 proposte" hides the
+      // only number worth knowing about it: how many it had computed and refused.
+      label: run.isAnomalous
+        ? `${formatDate(run.startedAt)} · ${run.proposalsComputed ?? 0} proposte scartate · anomalo`
+        : `${formatDate(run.startedAt)} · ${run.proposalsCreated ?? 0} proposte`,
     })),
   ];
 

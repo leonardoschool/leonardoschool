@@ -22,6 +22,7 @@ import {
   statsChanged,
   type CalibrationAnswer,
   type DifficultyProposal,
+  type DifficultyReasonCode,
   type DifficultySkipReason,
   type QuestionStatsSnapshot,
 } from './questionCalibration.helpers';
@@ -30,6 +31,7 @@ import {
   equateToAnchors,
   fitCutsFromLabels,
   parseAnchors,
+  refitPlaceholderCuts,
   scaleConfidence,
   selectAnchors,
   type MeasuredItem,
@@ -58,7 +60,12 @@ export interface CalibrationRunSummary {
   answersScanned: number;
   questionsWithStats: number;
   statsUpdated: number;
+  /** Proposals actually published to the review queue. Zero on an anomalous run. */
   proposalsCreated: number;
+  /** What the run computed before the anomaly guard, and which way the batch pointed. */
+  proposalsComputed: number;
+  proposalsHarder: number;
+  proposalsEasier: number;
   skipped: Record<DifficultySkipReason, number>;
   qualityFlagged: number;
   repeatExposuresExcluded: number;
@@ -186,13 +193,16 @@ export async function runQuestionCalibration(
   }
 
   const anomaly = detectRunAnomaly(proposals, await medianPreviousProposalCount(prisma));
-  if (anomaly.anomalous) proposals = [];
 
-  const distributionAfter = { ...distributionBefore };
-  for (const proposal of proposals) {
-    distributionAfter[proposal.fromLevel] -= 1;
-    distributionAfter[proposal.toLevel] += 1;
-  }
+  // Measured before the guard empties the batch, and recorded either way. An anomalous
+  // run used to store `proposalsCreated: 0` and a `distributionAfter` identical to
+  // `distributionBefore`, so the first question anyone asks — how many were there, and
+  // which way did they point — had no answer in the history, in the log, or in the UI.
+  // The batch is still discarded; only the evidence of what it was survives.
+  const computed = summariseBatch(proposals);
+  const distributionAfter = applyProposals(distributionBefore, proposals);
+
+  if (anomaly.anomalous) proposals = [];
 
   const summary: CalibrationRunSummary = {
     runId: null,
@@ -202,6 +212,9 @@ export async function runQuestionCalibration(
     questionsWithStats: aggregate.stats.size,
     statsUpdated,
     proposalsCreated: proposals.length,
+    proposalsComputed: computed.total,
+    proposalsHarder: computed.harder,
+    proposalsEasier: computed.easier,
     skipped,
     qualityFlagged,
     repeatExposuresExcluded: aggregate.repeatExposuresExcluded,
@@ -229,6 +242,31 @@ export async function runQuestionCalibration(
     await syncProposals(prisma, runId, proposals, options.questionIds ?? null, now, errors);
   }
   return summary;
+}
+
+interface BatchShape {
+  total: number;
+  harder: number;
+  easier: number;
+}
+
+/** Size and lean of a batch, kept even when the batch itself is thrown away. */
+function summariseBatch(proposals: readonly { reasonCode: DifficultyReasonCode }[]): BatchShape {
+  const harder = proposals.filter((p) => p.reasonCode === 'TOO_HARD_FOR_LEVEL').length;
+  return { total: proposals.length, harder, easier: proposals.length - harder };
+}
+
+/** How the bank would look if every proposal in the batch were accepted. */
+function applyProposals(
+  before: Record<DifficultyLevel, number>,
+  proposals: readonly { fromLevel: DifficultyLevel; toLevel: DifficultyLevel }[]
+): Record<DifficultyLevel, number> {
+  const after = { ...before };
+  for (const proposal of proposals) {
+    after[proposal.fromLevel] -= 1;
+    after[proposal.toLevel] += 1;
+  }
+  return after;
 }
 
 function emptySkipCounters(): Record<DifficultySkipReason, number> {
@@ -618,16 +656,35 @@ async function resolveSubjectScales(
       const anchors = parseAnchors(existing.anchorQuestionIds);
       const currentScores = new Map(items.map((item) => [item.id, item.score]));
       const equating = equateToAnchors(anchors, currentScores);
-      const cuts: ScaleCuts = {
+      const shift = equating?.shift ?? 0;
+
+      // A subject bootstrapped before it had enough labelled data kept the generic cuts
+      // forever, because this is the only place that ever writes them. Give it one
+      // chance to adopt cuts fitted on its own labels; a scale already fitted is left
+      // untouched, which is what keeps a label stable over time.
+      const refit = refitPlaceholderCuts(existing.confidence, anchors.length, items, shift);
+      const cuts: ScaleCuts = refit?.cuts ?? {
         easyMedium: existing.cutEasyMedium,
         mediumHard: existing.cutMediumHard,
       };
-      scales.set(subjectId, { shift: equating?.shift ?? 0, cuts });
+      scales.set(subjectId, { shift, cuts });
 
-      if (persist && equating) {
+      if (persist && (equating || refit)) {
         await prisma.difficultyScale.update({
           where: { subjectId },
-          data: { lastEquatingRmsd: equating.rmsd, lastEquatedAt: now },
+          data: {
+            ...(equating ? { lastEquatingRmsd: equating.rmsd, lastEquatedAt: now } : {}),
+            ...(refit
+              ? {
+                  cutEasyMedium: refit.cuts.easyMedium,
+                  cutMediumHard: refit.cuts.mediumHard,
+                  confidence: refit.confidence,
+                  fitKappa: refit.kappa,
+                  fitSampleSize: refit.sampleSize,
+                  frozenAt: now,
+                }
+              : {}),
+          },
         });
       }
     } catch (error) {
@@ -715,14 +772,22 @@ function deriveQualityFlag(
  * a magic weekday check.
  */
 async function proposalWindowOpen(prisma: PrismaClient, now: Date): Promise<boolean> {
-  const lastWithProposals = await prisma.questionCalibrationRun.findFirst({
-    where: { mode: 'PROPOSE', proposalsCreated: { gt: 0 } },
+  // A refused batch counts as an attempt. Keying the gate on `proposalsCreated > 0`
+  // alone meant an anomalous run never closed the window: the cron recomputed the same
+  // refused batch every single night and logged the same warning, which is a stream of
+  // alerts about a state that by definition has not changed since the first one. The
+  // weekly cadence now applies to trying, not only to succeeding — and a manual run
+  // passes `forceProposals`, so investigating an anomaly is never blocked by it.
+  const lastAttempt = await prisma.questionCalibrationRun.findFirst({
+    where: {
+      mode: 'PROPOSE',
+      OR: [{ proposalsCreated: { gt: 0 } }, { isAnomalous: true }],
+    },
     orderBy: { startedAt: 'desc' },
     select: { startedAt: true },
   });
-  if (!lastWithProposals) return true;
-  const elapsedDays =
-    (now.getTime() - lastWithProposals.startedAt.getTime()) / (1000 * 60 * 60 * 24);
+  if (!lastAttempt) return true;
+  const elapsedDays = (now.getTime() - lastAttempt.startedAt.getTime()) / (1000 * 60 * 60 * 24);
   return elapsedDays >= CALIBRATION.proposalIntervalDays;
 }
 
@@ -759,6 +824,9 @@ async function recordRun(
         questionsWithStats: summary.questionsWithStats,
         statsUpdated: summary.statsUpdated,
         proposalsCreated: summary.proposalsCreated,
+        proposalsComputed: summary.proposalsComputed,
+        proposalsHarder: summary.proposalsHarder,
+        proposalsEasier: summary.proposalsEasier,
         skippedLowEvidence: summary.skipped.LOW_EVIDENCE,
         skippedCooldown: summary.skipped.COOLDOWN,
         skippedAlreadyCorrect: summary.skipped.ALREADY_CORRECT,

@@ -4,6 +4,7 @@ import {
   equateToAnchors,
   fitCutsFromLabels,
   parseAnchors,
+  refitPlaceholderCuts,
   scaleConfidence,
   selectAnchors,
   type MeasuredItem,
@@ -193,6 +194,55 @@ describe('scaleConfidence', () => {
     expect(scaleConfidence(5, 0)).toBe('LOW');
     expect(scaleConfidence(25, 60)).toBe('MEDIUM');
     expect(scaleConfidence(50, 200)).toBe('HIGH');
+  });
+});
+
+/**
+ * The bootstrap trap: a subject frozen on `DEFAULT_CUTS` before it had any labelled
+ * data kept them forever, because nothing else in the system ever writes cuts again.
+ * Every question in it was then judged against a stick nobody had measured — which is
+ * how an entire batch ends up leaning one way and tripping the run-level guard.
+ */
+describe('refitPlaceholderCuts', () => {
+  const labelled = (count: number): MeasuredItem[] =>
+    Array.from({ length: count }, (_, i) => {
+      const score = -2 + (4 * i) / (count - 1);
+      const humanLabel: DifficultyLevel = score < -0.7 ? 'EASY' : score > 0.7 ? 'HARD' : 'MEDIUM';
+      return item({ id: `q${i}`, score, humanLabel });
+    });
+
+  it('replaces the generic cuts once the subject can support a real fit', () => {
+    const refit = refitPlaceholderCuts('LOW', 50, labelled(120), 0);
+
+    expect(refit).not.toBeNull();
+    expect(refit!.cuts.easyMedium).not.toBeCloseTo(DEFAULT_CUTS.easyMedium, 2);
+    expect(refit!.confidence).not.toBe('LOW');
+    expect(refit!.sampleSize).toBeGreaterThanOrEqual(40);
+  });
+
+  /**
+   * The property that makes the whole feature honest: a label must mean the same thing
+   * in June as in January. A scale fitted on real labels is never re-fitted, however
+   * much better the data has since become.
+   */
+  it('never touches a scale that was already fitted on real labels', () => {
+    expect(refitPlaceholderCuts('MEDIUM', 50, labelled(120), 0)).toBeNull();
+    expect(refitPlaceholderCuts('HIGH', 50, labelled(120), 0)).toBeNull();
+  });
+
+  it('leaves the placeholder in place while the evidence is still too thin', () => {
+    expect(refitPlaceholderCuts('LOW', 50, labelled(20), 0)).toBeNull();
+  });
+
+  /** Swapping one under-evidenced set of cuts for another moves labels for nothing. */
+  it('refuses a fit that would still be a low-confidence guess', () => {
+    expect(refitPlaceholderCuts('LOW', 5, labelled(120), 0)).toBeNull();
+  });
+
+  it('fits on the anchored scale, so the zero point does not move with it', () => {
+    const unshifted = refitPlaceholderCuts('LOW', 50, labelled(120), 0)!;
+    const shifted = refitPlaceholderCuts('LOW', 50, labelled(120), 1.5)!;
+    expect(shifted.cuts.easyMedium - unshifted.cuts.easyMedium).toBeCloseTo(1.5, 1);
   });
 });
 
